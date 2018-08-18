@@ -13,6 +13,10 @@ jobs:
       # CircleCI maintains a library of pre-built images
       # documented at https://circleci.com/docs/2.0/circleci-images/
       - image: circleci/postgres:9.6
+          environment:
+            POSTGRES_USER: olat
+            POSTGRES_PASSWORD: olat
+            POSTGRES_DB: olattest
 
     working_directory: ~/repo
 
@@ -43,5 +47,5 @@ jobs:
           key: v1-dependencies-{{ checksum "pom.xml" }}
         
       # run tests!
-      - run: mvn clean test -Dwith-postgres -Ptomcat
+      - run: mvn clean test -Dwith-postgresql -Dtest.env.db.postgresql.user=olat -Dtest.env.db.postgresql.pass=olat -Dtest=org.olat.test.AllTestsJunit4 -Ptomcat
 
