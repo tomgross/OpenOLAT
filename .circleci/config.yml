@@ -25,7 +25,8 @@ jobs:
       MAVEN_OPTS: -Xmx3200m -Xms1024m 
     
     steps:
-      - run: git clone git@github.com:tomgross/OpenOLAT.git --depth=10
+      - checkout
+            #      - run: git clone git@github.com:tomgross/OpenOLAT.git --depth=10
 
       # Download and cache dependencies
       - restore_cache:
