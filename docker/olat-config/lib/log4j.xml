@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE log4j:configuration SYSTEM "log4j.dtd">
+<log4j:configuration xmlns:log4j="http://jakarta.apache.org/log4j/" debug="false" threshold="all">
+    <appender name="CONSOLE" class="org.apache.log4j.ConsoleAppender">
+        <layout class="org.apache.log4j.PatternLayout">
+            <param name="ConversionPattern" value="%d [%t] %-5p %c{1} %x - %m%n"/>
+        </layout>
+    </appender>
+    <appender name="DebugLog" class="org.apache.log4j.DailyRollingFileAppender">
+        <param name="File" value="/home/openolat/logs/olat.debug.log"/>
+        <param name="DatePattern" value="'.'yyyy-MM-dd"/>
+        <layout class="org.apache.log4j.PatternLayout">
+            <param name="ConversionPattern" value="%d [%t] %-5p %c{1} %x - %m%n"/>
+        </layout>
+    </appender>
+    <appender name="syslog" class="org.apache.log4j.DailyRollingFileAppender">
+        <param name="File" value="/home/openolat/logs/olat.log"/>
+        <param name="DatePattern" value="'.'yyyy-MM-dd"/>
+        <layout class="org.apache.log4j.PatternLayout">
+            <param name="ConversionPattern" value="%d [%t] %-5p %c{1} %x - %m%n"/>
+        </layout>
+    </appender>
+    <logger name="org.olat"> <level value="INFO"/> </logger>
+    <logger name="org.olat.basesecurity.AuthHelper"> <level value="ERROR"/> </logger>
+    <logger name="org.apache.commons.httpclient"> <level value="WARN"/> </logger>
+    <logger name="org.olat.core.commons.taskExecutor.ThreadPoolTaskExecutor"> <level value="ERROR"/> </logger>
+    <logger name="org.apache.pdfbox.filter.FlateFilter"> <level value="FATAL" /> </logger>
+    <logger name="org.apache"> <level value="ERROR"/> </logger>
+    <logger name="org.hibernate"> <level value="ERROR"/> </logger>
+    <logger name="org.springframework"> <level value="ERROR"/> </logger>
+    <logger name="org.hibernate.event.def.AbstractFlushingEventListener"> <level value="FATAL"/> </logger>
+    <logger name="net.sf.hibernate"> <level value="WARN"/> </logger>
+    <logger name="org.jboss.cache"> <level value="WARN" /> </logger>
+    <logger name="org.hibernate.cache"> <level value="WARN" /> </logger>
+    <logger name="org.hibernate.engine.internal.StatisticalLoggingSessionEventListener"><level value="FATAL"/></logger>
+    <root> <level value="INFO" /> <appender-ref ref="syslog"/> </root>
+</log4j:configuration>

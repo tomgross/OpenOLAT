@@ -35,5 +35,11 @@ src/test/java/org/olat/selenium/SeleniumTest.java
 
 */.project
 .idea
+.gradle
 openolat-lms.iml
 
+# graddle
+build
+gradle
+gradlew*
+olat.local.properties
