@@ -35,3 +35,12 @@ src/test/java/org/olat/selenium/SeleniumTest.java
 
 */.project
 .idea
+
+.gradle/
+/build/
+openolat-lms.iml
+/var/
+
+node_modules
+node/
+.directory
