@@ -1,5 +1,8 @@
 # OpenOLAT
 
+[![CircleCI](https://circleci.com/gh/tomgross/OpenOLAT.svg?style=svg)](https://circleci.com/gh/tomgross/OpenOLAT)
+
+
 <a href="https://www.openolat.org"><img src="src/main/webapp/static/images/openolat/openolat_logo_72.png" align="left" hspace="10" vspace="6"></a>
 
  **OpenOLAT** is a web-based e-learning platform for teaching, learning, assessment and communication, an LMS, a learning management system. OpenOLAT impresses with its simple and intuitive operation.
@@ -444,4 +447,5 @@ The following features are delegated to the application server
 | x | LDAP Connection |
 | OK | Hibernate/JPA (only JBoss AS, we depend on Hibernate) |
 | OK | Caching (for JPA second level cache for example) |
+
 
