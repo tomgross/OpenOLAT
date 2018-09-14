@@ -8,6 +8,8 @@ jobs:
     docker:
       # specify the version you desire here
       - image: circleci/openjdk:8-jdk
+        environment:
+          TZ: "/usr/share/zoneinfo/Europe/Zurich"
       
       # Specify service dependencies here if necessary
       # CircleCI maintains a library of pre-built images
@@ -17,6 +19,7 @@ jobs:
           POSTGRES_USER: olat
           POSTGRES_PASSWORD: olat
           POSTGRES_DB: olattest
+          #          TZ: "/usr/share/zoneinfo/Europe/Zurich"
 
     working_directory: ~/repo
 
