@@ -19,7 +19,7 @@ jobs:
           POSTGRES_USER: olat
           POSTGRES_PASSWORD: olat
           POSTGRES_DB: olattest
-          #          TZ: "/usr/share/zoneinfo/Europe/Zurich"
+          TZ: "/usr/share/zoneinfo/Europe/Zurich"
 
     working_directory: ~/repo
 
@@ -31,11 +31,8 @@ jobs:
     steps:
       - checkout
 
-        #      - run: echo "Europe/Zurich" | sudo tee /etc/timezone 
-        #- run: sudo dpkg-reconfigure -f noninteractive tzdata
-      - run: echo $TZ
+      # Set timezone
       - run: sudo ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ | sudo tee /etc/timezone
-      - run: date
 
       # Download and cache dependencies
       - restore_cache:
