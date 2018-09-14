@@ -30,8 +30,9 @@ jobs:
     steps:
       - checkout
 
-      - run: echo "Europe/Zurich" | sudo tee /etc/timezone 
-      - run: sudo dpkg-reconfigure -f noninteractive tzdata
+        #      - run: echo "Europe/Zurich" | sudo tee /etc/timezone 
+        #- run: sudo dpkg-reconfigure -f noninteractive tzdata
+      - run: sudo timedatectl set-timezone Europe/Zurich
 
       # Download and cache dependencies
       - restore_cache:
