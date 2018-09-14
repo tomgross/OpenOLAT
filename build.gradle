@@ -215,6 +215,10 @@ exclude(module: 'commons-logging')
 
 test {
     filter {
-        includeTestsMatching 'org.olat.base*'
+        // Run only unittests by default
+        includeTestsMatching 'org.olat.test*'
     }
 }
+
+
+
