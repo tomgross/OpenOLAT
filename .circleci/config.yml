@@ -20,9 +20,9 @@ jobs:
 
     working_directory: ~/repo
 
-    branches:
-      only:
-        - circle_ci
+#    branches:
+#  only:
+#    - circle_ci
 
     environment:
       # Customize the JVM maximum heap limit
