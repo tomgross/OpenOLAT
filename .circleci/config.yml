@@ -27,7 +27,8 @@ jobs:
     steps:
       - checkout
 
-      - run: echo "Europe/Zurich" | sudo tee /etc/timezone && sudo dpkg-reconfigure -f noninteractive tzdata
+      - run: echo "Europe/Zurich" | sudo tee /etc/timezone 
+      - run: sudo dpkg-reconfigure -f noninteractive tzdata
 
       # Download and cache dependencies
       - restore_cache:
