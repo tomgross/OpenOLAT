@@ -9,6 +9,7 @@ A sophisticated modular toolkit provides course authors with a wide range of did
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![CircleCI](https://circleci.com/gh/OpenOLAT/OpenOLAT.svg?style=svg)](https://circleci.com/gh/OpenOLAT/OpenOLAT)
 
+
 ## Table of Contents
 
 1. [Licensing](#licensing)
