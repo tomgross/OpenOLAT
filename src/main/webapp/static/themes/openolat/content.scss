@@ -4,7 +4,7 @@
 @import "openolat_config";
 
 /* Add all default config and apply styles from light theme */
-@import "light/content";
+@import "light/content.scss";
 
 /* Override with OpenOLAT customizations */
 @import "openolat_content"; 
