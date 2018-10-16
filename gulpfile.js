@@ -3,7 +3,6 @@ var sass = require('gulp-sass');
 var uglify = require('gulp-uglify');
 var concat = require('gulp-concat');
 var rename = require('gulp-rename');
-var pump = require('pump');
 let cleanCSS = require('gulp-clean-css');
 
 var theme = 'light';
@@ -23,43 +22,43 @@ gulp.task('theme', function() {
 });
 
 //script paths
-jsTarget = '../../../target/';
+assetsPath = 'src/main/webapp/';
 
 
-gulp.task('compressjs', function (cb) {
+gulp.task('compressjs', function () {
 
     // jquery
     gulp.src('node_modules/jquery/dist/jquery.min.js')
-        .pipe(gulp.dest(jsTarget + 'js/jquery'))
+        .pipe(gulp.dest(assetsPath + 'js/jquery'))
         .pipe(rename('jquery-3.3.1.min.js'));
 
     // plugins: bootstrap, jquery plugins
     gulp.src([
-            'static/js/jquery/jquery.periodic.js',
-            'static/js/jshashtable-2.1_src.js',
-            'static/js/jquery/openolat/jquery.translator.js',
-            'static/js/jquery/openolat/jquery.navbar.js',
-            'static/js/jquery/openolat/jquery.bgcarrousel.js',
-            'static/js/tinymce4/tinymce/jquery.tinymce.min.js',
-            'static/functions.js',
-            'node_modules/jquery.transit/jquery.transit.js',
-            'node_modules/bootstrap/dist/js/bootstrap.min.js'
+            assetsPath + 'static/js/jquery/jquery.periodic.js',
+            assetsPath + 'static/js/jshashtable-2.1_src.js',
+            assetsPath + 'static/js/jquery/openolat/jquery.translator.js',
+            assetsPath + 'static/js/jquery/openolat/jquery.navbar.js',
+            assetsPath + 'static/js/jquery/openolat/jquery.bgcarrousel.js',
+            assetsPath + 'static/js/tinymce4/tinymce/jquery.tinymce.min.js',
+            assetsPath + 'static/functions.js',
+            assetsPath + 'node_modules/jquery.transit/jquery.transit.js',
+            assetsPath + 'node_modules/bootstrap/dist/js/bootstrap.min.js'
         ])
         .pipe(concat('js.plugins.min.js'))
         .pipe(uglify())
-        .pipe(gulp.dest(jsTarget + 'js'))
+        .pipe(gulp.dest(assetsPath + 'js'))
 
     // movie player
     gulp.src('static/movie/player.min.js')
-        .pipe(gulp.dest(jsTarget + 'movie'));
+        .pipe(gulp.dest(assetsPath + 'movie'));
 
     // iframe resizer
     gulp.src('node_modules/iframe-resizer/js/iframeResizer.min.js')
-        .pipe(gulp.dest(jsTarget + 'js/iframeResizer'))
+        .pipe(gulp.dest(assetsPath + 'js/iframeResizer'))
 
 });
 
-gulp.task('compresscss', function (cb) {
+gulp.task('compresscss', function () {
 
         gulp.src(
             [
@@ -75,7 +74,7 @@ gulp.task('compresscss', function (cb) {
                 console.log(`${details.name}: ${details.stats.originalSize}`);
                 console.log(`${details.name}: ${details.stats.minifiedSize}`);
             }))
-            .pipe(gulp.dest(jsTarget + 'jquery'))
+            .pipe(gulp.dest(assetsPath + 'jquery'))
 
 })
 
@@ -83,3 +82,6 @@ gulp.task('compresscss', function (cb) {
 gulp.task('watch', function() {
     gulp.watch('static/themes/**/*.scss', ['theme']);
 });
+
+// Default Task
+gulp.task('default', ['compresscss', 'compressjs']);
