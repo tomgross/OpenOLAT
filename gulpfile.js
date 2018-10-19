@@ -22,15 +22,51 @@ gulp.task('theme', function() {
 });
 
 //script paths
-assetsPath = 'src/main/webapp/';
+assetsPath = 'src/main/webapp/static/';
 
 
-gulp.task('compressjs', function () {
+gulp.task('js:build', function () {
 
     // jquery
     gulp.src('node_modules/jquery/dist/jquery.min.js')
-        .pipe(gulp.dest(assetsPath + 'js/jquery'))
-        .pipe(rename('jquery-3.3.1.min.js'));
+        .pipe(rename('jquery-3.3.1.min.js'))
+        .pipe(gulp.dest(assetsPath + 'js/jquery'));
+
+
+    // d3: copy only
+    gulp.src(
+        [
+            'node_modules/d3/build/d3.min.js',
+            'node_modules/d3/build/d3.js',
+        ]
+    )
+        .pipe(gulp.dest(assetsPath + 'js/d3'))
+
+
+    // dragula: copy only
+    gulp.src(
+        [
+            'node_modules/dragula/dist/*',
+        ]
+    )
+        .pipe(gulp.dest(assetsPath + 'js/dragula'))
+
+    // movie player: copy only
+    gulp.src('static/movie/player.min.js')
+        .pipe(gulp.dest(assetsPath + 'movie'));
+
+    // iframe resizer: copy only
+    gulp.src('node_modules/iframe-resizer/js/iframeResizer.min.js')
+        .pipe(gulp.dest(assetsPath + 'js/iframeResizer'))
+
+    // qrcodejs: copy only
+    gulp.src(
+        [
+            'node_modules/qrcodejs/qrcode.min.js',
+            'node_modules/qrcodejs/qrcode.js',
+        ]
+    )
+        .pipe(gulp.dest(assetsPath + 'js/jquery/qrcodejs'))
 
     // plugins: bootstrap, jquery plugins
     gulp.src([
@@ -48,18 +84,12 @@ gulp.task('compressjs', function () {
         .pipe(uglify())
         .pipe(gulp.dest(assetsPath + 'js'))
 
-    // movie player
-    gulp.src('static/movie/player.min.js')
-        .pipe(gulp.dest(assetsPath + 'movie'));
-
-    // iframe resizer
-    gulp.src('node_modules/iframe-resizer/js/iframeResizer.min.js')
-        .pipe(gulp.dest(assetsPath + 'js/iframeResizer'))
 
 });
 
-gulp.task('compresscss', function () {
+gulp.task('css:build', function () {
 
+        // minify
         gulp.src(
             [
                 'static/js/jquery/tagsinput/bootstrap-tagsinput.css',
@@ -76,6 +106,16 @@ gulp.task('compresscss', function () {
             }))
             .pipe(gulp.dest(assetsPath + 'jquery'))
 
+        // font-awesome: copy only
+        gulp.src(
+            [
+                'node_modules/font-awesome/**/*'
+            ]
+        )
+            .pipe(gulp.dest(assetsPath + 'font-awesome'))
+
+
+
 })
 
 
@@ -84,4 +124,4 @@ gulp.task('watch', function() {
 });
 
 // Default Task
-gulp.task('default', ['compresscss', 'compressjs']);
+gulp.task('default', ['css:build', 'js:build']);

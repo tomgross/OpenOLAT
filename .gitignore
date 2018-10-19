@@ -42,7 +42,6 @@ src/test/java/org/olat/selenium/SeleniumTest.java
 openolat-lms.iml
 /var/
 
-
-
 node_modules
+node/
 .directory

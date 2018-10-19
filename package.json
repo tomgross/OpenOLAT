@@ -30,8 +30,12 @@
   },
   "dependencies": {
     "bootstrap": "^3.2.0",
+    "d3": "4.13.0",
+    "dragula": "^3.7.2",
+    "font-awesome": "^4.7.0",
     "iframe-resizer": "^3.6.2",
     "jquery": "^3.3.1",
-    "jquery.transit": "^0.9.12"
+    "jquery.transit": "^0.9.12",
+    "qrcodejs": "^1.0.0"
   }
 }
