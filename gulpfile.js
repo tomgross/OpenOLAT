@@ -72,15 +72,15 @@ gulp.task('js:build', function () {
     if (!guidebug) {
         // production mode: concat and uglify
         gulp.src([
-            assetsPath + 'static/js/jquery/jquery.periodic.js',
-            assetsPath + 'static/js/jshashtable-2.1_src.js',
-            assetsPath + 'static/js/jquery/openolat/jquery.translator.js',
-            assetsPath + 'static/js/jquery/openolat/jquery.navbar.js',
-            assetsPath + 'static/js/jquery/openolat/jquery.bgcarrousel.js',
-            assetsPath + 'static/js/tinymce4/tinymce/jquery.tinymce.min.js',
-            assetsPath + 'static/functions.js',
-            assetsPath + 'node_modules/jquery.transit/jquery.transit.js',
-            assetsPath + 'node_modules/bootstrap-sass/assets/javascripts/bootstrap.min.js'
+            assetsPath + 'js/jquery/jquery.periodic.js',
+            assetsPath + 'js/jshashtable-2.1_src.js',
+            assetsPath + 'js/jquery/openolat/jquery.translator.js',
+            assetsPath + 'js/jquery/openolat/jquery.navbar.js',
+            assetsPath + 'js/jquery/openolat/jquery.bgcarrousel.js',
+            assetsPath + 'js/tinymce4/tinymce/jquery.tinymce.min.js',
+            assetsPath + 'js/functions.js',
+            'node_modules/jquery.transit/jquery.transit.js',
+            'node_modules/bootstrap-sass/assets/javascripts/bootstrap.min.js'
         ])
             .pipe(concat('js.plugins.min.js'))
             .pipe(uglify())
@@ -96,7 +96,6 @@ gulp.task('js:build', function () {
             'node_modules/bootstrap-sass/assets/javascripts/bootstrap/*'
         ])
             .pipe(gulp.dest(assetsPath + 'bootstrap/javascripts/bootstrap'))
-
     }
 
 });
@@ -108,12 +107,12 @@ gulp.task('css:build', function () {
             // production mode: concat and minify
             gulp.src(
                 [
-                    assetsPath + 'static/js/jquery/tagsinput/bootstrap-tagsinput.css',
-                    assetsPath + 'static/js/jquery/fullcalendar/fullcalendar.css',
-                    assetsPath + 'static/js/jquery/cropper/cropper.css',
-                    assetsPath + 'static/js/jquery/sliderpips/jquery-ui-slider-pips.css',
-                    assetsPath + 'static/js/jquery/ui/jquery-ui-1.11.4.custom.min.css',
-                    assetsPath + 'static/js/dragula/dragula.css'
+                    assetsPath + 'js/jquery/tagsinput/bootstrap-tagsinput.css',
+                    assetsPath + 'js/jquery/fullcalendar/fullcalendar.css',
+                    assetsPath + 'js/jquery/cropper/cropper.css',
+                    assetsPath + 'js/jquery/sliderpips/jquery-ui-slider-pips.css',
+                    assetsPath + 'js/jquery/ui/jquery-ui-1.11.4.custom.min.css',
+                    assetsPath + 'js/dragula/dragula.css'
                 ])
                 .pipe(concat('js.plugins.min.css'))
                 .pipe(cleanCSS({debug: true, level: {1: {specialComments: 'none'}}}, (details) => {
@@ -139,8 +138,9 @@ gulp.task('css:build', function () {
 
 
 gulp.task('watch', function() {
-    gulp.watch('static/themes/**/*.scss', ['theme']);
+    gulp.watch(assetsPath + 'themes/**/*.scss', ['theme']);
     gulp.watch('node_modules/**/*', ['default']);
+    gulp.watch(assetsPath + 'js/functions.js', ['js:build']);
 });
 
 // Default Task

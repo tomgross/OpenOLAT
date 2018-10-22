@@ -8,17 +8,17 @@ $fa-font-path:        "../../font-awesome/fonts" !default;
 $fa-css-prefix: "o_icon" !default;
 /* Immport everything but the icons definitions as we define only the icons we actually use.
    Don't use extend here to not make CSS explode */
-@import "../../../font-awesome/scss/variables";
-@import "../../../font-awesome/scss/mixins";
-@import "../../../font-awesome/scss/path";
-@import "../../../font-awesome/scss/core";
-@import "../../../font-awesome/scss/larger";
-@import "../../../font-awesome/scss/fixed-width";
-@import "../../../font-awesome/scss/list";
-@import "../../../font-awesome/scss/bordered-pulled";
-@import "../../../font-awesome/scss/animated";
-@import "../../../font-awesome/scss/rotated-flipped";
-@import "../../../font-awesome/scss/stacked";
+@import "../../../../../../../node_modules/font-awesome/scss/variables";
+@import "../../../../../../../node_modules/font-awesome/scss/mixins";
+@import "../../../../../../../node_modules/font-awesome/scss/path";
+@import "../../../../../../../node_modules/font-awesome/scss/core";
+@import "../../../../../../../node_modules/font-awesome/scss/larger";
+@import "../../../../../../../node_modules/font-awesome/scss/fixed-width";
+@import "../../../../../../../node_modules/font-awesome/scss/list";
+@import "../../../../../../../node_modules/font-awesome/scss/bordered-pulled";
+@import "../../../../../../../node_modules/font-awesome/scss/animated";
+@import "../../../../../../../node_modules/font-awesome/scss/rotated-flipped";
+@import "../../../../../../../node_modules/font-awesome/scss/stacked";
 
 
 /* OpenOLAT Icons */
