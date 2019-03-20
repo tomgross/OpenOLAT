@@ -38,6 +38,7 @@ import javax.ws.rs.core.UriBuilder;
 import org.apache.http.HttpResponse;
 import org.apache.http.client.methods.HttpGet;
 import org.apache.http.util.EntityUtils;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.olat.test.OlatJerseyTestCase;
 
@@ -49,6 +50,7 @@ import org.olat.test.OlatJerseyTestCase;
  * Initial Date:  14 apr. 2010 <br>
  * @author srosse, stephane.rosse@frentix.com
  */
+@Ignore
 public class I18nTest extends OlatJerseyTestCase {
 	
 	@Test

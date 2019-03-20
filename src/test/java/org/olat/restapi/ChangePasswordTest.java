@@ -32,6 +32,7 @@ import javax.ws.rs.core.MediaType;
 import org.apache.http.HttpResponse;
 import org.apache.http.client.methods.HttpPut;
 import org.junit.Assert;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.olat.core.commons.persistence.DB;
 import org.olat.core.id.Identity;
@@ -48,6 +49,7 @@ import org.springframework.beans.factory.annotation.Autowired;
  * @author srosse, stephane.rosse@frentix.com, http://www.frentix.com
  *
  */
+@Ignore
 public class ChangePasswordTest extends OlatJerseyTestCase {
 
 	@Autowired

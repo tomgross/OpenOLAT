@@ -26,6 +26,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.StringReader;
+import java.net.MalformedURLException;
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -117,24 +118,24 @@ import uk.ac.ed.ph.jqtiplus.value.DirectedPairValue;
 import uk.ac.ed.ph.jqtiplus.value.SingleValue;
 
 /**
- * 
+ *
  * Initial date: 04.07.2016<br>
  * @author srosse, stephane.rosse@frentix.com, http://www.frentix.com
  *
  */
 public class QTI21WordExport implements MediaResource {
-	
+
 	private final static OLog log = Tracing.createLoggerFor(QTIWordExport.class);
-	
+
 	private String encoding;
 	private ResolvedAssessmentTest resolvedAssessmentTest;
 	private VFSContainer mediaContainer;
 	private Locale locale;
 	private final CountDownLatch latch;
 	private final AssessmentHtmlBuilder htmlBuilder;
-	
+
 	public QTI21WordExport(ResolvedAssessmentTest resolvedAssessmentTest, VFSContainer mediaContainer,
-			Locale locale, String encoding, CountDownLatch latch) {
+						   Locale locale, String encoding, CountDownLatch latch) {
 		this.encoding = encoding;
 		this.locale = locale;
 		this.resolvedAssessmentTest = resolvedAssessmentTest;
@@ -142,12 +143,12 @@ public class QTI21WordExport implements MediaResource {
 		this.mediaContainer = mediaContainer;
 		htmlBuilder = new AssessmentHtmlBuilder();
 	}
-	
+
 	@Override
 	public boolean acceptRanges() {
 		return false;
 	}
-	
+
 	@Override
 	public String getContentType() {
 		return "application/zip";
@@ -184,14 +185,14 @@ public class QTI21WordExport implements MediaResource {
 		ZipOutputStream zout = null;
 		try {
 			AssessmentTest assessmentTest = resolvedAssessmentTest.getRootNodeLookup().extractIfSuccessful();
-			
+
 			String label = assessmentTest.getTitle();
 			String secureLabel = StringHelper.transformDisplayNameToFileSystemName(label);
 
 			String file = secureLabel + ".zip";
-			hres.setHeader("Content-Disposition", "attachment; filename*=UTF-8''" + StringHelper.urlEncodeUTF8(file));			
+			hres.setHeader("Content-Disposition", "attachment; filename*=UTF-8''" + StringHelper.urlEncodeUTF8(file));
 			hres.setHeader("Content-Description", StringHelper.urlEncodeUTF8(label));
-			
+
 			zout = new ZipOutputStream(hres.getOutputStream());
 			zout.setLevel(9);
 
@@ -199,7 +200,7 @@ public class QTI21WordExport implements MediaResource {
 			zout.putNextEntry(test);
 			exportTest(assessmentTest, label, zout, false);
 			zout.closeEntry();
-			
+
 			ZipEntry responses = new ZipEntry(secureLabel + "_responses.docx");
 			zout.putNextEntry(responses);
 			exportTest(assessmentTest, label, zout, true);
@@ -212,19 +213,19 @@ public class QTI21WordExport implements MediaResource {
 			IOUtils.closeQuietly(zout);
 		}
 	}
-	
+
 	private void exportTest(AssessmentTest assessmentTest, String header, OutputStream out, boolean withResponses) {
 		ZipOutputStream zout = null;
 		try {
 			OpenXMLDocument document = new OpenXMLDocument();
 			document.setMediaContainer(mediaContainer);
 			document.setDocumentHeader(header);
-			
+
 			Translator translator = Util.createPackageTranslator(AssessmentTestDisplayController.class, locale,
 					Util.createPackageTranslator(AssessmentTestComposerController.class, locale));
 
 			renderAssessmentTest(assessmentTest, document, translator);
-			
+
 			for(TestPart testPart:assessmentTest.getChildAbstractParts()) {
 				List<AssessmentSection> assessmentSections = testPart.getAssessmentSections();
 				for(AssessmentSection assessmentSection:assessmentSections) {
@@ -234,7 +235,7 @@ public class QTI21WordExport implements MediaResource {
 
 			zout = new ZipOutputStream(out);
 			zout.setLevel(9);
-			
+
 			OpenXMLDocumentWriter writer = new OpenXMLDocumentWriter();
 			writer.createDocument(zout, document);
 		} catch (Exception e) {
@@ -259,7 +260,7 @@ public class QTI21WordExport implements MediaResource {
 		String notSupported = translator.translate("info.alienitem");
 		document.appendText(notSupported, true, Style.bold);
 	}
-	
+
 	public void renderAssessmentSection(AssessmentSection assessmentSection, OpenXMLDocument document, boolean withResponses, Translator translator) {
 		String title = assessmentSection.getTitle();
 		document.appendHeading1(title, null);
@@ -268,7 +269,7 @@ public class QTI21WordExport implements MediaResource {
 			String htmlRubric = htmlBuilder.blocksString(rubricBlock.getBlocks());
 			document.appendHtmlText(htmlRubric, true);
 		}
-		
+
 		for(SectionPart sectionPart:assessmentSection.getChildAbstractParts()) {
 			if(sectionPart instanceof AssessmentSection) {
 				renderAssessmentSection((AssessmentSection)sectionPart, document, withResponses, translator);
@@ -282,11 +283,11 @@ public class QTI21WordExport implements MediaResource {
 			}
 		}
 	}
-	
+
 	public void renderAssessmentTest(AssessmentTest assessmentTest, OpenXMLDocument document, Translator translator) {
 		String title = assessmentTest.getTitle();
 		document.appendTitle(title);
-		
+
 		if(assessmentTest.getOutcomeProcessing() != null) {
 			List<OutcomeRule> outcomeRules = assessmentTest.getOutcomeProcessing().getOutcomeRules();
 			for(OutcomeRule outcomeRule:outcomeRules) {
@@ -304,11 +305,11 @@ public class QTI21WordExport implements MediaResource {
 			}
 		}
 	}
-	
+
 	public static void renderAssessmentItem(AssessmentItem item, File itemFile, OpenXMLDocument document,
-			boolean withResponses, Translator translator, AssessmentHtmlBuilder htmlBuilder) {
+											boolean withResponses, Translator translator, AssessmentHtmlBuilder htmlBuilder) {
 		StringBuilder addText = new StringBuilder();
-		
+
 		QTI21QuestionType type = QTI21QuestionType.getType(item);
 		String typeDescription = "";
 		switch(type) {
@@ -324,9 +325,9 @@ public class QTI21WordExport implements MediaResource {
 			case match: typeDescription = translator.translate("form.match"); break;
 			default: typeDescription = null; break;
 		}
-		
+
 		Double maxScore = QtiNodesExtractor.extractMaxScore(item);
-		
+
 		if(StringHelper.containsNonWhitespace(typeDescription) || maxScore != null) {
 			if(StringHelper.containsNonWhitespace(typeDescription)) {
 				addText.append("(").append(typeDescription).append(")");
@@ -335,21 +336,21 @@ public class QTI21WordExport implements MediaResource {
 				addText.append(" - ").append(AssessmentHelper.getRoundedScore(maxScore));
 			}
 		}
-		
+
 		String title = item.getTitle();
 		document.appendHeading1(title, addText.toString());
 
 		List<Block> itemBodyBlocks = item.getItemBody().getBlocks();
 		String html = htmlBuilder.blocksString(itemBodyBlocks);
 		document.appendHtmlText(html, true, new QTI21AndHTMLToOpenXMLHandler(document, item, itemFile, withResponses, htmlBuilder, translator));
-	
+
 		if(withResponses && (type == QTI21QuestionType.essay || type == QTI21QuestionType.upload || type == QTI21QuestionType.drawing)) {
 			renderCorrectSolutionForWord(item, document, translator, htmlBuilder);
 		}
 	}
-	
+
 	private static void renderCorrectSolutionForWord(AssessmentItem item, OpenXMLDocument document,
-			 Translator translator, AssessmentHtmlBuilder htmlBuilder) {
+													 Translator translator, AssessmentHtmlBuilder htmlBuilder) {
 		List<ModalFeedback> feedbacks = item.getModalFeedbacks();
 		if(feedbacks != null && feedbacks.size() > 0) {
 			for(ModalFeedback feedback:feedbacks) {
@@ -363,7 +364,7 @@ public class QTI21WordExport implements MediaResource {
 					if(!StringHelper.containsNonWhitespace(feedbackTitle)) {
 						feedbackTitle = translator.translate("correct.solution");
 					}
-					
+
 					document.appendHeading2(feedbackTitle, null);
 					String html = htmlBuilder.flowStaticString(feedback.getFlowStatics());
 					document.appendHtmlText(html, true);
@@ -371,21 +372,21 @@ public class QTI21WordExport implements MediaResource {
 			}
 		}
 	}
-	
+
 	private static class QTI21AndHTMLToOpenXMLHandler extends HTMLToOpenXMLHandler {
-		
+
 		private final File itemFile;
 		private final AssessmentItem assessmentItem;
 		private final boolean withResponses;
 		private final AssessmentHtmlBuilder htmlBuilder;
 		private final Translator translator;
-		
+
 		private String simpleChoiceIdentifier;
 		private String responseIdentifier;
 		private boolean renderElement = true;
 
 		public QTI21AndHTMLToOpenXMLHandler(OpenXMLDocument document, AssessmentItem assessmentItem,
-				File itemFile, boolean withResponses, AssessmentHtmlBuilder htmlBuilder, Translator translator) {
+											File itemFile, boolean withResponses, AssessmentHtmlBuilder htmlBuilder, Translator translator) {
 			super(document);
 			this.itemFile = itemFile;
 			this.withResponses = withResponses;
@@ -393,7 +394,7 @@ public class QTI21WordExport implements MediaResource {
 			this.htmlBuilder = htmlBuilder;
 			this.translator = translator;
 		}
-		
+
 		@Override
 		public void startElement(String uri, String localName, String qName, Attributes attributes) {
 
@@ -428,7 +429,7 @@ public class QTI21WordExport implements MediaResource {
 					break;
 				case "matchinteraction":
 					renderElement = false;
-					
+
 					Interaction interaction = getInteractionByResponseIdentifier(attributes);
 					if(interaction instanceof MatchInteraction) {
 						MatchInteraction matchInteraction = (MatchInteraction)interaction;
@@ -519,25 +520,25 @@ public class QTI21WordExport implements MediaResource {
 				}
 			}
 		}
-		
+
 		private void endSimpleChoice() {
 			Element checkboxCell = factory.createTableCell(null, 369, Unit.pct);
 			Node checkboxNode = currentTable.addCellEl(checkboxCell, 1);
-			
+
 			boolean checked = false;
 			if(withResponses) {
 				Identifier identifier = Identifier.assumedLegal(simpleChoiceIdentifier);
 				List<Identifier> correctAnswers = CorrectResponsesUtil
 						.getCorrectIdentifierResponses(assessmentItem, Identifier.assumedLegal(responseIdentifier));
-				checked = correctAnswers.contains(identifier);	
+				checked = correctAnswers.contains(identifier);
 			}
-			
+
 			Node responseEl = factory.createCheckbox(checked);
 			Node wrapEl = factory.wrapInParagraph(responseEl);
 			checkboxNode.appendChild(wrapEl);
 			closeCurrentTableRow();
 		}
-		
+
 		private void startHottext(Attributes attributes) {
 			Hottext hottext = getHottextByIdentifier(attributes);
 			if(hottext != null) {
@@ -548,15 +549,15 @@ public class QTI21WordExport implements MediaResource {
 						break;
 					}
 				}
-				
+
 				if(interaction != null) {
 					boolean checked = false;
 					if(withResponses) {
 						List<Identifier> correctAnswers = CorrectResponsesUtil
 								.getCorrectIdentifierResponses(assessmentItem, interaction.getResponseIdentifier());
-						checked = correctAnswers.contains(hottext.getIdentifier());	
+						checked = correctAnswers.contains(hottext.getIdentifier());
 					}
-					
+
 					flushText();
 					Element paragraphEl = getCurrentParagraph(false);
 					Node responseEl = factory.createCheckbox(checked, false);
@@ -567,7 +568,7 @@ public class QTI21WordExport implements MediaResource {
 				}
 			}
 		}
-		
+
 		private Hottext getHottextByIdentifier(Attributes attributes) {
 			String identifier = attributes.getValue("identifier");
 			if(StringHelper.containsNonWhitespace(identifier)) {
@@ -581,7 +582,7 @@ public class QTI21WordExport implements MediaResource {
 			}
 			return null;
 		}
-		
+
 		private void startDrawingInteraction(Attributes attributes) {
 			Interaction interaction = getInteractionByResponseIdentifier(attributes);
 			if(interaction instanceof DrawingInteraction) {
@@ -589,7 +590,7 @@ public class QTI21WordExport implements MediaResource {
 				setObject(drawingInteraction.getObject());
 			}
 		}
-		
+
 		private void startSelectPointInteraction(Attributes attributes) {
 			Interaction interaction = getInteractionByResponseIdentifier(attributes);
 			if(interaction instanceof SelectPointInteraction) {
@@ -597,7 +598,7 @@ public class QTI21WordExport implements MediaResource {
 				setObject(selectPointInteraction.getObject());
 			}
 		}
-		
+
 		private void startGraphicAssociateInteraction(Attributes attributes) {
 			Interaction interaction = getInteractionByResponseIdentifier(attributes);
 			if(interaction instanceof GraphicAssociateInteraction) {
@@ -605,7 +606,7 @@ public class QTI21WordExport implements MediaResource {
 				setObject(associateInteraction.getObject());
 			}
 		}
-		
+
 		private void startGraphicOrderInteraction(Attributes attributes) {
 			Interaction interaction = getInteractionByResponseIdentifier(attributes);
 			if(interaction instanceof GraphicOrderInteraction) {
@@ -613,7 +614,7 @@ public class QTI21WordExport implements MediaResource {
 				setObject(orderInteraction.getObject());
 			}
 		}
-		
+
 		private void startPositionObjectInteraction(Attributes attributes) {
 			Interaction interaction = getInteractionByResponseIdentifier(attributes);
 			if(interaction instanceof PositionObjectInteraction) {
@@ -621,16 +622,16 @@ public class QTI21WordExport implements MediaResource {
 				setObject(positionObject.getObject());
 			}
 		}
-		
+
 		private void startHotspotInteraction(Attributes attributes) {
 			Interaction interaction = getInteractionByResponseIdentifier(attributes);
 			if(interaction instanceof HotspotInteraction) {
 				HotspotInteraction hotspotInteraction = (HotspotInteraction)interaction;
-				
+
 				Object object = hotspotInteraction.getObject();
 				if(object != null && StringHelper.containsNonWhitespace(object.getData())) {
 					File backgroundImg = new File(itemFile.getParentFile(), object.getData());
-					
+
 					List<Identifier> correctAnswers = new ArrayList<>();
 					ResponseDeclaration responseDeclaration = assessmentItem.getResponseDeclaration(interaction.getResponseIdentifier());
 					if(responseDeclaration != null) {
@@ -639,7 +640,7 @@ public class QTI21WordExport implements MediaResource {
 							extractIdentifiersFromCorrectResponse(correctResponse, correctAnswers);
 						}
 					}
-					
+
 					List<OpenXMLGraphic> elements = new ArrayList<>();
 					List<HotspotChoice> choices = hotspotInteraction.getHotspotChoices();
 					for(HotspotChoice choice:choices) {
@@ -650,7 +651,7 @@ public class QTI21WordExport implements MediaResource {
 								style = OpenXMLGraphic.Style.accent3;
 							}
 						}
-						
+
 						Shape shape = choice.getShape();
 						if(shape == Shape.CIRCLE || shape == Shape.ELLIPSE) {
 							elements.add(new OpenXMLGraphic(OpenXMLGraphic.Type.circle, style, choice.getCoords()));
@@ -658,36 +659,41 @@ public class QTI21WordExport implements MediaResource {
 							elements.add(new OpenXMLGraphic(OpenXMLGraphic.Type.rectangle, style, choice.getCoords()));
 						}
 					}
-					startGraphic(backgroundImg, elements);
+
+					try {
+						startGraphic(backgroundImg.toURI().toURL(), elements);
+					} catch (MalformedURLException e) {
+						log.error("", e);
+					}
 				}
 			}
 		}
-		
+
 		private void startMatch(MatchInteraction matchInteraction) {
 			SimpleMatchSet questionMatchSetVertical = matchInteraction.getSimpleMatchSets().get(0);
 			SimpleMatchSet questionMatchSetHorizontal = matchInteraction.getSimpleMatchSets().get(1);
 			List<SimpleAssociableChoice> horizontalAssociableChoices = questionMatchSetHorizontal.getSimpleAssociableChoices();
 			List<SimpleAssociableChoice> verticalAssociableChoices = questionMatchSetVertical.getSimpleAssociableChoices();
-			
+
 			// calculate the width of the table () and of its columns
 			int tableWidthDxa = 11294;
 			int tableWidthPct = 4858;
 			int numOfColumns = horizontalAssociableChoices.size() + 1;
 			int columnWidthDxa = tableWidthDxa / numOfColumns;
 			int columnWidthPct = tableWidthPct / numOfColumns;
-			
+
 			Integer[] columnsWidth = new Integer[numOfColumns];
 			for(int i=numOfColumns; i-->0; ) {
 				columnsWidth[i] = columnWidthDxa;
 			}
 			startTable(columnsWidth);
 
-			
+
 			currentTable.addRowEl();
 			// white corner
 			Node emptyCell = currentTable.addCellEl(factory.createTableCell(null, columnWidthDxa, Unit.dxa), 1);
 			emptyCell.appendChild(factory.createParagraphEl(""));
-			
+
 			// horizontal headers
 			for(SimpleAssociableChoice choice:horizontalAssociableChoices) {
 				Element answerCell = currentTable.addCellEl(factory.createTableCell("E9EAF2", columnWidthPct, Unit.pct), 1);
@@ -705,13 +711,13 @@ public class QTI21WordExport implements MediaResource {
 					boolean correct = isCorrectMatchResponse(choice.getIdentifier(), horizontalChoice.getIdentifier(), matchInteraction);
 					appendMatchCheckBox(correct, columnWidthPct, factory);
 				}
-				
+
 				currentTable.closeRow();
 			}
-			
+
 			endTable();
 		}
-		
+
 		private void appendSimpleAssociableChoice(SimpleAssociableChoice choice, Element answerCell) {
 			String html = htmlBuilder.flowStaticString(choice.getFlowStatics());
 			Element wrapEl = factory.createParagraphEl();
@@ -720,7 +726,7 @@ public class QTI21WordExport implements MediaResource {
 				answerCell.appendChild(node);
 			}
 		}
-		
+
 		public List<Node> appendHtmlText(String html, Element wrapEl) {
 			if(!StringHelper.containsNonWhitespace(html)) {
 				return Collections.emptyList();
@@ -736,7 +742,7 @@ public class QTI21WordExport implements MediaResource {
 				return Collections.emptyList();
 			}
 		}
-		
+
 		private void startKPrim(MatchInteraction matchInteraction) {
 			SimpleMatchSet questionMatchSet = matchInteraction.getSimpleMatchSets().get(0);
 
@@ -747,17 +753,17 @@ public class QTI21WordExport implements MediaResource {
 			//draw header with +/-
 			Node emptyCell = currentTable.addCellEl(factory.createTableCell(null, 9062, Unit.dxa), 1);
 			emptyCell.appendChild(factory.createParagraphEl(""));
-			
+
 			Node plusCell = currentTable.addCellEl(factory.createTableCell(null, 1116, Unit.dxa), 1);
 			plusCell.appendChild(factory.createParagraphEl(translator.translate("kprim.plus")));
 			Node minusCell = currentTable.addCellEl(factory.createTableCell(null, 1116, Unit.dxa), 1);
 			minusCell.appendChild(factory.createParagraphEl(translator.translate("kprim.minus")));
 
 			currentTable.closeRow();
-			
+
 			for(SimpleAssociableChoice choice:questionMatchSet.getSimpleAssociableChoices()) {
 				currentTable.addRowEl();
-	
+
 				//answer
 				Element answerCell = currentTable.addCellEl(factory.createTableCell("E9EAF2", 4120, Unit.pct), 1);
 				appendSimpleAssociableChoice(choice, answerCell);
@@ -769,10 +775,10 @@ public class QTI21WordExport implements MediaResource {
 
 				currentTable.closeRow();
 			}
-			
+
 			endTable();
 		}
-		
+
 		private boolean isCorrectKPrimResponse(Identifier choiceIdentifier, Identifier targetIdentifier, MatchInteraction interaction) {
 			if(!withResponses) return false;
 
@@ -791,7 +797,7 @@ public class QTI21WordExport implements MediaResource {
 			}
 			return false;
 		}
-		
+
 		private boolean isCorrectMatchResponse(Identifier choiceIdentifier, Identifier targetIdentifier, MatchInteraction interaction) {
 			if(!withResponses) return false;
 
@@ -826,20 +832,24 @@ public class QTI21WordExport implements MediaResource {
 			}
 			return false;
 		}
-		
+
 		private void appendMatchCheckBox(boolean checked, int width, OpenXMLDocument document) {
 			Node checkboxCell = currentTable.addCellEl(document.createTableCell(null, width, Unit.pct), 1);
 			Node responseEl = document.createCheckbox(checked);
 			Node wrapEl = document.wrapInParagraph(responseEl);
 			checkboxCell.appendChild(wrapEl);
 		}
-		
+
 		private void setObject(Object object) {
 			if(object != null && StringHelper.containsNonWhitespace(object.getData())) {
-				setImage(new File(itemFile.getParentFile(), object.getData()));
+				try {
+					setImage(new File(itemFile.getParentFile(), object.getData()).toURI().toURL());
+				} catch (MalformedURLException e) {
+					log.error("", e);
+				}
 			}
 		}
-		
+
 		private Interaction getInteractionByResponseIdentifier(Attributes attributes) {
 			String identifier = attributes.getValue("responseidentifier");
 			if(StringHelper.containsNonWhitespace(identifier)) {
@@ -853,7 +863,7 @@ public class QTI21WordExport implements MediaResource {
 			}
 			return null;
 		}
-		
+
 		private void startExtendedTextInteraction(Attributes attributes) {
 			closeParagraph();
 
@@ -864,20 +874,20 @@ public class QTI21WordExport implements MediaResource {
 			} catch (NumberFormatException e) {
 				//
 			}
-			
+
 			for(int i=expectedLines; i-->0; ) {
 				Element paragraphEl = factory.createFillInBlanckWholeLine();
 				currentParagraph = addContent(paragraphEl);
 			}
 		}
-		
+
 		private void startTextEntryInteraction(String tag, Attributes attributes) {
 			flushText();
 
 			Style[] styles = setTextPreferences(Style.italic);
 			styleStack.add(new StyleStatus(tag, true, styles));
 			pNeedNewParagraph = false;
-			
+
 			if(withResponses) {
 				String response = "";
 				Identifier responseId = Identifier.assumedLegal(attributes.getValue("responseidentifier"));
@@ -886,7 +896,7 @@ public class QTI21WordExport implements MediaResource {
 					if(responseDeclaration.hasBaseType(BaseType.STRING) && responseDeclaration.hasCardinality(Cardinality.SINGLE)) {
 						TextEntry textEntry = new TextEntry(responseId);
 						FIBAssessmentItemBuilder.extractTextEntrySettingsFromResponseDeclaration(textEntry, responseDeclaration, new AtomicInteger(), new DoubleAdder());
-						
+
 						StringBuilder sb = new StringBuilder();
 						if(StringHelper.containsNonWhitespace(textEntry.getSolution())) {
 							sb.append(textEntry.getSolution());
@@ -920,7 +930,7 @@ public class QTI21WordExport implements MediaResource {
 				Element blanckEl = factory.createFillInBlanck(expectedLength);
 				getCurrentParagraph(false).appendChild(blanckEl);
 			}
-			
+
 			flushText();
 			popStyle(tag);
 		}

@@ -97,6 +97,8 @@ public class COEditController extends ActivateableTabbableDefaultController impl
 	public static final String CONFIG_KEY_MSUBJECT_DEFAULT = "mSubjectDefault";
 	/** config key: default body text */
 	public static final String CONFIG_KEY_MBODY_DEFAULT = "mBodyDefault";
+	/** config key: sent from course */
+	public static final String CONFIG_KEY_SENT_FROM_COURSE = "sentFromCourse";
 	
 	private ModuleConfiguration moduleConfiguration;
 	private final VelocityContainer myContent;

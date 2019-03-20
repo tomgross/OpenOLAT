@@ -76,6 +76,7 @@ import org.olat.repository.RepositoryManager;
 import org.olat.repository.RepositoryService;
 import org.olat.repository.handlers.RepositoryHandler;
 import org.olat.repository.handlers.RepositoryHandlerFactory;
+import org.olat.repository.manager.RepositoryEntryDeletionException;
 import org.olat.repository.manager.RepositoryEntryLifecycleDAO;
 import org.olat.repository.model.RepositoryEntryLifecycle;
 import org.olat.resource.OLATResource;
@@ -213,7 +214,7 @@ public class RepositoryEntryResource {
 
 			UserRequest ureq = RestSecurityHelper.getUserRequest(request);
 			IdentitiesAddEvent iae = new IdentitiesAddEvent(identityToAdd);
-			repositoryManager.addOwners(ureq.getIdentity(), iae, repoEntry);
+			repositoryManager.addOwners(ureq.getIdentity(), iae, repoEntry, null);
 			return Response.ok().build();
 		} catch (Exception e) {
 			log.error("Trying to add an owner to a repository entry", e);
@@ -237,7 +238,7 @@ public class RepositoryEntryResource {
 			List<Identity> identityToAdd = loadIdentities(owners);
 			UserRequest ureq = RestSecurityHelper.getUserRequest(request);
 			IdentitiesAddEvent iae = new IdentitiesAddEvent(identityToAdd);
-			repositoryManager.addOwners(ureq.getIdentity(), iae, repoEntry);
+			repositoryManager.addOwners(ureq.getIdentity(), iae, repoEntry, null);
 			return Response.ok().build();
 		} catch (Exception e) {
 			log.error("Trying to add an owner to a repository entry", e);
@@ -760,7 +761,12 @@ public class RepositoryEntryResource {
 		}
 		UserRequest ureq = getUserRequest(request);
 		RepositoryService rs = CoreSpringFactory.getImpl(RepositoryService.class);
-		ErrorList errors = rs.deletePermanently(re, ureq.getIdentity(), ureq.getUserSession().getRoles(), ureq.getLocale());
+		ErrorList errors;
+		try {
+			errors = rs.deletePermanently(re, ureq.getIdentity(), ureq.getUserSession().getRoles(), ureq.getLocale());
+		} catch (RepositoryEntryDeletionException e) {
+			return Response.serverError().status(500).build();
+		}
 		if(errors.hasErrors()) {
 			return Response.serverError().status(500).build();
 		}
@@ -821,12 +827,17 @@ public class RepositoryEntryResource {
 					LoggingResourceable.wrap(re, OlatResourceableType.genRepoEntry));
 		} else if("deleted".equals(newStatus)) {
 			Identity identity = getIdentity(request);
-			rs.deleteSoftly(re, identity, true);
-			log.audit("REST deleting (soft) course: " + re.getDisplayname() + " [" + re.getKey() + "]");
-			ThreadLocalUserActivityLogger.log(LearningResourceLoggingAction.LEARNING_RESOURCE_TRASH, getClass(),
-					LoggingResourceable.wrap(re, OlatResourceableType.genRepoEntry));
+			try {
+				rs.deleteSoftly(re, identity, true);
+				log.audit("REST deleting (soft) course: " + re.getDisplayname() + " [" + re.getKey() + "]");
+				ThreadLocalUserActivityLogger.log(LearningResourceLoggingAction.LEARNING_RESOURCE_TRASH, getClass(),
+						LoggingResourceable.wrap(re, OlatResourceableType.genRepoEntry));
+			} catch (RepositoryEntryDeletionException e) {
+				log.audit(e.getMessage());
+			}
 		} else if("restored".equals(newStatus)) {
-			rs.restoreRepositoryEntry(re);
+			Identity identity = getIdentity(request);
+			rs.restoreRepositoryEntry(re, identity);
 			log.audit("REST restoring course: " + re.getDisplayname() + " [" + re.getKey() + "]");
 			ThreadLocalUserActivityLogger.log(LearningResourceLoggingAction.LEARNING_RESOURCE_RESTORE, getClass(),
 					LoggingResourceable.wrap(re, OlatResourceableType.genRepoEntry));

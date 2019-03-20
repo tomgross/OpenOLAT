@@ -41,13 +41,27 @@ import org.olat.core.gui.components.table.TableDataModel;
  *
  * @param <U>
  */
+/**
+ * TODO sev26
+ * Most of the method of this class is only called once. Therefore it seems
+ * that this class is only an complexity overhead without a real purpose. In
+ * other words, feed other classes with
+ * {@link FlexiTableDataSourceDelegate<U>} and {@link FlexiTableColumnModel}
+ * directly.
+ */
 public abstract class DefaultFlexiTableDataSourceModel<U> implements FlexiTableDataSource<U>, TableDataModel<U> {
 	private List<U> rows;
 	private FlexiTableColumnModel columnModel;
 	private FlexiTableDataSourceDelegate<U> sourceDelegate;
 	
 	private int rowCount;
-	
+
+	/**
+	 * TODO sev26
+	 * Why mixing the model and data here? This should be the responsibility
+	 * of the controller. The {@link #sourceDelegate} member should be
+	 * removed.
+	 */
 	public DefaultFlexiTableDataSourceModel(FlexiTableDataSourceDelegate<U> sourceDelegate, FlexiTableColumnModel columnModel) {
 		this.rows = new ArrayList<U>(100);
 		this.sourceDelegate = sourceDelegate;

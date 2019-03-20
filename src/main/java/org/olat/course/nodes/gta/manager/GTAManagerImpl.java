@@ -36,8 +36,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import javax.persistence.LockModeType;
 import javax.persistence.Query;
 
-import org.olat.basesecurity.GroupRoles;
-import org.olat.basesecurity.IdentityRef;
+import org.olat.basesecurity.*;
 import org.olat.core.commons.modules.bc.FolderConfig;
 import org.olat.core.commons.modules.bc.vfs.OlatRootFolderImpl;
 import org.olat.core.commons.persistence.DB;
@@ -52,6 +51,7 @@ import org.olat.core.util.vfs.VFSContainer;
 import org.olat.core.util.vfs.VFSItem;
 import org.olat.core.util.vfs.VFSManager;
 import org.olat.core.util.xml.XStreamHelper;
+import org.olat.course.condition.Condition;
 import org.olat.course.nodes.GTACourseNode;
 import org.olat.course.nodes.gta.AssignmentResponse;
 import org.olat.course.nodes.gta.AssignmentResponse.Status;
@@ -70,18 +70,17 @@ import org.olat.course.nodes.gta.model.TaskImpl;
 import org.olat.course.nodes.gta.model.TaskListImpl;
 import org.olat.course.nodes.gta.ui.events.SubmitEvent;
 import org.olat.course.run.environment.CourseEnvironment;
-import org.olat.group.BusinessGroup;
-import org.olat.group.BusinessGroupRef;
-import org.olat.group.BusinessGroupService;
-import org.olat.group.DeletableGroupData;
+import org.olat.group.*;
 import org.olat.group.area.BGAreaManager;
 import org.olat.group.manager.BusinessGroupRelationDAO;
 import org.olat.group.model.BusinessGroupRefImpl;
+import org.olat.group.model.SearchBusinessGroupParams;
 import org.olat.modules.ModuleConfiguration;
 import org.olat.modules.assessment.AssessmentService;
 import org.olat.modules.assessment.model.AssessmentEntryStatus;
 import org.olat.repository.RepositoryEntry;
 import org.olat.repository.RepositoryEntryRef;
+import org.olat.repository.RepositoryEntryRelationType;
 import org.olat.repository.manager.RepositoryEntryRelationDAO;
 import org.olat.resource.OLATResource;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -106,6 +105,8 @@ public class GTAManagerImpl implements GTAManager, DeletableGroupData {
 	private DB dbInstance;
 	@Autowired
 	private BGAreaManager areaManager;
+	@Autowired
+	protected BaseSecurity securityManager;
 	@Autowired
 	private AssessmentService assessmentService;
 	@Autowired
@@ -786,6 +787,43 @@ public class GTAManagerImpl implements GTAManager, DeletableGroupData {
 				.setParameter("entryKey", entry.getKey())
 				.setParameter("courseNodeIdent", gtaNode.getIdent())
 				.getResultList();
+	}
+
+	@Override
+	public List<Identity> getCourseOwners(RepositoryEntry repositoryEntry) {
+		return repositoryEntryRelationDao.getMembers(repositoryEntry, RepositoryEntryRelationType.defaultGroup,
+				GroupRoles.owner.name());
+	}
+
+	@Override
+	public List<Identity> getCourseCoaches(RepositoryEntry repositoryEntry) {
+		return repositoryEntryRelationDao.getMembers(repositoryEntry, RepositoryEntryRelationType.defaultGroup,
+				GroupRoles.coach.name());
+	}
+
+	@Override
+	public List<Identity> getGroupCoaches(GTACourseNode gtaNode) {
+		List<Long> coaches = new ArrayList<>();
+		Condition visibilityCondition = gtaNode.getPreConditionVisibility();
+		if (visibilityCondition != null) {
+			// get groups from visibility settings of course node
+			SearchBusinessGroupParams groupSearchParams = new SearchBusinessGroupParams(null, false, false);
+			groupSearchParams.setGroupKeys(visibilityCondition.getEasyModeGroupAccessIdList());
+			List<BusinessGroup> groups = businessGroupService.findBusinessGroups(groupSearchParams, gtaNode.getReferencedRepositoryEntry(), 0, -1);
+			// get group memberships and related identity keys for coaches
+			List<BusinessGroupMembership> memberships = businessGroupService.getBusinessGroupsMembership(groups);
+			for (BusinessGroupMembership membership : memberships) {
+				if (membership.isOwner()) {
+					coaches.add(membership.getIdentityKey());
+				}
+			}
+		}
+		// return identities
+		SearchIdentityParams identitySearchParams = new SearchIdentityParams();
+		identitySearchParams.setIdentityKeys(coaches);
+		return (coaches.size() > 0)
+				? securityManager.getIdentitiesByPowerSearch(identitySearchParams, 0, -1)
+				: new ArrayList<>();
 	}
 
 	@Override

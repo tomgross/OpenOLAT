@@ -20,11 +20,8 @@
 
 package org.olat.commons.info.ui;
 
-import java.util.ArrayList;
-import java.util.Calendar;
-import java.util.Date;
-import java.util.List;
-import java.util.Set;
+import java.io.*;
+import java.util.*;
 
 import org.olat.commons.info.manager.InfoMessageFrontendManager;
 import org.olat.commons.info.manager.MailFormatter;
@@ -33,6 +30,7 @@ import org.olat.core.CoreSpringFactory;
 import org.olat.core.gui.UserRequest;
 import org.olat.core.gui.components.date.DateComponentFactory;
 import org.olat.core.gui.components.date.DateElement;
+import org.olat.core.gui.components.download.DownloadComponent;
 import org.olat.core.gui.components.form.flexible.FormItem;
 import org.olat.core.gui.components.form.flexible.FormItemContainer;
 import org.olat.core.gui.components.form.flexible.elements.FormLink;
@@ -49,6 +47,7 @@ import org.olat.core.gui.control.generic.wizard.Step;
 import org.olat.core.gui.control.generic.wizard.StepRunnerCallback;
 import org.olat.core.gui.control.generic.wizard.StepsMainRunController;
 import org.olat.core.gui.control.generic.wizard.StepsRunContext;
+import org.olat.core.gui.util.CSSHelper;
 import org.olat.core.id.Identity;
 import org.olat.core.id.OLATResourceable;
 import org.olat.core.id.User;
@@ -217,14 +216,14 @@ public class InfoDisplayController extends FormBasicController {
 
 		List<InfoMessage> msgs = infoMessageManager.loadInfoMessageByResource(ores, resSubPath, businessPath, after, null, 0, maxResults);
 		List<InfoMessageForDisplay> infoDisplays = new ArrayList<InfoMessageForDisplay>(msgs.size());
-		for(InfoMessage info:msgs) {
+		for (InfoMessage info:msgs) {
 			previousDisplayKeys.add(info.getKey());
 			infoDisplays.add(createInfoMessageForDisplay(info));
 			
 			String dateCmpName = "info.date." + info.getKey();
 			DateElement dateEl = DateComponentFactory.createDateElementWithYear(dateCmpName, info.getCreationDate());
 			flc.add(dateCmpName, dateEl);
-			
+
 			if(secCallback.canEdit(info)) {
 				String editName = "info.edit." + info.getKey();
 				FormLink link = uifactory.addFormLink(editName, "edit", "edit", flc, Link.BUTTON_SMALL);
@@ -241,6 +240,17 @@ public class InfoDisplayController extends FormBasicController {
 				deleteLinks.add(link);
 				flc.add(link);
 			}
+
+			// add download links for attachments
+			int i = 1;
+			for (File attachment : info.getAttachments()) {
+				String downloadComponentName = "download." + info.getKey() + "." + i;
+				DownloadComponent downloadComponent = new DownloadComponent(downloadComponentName, attachment,
+						 formatAttachmentName(attachment) + " (" + String.valueOf(attachment.length() / 1024) + " KB)", null,
+						CSSHelper.createFiletypeIconCssClassFor(attachment.getName()));
+				flc.put(downloadComponentName, downloadComponent);
+				i++;
+			}
 		}
 		flc.contextPut("infos", infoDisplays);
 
@@ -248,7 +258,12 @@ public class InfoDisplayController extends FormBasicController {
 		oldMsgsLink.setVisible((msgs.size() < numOfInfos));
 		newMsgsLink.setVisible((msgs.size() == numOfInfos) && (numOfInfos > maxResultsConfig) && (maxResultsConfig > 0));
 	}
-	
+
+	private String formatAttachmentName(File attachment) {
+		String name = attachment.getName();
+		return name.length() > 30 ? "..." + name.substring(name.length() - 30) : name;
+	}
+
 	private InfoMessageForDisplay createInfoMessageForDisplay(InfoMessage info) {
 		String message = info.getMessage();
 		boolean html = StringHelper.isHtml(message);
@@ -256,7 +271,7 @@ public class InfoDisplayController extends FormBasicController {
 			message = message.toString();
 		} else if(StringHelper.containsNonWhitespace(message)) {
 			message = Formatter.escWithBR(info.getMessage()).toString();
-			message =	Formatter.formatURLsAsLinks(message);
+			message = Formatter.formatURLsAsLinks(message);
 		}
 		
 		Formatter formatter = Formatter.getInstance(getLocale());
@@ -277,7 +292,7 @@ public class InfoDisplayController extends FormBasicController {
 			infos = translate("display.info", new String[]{StringHelper.escapeHtml(authorName), creationDate});
 		}		
 
-		return new InfoMessageForDisplay(info.getKey(), info.getTitle(), message, infos, modifier);
+		return new InfoMessageForDisplay(info.getKey(), info.getTitle(), message, info.getAttachments(), infos, modifier);
 	}
 	
 	@Override
@@ -438,29 +453,41 @@ public class InfoDisplayController extends FormBasicController {
 			
 			String title = (String)runContext.get(WizardConstants.MSG_TITLE);
 			String message = (String)runContext.get(WizardConstants.MSG_MESSAGE);
+			File[] attachments = (File[])runContext.get(WizardConstants.MSG_ATTACHMENTS);
+
 			@SuppressWarnings("unchecked")
 			Set<String> selectedOptions = (Set<String>)runContext.get(WizardConstants.SEND_MAIL);
 			
 			InfoMessage msg = infoMessageManager.createInfoMessage(ores, resSubPath, businessPath, ureq.getIdentity());
 			msg.setTitle(title);
 			msg.setMessage(message);
-			
+			msg.setAttachments(attachments);
+
 			List<Identity> identities = new ArrayList<Identity>();
-			for(SendMailOption option:sendMailOptions) {
-				if(selectedOptions != null && selectedOptions.contains(option.getOptionKey())) {
+			for (SendMailOption option:sendMailOptions) {
+				if (selectedOptions != null && selectedOptions.contains(option.getOptionKey())) {
 					identities.addAll(option.getSelectedIdentities());
 				}
 			}
-			
+
 			infoMessageManager.sendInfoMessage(msg, sendMailFormatter, ureq.getLocale(), ureq.getIdentity(), identities);
-			
+			// sendInfoMessage() also persists message into the DB.
+			//  If this was successful, we've got a key which is required for successful copyAttachmentToMediaFolder()
+			if (msg.getKey() != null) {
+				for (File attachment : attachments) {
+					if (!msg.copyAttachmentToMediaFolder(attachment)) {
+						getLogger().warn("Failed to copy attachment into media folder: " + attachment.getName());
+					}
+				}
+			}
+
 			ThreadLocalUserActivityLogger.log(CourseLoggingAction.INFO_MESSAGE_CREATED, getClass(),
 					LoggingResourceable.wrap(msg.getOLATResourceable(), OlatResourceableType.infoMessage));
 
 			return StepsMainRunController.DONE_MODIFIED;
 		}
 	}
-	
+
 	protected class CancelCallback implements StepRunnerCallback {
 		@Override
 		public Step execute(UserRequest ureq, WindowControl wControl, StepsRunContext runContext) {

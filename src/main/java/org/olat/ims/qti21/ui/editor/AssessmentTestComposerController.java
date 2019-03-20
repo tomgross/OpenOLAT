@@ -68,6 +68,7 @@ import org.olat.core.gui.control.generic.wizard.StepsMainRunController;
 import org.olat.core.gui.control.generic.wizard.StepsRunContext;
 import org.olat.core.gui.media.MediaResource;
 import org.olat.core.helpers.Settings;
+import org.olat.core.logging.AssertException;
 import org.olat.core.logging.activity.ThreadLocalUserActivityLogger;
 import org.olat.core.util.Formatter;
 import org.olat.core.util.Util;
@@ -359,7 +360,11 @@ public class AssessmentTestComposerController extends MainLayoutBasicController 
 	@Override
 	protected void doDispose() {
 		if (lockEntry != null && lockEntry.isSuccess()) {
-			CoordinatorManager.getInstance().getCoordinator().getLocker().releasePersistentLock(lockEntry);
+			try {
+				CoordinatorManager.getInstance().getCoordinator().getLocker().releasePersistentLock(lockEntry);
+			} catch (AssertException e) {
+				logWarn("Lock was already released", e);
+			}
 		}
 		if (activeSessionLock != null && activeSessionLock.isSuccess()) {
 			CoordinatorManager.getInstance().getCoordinator().getLocker().releaseLock(activeSessionLock);			
@@ -694,22 +699,31 @@ public class AssessmentTestComposerController extends MainLayoutBasicController 
 	private void doInsert(UserRequest ureq, List<QuestionItemView> items) {
 		TreeNode selectedNode = menuTree.getSelectedNode();
 		TreeNode sectionNode = getNearestSection(selectedNode);
-		
+
+		boolean allOk = true;
 		String firstItemId = null;
 		Map<AssessmentItemRef,AssessmentItem> flyingObjects = new HashMap<>();
 		try {
 			AssessmentSection section = (AssessmentSection)sectionNode.getUserObject();
 			for(QuestionItemView item:items) {
 				AssessmentItem assessmentItem = qti21QPoolServiceProvider.exportToQTIEditor(item, getLocale(), unzippedDirRoot);
-				AssessmentItemRef itemRef = doInsert(section, assessmentItem);
-				if(firstItemId == null) {
-					firstItemId = itemRef.getIdentifier().toString();
+				if(assessmentItem != null) {
+					AssessmentItemRef itemRef = doInsert(section, assessmentItem);
+					if(firstItemId == null) {
+						firstItemId = itemRef.getIdentifier().toString();
+					}
+					flyingObjects.put(itemRef, assessmentItem);
+				} else {
+					allOk &= false;
 				}
-				flyingObjects.put(itemRef, assessmentItem);
 			}
 		} catch (IOException | URISyntaxException e) {
 			showError("error.import.question");
 			logError("", e);
+		}
+		
+		if(!allOk) {
+			showError("error.import.question");
 		}
 		
 		if(firstItemId != null) {

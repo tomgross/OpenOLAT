@@ -44,15 +44,16 @@ import java.util.UUID;
 import javax.ws.rs.core.MediaType;
 import javax.ws.rs.core.UriBuilder;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.http.HttpResponse;
 import org.apache.http.client.methods.HttpDelete;
 import org.apache.http.client.methods.HttpGet;
 import org.apache.http.client.methods.HttpPut;
 import org.apache.http.util.EntityUtils;
-import org.codehaus.jackson.map.ObjectMapper;
-import org.codehaus.jackson.type.TypeReference;
 import org.junit.Assert;
 import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.olat.basesecurity.BaseSecurityManager;
 import org.olat.commons.calendar.CalendarManager;
@@ -78,6 +79,7 @@ import org.springframework.beans.factory.annotation.Autowired;
  * @author srosse, stephane.rosse@frentix.com, http://www.frentix.com
  *
  */
+@Ignore
 public class CourseCalendarTest extends OlatJerseyTestCase {
 	
 	private static final OLog log = Tracing.createLoggerFor(CourseCalendarTest.class);
@@ -291,7 +293,7 @@ public class CourseCalendarTest extends OlatJerseyTestCase {
 	
 	protected List<EventVO> parseEventArray(InputStream body) {
 		try {
-			ObjectMapper mapper = new ObjectMapper(jsonFactory); 
+			ObjectMapper mapper = new ObjectMapper(jsonFactory);
 			return mapper.readValue(body, new TypeReference<List<EventVO>>(){/* */});
 		} catch (Exception e) {
 			e.printStackTrace();

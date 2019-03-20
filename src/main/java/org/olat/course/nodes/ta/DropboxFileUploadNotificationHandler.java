@@ -25,8 +25,8 @@
 
 package org.olat.course.nodes.ta;
 
-import org.olat.core.commons.services.notifications.NotificationsHandler;
-import org.olat.core.commons.services.notifications.SubscriptionContext;
+import org.olat.core.commons.modules.bc.meta.MetaInfo;
+import org.olat.core.commons.services.notifications.*;
 import org.olat.core.logging.OLog;
 import org.olat.core.logging.Tracing;
 import org.olat.course.CourseModule;
@@ -50,9 +50,20 @@ public class DropboxFileUploadNotificationHandler extends AbstractTaskNotificati
 	public DropboxFileUploadNotificationHandler() {
 		//empty block
 	}
-	
+
 	protected static SubscriptionContext getSubscriptionContext(CourseEnvironment courseEnv, CourseNode node) {
 	  return CourseModule.createSubscriptionContext(courseEnv, node, node.getIdent());
+	}
+
+	@Override
+	protected String getBusinessPath(Publisher p, MetaInfo metaInfo) {
+		// LMSUZH-101 Replace business path from course node to user's dropbox
+		String businessPath = super.getBusinessPath(p, metaInfo);
+		businessPath = businessPath.substring(0, businessPath.indexOf("[CourseNode:"));
+		String repositoryEntry = businessPath.substring(businessPath.indexOf("[RepositoryEntry:") + "[RepositoryEntry:".length(), businessPath.indexOf("]"));
+		businessPath += "[assessmentTool:" + repositoryEntry + "][Identity:" + metaInfo.getAuthorIdentity().getKey() + "]";
+
+		return businessPath;
 	}
 
 	protected String getCssClassIcon() {

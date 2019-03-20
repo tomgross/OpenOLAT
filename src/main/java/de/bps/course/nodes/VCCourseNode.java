@@ -104,7 +104,6 @@ public class VCCourseNode extends AbstractAccessableCourseNode {
 	public TabbableController createEditController(UserRequest ureq, WindowControl wControl, BreadcrumbPanel stackPanel, ICourse course,
 			UserCourseEnvironment userCourseEnv) {
 		updateModuleConfigDefaults(false);
-		CourseNode chosenNode = course.getEditorTreeModel().getCourseNode(userCourseEnv.getCourseEditorEnv().getCurrentCourseNodeId());
 		// load and check configuration
 		String providerId = getModuleConfiguration().getStringValue(CONF_PROVIDER_ID);
 		VCProvider provider = providerId == null ? VCProviderFactory.createDefaultProvider() : VCProviderFactory.createProvider(providerId);
@@ -125,7 +124,7 @@ public class VCCourseNode extends AbstractAccessableCourseNode {
 			childTabCntrllr = new NoProviderController(ureq, wControl);
 		}
 		
-		NodeEditController nodeEditCtr = new NodeEditController(ureq, wControl, course.getEditorTreeModel(), course, chosenNode,
+		NodeEditController nodeEditCtr = new NodeEditController(ureq, wControl, course.getEditorTreeModel(), course,
 				userCourseEnv, childTabCntrllr);
 		nodeEditCtr.addControllerListener(childTabCntrllr);
 		return nodeEditCtr;

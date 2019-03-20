@@ -35,6 +35,7 @@ import org.apache.http.HttpResponse;
 import org.apache.http.client.methods.HttpGet;
 import org.junit.After;
 import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.olat.basesecurity.BaseSecurityManager;
 import org.olat.core.commons.persistence.DBFactory;
@@ -60,6 +61,7 @@ import org.olat.test.OlatJerseyTestCase;
  *
  * @author srosse, stephane.rosse@frentix.com, http://www.frentix.com
  */
+@Ignore
 public class CoursesForumsTest  extends OlatJerseyTestCase {
 
 	private static ICourse course1;

@@ -56,7 +56,7 @@ public interface ItemInput {
 	 * have corresponding Lists of Strings with the answers for that response_xxx
 	 * @return
 	 */
-	public Map<String,List<String>> getInputMap();
+	public Map<String, List<String>> getInputMap();
 
 	/**
 	 * 

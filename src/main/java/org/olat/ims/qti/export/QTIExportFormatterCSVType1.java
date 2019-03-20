@@ -207,7 +207,7 @@ public class QTIExportFormatterCSVType1 extends QTIExportFormatter {
 		// add configured user properties
 		if (isAnonymous) {
 			sb.append(row_counter);
-			sb.append(sep);			
+			sb.append(sep);
 		} else {
 			User user = set.getIdentity().getUser();
 			for (UserPropertyHandler userPropertyHandler : this.userPropertyHandlers) {
@@ -219,8 +219,8 @@ public class QTIExportFormatterCSVType1 extends QTIExportFormatter {
 					property = translator.translate("column.field.notavailable");
 				}
 				sb.append(property);
-				sb.append(sep);			
-			}			
+				sb.append(sep);
+			}
 			// add other user and session information
 			ContextEntry ce = BusinessControlFactory.getInstance().createContextEntry(set.getIdentity());
 			String homepage = BusinessControlFactory.getInstance().getAsURIString(Collections.singletonList(ce), false);
@@ -513,7 +513,7 @@ public class QTIExportFormatterCSVType1 extends QTIExportFormatter {
 				}
 				String header = translator.translate(userPropertyHandler.i18nFormElementLabelKey());
 				hr2Intro.append(header);
-				hr2Intro.append(sep);			
+				hr2Intro.append(sep);
 			}
 			// add other user and session information
 			String homepage = translator.translate("column.header.homepage");
@@ -615,5 +615,5 @@ public class QTIExportFormatterCSVType1 extends QTIExportFormatter {
 	public void setAnonymous(boolean isAnonymous) {
 		this.isAnonymous = isAnonymous;
 	}
-	
+
 }

@@ -344,6 +344,16 @@ public class VelocityRenderDecorator implements Closeable {
 		return sb;
 	}
 	
+	public StringOutput mathJaxCdnFullUrl() {
+		StringOutput sb = new StringOutput(100);
+		if(WebappHelper.getMathJaxCdn().startsWith("http")) {
+			sb.append(WebappHelper.getMathJaxCdn());
+		} else {
+			sb.append("https:").append(WebappHelper.getMathJaxCdn());
+		}
+		return sb;
+	}
+	
 	public StringOutput contextPath() {
 		StringOutput sb = new StringOutput(100);
 		sb.append(Settings.getServerContextPath());
@@ -615,7 +625,11 @@ public class VelocityRenderDecorator implements Closeable {
 	 * @return
 	 */
 	public String translate(String key) {
-		Translator trans = renderer.getTranslator();
+		/**
+		 * TODO sev26
+		 * Report bug.
+		 */
+		Translator trans = vc.getTranslator();
 		if (trans == null) return "{Translator is null: key_to_translate=" + key + "}";
 		String res = trans.translate(key);
 		if (res == null) return "?? key not found to translate: key_to_translate=" + key + " / trans info:" + trans + "}";

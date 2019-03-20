@@ -118,7 +118,7 @@ class RichTextElementComponent extends FormBaseComponentImpl {
 		// element we make an exception since we have the media and link chooser
 		// events that must be dispatched by this code.		
 		String moduleUri = ureq.getModuleURI();
-		if (CMD_FILEBROWSER.equals(moduleUri) || CMD_IMAGEBROWSER.equals(moduleUri) || CMD_FLASHPLAYERBROWSER.equals(moduleUri)) {
+		if (moduleUri != null && (moduleUri.startsWith(CMD_FILEBROWSER) || moduleUri.startsWith(CMD_IMAGEBROWSER) || moduleUri.startsWith(CMD_FLASHPLAYERBROWSER))) {
 			// Get currently edited relative file path
 			String fileName = getRichTextElementImpl().getEditorConfiguration().getLinkBrowserRelativeFilePath();
 			createFileSelectorPopupWindow(ureq, moduleUri, fileName);
@@ -138,11 +138,11 @@ class RichTextElementComponent extends FormBaseComponentImpl {
 		final boolean allowCustomMediaFactory = config.isAllowCustomMediaFactory();
 		final boolean uriValidation = config.isFilenameUriValidation();
 		final String[] suffixes;
-		if(type.equals(CMD_FILEBROWSER)) {
+		if(type.startsWith(CMD_FILEBROWSER)) {
 			suffixes = null;
-		} else if(type.equals(CMD_IMAGEBROWSER)) {
+		} else if(type.startsWith(CMD_IMAGEBROWSER)) {
 			suffixes = config.getLinkBrowserImageSuffixes();
-		} else if (type.equals(CMD_FLASHPLAYERBROWSER)) {
+		} else if (type.startsWith(CMD_FLASHPLAYERBROWSER)) {
 			suffixes = config.getLinkBrowserFlashPlayerSuffixes();
 		} else {
 			suffixes = config.getLinkBrowserMediaSuffixes();
@@ -161,7 +161,7 @@ class RichTextElementComponent extends FormBaseComponentImpl {
 				String uploadRelPath = config.getLinkBrowserUploadRelPath();
 				String absolutePath = config.getLinkBrowserAbsolutFilePath();
 				CustomLinkTreeModel linkBrowserCustomTreeModel = config.getLinkBrowserCustomLinkTreeModel();
-				if (type.equals(CMD_FILEBROWSER)) {
+				if (type.startsWith(CMD_FILEBROWSER)) {
 					// when in file mode we include the internal links to the selection
 					myLinkChooserController = new LinkChooserController(lureq, lwControl, baseContainer, uploadRelPath, absolutePath, suffixes, uriValidation, fileName, linkBrowserCustomTreeModel, allowCustomMediaFactory);			
 				} else {

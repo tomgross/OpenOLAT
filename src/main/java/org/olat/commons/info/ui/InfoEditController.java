@@ -20,6 +20,7 @@
 
 package org.olat.commons.info.ui;
 
+import java.io.File;
 import java.util.Date;
 
 import org.olat.commons.info.manager.InfoMessageFrontendManager;
@@ -60,6 +61,7 @@ public class InfoEditController extends FormBasicController {
 		editForm = new InfoEditFormController(ureq, wControl, mainForm, false);
 		editForm.setTitle(messageToEdit.getTitle());
 		editForm.setMessage(messageToEdit.getMessage());
+		editForm.setAttachments(messageToEdit.getAttachments());
 		listenTo(editForm);
 		
 		initForm(ureq);
@@ -96,6 +98,18 @@ public class InfoEditController extends FormBasicController {
 		messageToEdit.setMessage(message);
 		messageToEdit.setModificationDate(new Date());
 		messageToEdit.setModifier(getIdentity());
+		for (File attachment : editForm.getAttachments()) {
+			// If form was opened with some existing attachments and no additional attachments were uploaded,
+			//  then temp dir is not yet set
+			File attachmentTempDir = editForm.getAttachementTempDir();
+			if (attachmentTempDir != null && attachment.getAbsolutePath().startsWith(attachmentTempDir.getAbsolutePath())) {
+				// copy new file to the media folder
+				if (!messageToEdit.copyAttachmentToMediaFolder(attachment)) {
+					getLogger().warn("Failed to copy attachment into media folder: " + attachment.getName());
+				}
+			}
+		}
+		messageToEdit.setAttachments(editForm.getAttachments());
 		infoFrontendManager.sendInfoMessage(messageToEdit, null, null, ureq.getIdentity(), null);
 		
 		ThreadLocalUserActivityLogger.log(CourseLoggingAction.INFO_MESSAGE_UPDATED, getClass(),

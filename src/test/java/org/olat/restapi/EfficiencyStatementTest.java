@@ -34,6 +34,7 @@ import org.apache.http.client.methods.HttpGet;
 import org.apache.http.client.methods.HttpPut;
 import org.apache.http.util.EntityUtils;
 import org.junit.Assert;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.olat.basesecurity.BaseSecurityManager;
 import org.olat.core.commons.persistence.DB;
@@ -55,6 +56,7 @@ import org.springframework.beans.factory.annotation.Autowired;
  * @author srosse, stephane.rosse@frentix.com, http://www.frentix.com
  *
  */
+@Ignore
 public class EfficiencyStatementTest extends OlatJerseyTestCase {
 
 	@Autowired

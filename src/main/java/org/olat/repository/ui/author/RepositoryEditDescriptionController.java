@@ -70,7 +70,6 @@ import org.olat.repository.manager.RepositoryEntryLifecycleDAO;
 import org.olat.repository.model.RepositoryEntryLifecycle;
 import org.olat.resource.OLATResource;
 import org.olat.user.UserManager;
-import org.springframework.beans.factory.annotation.Autowired;
 
 /**
  * Description:<br>
@@ -90,42 +89,64 @@ public class RepositoryEditDescriptionController extends FormBasicController {
 	}
 
 	private VFSContainer mediaContainer;
-	private RepositoryEntry repositoryEntry;
-	private final String repoEntryType;
+	protected RepositoryEntry repositoryEntry;
+	protected final String repoEntryType;
 
 	private static final int picUploadlimitKB = 5120;
 	private static final int movieUploadlimitKB = 102400;
 
 	private FileElement fileUpload, movieUpload;
-	private TextElement externalRef, displayName, authors, expenditureOfWork, language, location;
-	private RichTextElement description, objectives, requirements, credits;
-	private SingleSelection dateTypesEl, publicDatesEl;
+	private TextElement externalRef;
+	private TextElement authors;
+	private TextElement expenditureOfWork;
+	protected TextElement language;
+	private TextElement location;
+	protected TextElement displayName;
+	protected RichTextElement description;
+	private RichTextElement objectives;
+	private RichTextElement requirements;
+	private RichTextElement credits;
+	protected SingleSelection dateTypesEl;
+	private SingleSelection publicDatesEl;
 	private DateChooser startDateEl, endDateEl;
 	private FormSubmit submit;
-	private FormLayoutContainer descCont, privateDatesCont;
+	private FormLayoutContainer descCont;
+	protected FormLayoutContainer privateDatesCont;
 	
 	private static final String[] dateKeys = new String[]{ "none", "private", "public"};
 
-	@Autowired
-	private UserManager userManager;
-	@Autowired
-	private RepositoryService repositoryService;
-	@Autowired
-	private RepositoryManager repositoryManager;
-	@Autowired
-	private RepositoryEntryLifecycleDAO lifecycleDao;
-	@Autowired
-	private RepositoryHandlerFactory repositoryHandlerFactory;
+	private final UserManager userManager;
+	private final RepositoryService repositoryService;
+	private final RepositoryManager repositoryManager;
+	private final RepositoryEntryLifecycleDAO lifecycleDao;
+	private final RepositoryHandlerFactory repositoryHandlerFactory;
 
 	/**
 	 * Create a repository add controller that adds the given resourceable.
-	 * 
+	 *
+	 * @param userManager
+	 * @param repositoryService
+	 * @param repositoryManager
+	 * @param lifecycleDao
+	 * @param repositoryHandlerFactory
 	 * @param ureq
 	 * @param wControl
-	 * @param sourceEntry
+	 * @param entry
 	 */
-	public RepositoryEditDescriptionController(UserRequest ureq, WindowControl wControl, RepositoryEntry entry) {
+	public RepositoryEditDescriptionController(UserManager userManager,
+											   RepositoryService repositoryService,
+											   RepositoryManager repositoryManager,
+											   RepositoryEntryLifecycleDAO lifecycleDao,
+											   RepositoryHandlerFactory repositoryHandlerFactory,
+											   UserRequest ureq,
+											   WindowControl wControl,
+											   RepositoryEntry entry) {
 		super(ureq, wControl, "bgrep");
+		this.userManager = userManager;
+		this.repositoryService = repositoryService;
+		this.repositoryManager = repositoryManager;
+		this.lifecycleDao = lifecycleDao;
+		this.repositoryHandlerFactory = repositoryHandlerFactory;
 		setBasePackage(RepositoryService.class);
 		this.repositoryEntry = entry;
 		repoEntryType = repositoryEntry.getOlatResource().getResourceableTypeName();
@@ -187,7 +208,7 @@ public class RepositoryEditDescriptionController extends FormBasicController {
 		
 		uifactory.addSpacerElement("spacer1", descCont, false);
 
-		displayName = uifactory.addTextElement("cif.displayname", "cif.displayname", 100, repositoryEntry.getDisplayname(), descCont);
+		displayName = uifactory.addTextElement("cif.displayname", "cif.displayname", 255, repositoryEntry.getDisplayname(), descCont);
 		displayName.setDisplaySize(30);
 		displayName.setMandatory(true);
 		displayName.setEnabled(!RepositoryEntryManagedFlag.isManaged(repositoryEntry, RepositoryEntryManagedFlag.title));
@@ -196,6 +217,7 @@ public class RepositoryEditDescriptionController extends FormBasicController {
 		authors.setDisplaySize(60);
 		
 		language = uifactory.addTextElement("cif.mainLanguage", "cif.mainLanguage", 16, repositoryEntry.getMainLanguage(), descCont);
+		language.setEnabled(!RepositoryEntryManagedFlag.isManaged(repositoryEntry, RepositoryEntryManagedFlag.language));
 		
 		location = uifactory.addTextElement("cif.location", "cif.location", 255, repositoryEntry.getLocation(), descCont);
 		location.setEnabled(!RepositoryEntryManagedFlag.isManaged(repositoryEntry, RepositoryEntryManagedFlag.location));
@@ -216,6 +238,8 @@ public class RepositoryEditDescriptionController extends FormBasicController {
 		uifactory.addSpacerElement("spacer2", descCont, false);
 
 		if(CourseModule.getCourseTypeName().equals(repoEntryType)) {
+			boolean managedDate = RepositoryEntryManagedFlag.isManaged(repositoryEntry, RepositoryEntryManagedFlag.dates);
+
 			String[] dateValues = new String[] {
 					translate("cif.dates.none"),
 					translate("cif.dates.private"),
@@ -230,6 +254,7 @@ public class RepositoryEditDescriptionController extends FormBasicController {
 			} else {
 				dateTypesEl.select("public", true);
 			}
+			dateTypesEl.setEnabled(!managedDate);
 			dateTypesEl.addActionListener(FormEvent.ONCHANGE);
 	
 			List<RepositoryEntryLifecycle> cycles = lifecycleDao.loadPublicLifecycle();
@@ -271,8 +296,10 @@ public class RepositoryEditDescriptionController extends FormBasicController {
 			
 			startDateEl = uifactory.addDateChooser("date.start", "cif.date.start", null, privateDatesCont);
 			startDateEl.setElementCssClass("o_sel_repo_lifecycle_validfrom");
+			startDateEl.setEnabled(!managedDate);
 			endDateEl = uifactory.addDateChooser("date.end", "cif.date.end", null, privateDatesCont);
 			endDateEl.setElementCssClass("o_sel_repo_lifecycle_validto");
+			endDateEl.setEnabled(!managedDate);
 			
 			if(repositoryEntry.getLifecycle() != null) {
 				RepositoryEntryLifecycle lifecycle = repositoryEntry.getLifecycle();

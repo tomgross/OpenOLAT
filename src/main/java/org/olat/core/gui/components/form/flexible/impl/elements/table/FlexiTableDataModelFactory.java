@@ -38,6 +38,10 @@ public class FlexiTableDataModelFactory {
 	 * You must add FlexiColumnModel for each table column.
 	 * @return
 	 */
+	/**
+	 * TODO sev26
+	 * Never use a static method for a factory.
+	 */
 	public static FlexiTableColumnModel createFlexiTableColumnModel() {
 		return new FlexiTableColumnModelImpl();
 	}

@@ -13,7 +13,7 @@
 	</bean>
 
 	<bean id="infoMessageManager" class="org.olat.commons.info.manager.InfoMessageManagerImpl">
-	  <property name="dbInstance" ref="database"/>
+	  <constructor-arg ref="database"/>
 	</bean>
 	
 	<bean id="infoSubscriptionManager" class="org.olat.commons.info.notification.InfoSubscriptionManagerImpl">

@@ -35,6 +35,7 @@ import org.olat.core.gui.control.WindowControl;
 import org.olat.core.gui.control.controller.BasicController;
 import org.olat.core.id.Identity;
 import org.olat.core.id.OLATResourceable;
+import org.olat.core.id.Roles;
 import org.olat.core.util.Formatter;
 import org.olat.core.util.StringHelper;
 import org.olat.core.util.coordinate.CoordinatorManager;
@@ -246,6 +247,10 @@ public abstract class GTAAbstractController extends BasicController implements G
 		}
 		
 		mainVC.contextPut("changelogconfig", courseModule.isDisplayChangeLog());
+		Roles roles = ureq.getUserSession().getRoles();
+		if (roles.isOLATAdmin() || roles.isAuthor()) {
+			mainVC.contextPut("changelogconfig", true);
+		}
 		
 		nodeLog();
 		collapsedContents(task);

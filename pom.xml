@@ -5,7 +5,7 @@
 	<groupId>org.openolat</groupId>
 	<artifactId>openolat-lms</artifactId>
 	<version>11.4-SNAPSHOT</version>
-	<packaging>war</packaging>
+	<packaging>jar</packaging>
 	<name>OpenOLAT LMS</name>
 	<url>http://www.openolat.org</url>
 	<description>
@@ -29,19 +29,19 @@
 	</licenses>
 	<distributionManagement>
 		<repository>
-			<id>nexus.openolat</id>
-			<name>OpenOLAT Internal Nexus Release Repository</name>
-			<url>http://nexus.openolat.org/nexus/content/repositories/openolat</url>
+			<id>releases</id>
+			<name>OLAT Internal Nexus Release Repository</name>
+			<url>http://repo.olat.uzh.ch/nexus/content/repositories/releases</url>
 		</repository>
 		<snapshotRepository>
-			<id>nexus.openolat</id>
-			<name>OpenOLAT Internal Nexus Snapshot Repository</name>
-			<url>http://nexus.openolat.org/nexus/content/repositories/openolat-snapshots</url>
+			<id>snapshots</id>
+			<name>OLAT Internal Nexus Snapshot Repository</name>
+			<url>http://repo.olat.uzh.ch/nexus/content/repositories/snapshots</url>
 		</snapshotRepository>
 	</distributionManagement>
 	<issueManagement>
 		<system>JIRA</system>
-		<url>http://jira.openolat.org</url>
+		<url>http://bugs.olat.org/jira/secure/Dashboard.jspa</url>
 	</issueManagement>
 	<scm>
 		<connection>scm:hg:http://hg.openolat.org</connection>
@@ -62,18 +62,21 @@
 	<properties>
 		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 		<targetJdk>1.8</targetJdk>
-		<org.springframework.version>3.2.17.RELEASE</org.springframework.version>
-		<org.hibernate.version>5.2.7.Final</org.hibernate.version>
+		<maven.compiler.source>1.8</maven.compiler.source>
+		<maven.compiler.target>1.8</maven.compiler.target>
+		<org.springframework.version>4.3.18.RELEASE</org.springframework.version>
+		<org.hibernate.version>5.2.17.Final</org.hibernate.version>
 		<com.sun.jersey.version>1.19.1</com.sun.jersey.version>
-		<jackson.version>1.9.2</jackson.version>
 		<org.mysql.version>5.1.40</org.mysql.version>
 		<org.postgresql.version>9.4.1212</org.postgresql.version>
-		<org.infinispan.version>8.1.0.Final</org.infinispan.version>
+		<org.infinispan.version>8.2.6.Final</org.infinispan.version>
 		<lucene.version>4.8.0</lucene.version>
 		<version.selenium>2.53.1</version.selenium>
 		<version.drone>2.0.1.Final</version.drone>
-		<activemq.version>5.11.1</activemq.version>
+		<activemq.version>5.15.7</activemq.version>
 		<qtiworks.version>1.0.4</qtiworks.version>
+		<io.undertow.version>1.3.33.Final</io.undertow.version>
+		<org.bouncycastle.version>1.60</org.bouncycastle.version>
 
 	    <!-- properties for testing and Q&A -->
 	    <!-- by default no tests are executed so far (April 2011). Use appropriate profiles and properties on the command line -->
@@ -83,7 +86,6 @@
 	    <test.env.db.name>olattest</test.env.db.name>
 	    <test.env.db.user>olat</test.env.db.user>
 	    <test.env.db.pass>olat</test.env.db.pass>
-	    <test.env.db.host.port>3306</test.env.db.host.port>
 	    <test.env.db.postgresql.user>postgres</test.env.db.postgresql.user>
 	    <test.env.db.postgresql.pass>postgres</test.env.db.postgresql.pass>
 	    <test.env.db.postgresql.host.port>5432</test.env.db.postgresql.host.port>
@@ -137,26 +139,26 @@
 									<force>true</force>
 									<encoding>UTF-8</encoding>
 									<nocompress>false</nocompress>
-									<outputDirectory>${basedir}/target/bootstrap</outputDirectory>
+									<outputDirectory>${basedir}/target/compressbootstrap</outputDirectory>
 									<sourceDirectory>${basedir}/src/main/webapp/static/bootstrap</sourceDirectory>
 									<excludeResources>true</excludeResources>
 									<aggregations>
 										<aggregation>
-											<output>${basedir}/target/bootstrap/bootstrap-openolat.min.js</output>
+											<output>${basedir}/target/compressbootstrap/bootstrap-openolat.min.js</output>
 											<removeIncluded>false</removeIncluded>
 											<includes>
-												<!-- <include>${basedir}/target/bootstrap/javascripts/bootstrap/affix.min.js</include> -->
-												<include>${basedir}/target/bootstrap/javascripts/bootstrap/alert.min.js</include>
-												<include>${basedir}/target/bootstrap/javascripts/bootstrap/button.min.js</include>
-												<!-- <include>${basedir}/target/bootstrap/javascripts/bootstrap/carousel.min.js</include> -->
-												<include>${basedir}/target/bootstrap/javascripts/bootstrap/collapse.min.js</include>
-												<include>${basedir}/target/bootstrap/javascripts/bootstrap/dropdown.min.js</include>
-												<include>${basedir}/target/bootstrap/javascripts/bootstrap/tab.min.js</include>
-												<include>${basedir}/target/bootstrap/javascripts/bootstrap/transition.min.js</include>
-												<!-- <include>${basedir}/target/bootstrap/javascripts/bootstrap/scrollspy.min.js</include>  -->
-												<include>${basedir}/target/bootstrap/javascripts/bootstrap/modal.min.js</include>
-												<include>${basedir}/target/bootstrap/javascripts/bootstrap/tooltip.min.js</include>
-												<include>${basedir}/target/bootstrap/javascripts/bootstrap/popover.min.js</include>
+												<!-- <include>${basedir}/target/compressbootstrap/javascripts/bootstrap/affix.min.js</include> -->
+												<include>${basedir}/target/compressbootstrap/javascripts/bootstrap/alert.min.js</include>
+												<include>${basedir}/target/compressbootstrap/javascripts/bootstrap/button.min.js</include>
+												<!-- <include>${basedir}/target/compressbootstrap/javascripts/bootstrap/carousel.min.js</include> -->
+												<include>${basedir}/target/compressbootstrap/javascripts/bootstrap/collapse.min.js</include>
+												<include>${basedir}/target/compressbootstrap/javascripts/bootstrap/dropdown.min.js</include>
+												<include>${basedir}/target/compressbootstrap/javascripts/bootstrap/tab.min.js</include>
+												<include>${basedir}/target/compressbootstrap/javascripts/bootstrap/transition.min.js</include>
+												<!-- <include>${basedir}/target/compressbootstrap/javascripts/bootstrap/scrollspy.min.js</include>  -->
+												<include>${basedir}/target/compressbootstrap/javascripts/bootstrap/modal.min.js</include>
+												<include>${basedir}/target/compressbootstrap/javascripts/bootstrap/tooltip.min.js</include>
+												<include>${basedir}/target/compressbootstrap/javascripts/bootstrap/popover.min.js</include>
 											</includes>
 										</aggregation>
 									</aggregations>
@@ -177,7 +179,7 @@
 									<force>true</force>
 									<encoding>UTF-8</encoding>
 									<nocompress>false</nocompress>
-									<outputDirectory>${basedir}/src/main/webapp/static/movie</outputDirectory>
+									<outputDirectory>${basedir}/target/classes/META-INF/resources/static/movie</outputDirectory>
 									<sourceDirectory>${basedir}/src/main/webapp/static/movie</sourceDirectory>
 									<excludeResources>true</excludeResources>
 									<excludes>
@@ -199,73 +201,73 @@
 									<force>true</force>
 									<encoding>UTF-8</encoding>
 									<nocompress>false</nocompress>
-									<outputDirectory>${basedir}/target/jquery</outputDirectory>
+									<outputDirectory>${basedir}/target/compressjs</outputDirectory>
 									<sourceDirectory>${basedir}/src/main/webapp/static/js</sourceDirectory>
 									<excludeResources>true</excludeResources>
 									<aggregations>
 										<aggregation>
-											<output>${basedir}/src/main/webapp/static/js/js.plugins.min.js</output>
+											<output>${basedir}/target/classes/META-INF/resources/static/js/js.plugins.min.js</output>
 											<removeIncluded>false</removeIncluded>
 											<includes>
-												<include>${basedir}/target/jquery/jquery/periodic/jquery.periodic.min.js</include>
-												<include>${basedir}/target/jquery/jshashtable-2.1_src.min.js</include>
-												<include>${basedir}/target/jquery/jquery/openolat/jquery.oolog.min.js</include>
-												<include>${basedir}/target/jquery/jquery/openolat/jquery.translator.min.js</include>
-												<include>${basedir}/target/jquery/jquery/openolat/jquery.navbar.min.js</include>
-												<include>${basedir}/target/jquery/jquery/openolat/jquery.bgcarrousel.min.js</include>
+												<include>${basedir}/target/compressjs/jquery/periodic/jquery.periodic.min.js</include>
+												<include>${basedir}/target/compressjs/jshashtable-2.1_src.min.js</include>
+												<include>${basedir}/target/compressjs/jquery/openolat/jquery.oolog.min.js</include>
+												<include>${basedir}/target/compressjs/jquery/openolat/jquery.translator.min.js</include>
+												<include>${basedir}/target/compressjs/jquery/openolat/jquery.navbar.min.js</include>
+												<include>${basedir}/target/compressjs/jquery/openolat/jquery.bgcarrousel.min.js</include>
 												<include>${basedir}/src/main/webapp/static/js/tinymce4/tinymce/jquery.tinymce.min.js</include>
-												<include>${basedir}/target/jquery/functions.min.js</include>
-												<include>${basedir}/target/jquery/jquery/transit/jquery.transit.min.js</include>
-												<include>${basedir}/target/bootstrap/bootstrap-openolat.min.js</include>
+												<include>${basedir}/target/compressjs/functions.min.js</include>
+												<include>${basedir}/target/compressjs/jquery/transit/jquery.transit.min.js</include>
+												<include>${basedir}/target/compressbootstrap/bootstrap-openolat.min.js</include>
 											</includes>
 										</aggregation>
 										<aggregation>
-											<output>${basedir}/src/main/webapp/static/js/tinymce4/tinymce/plugins/olatmatheditor/plugin.min.js</output>
+											<output>${basedir}/target/classes/META-INF/resources/static/js/tinymce4/tinymce/plugins/olatmatheditor/plugin.min.js</output>
 											<removeIncluded>false</removeIncluded>
 											<includes>
-												<include>${basedir}/target/jquery/tinymce4/tinymce/plugins/olatmatheditor/plugin.min.js</include>
+												<include>${basedir}/target/compressjs/tinymce4/tinymce/plugins/olatmatheditor/plugin.min.js</include>
 											</includes>
 										</aggregation>
 										<aggregation>
-											<output>${basedir}/src/main/webapp/static/js/tinymce4/tinymce/plugins/olatqti/plugin.min.js</output>
+											<output>${basedir}/target/classes/META-INF/resources/static/js/tinymce4/tinymce/plugins/olatqti/plugin.min.js</output>
 											<removeIncluded>false</removeIncluded>
 											<includes>
-												<include>${basedir}/target/jquery/tinymce4/tinymce/plugins/olatqti/plugin.min.js</include>
+												<include>${basedir}/target/compressjs/tinymce4/tinymce/plugins/olatqti/plugin.min.js</include>
 											</includes>
 										</aggregation>
 										<aggregation>
-											<output>${basedir}/src/main/webapp/static/js/tinymce4/tinymce/plugins/olatmovieviewer/plugin.min.js</output>
+											<output>${basedir}/target/classes/META-INF/resources/static/js/tinymce4/tinymce/plugins/olatmovieviewer/plugin.min.js</output>
 											<removeIncluded>false</removeIncluded>
 											<includes>
-												<include>${basedir}/target/jquery/tinymce4/tinymce/plugins/olatmovieviewer/plugin.min.js</include>
+												<include>${basedir}/target/compressjs/tinymce4/tinymce/plugins/olatmovieviewer/plugin.min.js</include>
 											</includes>
 										</aggregation>
 										<aggregation>
-											<output>${basedir}/src/main/webapp/static/js/tinymce4/tinymce/plugins/olatsmileys/plugin.min.js</output>
+											<output>${basedir}/target/classes/META-INF/resources/static/js/tinymce4/tinymce/plugins/olatsmileys/plugin.min.js</output>
 											<removeIncluded>false</removeIncluded>
 											<includes>
-												<include>${basedir}/target/jquery/tinymce4/tinymce/plugins/olatsmileys/plugin.min.js</include>
+												<include>${basedir}/target/compressjs/tinymce4/tinymce/plugins/olatsmileys/plugin.min.js</include>
 											</includes>
 										</aggregation>
 										<aggregation>
-											<output>${basedir}/src/main/webapp/static/js/tinymce4/tinymce/plugins/quotespliter/plugin.min.js</output>
+											<output>${basedir}/target/classes/META-INF/resources/static/js/tinymce4/tinymce/plugins/quotespliter/plugin.min.js</output>
 											<removeIncluded>false</removeIncluded>
 											<includes>
-												<include>${basedir}/target/jquery/tinymce4/tinymce/plugins/quotespliter/plugin.min.js</include>
+												<include>${basedir}/target/compressjs/tinymce4/tinymce/plugins/quotespliter/plugin.min.js</include>
 											</includes>
 										</aggregation>
 										<aggregation>
-											<output>${basedir}/src/main/webapp/static/js/jquery/openolat/jquery.statistics.chart.min.js</output>
+											<output>${basedir}/target/classes/META-INF/resources/static/js/jquery/openolat/jquery.statistics.chart.min.js</output>
 											<removeIncluded>false</removeIncluded>
 											<includes>
-												<include>${basedir}/target/jquery/jquery/openolat/jquery.statistics.chart.min.js</include>
+												<include>${basedir}/target/compressjs/jquery/openolat/jquery.statistics.chart.min.js</include>
 											</includes>
 										</aggregation>
 										<aggregation>
-											<output>${basedir}/src/main/webapp/static/js/jquery/openolat/jquery.timeline.min.js</output>
+											<output>${basedir}/target/classes/META-INF/resources/static/js/jquery/openolat/jquery.timeline.min.js</output>
 											<removeIncluded>false</removeIncluded>
 											<includes>
-												<include>${basedir}/target/jquery/jquery/openolat/jquery.timeline.min.js</include>
+												<include>${basedir}/target/compressjs/jquery/openolat/jquery.timeline.min.js</include>
 											</includes>
 										</aggregation>
 									</aggregations>
@@ -285,19 +287,19 @@
 									<force>true</force>
 									<encoding>UTF-8</encoding>
 									<nocompress>false</nocompress>
-									<outputDirectory>${basedir}/target/jquery</outputDirectory>
+									<outputDirectory>${basedir}/target/compresscss</outputDirectory>
 									<sourceDirectory>${basedir}/src/main/webapp/static/js</sourceDirectory>
 									<excludeResources>true</excludeResources>
 									<aggregations>
 										<aggregation>
-											<output>${basedir}/src/main/webapp/static/js/js.plugins.min.css</output>
+											<output>${basedir}/target/classes/META-INF/resources/static/js/js.plugins.min.css</output>
 											<removeIncluded>false</removeIncluded>
 											<includes>
-												<include>${basedir}/target/jquery/jquery/tagsinput/bootstrap-tagsinput.min.css</include>
-												<include>${basedir}/target/jquery/jquery/fullcalendar/fullcalendar.min.css</include>
-												<include>${basedir}/target/jquery/jquery/cropper/cropper.min.css</include>
-												<include>${basedir}/target/jquery/jquery/sliderpips/jquery-ui-slider-pips.min.css</include>
-												<include>${basedir}/target/jquery/jquery/ui/jquery-ui-1.11.4.custom.min.css</include>
+												<include>${basedir}/target/compresscss/jquery/tagsinput/bootstrap-tagsinput.min.css</include>
+												<include>${basedir}/target/compresscss/jquery/fullcalendar/fullcalendar.min.css</include>
+												<include>${basedir}/target/compresscss/jquery/cropper/cropper.min.css</include>
+                                                <include>${basedir}/target/compresscss/jquery/sliderpips/jquery-ui-slider-pips.min.css</include>
+                                                <include>${basedir}/target/compresscss/jquery/ui/jquery-ui-1.11.4.custom.min.css</include>
 											</includes>
 										</aggregation>
 									</aggregations>
@@ -326,13 +328,13 @@
 				<!-- Jersey for tomcat -->
 				<dependency>
 					<groupId>javax.ws.rs</groupId>
-					<artifactId>jsr311-api</artifactId>
-					<version>1.1.1</version>
+					<artifactId>javax.ws.rs-api</artifactId>
+					<version>2.1</version>
 				</dependency>
 				<dependency>
-					<groupId>com.sun.jersey</groupId>
+					<groupId>org.glassfish.jersey.core</groupId>
 					<artifactId>jersey-server</artifactId>
-					<version>${com.sun.jersey.version}</version>
+					<version>2.27</version>
 					<exclusions>
 						<exclusion>
 							<groupId>org.springframework</groupId>
@@ -365,11 +367,16 @@
 					</exclusions>
 				</dependency>
 				<dependency>
-					<groupId>com.sun.jersey</groupId>
-					<artifactId>jersey-servlet</artifactId>
-					<version>${com.sun.jersey.version}</version>
+					<groupId>org.glassfish.jersey.containers</groupId>
+					<artifactId>jersey-container-servlet</artifactId>
+					<version>2.27</version>
 				</dependency>
-				
+				<dependency>
+					<groupId>org.glassfish.jersey.inject</groupId>
+					<artifactId>jersey-hk2</artifactId>
+					<version>2.27</version>
+				</dependency>
+
 				<dependency>
 					<groupId>dom4j</groupId>
 					<artifactId>dom4j</artifactId>
@@ -433,7 +440,7 @@
 						</exclusion>
 					</exclusions>
 				</dependency>
-		
+
 				<dependency>
 					<groupId>mysql</groupId>
 					<artifactId>mysql-connector-java</artifactId>
@@ -511,8 +518,26 @@
 	    			<version>1.2.8</version>
 	    		</dependency>
 			</dependencies>
-			
+
 			<build>
+				<resources>
+					<resource>
+						<directory>src/main/webapp</directory>
+						<targetPath>${basedir}/target/classes/META-INF/resources</targetPath>
+						<includes>
+							<include>**/*</include>
+						</includes>
+						<filtering>false</filtering>
+					</resource>
+					<resource>
+						<directory>src/main/java/org/olat/ims/cp/_resources</directory>
+						<targetPath>${basedir}/target/classes/META-INF/resources/org/olat/ims/cp/_resources</targetPath>
+						<includes>
+							<include>imscp.zip</include>
+						</includes>
+						<filtering>false</filtering>
+					</resource>
+				</resources>
 				<plugins>
 					<plugin>
 						<groupId>org.apache.maven.plugins</groupId>
@@ -541,8 +566,8 @@
 				</dependency>
 				<dependency>
 					<groupId>javax.ws.rs</groupId>
-					<artifactId>jsr311-api</artifactId>
-					<version>1.1.1</version>
+					<artifactId>javax.ws.rs-api</artifactId>
+					<version>2.0.1</version>
 					<scope>provided</scope>
 				</dependency>
 				<dependency>
@@ -665,6 +690,7 @@
 				<testFailureIgnore>false</testFailureIgnore>
 				<test.env>mysql</test.env>
 				<skipTests>false</skipTests>
+				<openolat-database-server-link></openolat-database-server-link>
 			</properties>
 			<build>
 				<plugins>
@@ -674,7 +700,7 @@
 						<executions>
 							<execution>
 								<id>copy-resources-4-mysqlunittests</id>
-								<phase>generate-test-resources</phase>
+								<phase>process-test-resources</phase>
 								<goals>
 									<goal>copy-resources</goal>
 								</goals>
@@ -703,6 +729,68 @@
 						</executions>
 					</plugin>
 					<plugin>
+						<groupId>io.fabric8</groupId>
+						<artifactId>docker-maven-plugin</artifactId>
+						<version>0.27.2</version>
+						<executions>
+							<execution>
+								<id>start-mysql-server</id>
+								<phase>process-test-resources</phase>
+								<goals>
+									<goal>start</goal>
+								</goals>
+							</execution>
+							<execution>
+								<id>stop-mysql-server</id>
+								<phase>verify</phase>
+								<goals>
+									<goal>stop</goal>
+								</goals>
+							</execution>
+						</executions>
+						<configuration>
+							<images>
+								<image>
+									<name>mysql:5.6.35</name>
+									<run>
+										<exposedPropertyKey>
+											database-server
+										</exposedPropertyKey>
+										<ports>
+											<port>
+												127.0.0.1:host.port:3306
+											</port>
+										</ports>
+										<links>
+											<link>${openolat-database-server-link}</link>
+										</links>
+										<extraHosts>moby:127.0.0.1</extraHosts>
+										<env>
+											<MYSQL_ROOT_PASSWORD>
+												root
+											</MYSQL_ROOT_PASSWORD>
+											<MYSQL_DATABASE>
+												${test.env.db.name}
+											</MYSQL_DATABASE>
+											<MYSQL_USER>
+												${test.env.db.user}
+											</MYSQL_USER>
+											<MYSQL_PASSWORD>
+												${test.env.db.pass}
+											</MYSQL_PASSWORD>
+										</env>
+										<wait>
+											<time>60000</time>
+											<log>
+												MySQL init process done\. Ready for start up\.(?s).*\[Note\] mysqld: ready for connections\.
+											</log>
+										</wait>
+									</run>
+								</image>
+							</images>
+						</configuration>
+					</plugin>
+					<plugin>
 						<groupId>org.codehaus.mojo</groupId>
 						<artifactId>sql-maven-plugin</artifactId>
 						<version>1.5</version>
@@ -717,7 +805,7 @@
 						<!-- common configuration shared by all executions -->
 						<configuration>
 							<driver>com.mysql.jdbc.Driver</driver>
-							<url>jdbc:mysql://localhost:${test.env.db.host.port}/${test.env.db.name}</url>
+							<url>jdbc:mysql://${test.env.db.host.name}:${test.env.db.host.port}/${test.env.db.name}</url>
 							<username>${test.env.db.user}</username>
 							<password>${test.env.db.pass}</password>
 						</configuration>
@@ -731,7 +819,7 @@
 								</goals>
 								<configuration>
 									<!-- need another database to drop the targeted one -->
-									<url>jdbc:mysql://localhost:${test.env.db.host.port}/olat</url>
+									<url>jdbc:mysql://${test.env.db.host.name}:${test.env.db.host.port}</url>
 									<autocommit>true</autocommit>
 									<sqlCommand>drop database if exists ${test.env.db.name}</sqlCommand>
 									<!-- ignore error when database is not avaiable -->
@@ -746,7 +834,7 @@
 									<goal>execute</goal>
 								</goals>
 								<configuration>
-									<url>jdbc:mysql://localhost:${test.env.db.host.port}/olat</url>
+									<url>jdbc:mysql://${test.env.db.host.name}:${test.env.db.host.port}</url>
 									<!-- no transaction -->
 									<autocommit>true</autocommit>
 									<sqlCommand>create database ${test.env.db.name} default character set utf8</sqlCommand>
@@ -782,7 +870,7 @@
 									<sqlCommand>drop database if exists ${test.env.db.name}</sqlCommand>
 								</configuration>
 							</execution>
-							
+
 							<!-- Same for integration-test -->
 							<execution>
 								<id>drop-mysql-db-before-integration</id>
@@ -792,7 +880,7 @@
 								</goals>
 								<configuration>
 									<!-- need another database to drop the targeted one -->
-									<url>jdbc:mysql://localhost:${test.env.db.host.port}/olat</url>
+									<url>jdbc:mysql://${test.env.db.host.name}:${test.env.db.host.port}</url>
 									<autocommit>true</autocommit>
 									<sqlCommand>drop database if exists ${test.env.db.name}</sqlCommand>
 									<!-- ignore error when database is not avaiable -->
@@ -806,7 +894,7 @@
 									<goal>execute</goal>
 								</goals>
 								<configuration>
-									<url>jdbc:mysql://localhost:${test.env.db.host.port}/olat</url>
+									<url>jdbc:mysql://${test.env.db.host.name}:${test.env.db.host.port}</url>
 									<!-- no transaction -->
 									<autocommit>true</autocommit>
 									<sqlCommand>create database ${test.env.db.name} default character set utf8</sqlCommand>
@@ -854,6 +942,7 @@
 				<testFailureIgnore>false</testFailureIgnore>
 				<test.env>postgresql</test.env>
 				<skipTests>false</skipTests>
+				<openolat-database-server-link></openolat-database-server-link>
 			</properties>
 			<build>
 				<plugins>
@@ -863,7 +952,7 @@
 						<executions>
 							<execution>
 								<id>copy-resources-4-postgresqlunittests</id>
-								<phase>generate-test-resources</phase>
+								<phase>process-test-resources</phase>
 								<goals>
 									<goal>copy-resources</goal>
 								</goals>
@@ -892,6 +981,65 @@
 						</executions>
 					</plugin>
 					<plugin>
+						<groupId>io.fabric8</groupId>
+						<artifactId>docker-maven-plugin</artifactId>
+						<version>0.27.2</version>
+						<executions>
+							<execution>
+								<id>start-postgresql-server</id>
+								<phase>process-test-resources</phase>
+								<goals>
+									<goal>start</goal>
+								</goals>
+							</execution>
+							<execution>
+								<id>stop-postgresql-server</id>
+								<phase>verify</phase>
+								<goals>
+									<goal>stop</goal>
+								</goals>
+							</execution>
+						</executions>
+						<configuration>
+							<images>
+								<image>
+									<name>postgres:9.4.19</name>
+									<run>
+										<exposedPropertyKey>
+											database-server
+										</exposedPropertyKey>
+										<ports>
+											<port>
+												127.0.0.1:host.port:5432
+											</port>
+										</ports>
+										<links>
+											<link>${openolat-database-server-link}</link>
+										</links>
+										<extraHosts>moby:127.0.0.1</extraHosts>
+										<env>
+											<POSTGRES_DB>
+												postgres
+											</POSTGRES_DB>
+											<POSTGRES_USER>
+												${test.env.db.user}
+											</POSTGRES_USER>
+											<POSTGRES_PASSWORD>
+												${test.env.db.pass}
+											</POSTGRES_PASSWORD>
+										</env>
+										<wait>
+											<time>60000</time>
+											<log>
+												PostgreSQL init process complete; ready for start up\.(?s).*LOG:  database system is ready to accept connections
+											</log>
+										</wait>
+									</run>
+								</image>
+							</images>
+						</configuration>
+					</plugin>
+					<plugin>
 						<groupId>org.codehaus.mojo</groupId>
 						<artifactId>sql-maven-plugin</artifactId>
 						<version>1.5</version>
@@ -917,11 +1065,11 @@
 						<!-- common configuration shared by all executions -->
 						<configuration>
 							<driver>org.postgresql.Driver</driver>
-							<url>jdbc:postgresql://localhost:${test.env.db.postgresql.host.port}/${test.env.db.name}</url>
-							<username>${test.env.db.postgresql.user}</username>
-							<password>${test.env.db.postgresql.pass}</password>
+							<url>jdbc:postgresql://${test.env.db.host.name}:${test.env.db.host.port}/${test.env.db.name}</url>
+							<username>${test.env.db.user}</username>
+							<password>${test.env.db.pass}</password>
 						</configuration>
-	
+
 						<executions>
 							<execution>
 								<id>drop-postgresql-db-before-test</id>
@@ -931,7 +1079,7 @@
 								</goals>
 								<configuration>
 									<!-- need another database to drop the targeted one -->
-									<url>jdbc:postgresql://localhost:${test.env.db.postgresql.host.port}/postgres</url>
+									<url>jdbc:postgresql://${test.env.db.host.name}:${test.env.db.host.port}/postgres</url>
 									<autocommit>true</autocommit>
 									<sqlCommand>drop database if exists ${test.env.db.name}</sqlCommand>
 									<!-- ignore error when database is not avaiable -->
@@ -946,7 +1094,7 @@
 									<goal>execute</goal>
 								</goals>
 								<configuration>
-									<url>jdbc:postgresql://localhost:${test.env.db.postgresql.host.port}/postgres</url>
+									<url>jdbc:postgresql://${test.env.db.host.name}:${test.env.db.host.port}/postgres</url>
 									<!-- no transaction -->
 									<autocommit>true</autocommit>
 									<sqlCommand>create database ${test.env.db.name}</sqlCommand>
@@ -979,7 +1127,7 @@
 									<goal>execute</goal>
 								</goals>
 								<configuration>
-									<url>jdbc:postgresql://localhost:${test.env.db.postgresql.host.port}/postgres</url>
+									<url>jdbc:postgresql://${test.env.db.host.name}:${test.env.db.host.port}/postgres</url>
 									<autocommit>true</autocommit>
 									<sqlCommand>drop database if exists ${test.env.db.name}</sqlCommand>
 								</configuration>
@@ -994,14 +1142,14 @@
 								</goals>
 								<configuration>
 									<!-- need another database to drop the targeted one -->
-									<url>jdbc:postgresql://localhost:${test.env.db.postgresql.host.port}/postgres</url>
+									<url>jdbc:postgresql://${test.env.db.host.name}:${test.env.db.host.port}/postgres</url>
 									<autocommit>true</autocommit>
 									<sqlCommand>drop database if exists ${test.env.db.name}</sqlCommand>
 									<!-- ignore error when database is not avaiable -->
 									<onError>continue</onError>
 								</configuration>
 							</execution>
-	
+
 							<execution>
 								<id>create-postgresql-db-before-integration-test</id>
 								<phase>pre-integration-test</phase>
@@ -1009,7 +1157,7 @@
 									<goal>execute</goal>
 								</goals>
 								<configuration>
-									<url>jdbc:postgresql://localhost:${test.env.db.postgresql.host.port}/postgres</url>
+									<url>jdbc:postgresql://${test.env.db.host.name}:${test.env.db.host.port}/postgres</url>
 									<!-- no transaction -->
 									<autocommit>true</autocommit>
 									<sqlCommand>create database ${test.env.db.name}</sqlCommand>
@@ -1038,7 +1186,7 @@
 									<goal>execute</goal>
 								</goals>
 								<configuration>
-									<url>jdbc:postgresql://localhost:${test.env.db.postgresql.host.port}/postgres</url>
+									<url>jdbc:postgresql://${test.env.db.host.name}:${test.env.db.host.port}/postgres</url>
 									<autocommit>true</autocommit>
 									<sqlCommand>drop database if exists ${test.env.db.name}</sqlCommand>
 								</configuration>
@@ -1068,7 +1216,7 @@
 						<executions>
 							<execution>
 								<id>copy-resources-4-oracleunittests</id>
-								<phase>generate-test-resources</phase>
+								<phase>process-test-resources</phase>
 								<goals>
 									<goal>copy-resources</goal>
 								</goals>
@@ -1147,7 +1295,7 @@
 			<releases>
 				<enabled>true</enabled>
 			</releases>
-		</repository>	
+		</repository>
 		<repository>
 			<id>openolat-repo</id>
 			<name>OpenOLAT Public Maven Repository Group</name>
@@ -1213,6 +1361,7 @@
 					<exclude>**/*.pdf</exclude>
 					<exclude>**/*.graffle</exclude>
 					<exclude>**/doc-files/**</exclude>
+					<exclude>org/olat/ims/cp/_resources/imscp.zip</exclude>
 				</excludes>
 			</resource>
 			<resource>
@@ -1278,19 +1427,19 @@
 						</configuration>                       
 					</execution>
 					<!-- Download tomcat for integration test -->
-					<execution>
-                        <phase>pre-integration-test</phase>
-                        <goals>
-                        	<goal>run</goal>
-                        </goals>
-                        <configuration>
-                            <tasks>
-                                <mkdir dir="${project.build.directory}/downloads" />
-                                <get src="http://nexus.openolat.org/nexus/content/repositories/openolat/org/apache/tomcat/apache-tomcat-arq/8.0.24/apache-tomcat-arq-8.0.24.zip" dest="${project.build.directory}/downloads" verbose="true" skipexisting="true" />
-                                <unzip src="${project.build.directory}/downloads/apache-tomcat-arq-8.0.24.zip" dest="${project.build.directory}/arq-apache-tomcat-8.0.24" />
-                            </tasks>
-                        </configuration>
-                    </execution> 
+					<!--<execution>-->
+                        <!--<phase>pre-integration-test</phase>-->
+                        <!--<goals>-->
+                        	<!--<goal>run</goal>-->
+                        <!--</goals>-->
+                        <!--<configuration>-->
+                            <!--<tasks>-->
+                                <!--<mkdir dir="${project.build.directory}/downloads" />-->
+                                <!--<get src="http://nexus.openolat.org/nexus/content/repositories/openolat/org/apache/tomcat/apache-tomcat-arq/8.0.24/apache-tomcat-arq-8.0.24.zip" dest="${project.build.directory}/downloads" verbose="true" skipexisting="true" />-->
+                                <!--<unzip src="${project.build.directory}/downloads/apache-tomcat-arq-8.0.24.zip" dest="${project.build.directory}/arq-apache-tomcat-8.0.24" />-->
+                            <!--</tasks>-->
+                        <!--</configuration>-->
+                    <!--</execution> -->
 				</executions>
 			</plugin>
             <!-- Unit tests -->
@@ -1304,6 +1453,18 @@
 					<argLine>-Xmx512m -Xms256m -Djava.awt.headless=true</argLine>
 					<systemPropertyVariables>
 						<java.io.tmpdir>${project.build.directory}/olatdata</java.io.tmpdir>
+						<test.env.db.host.name>
+							${test.env.db.host.name}
+						</test.env.db.host.name>
+						<test.env.db.host.port>
+							${test.env.db.host.port}
+						</test.env.db.host.port>
+						<docker.container.database-server.ip>
+							${docker.container.database-server.ip}
+						</docker.container.database-server.ip>
+						<host.port>
+							${host.port}
+						</host.port>
 					</systemPropertyVariables>
 					<testNGArtifactName>none:none</testNGArtifactName>
 					<includes>
@@ -1353,6 +1514,18 @@
 						<id>selenium-verify</id>
 						<goals>
 							<goal>verify</goal>
+						</goals>
+					</execution>
+				</executions>
+			</plugin>
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-jar-plugin</artifactId>
+				<version>2.6</version>
+				<executions>
+					<execution>
+						<goals>
+							<goal>test-jar</goal>
 						</goals>
 					</execution>
 				</executions>
@@ -1807,6 +1980,12 @@
 			<groupId>org.openolat</groupId>
 			<artifactId>openmeetingws</artifactId>
 			<version>2.1.1</version>
+			<exclusions>
+				<exclusion>
+					<groupId>javax.ws.rs</groupId>
+					<artifactId>jsr311-api</artifactId>
+				</exclusion>
+			</exclusions>
 		</dependency>
 		<dependency>
 			<groupId>org.openolat</groupId>
@@ -1826,7 +2005,7 @@
 		<dependency>
 			<groupId>org.apache.pdfbox</groupId>
 			<artifactId>pdfbox</artifactId>
-			<version>1.8.12</version>
+			<version>1.8.16</version>
 			<exclusions>
 				<exclusion>
 					<groupId>commons-logging</groupId>
@@ -1836,13 +2015,13 @@
 		</dependency>
 		<dependency>
 			<groupId>org.bouncycastle</groupId>
-			<artifactId>bcmail-jdk15</artifactId>
-			<version>1.46</version>
+			<artifactId>bcmail-jdk15on</artifactId>
+			<version>${org.bouncycastle.version}</version>
 		</dependency>
 		<dependency>
 			<groupId>org.bouncycastle</groupId>
-			<artifactId>bcprov-jdk15</artifactId>
-			<version>1.46</version>
+			<artifactId>bcprov-jdk15on</artifactId>
+			<version>${org.bouncycastle.version}</version>
 		</dependency>
 		<dependency>
 			<groupId>org.scribe</groupId>
@@ -2024,29 +2203,18 @@
 		<dependency>
 			<groupId>org.slf4j</groupId>
 			<artifactId>slf4j-api</artifactId>
-			<version>1.5.11</version>
-		</dependency>
-		<dependency>
-			<groupId>org.slf4j</groupId>
-			<artifactId>slf4j-log4j12</artifactId>
-			<version>1.5.11</version>
+			<version>1.7.21</version>
 		</dependency>
 		<dependency>
 			<groupId>org.slf4j</groupId>
 			<artifactId>jul-to-slf4j</artifactId>
-			<version>1.5.8</version>
+			<version>1.7.21</version>
 		</dependency>
 		<!-- Replace commons-logging -->
 		<dependency>
 			<groupId>org.slf4j</groupId>
 			<artifactId>jcl-over-slf4j</artifactId>
-			<version>1.5.8</version>
-		</dependency>
-		<dependency>
-			<groupId>log4j</groupId>
-			<artifactId>log4j</artifactId>
-			<version>1.2.17</version>
-			<scope>test</scope>
+			<version>1.7.21</version>
 		</dependency>
 
 		<!-- basic LTI stuff for lti demo: http://www.imsglobal.org/toolsinteroperability2.cfm -->
@@ -2077,7 +2245,7 @@
 		<dependency>
 			<groupId>org.owasp.antisamy</groupId>
 			<artifactId>antisamy</artifactId>
-			<version>1.5.2</version>
+			<version>1.5.7</version>
 		</dependency>
 		<dependency>
 			<groupId>org.w3c.css</groupId>
@@ -2113,12 +2281,12 @@
 		<dependency>
 			<groupId>org.apache.httpcomponents</groupId>
 			<artifactId>httpcore</artifactId>
-			<version>4.3.3</version>
+			<version>4.4.4</version>
 		</dependency>
 		<dependency>
 			<groupId>org.apache.httpcomponents</groupId>
 			<artifactId>httpclient</artifactId>
-			<version>4.3.3</version>
+			<version>4.5.3</version>
 			<exclusions>
 				<exclusion>
 					<groupId>commons-logging</groupId>
@@ -2129,14 +2297,19 @@
 		<dependency>
 			<groupId>org.apache.httpcomponents</groupId>
 			<artifactId>httpmime</artifactId>
-			<version>4.3.3</version>
+			<version>4.5.3</version>
 		</dependency>
-		<dependency>
-			<!-- Used by at least ical4j, velocity, basiclti -->
-			<groupId>commons-lang</groupId>
-			<artifactId>commons-lang</artifactId>
-			<version>2.6</version>
-		</dependency>
+        <dependency>
+            <!-- Used by iCal4j (the upcoming version 2.0 uses the Commons Lang version 3) -->
+            <groupId>commons-lang</groupId>
+            <artifactId>commons-lang</artifactId>
+            <version>2.6</version>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.commons</groupId>
+            <artifactId>commons-lang3</artifactId>
+            <version>3.4</version>
+        </dependency>
 		<dependency>
 			<groupId>org.infinispan</groupId>
 			<artifactId>infinispan-core</artifactId>
@@ -2218,12 +2391,12 @@
 		<dependency>
 			<groupId>org.quartz-scheduler</groupId>
 			<artifactId>quartz</artifactId>
-			<version>1.8.6</version>
+			<version>2.2.3</version>
 		</dependency>
 		<dependency>
 			<groupId>com.thoughtworks.xstream</groupId>
 			<artifactId>xstream</artifactId>
-			<version>1.4.9</version>
+			<version>1.4.10</version>
 		</dependency>
 		<dependency>
 			<groupId>xerces</groupId>
@@ -2355,34 +2528,47 @@
 				</exclusion>
 			</exclusions>
 		</dependency>
+		<dependency>
+			<groupId>org.checkerframework</groupId>
+			<artifactId>checker</artifactId>
+			<version>2.1.9</version>
+		</dependency>
+		<dependency>
+			<groupId>org.checkerframework</groupId>
+			<artifactId>checker-qual</artifactId>
+			<version>2.1.7</version>
+		</dependency>
 		<!-- end Spring dependencies -->
 		<!-- Start Jersey dependency -->
 		<dependency>
 			<groupId>javax.ws.rs</groupId>
-			<artifactId>jsr311-api</artifactId>
-			<version>1.1.1</version>
+			<artifactId>javax.ws.rs-api</artifactId>
+			<version>2.1</version>
 			<scope>test</scope>
 		</dependency>
 
 		<dependency>
-			<groupId>org.codehaus.jackson</groupId>
-			<artifactId>jackson-core-asl</artifactId>
-			<version>${jackson.version}</version>
+			<groupId>org.glassfish.jersey.core</groupId>
+			<artifactId>jersey-client</artifactId>
+			<version>2.27</version>
+		</dependency>
+		<!-- Downgrade version of jackson-databind -->
+		<!-- See https://github.com/FasterXML/jackson-annotations/issues/119 -->
+		<dependency>
+			<groupId>org.glassfish.jersey.media</groupId>
+			<artifactId>jersey-media-json-jackson</artifactId>
+			<version>2.27</version>
+			<exclusions>
+				<exclusion>
+					<groupId>com.fasterxml.jackson.core</groupId>
+					<artifactId>jackson-databind</artifactId>
+				</exclusion>
+			</exclusions>
 		</dependency>
 		<dependency>
-			<groupId>org.codehaus.jackson</groupId>
-			<artifactId>jackson-mapper-asl</artifactId>
-			<version>${jackson.version}</version>
-		</dependency>
-		<dependency>
-			<groupId>org.codehaus.jackson</groupId>
-			<artifactId>jackson-jaxrs</artifactId>
-			<version>${jackson.version}</version>
-		</dependency>
-		<dependency>
-			<groupId>org.codehaus.jackson</groupId>
-			<artifactId>jackson-xc</artifactId>
-			<version>${jackson.version}</version>
+			<groupId>com.fasterxml.jackson.core</groupId>
+			<artifactId>jackson-databind</artifactId>
+			<version>2.8.10</version>
 		</dependency>
 		<!-- end jersey -->
 		
@@ -2402,6 +2588,11 @@
 			<scope>test</scope>
 		</dependency>
 		<dependency>
+      		<groupId>org.mockito</groupId>
+      		<artifactId>mockito-all</artifactId>
+      		<version>1.8.1</version>
+    	</dependency>
+		<dependency>
 			<groupId>org.assertj</groupId>
 			<artifactId>assertj-core</artifactId>
 			<version>3.6.1</version>
@@ -2416,13 +2607,13 @@
 		<dependency>
 		    <groupId>io.undertow</groupId>
 		    <artifactId>undertow-core</artifactId>
-		    <version>1.2.9.Final</version>
+		    <version>${io.undertow.version}</version>
 			<scope>test</scope>
 		</dependency>
 		<dependency>
 		    <groupId>io.undertow</groupId>
 		    <artifactId>undertow-servlet</artifactId>
-		    <version>1.2.9.Final</version>
+		    <version>${io.undertow.version}</version>
 			<scope>test</scope>
 		</dependency>
 		<dependency>
@@ -2431,7 +2622,7 @@
 			<version>0.5.2</version>
 			<scope>test</scope>
 		</dependency>
-    
+
 		<!-- Start test dependencies for Arquillian and Selenium -->
     	<dependency>
 			<groupId>org.jboss.arquillian.junit</groupId>

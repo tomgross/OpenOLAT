@@ -20,13 +20,7 @@
 
 package org.olat.core.util.filter;
 
-import org.olat.core.util.filter.impl.AddBaseURLToMediaRelativeURLFilter;
-import org.olat.core.util.filter.impl.ConditionalHTMLCommentsFilter;
-import org.olat.core.util.filter.impl.NekoHTMLFilter;
-import org.olat.core.util.filter.impl.OWASPAntiSamyXSSFilter;
-import org.olat.core.util.filter.impl.SimpleHTMLTagsFilter;
-import org.olat.core.util.filter.impl.SmileysCssToDataUriFilter;
-import org.olat.core.util.filter.impl.XMLValidCharacterFilter;
+import org.olat.core.util.filter.impl.*;
 
 /**
  * Description:<br>
@@ -41,6 +35,7 @@ import org.olat.core.util.filter.impl.XMLValidCharacterFilter;
  */
 public class FilterFactory {
 	// the html tag filter is static, not stateful
+	private static final Filter stripHtmlTagsFilter = new StripHTMLTagsFilter();
 	private static final Filter htmlTagsFilter = new SimpleHTMLTagsFilter();
 	private static final Filter htmlTagsAndDesescapingFilter = new NekoHTMLFilter();
 	private static final Filter conditionalCommentsFilter = new ConditionalHTMLCommentsFilter();
@@ -56,6 +51,10 @@ public class FilterFactory {
 		return htmlTagsFilter;
 	}
 	
+	public static Filter getStripHtmlTagsFilter() {
+		return stripHtmlTagsFilter;
+	}
+
 	public static Filter getHtmlTagAndDescapingFilter() {
 		return htmlTagsAndDesescapingFilter;
 	}

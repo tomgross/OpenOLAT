@@ -363,8 +363,8 @@ public class Window extends AbstractComponent implements CustomCSSDelegate {
 								long durationAfterDoDispatchToComponent = System.currentTimeMillis() - debug_start;
 								log.debug("Perf-Test: Window durationAfterDoDispatchToComponent=" + durationAfterDoDispatchToComponent);
 							}
-						}	
-							
+						}
+
 						MediaResource mmr = null;
 						//REVIEW:PB: this will be the code allowing back forward navigation
 						//-----> if (didDispatch || inlineAfterBackForward) {
@@ -390,8 +390,8 @@ public class Window extends AbstractComponent implements CustomCSSDelegate {
 								} else {
 									inline = false;
 								}
-							} 
-							
+							}
+
 							//REVIEW:PB: this will be the code allowing back forward navigation
 							//-----> if (inline) {
 							if (inline || !validForDispatching) {
@@ -399,7 +399,7 @@ public class Window extends AbstractComponent implements CustomCSSDelegate {
 									// not valid: fire oldtimestamp event and later rerender
 									fireEvent(ureq, OLDTIMESTAMPCALL);
 								}
-								
+
 								ComponentCollection top = getContentPane();
 								// always validate here, since we are never in the case of just rerendering (we are in the bg iframe)
 								ValidatingVisitor vv = new ValidatingVisitor(gsettings, jsAndCssAdder);
@@ -414,12 +414,12 @@ public class Window extends AbstractComponent implements CustomCSSDelegate {
 									log.debug("Perf-Test: Window durationAfterVisitAll=" + durationAfterVisitAll);
 								}
 								wbackofficeImpl.fireCycleEvent(Window.AFTER_VALIDATING);
-								
+
 								ValidationResult vr = vv.getValidationResult();
-		
+
 								boolean newJsCssAdded= vr.getJsAndCSSAdder().finishAndCheckChange();
 								String newModUri = vr.getNewModuleURI();
-								// !validForDispatching || 
+								// !validForDispatching ||
 								if (newJsCssAdded || newModUri != null) {
 									// send 302 redirect so the ajax-iframe's parent window gets reloaded to either include new js/css or to prepare the address bar
 									// url for asynchronous requests when delivering inline-contentpackaging.
@@ -435,18 +435,18 @@ public class Window extends AbstractComponent implements CustomCSSDelegate {
 								} else {
 									// inline rendering by selectively replacing the dirty components in the dom tree of the browser
 									wbackofficeImpl.fireCycleEvent(Window.BEFORE_INLINE_RENDERING);
-					
+
 									// Start by preparing the client: must be called prior to the
 									// other commands to not overwrite the form o2c dirty flag
 									// wich might be set by later commands
 									if (!this.isDirty()) {
 										wbackofficeImpl.sendCommandTo(CommandFactory.createPrepareClientCommand(null));
 									}
-									
+
 									// Add the js and css files and related pre init commands
 									Command jscsscom = jsAndCssAdder.extractJSCSSCommand();
 									wbackofficeImpl.sendCommandTo(jscsscom);
-									
+
 									// Add the DOM replacement commands. Must be called after the
 									// js and css commands. Inline JS scripts might have
 									// dependencies to previously loaded js libs
@@ -527,7 +527,7 @@ public class Window extends AbstractComponent implements CustomCSSDelegate {
 							long durationBeforeServeResource = System.currentTimeMillis() - debug_start;
 							log.debug("Perf-Test: Window durationBeforeServeResource=" + durationBeforeServeResource);
 						}
-						
+
 						wbackofficeImpl.pushCommands(ureq, request, response);
 					}  catch (InvalidRequestParameterException e) {
 						try {
@@ -539,13 +539,13 @@ public class Window extends AbstractComponent implements CustomCSSDelegate {
 						// in any case, try to inform the user appropriately.
 						// a) error while dispatching (e.g. db problem, npe, ...)
 						// b) for inline: error while validating or json-rendering dirty components.
-						
+
 						// since an error has occured for a request which is targeted in the background iframe, we need to redirect to the error window.
 						// create the error window
 						try {
 							log.debug("Error in Window, rollback");
 							DBFactory.getInstance().rollback();
-						
+
 							ChiefController msgcc = MsgFactory.createMessageChiefController(ureq, th);
 							Window errWindow = msgcc.getWindow();
 							errWindow.setUriPrefix(getUriPrefix());
@@ -568,7 +568,7 @@ public class Window extends AbstractComponent implements CustomCSSDelegate {
 					return;
 				}
 			}
-			
+
 			// -------------------------
 			// ----- standard mode -----
 			// -------------------------
@@ -577,7 +577,7 @@ public class Window extends AbstractComponent implements CustomCSSDelegate {
 				validate = true;
 				wbackofficeImpl.fireCycleEvent(BEFORE_RENDER_ONLY);
 			} else if (validatingCausedRerendering && timestampID.equals("-1")) {
-				// the first request after the 302 redirect cause by a component validation 
+				// the first request after the 302 redirect cause by a component validation
 				// -> just rerender, but clear the flag for further async media requests
 				validatingCausedRerendering = false;
 				inline = true;
@@ -595,7 +595,7 @@ public class Window extends AbstractComponent implements CustomCSSDelegate {
 					if (asyncMediaResponsible == null) { // no async resp.
 						// assume it to be a link from an old window (using browser back or
 						// "open in new window/tab" in the browser).
-						if ((componentID != null && componentID.equals("-1")) || (ureq.getParameter("o_winrndo") != null)) { 
+						if ((componentID != null && componentID.equals("-1")) || (ureq.getParameter("o_winrndo") != null)) {
 							// just rerender
 						}	else  {
 							// not a valid timestamp -> most likely a browser back or forward event (or a copy/paste of a url) ->
@@ -623,10 +623,10 @@ public class Window extends AbstractComponent implements CustomCSSDelegate {
 					}
 				} else {
 					// latestTimestamp == null || timestampID.equals(latestTimestamp)
-					
+
 					dispatch = true;
 					checkNewWindow = true;
-					validate = true;				
+					validate = true;
 				}
 			}
 			// end of simple flagging.
@@ -636,7 +636,7 @@ public class Window extends AbstractComponent implements CustomCSSDelegate {
 				long syncIntroDiff = dstart - debug_start;
 				debugMsg.append("sync_bdisp:").append(syncIntroDiff).append(LOG_SEPARATOR);
 			}
-			
+
 			boolean forceReload = false;
 			if (dispatch) {
 				DispatchResult dispatchResult = doDispatchToComponent(ureq, debugMsg);
@@ -655,7 +655,7 @@ public class Window extends AbstractComponent implements CustomCSSDelegate {
 					} else {
 						inline = false;
 					}
-				} else { 
+				} else {
 					// component with id was not found -> probably asynchronous thread changed flow ->
 					// just rerender
 					inline = true;
@@ -677,7 +677,7 @@ public class Window extends AbstractComponent implements CustomCSSDelegate {
 					}
 					// render initial state of new window by redirecting (302) to the new
 					// window id. needed for asyncronous data like images loaded
-					
+
 					// todo maybe better delegate window registry to the windowbackoffice?
 					URLBuilder ubu = new URLBuilder(uriPrefix, resWindow.getInstanceId(), String.valueOf(resWindow.timestamp));
 					StringOutput sout = new StringOutput(30);
@@ -694,7 +694,7 @@ public class Window extends AbstractComponent implements CustomCSSDelegate {
 					return;
 				}
 			}
-			
+
 			if(forceReload) {
 				//force RELOAD with a redirect to itself (http redirect because we are in non-Ajax mode)
 				String reRenderUri = buildURIFor(this, timestampID, null);
@@ -702,7 +702,7 @@ public class Window extends AbstractComponent implements CustomCSSDelegate {
 				DispatcherModule.redirectTo(response, url);
 			} else if (inline) {
 					// do inline rendering.
-					
+
 					ComponentCollection top = getContentPane();
 					// validate prior to rendering, but only if the timestamp was not null
 					// /
@@ -718,7 +718,7 @@ public class Window extends AbstractComponent implements CustomCSSDelegate {
 						String newModUri = vr.getNewModuleURI();
 
 						vr.getJsAndCSSAdder().finishAndCheckChange(); // ignore the return value since we are just about rendering anyway
-					
+
 						if (newModUri != null) {
 							// send 302 redirect without dispatching, but just rerender
 							// inline.
@@ -744,7 +744,7 @@ public class Window extends AbstractComponent implements CustomCSSDelegate {
 					StringOutput result;
 					synchronized(render_mutex) { //o_clusterOK by:fj
 						// render now
-						//TODO state-less 
+						//TODO state-less
 						if (incTimestamp) {
 							timestamp++;
 						}
@@ -757,7 +757,7 @@ public class Window extends AbstractComponent implements CustomCSSDelegate {
 						// if the timestamp of a request is outdated, simply jump to its bookmarked business control path.
 						URLBuilder ubu = new URLBuilder(uriPrefix, getInstanceId(), newTimestamp);
 						RenderResult renderResult = new RenderResult();
-						
+
 						// if we have an around-component-interception
 						// set the handler for this render cycle
 						InterceptHandler interceptHandler = wbackofficeImpl.getInterceptHandler();
@@ -765,7 +765,7 @@ public class Window extends AbstractComponent implements CustomCSSDelegate {
 							InterceptHandlerInstance dhri = interceptHandler.createInterceptHandlerInstance();
 							renderResult.setInterceptHandlerRenderInstance(dhri);
 						}
-						
+
 						Renderer fr = Renderer.getInstance(top, top.getTranslator(), ubu, renderResult, gsettings);
 						long rstart = 0;
 						if (isDebugLog) {
@@ -781,12 +781,12 @@ public class Window extends AbstractComponent implements CustomCSSDelegate {
 						if (renderResult.getRenderException() != null) {
 							throw new OLATRuntimeException(Window.class, renderResult.getLogMsg(), renderResult.getRenderException());
 						}
-						
+
 						//to check HTML by reload
 						//System.out.println();
 						//System.out.println(result.toString());
 						//System.out.println();
-		
+
 						// after rendering we know if some component awaits further async
 						// calls
 						// like images, so get a handler
@@ -800,7 +800,7 @@ public class Window extends AbstractComponent implements CustomCSSDelegate {
 						long diff = System.currentTimeMillis() - debug_start;
 						debugMsg.append("inl_comp:").append(diff).append(LOG_SEPARATOR);
 					}
-					
+
 					wbackofficeImpl.fireCycleEvent(AFTER_INLINE_RENDERING);
 					ServletUtil.serveStringResource(response, result);
 					StringOutputPool.free(result);
@@ -808,11 +808,11 @@ public class Window extends AbstractComponent implements CustomCSSDelegate {
 						long diff = System.currentTimeMillis() - debug_start;
 						debugMsg.append("inl_serve:").append(diff).append(LOG_SEPARATOR);
 					}
-			} 
+			}
 			//else serve mediaresource, but postpone serving to when lock has been released,
 			// otherwise e.g. a large download blocks the window, so that the user cannot click until the download is finished
 		} // end of synchronized(this)
-				
+
 		if (!inline) {
 			// it can be an async media resource, or a resulting mediaresource (image, an excel download, a 302 redirect, and so on.)
 			if (isDebugLog) {
@@ -825,7 +825,7 @@ public class Window extends AbstractComponent implements CustomCSSDelegate {
 				debugMsg.append("mr_serve:").append(diff).append(LOG_SEPARATOR);
 			}
 		}
-		
+
 		if (isDebugLog) {
 			// log the collected data now
 			log.info(debugMsg.toString());
@@ -833,8 +833,8 @@ public class Window extends AbstractComponent implements CustomCSSDelegate {
 			log.debug("Perf-Test: Window durationDispatchRequest=" + durationDispatchRequest);
 		}
 	}
-	
-	
+
+
 
 	public DTabs getDTabs() {
 		return dTabs;

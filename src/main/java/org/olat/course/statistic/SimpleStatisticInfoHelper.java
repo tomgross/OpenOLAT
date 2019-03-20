@@ -85,7 +85,7 @@ public class SimpleStatisticInfoHelper {
 	 */
 	private synchronized Date doGetFirstLoggingTableCreationDate() {
 		if (!initialized_) {
-			creationdate_ = jdbcTemplate_.queryForLong(sql_.get(dbVendor_));
+			creationdate_ = jdbcTemplate_.queryForObject(sql_.get(dbVendor_), Long.class);
 			initialized_ = true;
 		}
 		if (creationdate_!=-1) {

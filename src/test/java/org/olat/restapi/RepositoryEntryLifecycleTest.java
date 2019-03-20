@@ -34,11 +34,12 @@ import java.util.List;
 import javax.ws.rs.core.MediaType;
 import javax.ws.rs.core.UriBuilder;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.Assert;
 import org.apache.http.HttpResponse;
 import org.apache.http.client.methods.HttpGet;
-import org.codehaus.jackson.map.ObjectMapper;
-import org.codehaus.jackson.type.TypeReference;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.olat.core.commons.persistence.DB;
 import org.olat.core.logging.OLog;
@@ -55,6 +56,7 @@ import org.springframework.beans.factory.annotation.Autowired;
  * @author srosse, stephane.rosse@frentix.com, http://www.frentix.com
  *
  */
+@Ignore
 public class RepositoryEntryLifecycleTest extends OlatJerseyTestCase  {
 	
 	private static OLog log = Tracing.createLoggerFor(RepositoryEntryLifecycleTest.class);
@@ -105,7 +107,7 @@ public class RepositoryEntryLifecycleTest extends OlatJerseyTestCase  {
 
 	private List<RepositoryEntryLifecycleVO> parseRepoArray(InputStream body) {
 		try {
-			ObjectMapper mapper = new ObjectMapper(jsonFactory); 
+			ObjectMapper mapper = new ObjectMapper(jsonFactory);
 			return mapper.readValue(body, new TypeReference<List<RepositoryEntryLifecycleVO>>(){/* */});
 		} catch (Exception e) {
 			log.error("", e);

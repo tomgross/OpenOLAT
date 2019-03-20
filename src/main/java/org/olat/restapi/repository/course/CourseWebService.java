@@ -87,6 +87,7 @@ import org.olat.repository.RepositoryManager;
 import org.olat.repository.RepositoryService;
 import org.olat.repository.handlers.RepositoryHandler;
 import org.olat.repository.handlers.RepositoryHandlerFactory;
+import org.olat.repository.manager.RepositoryEntryDeletionException;
 import org.olat.resource.OLATResource;
 import org.olat.resource.OLATResourceManager;
 import org.olat.resource.accesscontrol.ACService;
@@ -336,8 +337,13 @@ public class CourseWebService {
 		UserRequest ureq = getUserRequest(request);
 		RepositoryService rs = CoreSpringFactory.getImpl(RepositoryService.class);
 		RepositoryEntry re = course.getCourseEnvironment().getCourseGroupManager().getCourseEntry();
-		
-		ErrorList errors = rs.deletePermanently(re, ureq.getIdentity(), ureq.getUserSession().getRoles(), ureq.getLocale());
+
+		ErrorList errors;
+		try {
+			errors = rs.deletePermanently(re, ureq.getIdentity(), ureq.getUserSession().getRoles(), ureq.getLocale());
+		} catch (RepositoryEntryDeletionException e) {
+			return Response.serverError().status(500).build();
+		}
 		if(errors.hasErrors()) {
 			return Response.serverError().status(500).build();
 		}
@@ -392,12 +398,17 @@ public class CourseWebService {
 					LoggingResourceable.wrap(re, OlatResourceableType.genRepoEntry));
 		} else if("deleted".equals(newStatus)) {
 			Identity identity = getIdentity(request);
-			rs.deleteSoftly(re, identity, true);
-			log.audit("REST deleting (soft) course: " + re.getDisplayname() + " [" + re.getKey() + "]");
-			ThreadLocalUserActivityLogger.log(LearningResourceLoggingAction.LEARNING_RESOURCE_TRASH, getClass(),
-					LoggingResourceable.wrap(re, OlatResourceableType.genRepoEntry));
+			try {
+				rs.deleteSoftly(re, identity, true);
+				log.audit("REST deleting (soft) course: " + re.getDisplayname() + " [" + re.getKey() + "]");
+				ThreadLocalUserActivityLogger.log(LearningResourceLoggingAction.LEARNING_RESOURCE_TRASH, getClass(),
+						LoggingResourceable.wrap(re, OlatResourceableType.genRepoEntry));
+			} catch (RepositoryEntryDeletionException e) {
+				log.audit(e.getMessage());
+			}
 		} else if("restored".equals(newStatus)) {
-			rs.restoreRepositoryEntry(re);
+			Identity identity = getIdentity(request);
+			rs.restoreRepositoryEntry(re, identity);
 			log.audit("REST restoring course: " + re.getDisplayname() + " [" + re.getKey() + "]");
 			ThreadLocalUserActivityLogger.log(LearningResourceLoggingAction.LEARNING_RESOURCE_RESTORE, getClass(),
 					LoggingResourceable.wrap(re, OlatResourceableType.genRepoEntry));
@@ -710,7 +721,7 @@ public class CourseWebService {
 		RepositoryEntry repositoryEntry = course.getCourseEnvironment().getCourseGroupManager().getCourseEntry();
 		List<Identity> authors = Collections.singletonList(author);
 		IdentitiesAddEvent identitiesAddedEvent = new IdentitiesAddEvent(authors);
-		rm.addOwners(identity, identitiesAddedEvent, repositoryEntry);
+		rm.addOwners(identity, identitiesAddedEvent, repositoryEntry, null);
 		
 		return Response.ok().build();
 	}
@@ -740,7 +751,7 @@ public class CourseWebService {
 		//add the author as owner of the course
 		RepositoryEntry repositoryEntry = course.getCourseEnvironment().getCourseGroupManager().getCourseEntry();
 		IdentitiesAddEvent identitiesAddedEvent = new IdentitiesAddEvent(authorList);
-		RepositoryManager.getInstance().addOwners(identity, identitiesAddedEvent, repositoryEntry);
+		RepositoryManager.getInstance().addOwners(identity, identitiesAddedEvent, repositoryEntry, null);
 		return Response.ok().build();
 	}
 	

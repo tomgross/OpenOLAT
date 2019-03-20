@@ -40,9 +40,9 @@ import javax.servlet.MultipartConfigElement;
 import javax.servlet.ServletException;
 import javax.ws.rs.core.UriBuilder;
 
-import org.codehaus.jackson.JsonFactory;
-import org.codehaus.jackson.map.ObjectMapper;
-import org.codehaus.jackson.type.TypeReference;
+import com.fasterxml.jackson.core.JsonFactory;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.Before;
 import org.olat.core.logging.OLog;
 import org.olat.core.logging.Tracing;
@@ -105,7 +105,7 @@ public abstract class OlatJerseyTestCase extends OlatTestCase {
 				        .setContextPath("/" + CONTEXT_PATH)
 				        .setDeploymentName("rest.war")
 				        .addServlets(
-				                servlet("REST Servlet",  com.sun.jersey.spi.container.servlet.ServletContainer.class)
+				                servlet("REST Servlet", org.glassfish.jersey.servlet.ServletContainer.class)
 		        		        		.addInitParam("javax.ws.rs.Application", OlatRestApplication.class.getName())
 		        		        		.setMultipartConfig(new MultipartConfigElement((String)null))
 				                        .addMapping("/*"))
@@ -159,7 +159,7 @@ public abstract class OlatJerseyTestCase extends OlatTestCase {
 	
 	protected List<LinkVO> parseLinkArray(InputStream body) {
 		try {
-			ObjectMapper mapper = new ObjectMapper(jsonFactory); 
+			ObjectMapper mapper = new ObjectMapper(jsonFactory);
 			return mapper.readValue(body, new TypeReference<List<LinkVO>>(){/* */});
 		} catch (Exception e) {
 			log.error("", e);

@@ -48,6 +48,7 @@ import org.apache.http.client.methods.HttpGet;
 import org.apache.http.util.EntityUtils;
 import org.junit.After;
 import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.olat.basesecurity.BaseSecurityManager;
 import org.olat.core.commons.persistence.DBFactory;
@@ -60,6 +61,7 @@ import org.olat.restapi.repository.course.CoursesWebService;
 import org.olat.restapi.support.vo.LinkVO;
 import org.olat.test.OlatJerseyTestCase;
 
+@Ignore
 public class CoursesResourcesFoldersTest extends OlatJerseyTestCase {
 
 	private static ICourse course1;

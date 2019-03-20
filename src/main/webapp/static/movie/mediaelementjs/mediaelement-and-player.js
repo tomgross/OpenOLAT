@@ -37,7 +37,10 @@ mejs.plugins = {
 	],
 	vimeo: [
 		{version: null, types: ['video/vimeo', 'video/x-vimeo']}
-	]
+	],
+    switchtube: [
+        {version: null, types: ['video/switchtube', 'video/x-switchtube']}
+    ]
 };
 
 /*
@@ -936,7 +939,7 @@ mejs.MediaElementDefaults = {
 	// none: forces fallback view
 	mode: 'auto',
 	// remove or reorder to change plugin priority and availability
-	plugins: ['flash','silverlight','youtube','vimeo'],
+	plugins: ['flash','silverlight','youtube','vimeo','switchtube'],
 	// shows debug errors on screen
 	enablePluginDebug: false,
 	// use plugin for browsers that have trouble with Basic Authentication on HTTPS sites
@@ -1559,8 +1562,17 @@ mejs.HtmlMediaElementShim = {
 					mejs.YouTubeApi.createFlash(youtubeSettings, options);
 				}
 				break;
-			
-			// DEMO Code. Does NOT work.
+
+            case 'switchtube':
+
+                var player_id = pluginid + "_player";
+                pluginMediaElement.switchtubeid = playback.url.substr(playback.url.lastIndexOf('/')+1);
+
+                container.innerHTML ='<iframe src="' + playback.scheme + 'tube.switch.ch/embed/' + pluginMediaElement.switchtubeid +'" width="' + width +'" height="' + height +'" frameborder="0" class="mejs-shim" id="' + player_id + '" webkitallowfullscreen mozallowfullscreen allowfullscreen></iframe>';
+
+                break;
+
+            // DEMO Code. Does NOT work.
 			case 'vimeo':
 				var player_id = pluginid + "_player";
 				pluginMediaElement.vimeoid = playback.url.substr(playback.url.lastIndexOf('/')+1);

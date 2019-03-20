@@ -40,6 +40,7 @@ import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 
+import org.junit.Ignore;
 import org.junit.Test;
 
 /**
@@ -59,6 +60,7 @@ import org.junit.Test;
  * 
  * @author guido
  */
+@Ignore
 public class TestRenderStaticURLCacheHeaders {
 
 	private String[] uris = {"https://olatng.uzh.ch/", "https://olat.uzh.ch/"};

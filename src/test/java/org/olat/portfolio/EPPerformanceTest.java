@@ -19,22 +19,9 @@
  */
 package org.olat.portfolio;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNotNull;
-
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.Date;
-import java.util.Iterator;
-import java.util.List;
-import java.util.UUID;
-
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
-import org.olat.core.commons.persistence.DB;
-import org.olat.core.commons.persistence.DBFactory;
 import org.olat.core.id.Identity;
 import org.olat.core.id.Roles;
 import org.olat.modules.fo.portfolio.ForumArtefact;
@@ -49,6 +36,12 @@ import org.olat.portfolio.model.structel.PortfolioStructureMap;
 import org.olat.test.JunitTestHelper;
 import org.olat.test.OlatTestCase;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Component;
+
+import java.util.*;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
 
 /**
  * Description:<br>
@@ -61,6 +54,7 @@ import org.springframework.beans.factory.annotation.Autowired;
  * 
  * @author Roman Haag, roman.haag@frentix.com, http://www.frentix.com
  */
+@Component
 public class EPPerformanceTest extends OlatTestCase {
 
 	private static final String LOREM_STRING_512 = "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Aenean id sapien ac justo congue mollis. " +
@@ -69,10 +63,6 @@ public class EPPerformanceTest extends OlatTestCase {
 			"felis commodo a rutrum ipsum tristique. Nulla facilisi. Vivamus convallis faucibus augue quis ultrices. Sed quam orci, dignissim metus. ";
 	private static final List<String> tagList1 = new ArrayList<String>(Arrays.asList("Haus", "baum", "Wald"));
 	private static final List<String> tagList2 = new ArrayList<String>(Arrays.asList("Schule", "Lehrer"));
-	
-
-	@Autowired
-	private DB dbInstance;
 
 	@Autowired
 	private EPFrontendManager epFrontendManager;
@@ -123,7 +113,7 @@ public class EPPerformanceTest extends OlatTestCase {
 			}
 			
 			if (j % 10 == 0) {
-				DBFactory.getInstance().closeSession();
+				dbInstance.closeSession();
 			}
 			if (j % 100 == 0){
 				logger.info("created another 100 artefacts! -> " + j);
@@ -189,7 +179,7 @@ public class EPPerformanceTest extends OlatTestCase {
 			i++;
 			epFrontendManager.deletePortfolioStructure(portfolioStructure);
 			if (i % 100 == 0) {
-				DBFactory.getInstance().closeSession();
+				dbInstance.closeSession();
 			}
 		}
 	}
@@ -279,7 +269,6 @@ public class EPPerformanceTest extends OlatTestCase {
 	}
 
 	/**
-	 * @param mapAmount
 	 * @param start
 	 * @param sharedQ
 	 * @param countArtefactQ

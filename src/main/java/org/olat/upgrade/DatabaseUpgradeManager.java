@@ -34,13 +34,16 @@ import java.util.Map;
 import java.util.Set;
 import java.util.StringTokenizer;
 
+import org.olat.core.commons.persistence.DB;
 import org.olat.core.logging.StartupException;
 import org.olat.core.util.StringHelper;
 import org.olat.core.util.WebappHelper;
 import org.olat.core.util.xml.XStreamHelper;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.core.io.Resource;
 
+import javax.inject.Provider;
 
 /**
  * 
@@ -57,9 +60,11 @@ public class DatabaseUpgradeManager extends UpgradeManagerImpl {
 	private boolean autoUpgradeDatabase = true;
 	
 	protected UpgradesDefinitions olatUpgradesDefinitions;
-	
-	public DatabaseUpgradeManager() {
-		INSTALLED_UPGRADES_XML = "installed_database_upgrades.xml";
+
+	@Autowired
+	public DatabaseUpgradeManager(Provider<DB> dbInstance) {
+        super(dbInstance);
+        INSTALLED_UPGRADES_XML = "installed_database_upgrades.xml";
 	}
 	
 	
@@ -105,9 +110,6 @@ public class DatabaseUpgradeManager extends UpgradeManagerImpl {
 		}
 	}
 
-	/**
-	 * @see org.olat.upgrade.UpgradeManager#runAlterDbStatements()
-	 */
 	public void runAlterDbStatements() {
 		Dialect dialect;
 		//only run upgrades on mysql or postgresql
@@ -169,7 +171,6 @@ public class DatabaseUpgradeManager extends UpgradeManagerImpl {
 	
 	/**
 	 * load file with alter statements and add to batch
-	 * @param statements
 	 * @param alterDbStatements
 	 */
 	private void loadAndExecuteSqlStatements(Statement statement, String alterDbStatements, Dialect dialect) {

@@ -45,6 +45,7 @@ import java.nio.file.SimpleFileVisitor;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.text.Normalizer;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 import java.util.regex.Matcher;
@@ -72,15 +73,30 @@ public class FileUtils {
 	// matches files and folders of type:
 	// bla, bla1, bla12, bla.html, bla1.html, bla12.html
 	private static final Pattern fileNamePattern = Pattern.compile("(.+?)\\p{Digit}*(\\.\\w{2,4})?");
-	
-	//windows: invalid characters for filenames: \ / : * ? " < > | 
-	//linux: invalid characters for file/folder names: /, but you have to escape certain chars, like ";$%&*"
-	//OLAT reserved char: ":"	
-	public static char[] FILE_NAME_FORBIDDEN_CHARS = { '/', '\n', '\r', '\t', '\f', '`', '?', '*', '\\', '<', '>', '|', '\"', ':', ',' };
-  //private static char[] FILE_NAME_ACCEPTED_CHARS = { 'ä', 'Ä', 'ü', 'Ü', 'ö', 'Ö', ' '};
-	public static char[] FILE_NAME_ACCEPTED_CHARS = { '\u0228', '\u0196', '\u0252', '\u0220', '\u0246', '\u0214', ' '};
-	// known metadata files
-	public static final List<String> META_FILENAMES = Arrays.asList(".DS_Store",".CVS",".nfs",".sass-cache",".hg");
+
+	/**
+	 * For security reasons Servlet containers deny requests with an encoded
+	 * slash (/) or backslash (\) in the request URL (they return a 400 code).
+	 * As a result, a file or directory that contains such character in its
+	 * name cannot be accessed (or created by WebDAV). To prevent the creation
+	 * of such named objects in the OLAT GUI, the two characters are
+	 * blacklisted. However, with the help of a ZIP archive, that contains
+	 * e.g. files with such malicious names, such objects can be created (but
+	 * never accessed). The good thing is, that such objects can be deleted
+	 * via the OLAT GUI.
+	 *
+	 * URL: invalid characters for a request: / \ (denied by the Servlet container, see above)
+	 * Windows: invalid characters for a file name: \ / : * ? " < > | (true but such can be created via WebDAV or with the help of a ZIP archive)
+	 * Linux: invalid characters for a file or directory name: / (but you have to escape certain chars like ";$%&*")
+	 */
+	private static final int[] FILE_NAME_FORBIDDEN_CHARS = { '/', '\\', '\n', '\r', '\t', '\f' };
+	private static final int[] FILE_NAME_ACCEPTED_CHARS = { ' ' };
+    private static final List<String> META_FILENAMES = Collections.emptyList();
+
+    static {
+		Arrays.sort(FILE_NAME_FORBIDDEN_CHARS);
+		Arrays.sort(FILE_NAME_ACCEPTED_CHARS);
+	}
 
 	/**
 	 * @param sourceFile
@@ -404,10 +420,10 @@ public class FileUtils {
 	
 	public static boolean copyToFile(InputStream in, File targetFile, String wt) {
 		if (targetFile.isDirectory()) return false;
-		
+
 		// create target directories
 		targetFile.getParentFile().mkdirs(); // don't check for success... would return false on
-		
+
 		BufferedInputStream  bis = new BufferedInputStream(in);
 		try (OutputStream dst = new FileOutputStream(targetFile);
 				BufferedOutputStream bos = getBos (dst)) {
@@ -421,7 +437,7 @@ public class FileUtils {
 			IOUtils.closeQuietly(in);
 		}
 	}
-	
+
 	/**
 	 * Copy method to copy a file to another file
 	 * @param sourceFile
@@ -726,6 +742,10 @@ public class FileUtils {
 		}		
 	}
 
+	public static void saveToDir(InputStream inputStream, File directory, String newFileName) {
+		save(inputStream, new File(directory, newFileName));
+	}
+
 	public static String load(Resource source, String encoding) {
     		try {
     			return load(source.getInputStream(), encoding);
@@ -838,27 +858,27 @@ public class FileUtils {
 	 * @return true if filename valid
 	 */
 	public static boolean validateFilename(String filename) {
-		if(filename==null) {
+		if (filename == null) {
 			return false;
 		}
-		Arrays.sort(FILE_NAME_FORBIDDEN_CHARS);
-		Arrays.sort(FILE_NAME_ACCEPTED_CHARS);
 		
-		for(int i=0; i<filename.length(); i++) {
-			char character = filename.charAt(i);
-			if(Arrays.binarySearch(FILE_NAME_ACCEPTED_CHARS, character)>=0) {
-				continue;
-			} else if(character<33 || character>255 || Arrays.binarySearch(FILE_NAME_FORBIDDEN_CHARS, character)>=0) {
-				return false;
+		int length = filename.codePointCount(0, filename.length());
+		for (int i = 0; i < length; i++) {
+			int character = filename.codePointAt(i);
+			if (Arrays.binarySearch(FILE_NAME_ACCEPTED_CHARS, character) < 0) {
+				if (character < 33 || Arrays.binarySearch(FILE_NAME_FORBIDDEN_CHARS, character) >= 0) {
+					return false;
+				}
 			}
 		}
 		//check if there are any unwanted path denominators in the name
-		if (filename.indexOf("..") > -1) {
+		if (".".equals(filename) || "..".equals(filename)) {
 			return false;
 		}
+
 		return true;
 	}
-	
+
 	public static String normalizeFilename(String name) {
 		String nameFirstPass = name.replace(" ", "_")
 				.replace("\u00C4", "Ae")
@@ -876,6 +896,8 @@ public class FileUtils {
 		String nameSanitized = nameNormalized.replaceAll("\\W+", "");
 		return nameSanitized;
 	}
+	
+	
 	
 	/**
 	 * Creates a new directory in the specified directory, using the given prefix and suffix strings to generate its name.
@@ -1016,27 +1038,27 @@ public class FileUtils {
 	 * Check if the given filename is a metadata filename generated by macOS or
 	 * windows when browsing a directory or generated by one of the known
 	 * repository systems.
-	 * 
+	 *
 	 * @param filename
 	 * @return
 	 */
 	public static boolean isMetaFilename(String filename) {
 		boolean isMeta = false;
 		if (filename != null) {
-			// 1) check for various known filenames 
+			// 1) check for various known filenames
 			isMeta = META_FILENAMES.parallelStream().anyMatch(filename::contains);
 			if (!isMeta) {
 				// 2) macOS meta files generated with WebDAV starts with ._
 				isMeta = filename.startsWith("._");
 			}
-			
+
 		}
 		return isMeta;
 	}
-	
 
-	
-	
+
+
+
 	public static String rename(File f) {
 		String filename = f.getName();
 		String newName = filename;

@@ -250,7 +250,7 @@ public class BusinessGroupRelationDAO {
 	 * Match the list of roles with the list of specfified roles
 	 * @param identity
 	 * @param group
-	 * @param roles
+	 * @param role
 	 * @return
 	 */
 	public boolean hasRole(IdentityRef identity, BusinessGroupRef group, String role) {
@@ -536,7 +536,7 @@ public class BusinessGroupRelationDAO {
 		}
 
 		StringBuilder sb = new StringBuilder();
-		sb.append("select new org.olat.group.model.BGRepositoryEntryShortImpl(v.key, v.displayname) from ").append(RepositoryEntry.class.getName()).append(" as v ")
+		sb.append("select distinct new org.olat.group.model.BGRepositoryEntryShortImpl(v.key, v.displayname) from ").append(RepositoryEntry.class.getName()).append(" as v ")
 			.append(" inner join v.olatResource as ores ")
 			.append(" inner join v.groups as relGroup")
 			.append(" where exists (")

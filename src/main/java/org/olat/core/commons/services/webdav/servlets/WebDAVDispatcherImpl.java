@@ -16,16 +16,7 @@
  */
 package org.olat.core.commons.services.webdav.servlets;
 
-import java.io.BufferedInputStream;
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.PrintWriter;
-import java.io.RandomAccessFile;
-import java.io.StringReader;
-import java.io.StringWriter;
-import java.io.Writer;
+import java.io.*;
 import java.text.Normalizer;
 import java.util.Collection;
 import java.util.Date;
@@ -56,6 +47,7 @@ import org.olat.core.helpers.Settings;
 import org.olat.core.logging.OLog;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.UserSession;
+import org.olat.core.util.servlets.OlatUrlDecoder;
 import org.olat.core.util.vfs.QuotaExceededException;
 import org.olat.core.util.vfs.VFSItem;
 import org.olat.core.util.vfs.lock.LockInfo;
@@ -301,7 +293,7 @@ public class WebDAVDispatcherImpl
         if (log.isDebug()) {
             log.debug("[" + method + "] " + path);
         }
-        
+
         if (method.equals(METHOD_PROPFIND)) {
             doPropfind(req, resp);
         } else if (method.equals(METHOD_PROPPATCH)) {
@@ -327,7 +319,7 @@ public class WebDAVDispatcherImpl
         } else if (method.equals(METHOD_DELETE)) {
             doDelete(req, resp);
         } else if (method.equals(METHOD_OPTIONS)) {
-            doOptions(req,resp);  
+            doOptions(req,resp);
         }
     }
 
@@ -379,15 +371,8 @@ public class WebDAVDispatcherImpl
             return (result);
         }
 
-        // No, extract the desired path directly from the request
-        String result = request.getPathInfo();
-        if ((result == null) || (result.equals(""))) {
-            result = "/";
-        }
-        
-        result = Normalizer.normalize(result, Normalizer.Form.NFC);
-        return (result);
-
+		String fullPathInfo = OlatUrlDecoder.getFullPathInfo(request);
+		return Normalizer.normalize(fullPathInfo, Normalizer.Form.NFC);
     }
 
 
@@ -429,7 +414,7 @@ public class WebDAVDispatcherImpl
 	throws ServletException, IOException {
         resp.addHeader("DAV", "1,2");
         resp.setHeader("Allow", "OPTIONS, GET, HEAD, POST, DELETE, TRACE, PROPPATCH, COPY, MOVE, LOCK, UNLOCK");
-        
+
         resp.addHeader("MS-Author-Via", "DAV");
 		resp.setDateHeader("Date", new Date().getTime());
         resp.setHeader("Content-Length", "0");
@@ -630,7 +615,7 @@ public class WebDAVDispatcherImpl
                     if (lockPath.endsWith("/")) {
                         lockPath = lockPath.substring(0, lockPath.length() - 1);
                     }
-                    
+
                     Vector<String> currentLockNullResources = lockManager.getLockNullResource(resource);
                     if (currentLockNullResources != null) {
                         Enumeration<String> lockNullResourcesList = currentLockNullResources.elements();
@@ -676,14 +661,14 @@ public class WebDAVDispatcherImpl
             resp.sendError(WebdavStatus.SC_FORBIDDEN);
         	return;
         }
-        
+
         if (path.endsWith("/")) {
             path = path.substring(0, path.length() - 1);
         }
 
         resp.setStatus(WebdavStatus.SC_MULTI_STATUS);
         resp.setContentType("text/xml; charset=UTF-8");
-        
+
         /*
    <?xml version="1.0" encoding="utf-8" ?>
    <D:multistatus xmlns:D="DAV:"
@@ -702,11 +687,11 @@ public class WebDAVDispatcherImpl
      </D:response>
    </D:multistatus>
         */
-        
+
         XMLWriter generatedXML = new XMLWriter(resp.getWriter());
         generatedXML.writeXMLHeader();
         generatedXML.writeElement("D", DEFAULT_NAMESPACE, "multistatus", XMLWriter.OPENING);
-        
+
         parseProperties( req, generatedXML, path, 32, new Vector<String>());
 
         generatedXML.writeElement("D", "multistatus", XMLWriter.CLOSING);
@@ -779,7 +764,7 @@ public class WebDAVDispatcherImpl
             resp.sendError(WebdavStatus.SC_LOCKED);
             return;
         }
-        
+
         String path = this.getRelativePath(req);
         WebResourceRoot resources = this.getResources(req);
         if(!resources.canDelete(path)) {
@@ -789,7 +774,7 @@ public class WebDAVDispatcherImpl
 
         deleteResource(req, resp);
     }
-    
+
     /**
      * Process a HEAD request for the specified resource.
      *
@@ -805,7 +790,7 @@ public class WebDAVDispatcherImpl
     	boolean serveContent = DispatcherType.INCLUDE.equals(request.getDispatcherType());
         serveResource(request, response, serveContent, fileEncoding);
     }
-  
+
 	public void doGet(HttpServletRequest request, HttpServletResponse response) throws IOException, ServletException {
 		serveResource(request, response, true, fileEncoding);
 	}
@@ -837,7 +822,7 @@ public class WebDAVDispatcherImpl
     		resp.sendError(WebdavStatus.SC_FORBIDDEN);
     		return;
     	}
-       
+
         final WebResource resource = resources.getResource(path);
         Range range = parseContentRange(req, resp);
         InputStream resourceInputStream = null;
@@ -868,7 +853,7 @@ public class WebDAVDispatcherImpl
                     	.append("<p>Resource ").append(path).append(" created.</p>\n")
                     	.append("</body></html>\n");
                     resp.setContentType("text/html; charset=ISO-8859-1");
-                    
+
                     String location = Settings.getServerContextPathURI() + path;
                     resp.setHeader("Location", location);
                 }
@@ -890,7 +875,7 @@ public class WebDAVDispatcherImpl
         // Removing any lock-null resource which would be present
         lockManager.removeLockNullResource(resource);
     }
-    
+
     /**
      * Handle a partial PUT.  New content specified in request is appended to
      * existing content in oldRevisionContent (if present). This code does
@@ -903,7 +888,7 @@ public class WebDAVDispatcherImpl
         // resource - create a temp. file on the local filesystem to
         // perform this operation
         File tempDir = (File) req.getServletContext().getAttribute(ServletContext.TEMPDIR);
-        
+
         // Convert all '/' characters to '.' in resourcePath
         String convertedResourcePath = path.replace('/', '.');
         File contentFile = new File(tempDir, convertedResourcePath);
@@ -982,7 +967,7 @@ public class WebDAVDispatcherImpl
             resp.sendError(WebdavStatus.SC_FORBIDDEN);
             return;
         }
-        
+
         if (copyResource(req, resp, true)) {
             deleteResource(path, req, resp, false);
         }
@@ -1025,7 +1010,7 @@ public class WebDAVDispatcherImpl
                 lock.setDepth(maxDepth);
             }
         }
-        
+
         if(log.isDebug()) {
         	log.debug("Lock the ressource: " + path + " with depth:" + lock.getDepth());
         }
@@ -1211,7 +1196,7 @@ public class WebDAVDispatcherImpl
         if (lockRequestType == LOCK_CREATION) {
 
             // Generating lock id
-            
+
             String lockToken = lockManager.generateLockToken(lock, usess.getIdentity().getKey());
             if (resource.isDirectory() && lock.getDepth() == maxDepth) {
 
@@ -1430,7 +1415,7 @@ public class WebDAVDispatcherImpl
      */
     protected void doUnlock(HttpServletRequest req, HttpServletResponse resp)
             throws IOException {
-    	
+
         if (isLocked(req)) {
             resp.sendError(WebdavStatus.SC_LOCKED);
             return;
@@ -1530,7 +1515,7 @@ public class WebDAVDispatcherImpl
         } else if(lockTokenHeader != null && lockTokenHeader.startsWith("<opaquelocktoken") && !lockTokenHeader.endsWith(">")) {
         	lockTokenHeader += ">";
         }
-        
+
         UserSession usess = webDAVManager.getUserSession(req);
         boolean locked = lockManager.isLocked(resource, ifHeader + lockTokenHeader, usess.getIdentity());
         if(locked && log.isDebug()) {
@@ -1643,7 +1628,7 @@ public class WebDAVDispatcherImpl
 
         return true;
     }
-    
+
     private String getDestinationPath(HttpServletRequest req) {
     	String destinationPath = req.getHeader("Destination");
     	if (destinationPath == null) {
@@ -1694,7 +1679,7 @@ public class WebDAVDispatcherImpl
             (destinationPath.startsWith(contextPath))) {
             destinationPath = destinationPath.substring(contextPath.length());
         }
-        
+
         return destinationPath;
     }
 
@@ -1711,7 +1696,7 @@ public class WebDAVDispatcherImpl
             String source, String dest, boolean moved) {
 
         if (log.isDebug()) log.debug("Copy: " + source + " To: " + dest);
-        
+
         WebResourceRoot resources = getResources(req);
         WebResource sourceResource = resources.getResource(source);
 
@@ -1752,7 +1737,7 @@ public class WebDAVDispatcherImpl
                 }
             }
 
-        	WebResource movedFrom = moved ? sourceResource : null; 
+        	WebResource movedFrom = moved ? sourceResource : null;
             try {
 				if (!resources.write(dest, sourceResource.getInputStream(), false, movedFrom)) {
 				    errorList.put(source, new Integer(WebdavStatus.SC_INTERNAL_SERVER_ERROR));

@@ -44,7 +44,10 @@ import org.olat.modules.qpool.ui.events.QPoolEvent;
 public class QuestionMetadataController extends FormBasicController  {
 	
 	private FormLink editLink;
-	private StaticTextElement typeEl, difficultyEl, stdevDifficultyEl, differentiationEl, numAnswerAltEl, usageEl, assessmentTypeEl;
+	private StaticTextElement typeEl, difficultyEl, stdevDifficultyEl, differentiationEl, numAnswerAltEl, assessmentTypeEl;
+
+	// LMSUZH-671 quick fix to prevent meaningless field which always shows zero. Uncomment next line when item.getUsage() can show real number instead.
+	// private StaticTextElement usageEl;
 
 	private final boolean edit;
 	
@@ -70,8 +73,10 @@ public class QuestionMetadataController extends FormBasicController  {
 		stdevDifficultyEl = uifactory.addStaticTextElement("question.stdevDifficulty", "", formLayout);
 		differentiationEl = uifactory.addStaticTextElement("question.differentiation", "", formLayout);
 		numAnswerAltEl = uifactory.addStaticTextElement("question.numOfAnswerAlternatives", "", formLayout);
-		usageEl = uifactory.addStaticTextElement("question.usage", "", formLayout);
 		assessmentTypeEl = uifactory.addStaticTextElement("question.assessmentType", "", formLayout);
+
+		// LMSUZH-671 quick fix to prevent meaningless field which always shows zero. Uncomment next line when item.getUsage() can show real number instead.
+		//usageEl = uifactory.addStaticTextElement("question.usage", "", formLayout);
 	}
 	
 	public void setItem(QuestionItem item) {
@@ -90,7 +95,7 @@ public class QuestionMetadataController extends FormBasicController  {
 		stdevDifficultyEl.setValue(MetaUIFactory.bigDToString(item.getStdevDifficulty()));
 		differentiationEl.setValue(MetaUIFactory.bigDToString(item.getDifferentiation()));
 		numAnswerAltEl.setValue(Integer.toString(item.getNumOfAnswerAlternatives()));
-		usageEl.setValue(Integer.toString(item.getUsage()));
+		//usageEl.setValue(Integer.toString(item.getUsage())); // Disabled as a quick fix for LMSUZH-671
 		String assessmentType = item.getAssessmentType() == null ?
 				"" : translate("question.assessmentType." + item.getAssessmentType());
 		assessmentTypeEl.setValue(assessmentType);

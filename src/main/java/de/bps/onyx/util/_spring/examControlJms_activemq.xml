@@ -6,7 +6,8 @@
                         
 	<!-- JMS Stuff -->
 	<bean id="examControlConnectionFactory" class="org.apache.activemq.spring.ActiveMQConnectionFactory" lazy-init="true">
-		<property name="brokerURL" value="${search.broker.url}" /> 
+		<property name="brokerURL" value="${search.broker.url}" />
+		<property name="trustAllPackages" value="true" />
 	</bean>
 
 	<!-- used for sending the search requests -->

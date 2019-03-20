@@ -1,3 +1,22 @@
+package org.olat.group.ui.main;
+
+import org.olat.core.gui.components.form.flexible.impl.elements.table.FlexiCellRenderer;
+import org.olat.core.gui.components.form.flexible.impl.elements.table.FlexiTableComponent;
+import org.olat.core.gui.components.table.CustomCellRenderer;
+import org.olat.core.gui.render.Renderer;
+import org.olat.core.gui.render.StringOutput;
+import org.olat.core.gui.render.URLBuilder;
+import org.olat.core.gui.translator.Translator;
+import org.olat.group.BusinessGroupShort;
+
+import java.text.Collator;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.Locale;
+
+import static org.jcodec.common.Assert.assertNotNull;
+
 /**
  * <a href="http://www.openolat.org">
  * OpenOLAT - Online Learning and Training</a><br>
@@ -16,23 +35,6 @@
  * Initial code contributed and copyrighted by<br>
  * frentix GmbH, http://www.frentix.com
  * <p>
- */
-package org.olat.group.ui.main;
-
-import java.util.List;
-import java.util.Locale;
-
-import org.olat.core.gui.components.form.flexible.impl.elements.table.FlexiCellRenderer;
-import org.olat.core.gui.components.form.flexible.impl.elements.table.FlexiTableComponent;
-import org.olat.core.gui.components.table.CustomCellRenderer;
-import org.olat.core.gui.render.Renderer;
-import org.olat.core.gui.render.StringOutput;
-import org.olat.core.gui.render.URLBuilder;
-import org.olat.core.gui.translator.Translator;
-import org.olat.core.util.StringHelper;
-import org.olat.group.BusinessGroupShort;
-
-/**
  * 
  * @author srosse, stephane.rosse@frentix.com, http://www.frentix.com
  */
@@ -42,34 +44,45 @@ public class GroupCellRenderer implements CustomCellRenderer, FlexiCellRenderer 
 	public void render(Renderer renderer, StringOutput target, Object cellValue, int row,
 			FlexiTableComponent source, URLBuilder ubu, Translator translator) {
 		if (cellValue instanceof MemberView) {
-			render(target, (MemberView) cellValue);
+			render(target, (MemberView) cellValue, translator.getLocale());
 		}
 	}
 
 	@Override
 	public void render(StringOutput sb, Renderer renderer, Object val, Locale locale, int alignment, String action) {
 		if (val instanceof MemberView) {
-			render(sb, (MemberView) val);
+			render(sb, (MemberView) val, locale);
 		}
 	}
 	
-	private void render(StringOutput sb, MemberView member) {
+	private void render(StringOutput sb, MemberView member, Locale locale) {
+		assertNotNull(locale);
+
 		List<BusinessGroupShort> groups = member.getGroups();
-		if(groups != null && !groups.isEmpty()) {
-			boolean and = false;
-			for(BusinessGroupShort group:groups) {
-				and = and(sb, and);
-				if(group.getName() == null) {
-					sb.append(group.getKey());
-				} else {
-					sb.append(StringHelper.escapeHtml(group.getName()));
-				}
+
+		if (groups == null) {
+			return;
+		}
+
+		List<String> groupNames = new ArrayList<>();
+		for (BusinessGroupShort group : groups) {
+			if (group.getName() == null) {
+				groupNames.add(group.getKey().toString());
+			} else {
+				groupNames.add(group.getName());
 			}
 		}
-	}
-	
-	private final boolean and(StringOutput sb, boolean and) {
-		if(and) sb.append(", ");
-		return true;
+
+		// Sort group names
+		Collator collator = Collator.getInstance(locale);
+		groupNames.sort(collator);
+
+		// Concat group names
+		for (String groupName : groupNames) {
+			sb.append(groupName).append(", ");
+		}
+
+		// Remove last ", "
+		sb.setLength(sb.length() - 2);
 	}
 }

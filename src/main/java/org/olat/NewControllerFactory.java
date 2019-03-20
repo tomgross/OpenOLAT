@@ -78,6 +78,10 @@ public class NewControllerFactory {
 	 * 
 	 * @return
 	 */
+	/**
+	 * TODO sev26
+	 * The static here is not a good idea.
+	 */
 	public static NewControllerFactory getInstance() {
 		return INSTANCE;
 	}

@@ -46,17 +46,18 @@ import uk.ac.ed.ph.jqtiplus.value.Cardinality;
  *
  */
 public enum QTI21QuestionType {
-	sc(true, "sc", "o_mi_qtisc", QuestionType.SC),
-	mc(true, "mc", "o_mi_qtimc", QuestionType.MC),
-	kprim(true, "kprim", "o_mi_qtikprim", QuestionType.KPRIM),
-	match(true, "match", "o_mi_qtimatch", QuestionType.MATCH),
-	fib(true, "fib", "o_mi_qtifib", QuestionType.FIB),
-	numerical(true, "numerical", "o_mi_qtinumerical", QuestionType.NUMERICAL),
-	hotspot(true, "hotspot", "o_mi_qtihotspot", QuestionType.HOTSPOT),
-	essay(true, "essay", "o_mi_qtiessay", QuestionType.ESSAY),
-	upload(true, "upload", "o_mi_qtiupload", QuestionType.UPLOAD),
-	drawing(true, "drawing", "o_mi_qtidrawing", QuestionType.DRAWING),
-	hottext(true, "hottext", "o_mi_qtihottext", QuestionType.HOTTEXT),
+	sc(false, "sc", "o_mi_qtisc", QuestionType.SC),
+	mc(false, "mc", "o_mi_qtimc", QuestionType.MC),
+	kprim(false, "kprim", "o_mi_qtikprim", QuestionType.KPRIM),
+	match(false, "match", "o_mi_qtimatch", QuestionType.MATCH),
+	//matchdraganddrop(false, "matchdraganddrop", "o_mi_qtimatch_draganddrop", QuestionType.MATCHDRAGANDDROP),
+	fib(false, "fib", "o_mi_qtifib", QuestionType.FIB),
+	numerical(false, "numerical", "o_mi_qtinumerical", QuestionType.NUMERICAL),
+	hotspot(false, "hotspot", "o_mi_qtihotspot", QuestionType.HOTSPOT),
+	essay(false, "essay", "o_mi_qtiessay", QuestionType.ESSAY),
+	upload(false, "upload", "o_mi_qtiupload", QuestionType.UPLOAD),
+	drawing(false, "drawing", "o_mi_qtidrawing", QuestionType.DRAWING),
+	hottext(false, "hottext", "o_mi_qtihottext", QuestionType.HOTTEXT),
 	unkown(false, null, "o_mi_qtiunkown", null);
 	
 	private final String prefix;

@@ -27,20 +27,6 @@
 package org.olat.course.nodes.projectbroker;
 
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertNull;
-import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
-
-import java.util.ArrayList;
-import java.util.Calendar;
-import java.util.Date;
-import java.util.List;
-import java.util.Locale;
-import java.util.UUID;
-
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
@@ -64,12 +50,18 @@ import org.olat.repository.RepositoryEntry;
 import org.olat.test.JunitTestHelper;
 import org.olat.test.OlatTestCase;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Component;
+
+import java.util.*;
+
+import static org.junit.Assert.*;
 
 /**
  *   
  * @author Christian Guretzki
  */
 
+@Component
 public class ProjectBrokerManagerTest extends OlatTestCase {
 
 	private static Identity id1 = null;
@@ -80,7 +72,7 @@ public class ProjectBrokerManagerTest extends OlatTestCase {
 	private ProjectGroupManager projectGroupManager;
 	@Autowired
 	private ProjectBrokerManager projectBrokerManager;
-	
+
 
 	/**
 	 * @see junit.framework.TestCase#setUp()

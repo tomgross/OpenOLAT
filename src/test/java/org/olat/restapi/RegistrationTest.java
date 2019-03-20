@@ -32,6 +32,7 @@ import org.apache.http.Header;
 import org.apache.http.HttpResponse;
 import org.apache.http.client.methods.HttpPut;
 import org.apache.http.util.EntityUtils;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.olat.core.id.Identity;
 import org.olat.core.id.UserConstants;
@@ -47,6 +48,7 @@ import org.olat.test.OlatJerseyTestCase;
  *
  * @author srosse, stephane.rosse@frentix.com, http://www.frentix.com
  */
+@Ignore
 public class RegistrationTest extends OlatJerseyTestCase {
 	
 	@Test

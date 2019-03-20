@@ -266,7 +266,14 @@ public interface GTAManager {
 	
 	public List<TaskLight> getTasksLight(RepositoryEntryRef entry, GTACourseNode gtaNode);
 
-	
+
+	public List<Identity> getCourseOwners(RepositoryEntry repositoryEntry);
+
+	public List<Identity> getCourseCoaches(RepositoryEntry repositoryEntry);
+
+	public List<Identity> getGroupCoaches(GTACourseNode gtaNode);
+
+
 	/**
 	 * Return the tasks assigned to a person, individually or via a
 	 * business group.

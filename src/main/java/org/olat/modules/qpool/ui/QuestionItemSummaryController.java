@@ -38,9 +38,12 @@ import org.olat.modules.qpool.ui.metadata.MetaUIFactory;
  */
 public class QuestionItemSummaryController extends FormBasicController {
 	
-	private StaticTextElement subjectEl, studyFieldEl, keywordsEl, usageEl, descriptionEl;
+	private StaticTextElement subjectEl, studyFieldEl, keywordsEl, descriptionEl;
 	private StaticTextElement difficultyEl, stdevDifficultyEl, differentiationEl;
-	
+
+	// LMSUZH-671 quick fix to prevent meaningless field which always shows zero. Uncomment next line when item.getUsage() can show real number instead.
+	//private StaticTextElement usageEl;
+
 	private boolean canEdit;
 	private QuestionItem item;
 	
@@ -61,11 +64,13 @@ public class QuestionItemSummaryController extends FormBasicController {
 		subjectEl = uifactory.addStaticTextElement("general.title", "", formLayout);
 		keywordsEl = uifactory.addStaticTextElement("general.keywords", "", formLayout);
 		studyFieldEl = uifactory.addStaticTextElement("classification.taxonomy.level", "", formLayout);
-		usageEl = uifactory.addStaticTextElement("question.usage", "", formLayout);
 		difficultyEl = uifactory.addStaticTextElement("question.difficulty", "", formLayout);
 		stdevDifficultyEl = uifactory.addStaticTextElement("question.stdevDifficulty", "", formLayout);
 		differentiationEl = uifactory.addStaticTextElement("question.differentiation", "", formLayout);
 		descriptionEl = uifactory.addStaticTextElement("general.description", "", formLayout);
+
+		// LMSUZH-671 quick fix to prevent meaningless field which always shows zero. Uncomment next line when item.getUsage() can show real number instead.
+		//usageEl = uifactory.addStaticTextElement("question.usage", "", formLayout);
 	}
 	
 	@Override
@@ -92,11 +97,13 @@ public class QuestionItemSummaryController extends FormBasicController {
 			subjectEl.setValue("");
 			keywordsEl.setValue("" );
 			studyFieldEl.setValue("");
-			usageEl.setValue("");
 			descriptionEl.setValue("");
 			difficultyEl.setValue("");
 			stdevDifficultyEl.setValue("");
 			differentiationEl.setValue("");
+
+			// LMSUZH-671 quick fix to prevent meaningless field which always shows zero. Uncomment next line when item.getUsage() can show real number instead.
+			//usageEl.setValue("");
 		} else {
 			canEdit = edit;
 			subjectEl.setValue(updatedItem.getTitle());
@@ -104,24 +111,26 @@ public class QuestionItemSummaryController extends FormBasicController {
 			keywordsEl.setValue(keywords == null ? "" : keywords);
 			String taxonPath = updatedItem.getTaxonomicPath();
 			studyFieldEl.setValue(taxonPath == null ? "" : taxonPath);
-			
-			int usage = updatedItem.getUsage();
-			String usageStr = "";
-			if(usage >= 0) {
-				usageStr = Integer.toString(usage);
-			}
-			usageEl.setValue(usageStr);
-			
 			difficultyEl.setValue(MetaUIFactory.bigDToString(updatedItem.getDifficulty()));
 			stdevDifficultyEl.setValue(MetaUIFactory.bigDToString(updatedItem.getStdevDifficulty()));
 			differentiationEl.setValue(MetaUIFactory.bigDToString(updatedItem.getDifferentiation()));
-			
+
 			String description = updatedItem.getDescription();
 			if(StringHelper.containsNonWhitespace(description)) {
 				descriptionEl.setValue(description);
 			} else {
 				descriptionEl.setValue("");
 			}
+
+			// LMSUZH-671 quick fix to prevent meaningless field which always shows zero. Uncomment next line when item.getUsage() can show real number instead.
+			/*
+			int usage = updatedItem.getUsage();
+			String usageStr = "";
+			if(usage >= 0) {
+				usageStr = Integer.toString(usage);
+			}
+			usageEl.setValue(usageStr);
+			*/
 		}
 	}
 	
@@ -129,8 +138,10 @@ public class QuestionItemSummaryController extends FormBasicController {
 		subjectEl.setValue("");
 		studyFieldEl.setValue("");
 		keywordsEl.setValue("");
-		usageEl.setValue("");
 		descriptionEl.setValue("");
+
+		// LMSUZH-671 quick fix to prevent meaningless field which always shows zero. Uncomment next line when item.getUsage() can show real number instead.
+		//usageEl.setValue("");
 	}
 
 	@Override

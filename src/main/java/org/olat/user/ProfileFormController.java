@@ -53,7 +53,6 @@ import org.olat.core.helpers.Settings;
 import org.olat.core.id.Identity;
 import org.olat.core.id.OLATResourceable;
 import org.olat.core.id.User;
-import org.olat.core.util.StringHelper;
 import org.olat.core.util.WebappHelper;
 import org.olat.core.util.coordinate.CoordinatorManager;
 import org.olat.core.util.coordinate.SyncerExecutor;
@@ -131,9 +130,7 @@ public class ProfileFormController extends FormBasicController {
 	 * 
 	 * @param ureq The user request.
 	 * @param wControl The window control.
-	 * @param conf The homepage configuration (decides which user profile fields
-	 *          are visible for everyone).
-	 * @param identity The identity of the user.
+	 * @param identityToModify The identity of the user.
 	 * @param isAdministrativeUser true: user is editing another users profile as
 	 *          user manager; false: use is editing his own profile
 	 */
@@ -291,10 +288,6 @@ public class ProfileFormController extends FormBasicController {
 	/**
 	 * Stores the data from the form into a) the user's home page configuration
 	 * and b) the user's properties.
-	 * 
-	 * @param config The user's home page configuration (i.e. flags for publicly
-	 *          visible fields).
-	 * @param identity The user's identity
 	 */
 	public void updateFromFormData() {
 		User user = identityToModify.getUser();
@@ -474,14 +467,16 @@ public class ProfileFormController extends FormBasicController {
 			public void execute() {
 				UserManager um = UserManager.getInstance();
 				identityToModify = (Identity) DBFactory.getInstance().loadObject(identityToModify);
-				currentEmail = identityToModify.getUser().getProperty("email", null);
+				currentEmail = identityToModify.getUser().getProperty("email", null).toLowerCase();
 
 				identityToModify = updateIdentityFromFormData(identityToModify);
-				changedEmail = identityToModify.getUser().getProperty("email", null);
-				if ((currentEmail == null && StringHelper.containsNonWhitespace(changedEmail))
-						|| (currentEmail != null && !currentEmail.equals(changedEmail))) {
+				changedEmail = identityToModify.getUser().getProperty("email", null).toLowerCase();
+				//if ((currentEmail == null && StringHelper.containsNonWhitespace(changedEmail))
+				//		|| (currentEmail != null && !currentEmail.equals(changedEmail))) {
+				if (!currentEmail.equals(changedEmail)) {
 					// allow an admin to change email without verification workflow. usermanager is only permitted to do so, if set by config.
-					if ( !(ureq.getUserSession().getRoles().isOLATAdmin() || (BaseSecurityModule.USERMANAGER_CAN_BYPASS_EMAILVERIFICATION && ureq.getUserSession().getRoles().isUserManager()))) {
+					if ( !(ureq.getUserSession().getRoles().isOLATAdmin()
+							|| (BaseSecurityModule.USERMANAGER_CAN_BYPASS_EMAILVERIFICATION && ureq.getUserSession().getRoles().isUserManager() ))) {
 						emailChanged = true;
 						// change email address to old address until it is verified
 						identityToModify.getUser().setProperty("email", currentEmail);
@@ -614,7 +609,9 @@ public class ProfileFormController extends FormBasicController {
 					for (TemporaryKey temporaryKey : tks) {
 						@SuppressWarnings("unchecked")
 						Map<String, String> tkMails = (Map<String, String>) xml.fromXML(temporaryKey.getEmailAddress());
-						if (tkMails.get("currentEMail").equals(currentEMail)) {
+						// In OLAT 7.x "currentemail" instead of "currentEMail" was used in o_temporarykey table,
+						// so we have to look also for that string
+						if (currentEMail.equals(tkMails.get("currentEMail")) || currentEMail.equals(tkMails.get("currentemail"))) {
 							if (countCurrentEMail > 0) {
 								// clean
 								rm.deleteTemporaryKeyWithId(temporaryKey.getRegistrationKey());

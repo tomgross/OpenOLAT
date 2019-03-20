@@ -68,7 +68,7 @@ public class CrumbRenderer {
 				if(pathLink.length() > 0) {
 					pathLink.append("/");
 				}
-				pathLink.append(ubu.encodeUrl(token));
+				pathLink.append(token);
 				if (st.hasMoreElements()) {
 					sb.append("<li><a ");
 					ubu.buildHrefAndOnclick(sb, pathLink.toString(), iframePostEnabled, false, true)

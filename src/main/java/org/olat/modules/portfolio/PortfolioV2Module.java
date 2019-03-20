@@ -92,7 +92,7 @@ public class PortfolioV2Module extends AbstractSpringModule implements ConfigOnO
 	
 	@Override
 	public boolean isEnabled() {
-		return enabled;
+		return false;
 	}
 	
 	public void setEnabled(boolean enabled) {

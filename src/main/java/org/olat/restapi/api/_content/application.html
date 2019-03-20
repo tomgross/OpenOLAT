@@ -2,7 +2,7 @@
   PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
 <html xmlns="http://www.w3.org/1999/xhtml">
    <head>
-      <title>Documentation of OpenOLAT REST API</title><style type="text/css">
+      <title>Documentation of OLAT REST API</title><style type="text/css">
                     body {
                         font-family: sans-serif;
                         font-size: 0.85em;
@@ -74,7 +74,7 @@
                     }
                 </style></head>
    <body>
-      <h1>Documentation of OpenOLAT REST API</h1>
+      <h1>Documentation of OLAT REST API</h1>
       <p>
          
          <p xmlns="" xmlns:ns2="http://wadl.dev.java.net/2009/02">The goal of the REST API is to provide an easy way to exchange
@@ -93,7 +93,7 @@
             HTTP Headers and Media Types for content negotiation...
          </p>
          
-         <p xmlns="" xmlns:ns2="http://wadl.dev.java.net/2009/02">In OpenOLAT, the JRS-311 is used as a backend for the implementation of our REST API. JSR-311 is a standard
+         <p xmlns="" xmlns:ns2="http://wadl.dev.java.net/2009/02">In OLAT, the JRS-311 is used as a backend for the implementation of our REST API. JSR-311 is a standard
             from J2EE. We use the reference implementation from the following standard: <a href="https://jersey.dev.java.net/">Jersey</a>.
          </p>
          <img xmlns="" xmlns:ns2="http://wadl.dev.java.net/2009/02" src="schema.jpg" title="schema">
@@ -101,7 +101,7 @@
          
          <h2 xmlns="" xmlns:ns2="http://wadl.dev.java.net/2009/02">Security</h2>
          
-         <p xmlns="" xmlns:ns2="http://wadl.dev.java.net/2009/02">The security is based on a two level mechanism, as it is in OpenOLAT.</p>
+         <p xmlns="" xmlns:ns2="http://wadl.dev.java.net/2009/02">The security is based on a two level mechanism, as it is in OLAT.</p>
          
          <ol xmlns="" xmlns:ns2="http://wadl.dev.java.net/2009/02">
             <li>The first level is a servlet filter which collects all requests to the REST API. This filter
@@ -117,7 +117,7 @@
          <p xmlns="" xmlns:ns2="http://wadl.dev.java.net/2009/02">To maintain a valid authentication over several requests, the filter proposes two methods:</p>
          
          <ol xmlns="" xmlns:ns2="http://wadl.dev.java.net/2009/02">
-            <li>Reuse the session cookie on every request. The advantage of this method is that OpenOLAT
+            <li>Reuse the session cookie on every request. The advantage of this method is that OLAT
                	doesn't need to create a session on every request.
             </li>
             <li>If you cannot use the session cookie, the filter always adds an HTTP Header (X-OLAT-TOKEN) to
@@ -180,7 +180,7 @@
             
          </ol>
          
-         <p xmlns="" xmlns:ns2="http://wadl.dev.java.net/2009/02">To add java classes annoted with JAXB, you must update the pom file in the OpenOLAT directory
+         <p xmlns="" xmlns:ns2="http://wadl.dev.java.net/2009/02">To add java classes annoted with JAXB, you must update the pom file in the OLAT directory
             under the artfact <code>maven-jaxb-schemagen-plugin</code>.
          </p>
          
@@ -8797,7 +8797,7 @@
          <div class="methods">
             <div class="method">
                <h4 id="http://www.example.com#getStatistics">GET</h4>
-               <p>Return the statistics about OpenOLAT, users count, courses count...</p>
+               <p>Return the statistics about OLAT, users count, courses count...</p>
                <p><em>available response representations:</em></p>
                <ul>
                   <li><a href="#d2e3822">application/xml, application/json (<abbr title="{http://www.example.com} releaseVO">ns3:releaseVO</abbr>)</a></li>
@@ -8833,7 +8833,7 @@
          <div class="methods">
             <div class="method">
                <h4 id="http://www.example.com#getUserStatistics">GET</h4>
-               <p>Return the statistics about OpenOLAT users</p>
+               <p>Return the statistics about OLAT users</p>
                <p><em>available response representations:</em></p>
                <ul>
                   <li><a href="#d2e3868">application/xml, application/json (<abbr title="{http://www.example.com} releaseVO">ns3:releaseVO</abbr>)</a></li>
@@ -20479,7 +20479,7 @@
          <h6>Example</h6><pre><code>&lt;?xml version="1.0" encoding="UTF-8" standalone="yes"?&gt;
 &lt;monitoringInfosVO&gt;
     &lt;type&gt;openolat&lt;/type&gt;
-    &lt;description&gt;this is an OpenOLAT instance&lt;/description&gt;
+    &lt;description&gt;this is an OLAT instance&lt;/description&gt;
     &lt;probes&gt;
         &lt;probe&gt;Environment&lt;/probe&gt;
         &lt;probe&gt;System&lt;/probe&gt;

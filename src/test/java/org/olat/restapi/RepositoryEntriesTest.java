@@ -43,6 +43,8 @@ import java.util.UUID;
 import javax.ws.rs.core.MediaType;
 import javax.ws.rs.core.UriBuilder;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.http.HttpEntity;
 import org.apache.http.HttpResponse;
 import org.apache.http.client.methods.HttpDelete;
@@ -53,9 +55,8 @@ import org.apache.http.entity.ContentType;
 import org.apache.http.entity.mime.HttpMultipartMode;
 import org.apache.http.entity.mime.MultipartEntityBuilder;
 import org.apache.http.util.EntityUtils;
-import org.codehaus.jackson.map.ObjectMapper;
-import org.codehaus.jackson.type.TypeReference;
 import org.junit.Assert;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.olat.admin.securitygroup.gui.IdentitiesAddEvent;
 import org.olat.basesecurity.BaseSecurity;
@@ -85,6 +86,7 @@ import org.springframework.beans.factory.annotation.Autowired;
  * 
  * @author srosse, stephane.rosse@frentix.com, http:
  */
+@Ignore
 public class RepositoryEntriesTest extends OlatJerseyTestCase {
 	
 	private static final OLog log = Tracing.createLoggerFor(RepositoryEntriesTest.class);
@@ -457,8 +459,8 @@ public class RepositoryEntriesTest extends OlatJerseyTestCase {
 		Identity owner1 = JunitTestHelper.createAndPersistIdentityAsAuthor("author-1-" + UUID.randomUUID().toString());
 		Identity owner2 = JunitTestHelper.createAndPersistIdentityAsAuthor("author-2-" + UUID.randomUUID().toString());
 		RepositoryEntry re = JunitTestHelper.createAndPersistRepositoryEntry();
-		repositoryManager.addOwners(owner1, new IdentitiesAddEvent(owner1), re);
-		repositoryManager.addOwners(owner1, new IdentitiesAddEvent(owner2), re);
+		repositoryManager.addOwners(owner1, new IdentitiesAddEvent(owner1), re, null);
+		repositoryManager.addOwners(owner1, new IdentitiesAddEvent(owner2), re, null);
 		dbInstance.commitAndCloseSession();
 
 		//get the owners
@@ -551,7 +553,7 @@ public class RepositoryEntriesTest extends OlatJerseyTestCase {
 	public void removeOwner() throws IOException, URISyntaxException {
 		Identity owner = JunitTestHelper.createAndPersistIdentityAsAuthor("author-4-" + UUID.randomUUID().toString());
 		RepositoryEntry re = JunitTestHelper.createAndPersistRepositoryEntry();
-		repositoryManager.addOwners(owner, new IdentitiesAddEvent(owner), re);
+		repositoryManager.addOwners(owner, new IdentitiesAddEvent(owner), re, null);
 		dbInstance.commitAndCloseSession();
 
 		//remove the owner
@@ -820,7 +822,7 @@ public class RepositoryEntriesTest extends OlatJerseyTestCase {
 
 	private List<RepositoryEntryVO> parseRepoArray(InputStream body) {
 		try {
-			ObjectMapper mapper = new ObjectMapper(jsonFactory); 
+			ObjectMapper mapper = new ObjectMapper(jsonFactory);
 			return mapper.readValue(body, new TypeReference<List<RepositoryEntryVO>>(){/* */});
 		} catch (Exception e) {
 			e.printStackTrace();

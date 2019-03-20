@@ -19,9 +19,13 @@
  */
 package org.olat.core.logging;
 
+import static org.quartz.CronScheduleBuilder.cronSchedule;
+import static org.quartz.JobBuilder.newJob;
+import static org.quartz.TriggerBuilder.newTrigger;
+import static org.quartz.impl.matchers.KeyMatcher.keyEquals;
+
 import java.io.IOException;
 import java.io.StringWriter;
-import java.text.ParseException;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -31,6 +35,7 @@ import org.apache.log4j.Logger;
 import org.apache.log4j.PatternLayout;
 import org.apache.log4j.WriterAppender;
 import org.olat.core.CoreSpringFactory;
+import org.olat.core.commons.services.scheduler.DummyJob;
 import org.olat.core.gui.UserRequest;
 import org.olat.core.gui.components.Component;
 import org.olat.core.gui.components.htmlheader.jscss.JSAndCSSComponent;
@@ -41,14 +46,15 @@ import org.olat.core.gui.control.Event;
 import org.olat.core.gui.control.WindowControl;
 import org.olat.core.gui.control.controller.BasicController;
 import org.olat.core.util.Formatter;
-import org.quartz.CronTrigger;
 import org.quartz.JobDetail;
 import org.quartz.JobExecutionContext;
 import org.quartz.JobExecutionException;
+import org.quartz.JobKey;
 import org.quartz.JobListener;
 import org.quartz.Scheduler;
 import org.quartz.SchedulerException;
-import org.quartz.jobs.NoOpJob;
+import org.quartz.Trigger;
+import org.quartz.TriggerKey;
 
 /**
  * Description:<br>
@@ -68,7 +74,8 @@ public class LogRealTimeViewerController extends BasicController implements JobL
 	private Logger log4JLogger;
 	private WriterAppender writerAppender;
 	private StringWriter writer;
-	private JobDetail jobDetail;
+	private JobKey jobKey;
+	private TriggerKey triggerKey;
 	private String jobName;
 	private Link updateLink, startLink, stopLink;
 	private boolean removeLogNoise;
@@ -106,19 +113,22 @@ public class LogRealTimeViewerController extends BasicController implements JobL
 		updateLogViewFromWriter();
 		// Add job to read from the string writer every second
 		try {
-			jobName = "Log_Displayer_Job_" + this.hashCode();
-			jobDetail = new JobDetail(jobName, LOG_DISPLAYER_GROUP, NoOpJob.class);
-			jobDetail.addJobListener(jobName);
-			CronTrigger trigger = new CronTrigger();
-			trigger.setName(jobName);
-			trigger.setGroup(LOG_DISPLAYER_GROUP);
-			trigger.setCronExpression("* * * * * ?");
+			jobKey = new JobKey("Log_Displayer_Job_" + this.hashCode(), LOG_DISPLAYER_GROUP);
+			triggerKey = new TriggerKey("Log_Displayer_Trigger_" + this.hashCode(), LOG_DISPLAYER_GROUP);
+
+			JobDetail jobDetail = newJob(DummyJob.class)
+					.withIdentity(jobKey)
+					.build();
+
+			Trigger trigger = newTrigger()
+					.withIdentity(triggerKey)
+					.withSchedule(cronSchedule("* * * * * ?"))
+					.build();
+
 			// Schedule job now
-			Scheduler scheduler = (Scheduler) CoreSpringFactory.getBean("schedulerFactoryBean");
-			scheduler.addJobListener(this);
+			Scheduler scheduler = (Scheduler) CoreSpringFactory.getBean(Scheduler.class);
+			scheduler.getListenerManager().addJobListener(this, keyEquals(jobKey));
 			scheduler.scheduleJob(jobDetail, trigger);
-		} catch (ParseException e) {
-			logError("Can not parse log viewer cron expression", e);
 		} catch (SchedulerException e) {
 			logError("Problem when creating log viewer scheduler", e);
 		}
@@ -140,11 +150,11 @@ public class LogRealTimeViewerController extends BasicController implements JobL
 	protected void doDispose() {
 		
 		if (logViewerVC != null) { // don't clean up twice
-			Scheduler scheduler = (Scheduler) CoreSpringFactory.getBean("schedulerFactoryBean");
+			Scheduler scheduler = (Scheduler) CoreSpringFactory.getBean(Scheduler.class);
 			// remove scheduler job first
 			try {
-				scheduler.deleteJob(jobName, LOG_DISPLAYER_GROUP);
-				scheduler.removeJobListener(jobName);
+				scheduler.deleteJob(jobKey);
+				scheduler.getListenerManager().removeJobListener(jobKey.getName());
 			} catch (SchedulerException e) {
 				logError("Can not delete log viewer job", e);
 			}
@@ -203,8 +213,8 @@ public class LogRealTimeViewerController extends BasicController implements JobL
 			log4JLogger.removeAppender(writerAppender);
 			// pause log update trigger job
 			try {
-				Scheduler scheduler = (Scheduler) CoreSpringFactory.getBean("schedulerFactoryBean");
-				scheduler.pauseJob(jobName, LOG_DISPLAYER_GROUP);
+				Scheduler scheduler = (Scheduler) CoreSpringFactory.getBean(Scheduler.class);
+				scheduler.pauseJob(jobKey);
 			} catch (SchedulerException e) {
 				logError("Can not pause log viewer job", e);
 			}
@@ -218,8 +228,8 @@ public class LogRealTimeViewerController extends BasicController implements JobL
 			log4JLogger.addAppender(writerAppender);
 			// resume trigger job
 			try {
-				Scheduler scheduler = (Scheduler) CoreSpringFactory.getBean("schedulerFactoryBean");
-				scheduler.resumeJob(jobName, LOG_DISPLAYER_GROUP);
+				Scheduler scheduler = (Scheduler) CoreSpringFactory.getBean(Scheduler.class);
+				scheduler.resumeJob(jobKey);
 			} catch (SchedulerException e) {
 				logError("Can not resume log viewer job", e);
 			}

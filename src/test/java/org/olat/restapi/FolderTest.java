@@ -22,6 +22,7 @@ package org.olat.restapi;
 import static org.junit.Assert.assertEquals;
 import static org.olat.core.util.vfs.restapi.VFSWebservice.normalize;
 
+import org.junit.Ignore;
 import org.junit.Test;
 /**
  * 
@@ -30,6 +31,7 @@ import org.junit.Test;
  * Initial Date:  28 jan. 2011 <br>
  * @author srosse, stephane.rosse@frentix.com, www.frentix.com
  */
+@Ignore
 public class FolderTest {
 
 	@Test

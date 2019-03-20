@@ -231,6 +231,7 @@
 				    {text: translator().translate('olatmovieviewer.video'), value: 'video'},
 				    {text: translator().translate('olatmovieviewer.sound'), value: 'sound'},
 				    {text: translator().translate('olatmovieviewer.youtube'), value: 'youtube'},
+					{text: translator().translate('olatmovieviewer.switchtube'), value: 'switchtube'},
 				    {text: translator().translate('olatmovieviewer.vimeo'), value: 'vimeo'},
 				    {text: translator().translate('olatmovieviewer.http'), value: 'http'},
 				    {text: translator().translate('olatmovieviewer.rtmp'), value: 'rtmp'}

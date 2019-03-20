@@ -98,7 +98,7 @@ var BPlayer = {
 
 		if(typeof jQuery('body').mediaelementplayer != 'undefined') {
 			if (afterloadCallback) {
-				afterloadCallback();					
+				afterloadCallback();
 			}
 		} else {
 			jQuery.ajax({
@@ -146,7 +146,7 @@ var BPlayer = {
 	
 	_insertHTML5MediaElementPlayerWorker: function(domId, config) {
 		var mediaElementBaseUrl = BPlayer._mediaElementBaseUrl();
-		
+
 		var meConfig = {
 			loop: config.repeat,
 			pluginPath: mediaElementBaseUrl,
@@ -175,20 +175,22 @@ var BPlayer = {
 			}
 		};
 
-		var mimeType = null;
-		var extension = config.file.split('.').pop().toLowerCase().split('&').shift();
-		if(config.provider == 'sound') {
-			if(extension == 'mp3') {
-				mimeType = "audio/mp3";
-			} else if(extension == 'aac') {
-				mimeType = "audio/aac";
-				meConfig.pluginVars = 'isvideo=true';
-			} else if(extension == 'm4a') {
-				mimeType = "audio/m4a";
-			}
-		} else if(config.provider == 'youtube') {
-			mimeType = "video/youtube";
-		} else if(config.provider == 'vimeo') {
+        var mimeType = null;
+        var extension = config.file.split('.').pop().toLowerCase().split('&').shift();
+        if (config.provider == 'sound') {
+            if (extension == 'mp3') {
+                mimeType = "audio/mp3";
+            } else if (extension == 'aac') {
+                mimeType = "audio/aac";
+                meConfig.pluginVars = 'isvideo=true';
+            } else if (extension == 'm4a') {
+                mimeType = "audio/m4a";
+            }
+        } else if (config.provider == 'youtube') {
+            mimeType = "video/youtube";
+        } else if(config.provider == 'switchtube') {
+            mimeType = "video/switchtube";
+    	} else if(config.provider == 'vimeo') {
 			mimeType = "video/vimeo";
 		} else if(config.provider == 'rtmp') {
 			meConfig.flashStreamer = config.streamer;
@@ -221,9 +223,11 @@ var BPlayer = {
 			} else if(extension == 'm4a') {
 				mimeType = "audio/m4a";
 				config.provider = "sound";
+			} else if(config.file.indexOf('switch.ch') > -1) {
+				mimeType = "video/switchtube";
 			} else if(config.file.indexOf('vimeo.com') > -1) {
-				mimeType = "video/vimeo";
-			} else if(config.file.indexOf('youtube.com') > -1 || config.file.indexOf('youtube.be') > -1) {
+                mimeType = "video/vimeo";
+            }else if(config.file.indexOf('youtube.com') > -1 || config.file.indexOf('youtube.be') > -1) {
 				mimeType = "video/youtube";
 			} else if(extension.indexOf('mp4?') == 0) {
 				mimeType = "video/mp4";

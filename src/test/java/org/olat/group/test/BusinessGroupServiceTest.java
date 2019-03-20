@@ -377,6 +377,7 @@ public class BusinessGroupServiceTest extends OlatTestCase {
 	@Test
 	public void mergeGroups() {
 		//create some identities
+		Identity ureqIdentity = JunitTestHelper.createAndPersistIdentityAsRndUser("merge-u-");
 		Identity ident1 = JunitTestHelper.createAndPersistIdentityAsUser("merge-1-" + UUID.randomUUID().toString());
 		Identity ident2 = JunitTestHelper.createAndPersistIdentityAsUser("merge-2-" + UUID.randomUUID().toString());
 		Identity ident3 = JunitTestHelper.createAndPersistIdentityAsUser("merge-3-" + UUID.randomUUID().toString());
@@ -396,13 +397,18 @@ public class BusinessGroupServiceTest extends OlatTestCase {
 		BusinessGroup g3 = businessGroupService.createBusinessGroup(null, "target", null, 0, 10, false, false, null);
 		businessGroupRelationDao.addRole(ident1, g3, GroupRoles.participant.name());
 		dbInstance.commitAndCloseSession();
+
+		// Add author role to ureqIdentity
+		Roles modifiedRoles = new Roles(false, false, false, true, false, false, false, false);
+		securityManager.updateRoles(id1, ureqIdentity, modifiedRoles);
+		dbInstance.flush();
 		
 		//merge
 		List<BusinessGroup> groupsToMerge = new ArrayList<BusinessGroup>();
 		groupsToMerge.add(g1);
 		groupsToMerge.add(g2);
 		groupsToMerge.add(g3);
-		BusinessGroup mergedGroup = businessGroupService.mergeBusinessGroups(wg1, g3, groupsToMerge, null);
+		BusinessGroup mergedGroup = businessGroupService.mergeBusinessGroups(ureqIdentity, g3, groupsToMerge, null);
 		Assert.assertNotNull(mergedGroup);
 		Assert.assertEquals(g3, mergedGroup);
 		dbInstance.commitAndCloseSession();
@@ -741,6 +747,11 @@ public class BusinessGroupServiceTest extends OlatTestCase {
 		businessGroupRelationDao.addRole(partIdentity, group, GroupRoles.participant.name());
 		dbInstance.commitAndCloseSession();
 
+		// Add author role to ureqIdentity
+		Roles modifiedRoles = new Roles(false, false, false, true, false, false, false, false);
+		securityManager.updateRoles(id1, ureqIdentity, modifiedRoles);
+		dbInstance.flush();
+
 		//update memberships
 		MailPackage mailing = new MailPackage(false);
 		List<BusinessGroup> groups = Collections.singletonList(group);
@@ -771,6 +782,11 @@ public class BusinessGroupServiceTest extends OlatTestCase {
 		businessGroupRelationDao.addRole(ownerIdentity, group, GroupRoles.coach.name());
 		businessGroupRelationDao.addRole(partIdentity, group, GroupRoles.participant.name());
 		dbInstance.commitAndCloseSession();
+
+		// Add author role to ureqIdentity
+		Roles modifiedRoles = new Roles(false, false, false, true, false, false, false, false);
+		securityManager.updateRoles(id1, ureqIdentity, modifiedRoles);
+		dbInstance.flush();
 
 		//invert the roles
 		BusinessGroupMembershipChange change1 = new BusinessGroupMembershipChange(ownerIdentity, group.getKey());

@@ -95,11 +95,8 @@
 	Sample remaining configuration for SimpleLogExporter or version a) above
 	........................................................................
 	 -->
-	
-	<bean id="courseLogExporter" class="org.olat.course.statistic.export.SimpleLogExporter">
-		<property name="dbInstance" ref="database"/>
-		<property name="logLineConverter" ref="logLineConverter"/>
-	</bean>
+
+	<bean id="courseLogExporter" class="org.olat.course.statistic.export.SimpleLogExporter"/>
 
 	<bean id="logLineConverter"
 		class="org.olat.course.statistic.export.LogLineConverter">

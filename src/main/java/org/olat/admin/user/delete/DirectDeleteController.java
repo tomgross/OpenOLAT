@@ -57,6 +57,7 @@ public class DirectDeleteController extends BasicController {
 	private DeletableUserSearchController usc;
 	private DialogBoxController deleteConfirmController;
 	private List<Identity> toDelete;
+	private List<Identity> toSkip;
 	private UserListForm userListForm;
 	private BulkDeleteController bdc;
 	private CloseableModalController cmc;
@@ -99,9 +100,21 @@ public class DirectDeleteController extends BasicController {
 				
 			} else if (event instanceof MultiIdentityChosenEvent) {
 				MultiIdentityChosenEvent multiEvent = (MultiIdentityChosenEvent) event;
-				toDelete = multiEvent.getChosenIdentities();
+				toDelete = new ArrayList<Identity>();
+				toSkip = new ArrayList<Identity>();
+				for (Identity chosenIdentity : multiEvent.getChosenIdentities()) {
+					if (BulkDeleteController.isDeletableIdentity(chosenIdentity)) {
+						toDelete.add(chosenIdentity);
+					} else {
+						toSkip.add(chosenIdentity);
+					}
+				}
 				if (toDelete.size() == 0) {
-					showError("msg.selectionempty");
+					if (toSkip.size() > 0) {
+						showError("msg.user.no.deletables");
+					} else {
+						showError("msg.selectionempty");
+					}
 					return;
 				}
 				String names = buildUserNameList(toDelete);
@@ -110,11 +123,15 @@ public class DirectDeleteController extends BasicController {
 			} else if (event instanceof SingleIdentityChosenEvent) {
 				// single choose event may come from autocompleter user search
 				SingleIdentityChosenEvent uce = (SingleIdentityChosenEvent) event;
-				toDelete = new ArrayList<Identity>();
-				toDelete.add(uce.getChosenIdentity());
-				
-				String fullname = userManager.getUserDisplayName(uce.getChosenIdentity());
-				deleteConfirmController = activateOkCancelDialog(ureq, null, translate("readyToDelete.delete.confirm", fullname), deleteConfirmController);
+				Identity chosenIdentity = uce.getChosenIdentity();
+				if (BulkDeleteController.isDeletableIdentity(chosenIdentity)) {
+					toDelete = new ArrayList<Identity>();
+					toDelete.add(chosenIdentity);
+					String fullname = userManager.getUserDisplayName(uce.getChosenIdentity());
+					deleteConfirmController = activateOkCancelDialog(ureq, null, translate("readyToDelete.delete.confirm", fullname), deleteConfirmController);
+				} else {
+					showError("msg.user.not.deletable");
+				}
 				return;
 			} else {
 				throw new AssertException("unknown event ::" + event.getCommand());

@@ -20,11 +20,9 @@
 package org.olat.course.nodes.gta.ui;
 
 import java.io.File;
-import java.util.Collections;
-import java.util.Date;
-import java.util.List;
-import java.util.UUID;
+import java.util.*;
 
+import org.checkerframework.checker.nullness.NullnessUtil;
 import org.olat.NewControllerFactory;
 import org.olat.basesecurity.GroupRoles;
 import org.olat.core.gui.UserRequest;
@@ -39,7 +37,10 @@ import org.olat.core.gui.control.WindowControl;
 import org.olat.core.gui.control.generic.closablewrapper.CloseableCalloutWindowController;
 import org.olat.core.gui.control.generic.modal.DialogBoxController;
 import org.olat.core.gui.control.generic.modal.DialogBoxUIFactory;
+import org.olat.core.gui.translator.Translator;
 import org.olat.core.id.Identity;
+import org.olat.core.id.UserConstants;
+import org.olat.core.util.Formatter;
 import org.olat.core.util.StringHelper;
 import org.olat.core.util.coordinate.CoordinatorManager;
 import org.olat.core.util.io.SystemFilenameFilter;
@@ -173,8 +174,10 @@ public class GTAParticipantController extends GTAAbstractController {
 						if(response != null) {
 							assignedTask = response.getTask();
 						}
-						showInfo("task.successfully.assigned");
+						showInfo(buildAssignmentTaskMessage(assignedTask, ureq.getIdentity()));
 						showAssignedTask(ureq, assignedTask);
+						// send e-mail; called function will check the enabled roles
+						doAssignmentEmail(assignedTask);
 					}
 				} else if(GTACourseNode.GTASK_ASSIGNEMENT_TYPE_MANUAL.equals(assignmentType)) {
 					availableTaskCtrl = new GTAAvailableTaskController(ureq, getWindowControl(), availableTasks,
@@ -189,9 +192,42 @@ public class GTAParticipantController extends GTAAbstractController {
 		}
 		return assignedTask;
 	}
+
+	private String buildAssignmentTaskMessage(Task assignedTask, Identity identity) {
+		String message = config.getStringValue(GTACourseNode.GTASK_ASSIGNMENT_TEXT);
+		if (!StringHelper.containsNonWhitespace(message)) {
+			message = translate("assignment.email.template");
+		}
+		DueDate dueDate = getSubmissionDueDate(assignedTask);
+		Date due = (dueDate == null) ? null : dueDate.getDueDate();
+		Translator translator = getTranslator();
+		Locale locale = translator.getLocale();
+		// Prepare a HashMap with placeholders for the template
+		HashMap<String, String> placeholders = new HashMap<>();
+		placeholders.put("login", identity.getName());
+		placeholders.put("first", identity.getUser().getProperty(UserConstants.FIRSTNAME, locale));
+		placeholders.put("firstName", identity.getUser().getProperty(UserConstants.FIRSTNAME, locale));
+		placeholders.put("last", identity.getUser().getProperty(UserConstants.LASTNAME, locale));
+		placeholders.put("lastName", identity.getUser().getProperty(UserConstants.LASTNAME, locale));
+		placeholders.put("email", identity.getUser().getProperty(UserConstants.EMAIL, locale));
+		placeholders.put("title", assignedTask.getTaskName());
+		// format all dates using Formatter
+		Date now = new Date();
+		org.olat.core.util.Formatter f = Formatter.getInstance(locale);
+		placeholders.put("date", f.formatDate(now));
+		placeholders.put("time", f.formatTime(now));
+		placeholders.put("dueDate", due == null ? "" : f.formatDate(due));
+		placeholders.put("dueTime", due == null ? "" : f.formatTime(due));
+		// Replace placeholders
+		for (String key : placeholders.keySet()) {
+			message = message.replaceAll("\\$" + key, placeholders.get(key));
+		}
+		return message != null ? message : "";
+	}
 	
 	private void showAssignedTask(UserRequest ureq, Task assignedTask) {
 		String message = gtaNode.getModuleConfiguration().getStringValue(GTACourseNode.GTASK_USERS_TEXT);
+		//String message = buildAssignmentTaskMessage(assignedTask, ureq.getIdentity());
 		TaskDefinition taskDef = getTaskDefinition(assignedTask);
 		assignedTaskCtrl = new GTAAssignedTaskController(ureq, getWindowControl(), assignedTask,
 				taskDef, courseEnv, gtaNode,
@@ -300,7 +336,7 @@ public class GTAParticipantController extends GTAAbstractController {
 			documentsContainer = gtaManager.getSubmitContainer(courseEnv, gtaNode, assessedGroup);
 			File documentsDir = gtaManager.getSubmitDirectory(courseEnv, gtaNode, assessedGroup);
 			submittedDocuments = documentsDir.listFiles(new SystemFilenameFilter(true, false));
-			if(submittedDocuments.length == 0) {
+			if (submittedDocuments.length == 0) {
 				text = "<div class='o_warning'>" + translate("run.submit.confirm.warning.group", new String[]{ StringHelper.escapeHtml(assessedGroup.getName()) }) + "</div>";
 			} else {
 				text = translate("run.submit.confirm.group", new String[]{ StringHelper.escapeHtml(assessedGroup.getName()) });
@@ -309,7 +345,7 @@ public class GTAParticipantController extends GTAAbstractController {
 			documentsContainer = gtaManager.getSubmitContainer(courseEnv, gtaNode, getIdentity());
 			File documentsDir = gtaManager.getSubmitDirectory(courseEnv, gtaNode, getIdentity());
 			submittedDocuments = documentsDir.listFiles(new SystemFilenameFilter(true, false));
-			if(submittedDocuments.length == 0) {
+			if (submittedDocuments.length == 0) {
 				text = "<div class='o_warning'>" + translate("run.submit.confirm.warning") + "</div>";
 			} else {
 				text = translate("run.submit.confirm");
@@ -341,34 +377,92 @@ public class GTAParticipantController extends GTAAbstractController {
 		process(ureq);
 		doUpdateAttempts();
 
-		//do send e-mail
-		if(config.getBooleanSafe(GTACourseNode.GTASK_SUBMISSION_MAIL_CONFIRMATION)) {
-			doSubmissionEmail();
-		}
+		// send e-mails according to config
+		doSubmissionEmail();
 	}
 	
 	private void doSubmissionEmail() {
 		String body = config.getStringValue(GTACourseNode.GTASK_SUBMISSION_TEXT);
-		if(StringHelper.containsNonWhitespace(body)) {
-			MailContext context = new MailContextImpl(getWindowControl().getBusinessControl().getAsString());
-			List<Identity> recipientsTO;
-			File submitDirectory;
-			if(GTAType.group.name().equals(config.getStringValue(GTACourseNode.GTASK_TYPE))) {
-				recipientsTO = businessGroupService.getMembers(assessedGroup, GroupRoles.participant.name());
-				submitDirectory = gtaManager.getSubmitDirectory(courseEnv, gtaNode, assessedGroup);
-			} else {
-				recipientsTO = Collections.singletonList(assessedIdentity);
-				submitDirectory = gtaManager.getSubmitDirectory(courseEnv, gtaNode, assessedIdentity);
-			}
-			
-			String subject = translate("submission.mail.subject");
+		if (StringHelper.containsNonWhitespace(body)) {
+
+			// Build the list of recipients for the message according to configuration of the course element
+			boolean sendToOwners = config.getBooleanSafe(GTACourseNode.GTASK_SUBMISSION_MAIL_CONFIRMATION_OWNER);
+			boolean sendToCourseCoaches = config.getBooleanSafe(GTACourseNode.GTASK_SUBMISSION_MAIL_CONFIRMATION_COACH_COURSE);
+			boolean sendToGroupCoaches = config.getBooleanSafe(GTACourseNode.GTASK_SUBMISSION_MAIL_CONFIRMATION_COACH_GROUP);
+			// Backwards compatibility to allow old setting that did not consider different roles
+			boolean sendToParticipants = config.getBooleanSafe(GTACourseNode.GTASK_SUBMISSION_MAIL_CONFIRMATION_PARTICIPANT)
+					|| config.getBooleanSafe(GTACourseNode.GTASK_SUBMISSION_MAIL_CONFIRMATION);
+			List<Identity> recipients = addRecipients(sendToOwners, sendToParticipants, sendToCourseCoaches, sendToGroupCoaches);
+
+			// Prepare mail template
+			String subject = translate("submission.email.subject");
+			File submitDirectory = (GTAType.group.name().equals(config.getStringValue(GTACourseNode.GTASK_TYPE)))
+					? gtaManager.getSubmitDirectory(courseEnv, gtaNode, assessedGroup)
+					: gtaManager.getSubmitDirectory(courseEnv, gtaNode, assessedIdentity);
 			File[] files = TaskHelper.getDocuments(submitDirectory);
-			MailTemplate template = new GTAMailTemplate(subject, body, files, getIdentity(), getTranslator());
-			
-			MailerResult result = new MailerResult();
-			MailBundle[] bundles = mailManager.makeMailBundles(context, recipientsTO, template, null, UUID.randomUUID().toString(), result);
-			mailManager.sendMessage(bundles);
+			MailTemplate template = new GTASubmissionMailTemplate(subject, body, files, getIdentity(), getTranslator());
+
+			// send message to all found recipients
+			if (recipients.size() > 0) {
+				sendMail(template, recipients);
+			}
 		}
+	}
+
+	private void doAssignmentEmail(Task assignedTask) {
+		String body = config.getStringValue(GTACourseNode.GTASK_ASSIGNMENT_TEXT);
+		if (StringHelper.containsNonWhitespace(body)) {
+
+			// Build the list of recipients for the message according to configuration of the course element
+			boolean sendToOwners = config.getBooleanSafe(GTACourseNode.GTASK_ASSIGNMENT_MAIL_CONFIRMATION_OWNER);
+			boolean sendToCourseCoaches = config.getBooleanSafe(GTACourseNode.GTASK_ASSIGNMENT_MAIL_CONFIRMATION_COACH_COURSE);
+			boolean sendToGroupCoaches = config.getBooleanSafe(GTACourseNode.GTASK_ASSIGNMENT_MAIL_CONFIRMATION_COACH_GROUP);
+			boolean sendToParticipants = config.getBooleanSafe(GTACourseNode.GTASK_ASSIGNMENT_MAIL_CONFIRMATION_PARTICIPANT);
+			List<Identity> recipients = addRecipients(sendToOwners, sendToParticipants, sendToCourseCoaches, sendToGroupCoaches);
+
+			// Prepare mail template
+			String subject = translate("assignment.email.subject");
+			DueDate dueDate = getSubmissionDueDate(assignedTask);
+			Date submissionDueDate = (dueDate == null) ? null : dueDate.getDueDate();
+			MailTemplate template = new GTAAssignmentMailTemplate(subject, body, submissionDueDate, assignedTask.getTaskName(), getIdentity(), getTranslator());
+
+			// send message to all found recipients
+			if (recipients.size() > 0) {
+				sendMail(template, recipients);
+			}
+		}
+	}
+
+	private List<Identity> addRecipients(boolean addOwners, boolean addParticipants, boolean addCourseCoaches, boolean addGroupCoaches) {
+		List<Identity> recipients = new ArrayList<>();
+		if (addOwners) {
+			recipients.addAll(gtaManager.getCourseOwners(courseEntry));
+		}
+		if (addCourseCoaches) {
+			recipients.addAll(gtaManager.getCourseCoaches(courseEntry));
+		}
+		if (addGroupCoaches) {
+			if (GTAType.group.name().equals(config.getStringValue(GTACourseNode.GTASK_TYPE))) {
+				recipients.addAll(businessGroupService.getMembers(assessedGroup, GroupRoles.coach.name()));
+			} else {
+				recipients.addAll(gtaManager.getGroupCoaches(gtaNode));
+			}
+		}
+		if (addParticipants) {
+			if (GTAType.group.name().equals(config.getStringValue(GTACourseNode.GTASK_TYPE))) {
+				recipients.addAll(businessGroupService.getMembers(assessedGroup, GroupRoles.participant.name()));
+			} else {
+				recipients.addAll(Collections.singletonList(assessedIdentity));
+			}
+		}
+		return recipients;
+	}
+
+	private void sendMail(MailTemplate template, List<Identity> recipients) {
+		MailContext context = new MailContextImpl(getWindowControl().getBusinessControl().getAsString());
+		MailerResult result = new MailerResult();
+		MailBundle[] bundles = mailManager.makeMailBundles(context, recipients, template, null, UUID.randomUUID().toString(), result);
+		mailManager.sendMessage(bundles);
 	}
 	
 	@Override
@@ -653,9 +747,16 @@ public class GTAParticipantController extends GTAAbstractController {
 	protected void event(UserRequest ureq, Controller source, Event event) {
 		if(availableTaskCtrl == source) {
 			if(event == Event.DONE_EVENT) {
+				Task assignedTask = availableTaskCtrl.getSelectedTask();
+
 				cleanUpProcess();
 				resetDueDates();
 				process(ureq);
+
+				// send e-mail; called function will check for enabled roles
+				if (assignedTask != null) {
+					doAssignmentEmail(assignedTask);
+				}
 			}
 		} else if(revisionDocumentsCtrl == source) {
 			if(event == Event.DONE_EVENT) {

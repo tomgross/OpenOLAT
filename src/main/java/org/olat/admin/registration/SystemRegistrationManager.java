@@ -24,7 +24,10 @@
 */
 package org.olat.admin.registration;
 
-import java.text.ParseException;
+import static org.quartz.CronScheduleBuilder.cronSchedule;
+import static org.quartz.JobBuilder.newJob;
+import static org.quartz.TriggerBuilder.newTrigger;
+
 import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.HashMap;
@@ -63,12 +66,14 @@ import org.olat.group.model.SearchBusinessGroupParams;
 import org.olat.instantMessaging.InstantMessagingModule;
 import org.olat.repository.RepositoryEntry;
 import org.olat.repository.RepositoryManager;
-import org.quartz.CronTrigger;
 import org.quartz.JobDetail;
+import org.quartz.JobKey;
 import org.quartz.Scheduler;
 import org.quartz.SchedulerException;
+import org.quartz.Trigger;
 import org.springframework.beans.factory.InitializingBean;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
@@ -92,24 +97,37 @@ public class SystemRegistrationManager implements InitializingBean {
 	private static final String TRIGGER = "system_registration_trigger";
 	public static final String PRODUCT = "openolat";
 
-	@Value("${cluster.mode}")
-	private String clusterMode;
-	
-	@Autowired
-	private DB database;
-	@Autowired
-	private Scheduler scheduler;
-	@Autowired
-	private RepositoryManager repositoryManager;
-	@Autowired
-	private BaseSecurity securityManager;
-	@Autowired
-	private BusinessGroupService businessGroupService;
-	@Autowired
-	private SystemRegistrationModule registrationModule;
+	private final SystemRegistrationModule registrationModule;
+	private final Scheduler scheduler;
+	private final String clusterMode;
+	private final DB database;
+	private final RepositoryManager repositoryManager;
+	private final BaseSecurity securityManager;
+	private final BusinessGroupService businessGroupService;
 
 	private static final String REGISTRATION_SERVER = "http://registration.openolat.org/registration/restapi/registration/openolat";
 	//private static final String REGISTRATION_SERVER = "http://localhost:8083/registration/restapi/registration/openolat";
+	
+	/**
+	 * [used by spring]
+	 * Use getInstance(), this is a singleton
+	 */
+	@Autowired
+	private SystemRegistrationManager(Scheduler scheduler,
+									  @Value("${cluster.mode}") String clusterMode,
+									  DB database,
+									  SystemRegistrationModule registrationModule,
+									  RepositoryManager repositoryManager,
+									  BaseSecurity securityManager,
+									  BusinessGroupService businessGroupService) {
+		this.scheduler = scheduler;
+		this.clusterMode = clusterMode;
+		this.database = database;
+		this.registrationModule = registrationModule;
+		this.repositoryManager = repositoryManager;
+		this.securityManager = securityManager;
+		this.businessGroupService = businessGroupService;
+	}
 	
 	/**
 	 * Initialize the configuration
@@ -171,7 +189,7 @@ public class SystemRegistrationManager implements InitializingBean {
 	
 	public void send() {
 		try {
-			scheduler.triggerJob(SCHEDULER_NAME, Scheduler.DEFAULT_GROUP);
+			scheduler.triggerJob(new JobKey(SCHEDULER_NAME, Scheduler.DEFAULT_GROUP));
 		} catch (SchedulerException e) {
 			log.error("", e);
 		}
@@ -318,19 +336,16 @@ public class SystemRegistrationManager implements InitializingBean {
 
 		String cronExpression = createCronTriggerExpression();
 		try {
-			// Create job with cron trigger configuration
-			JobDetail jobDetail = new JobDetail(SCHEDULER_NAME, Scheduler.DEFAULT_GROUP, SystemRegistrationJob.class);
-			CronTrigger trigger = new CronTrigger();
-			trigger.setName(TRIGGER);
-			// Use this cron expression for debugging, tries to send data every minute
-			//trigger.setCronExpression("0 * * * * ?");
-			trigger.setCronExpression(cronExpression);
-			// Schedule job now
+			JobDetail jobDetail = newJob(SystemRegistrationJob.class)
+					.withIdentity(SCHEDULER_NAME, Scheduler.DEFAULT_GROUP)
+					.build();
+			Trigger trigger = newTrigger()
+					.withIdentity(TRIGGER)
+					.withSchedule(cronSchedule(cronExpression))
+					.build();
 			scheduler.scheduleJob(jobDetail, trigger);
-		} catch (ParseException e) {
+		} catch (Exception e) {
 			log.error("Illegal cron expression for system registration", e);
-		} catch (SchedulerException e) {
-			log.error("Can not start system registration scheduler", e);
 		}
 		log.info("Registration background job successfully started: "+cronExpression, null);
 	}

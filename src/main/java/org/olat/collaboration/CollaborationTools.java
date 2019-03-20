@@ -118,6 +118,7 @@ import org.olat.portfolio.EPUIFactory;
 import org.olat.portfolio.manager.EPFrontendManager;
 import org.olat.portfolio.model.structel.PortfolioStructureMap;
 import org.olat.portfolio.ui.structel.EPCreateMapController;
+import org.olat.portfolio.ui.structel.EPMapViewController;
 import org.olat.properties.NarrowedPropertyManager;
 import org.olat.properties.Property;
 import org.olat.properties.PropertyManager;
@@ -527,56 +528,52 @@ public class CollaborationTools implements Serializable {
 	 * @param wControl
 	 * @return
 	 */
-	public Controller createPortfolioController(final UserRequest ureq, final WindowControl wControl,
-			final TooledStackedPanel stackPanel, final BusinessGroup group) {
-		final NarrowedPropertyManager npm = NarrowedPropertyManager.getInstance(ores);
-		Property mapProperty = npm.findProperty(null, null, PROP_CAT_BG_COLLABTOOLS, KEY_PORTFOLIO);
-		if(mapProperty != null) {
-			return createPortfolioController(ureq, wControl, stackPanel, mapProperty);
-		} else {
-			//TODO gsync
-			return coordinatorManager.getCoordinator().getSyncer().doInSync(ores, new SyncerCallback<Controller>() {
-				@Override
-				public Controller execute() {
-					Controller ctrl;
-					Property mapKeyProperty = npm.findProperty(null, null, PROP_CAT_BG_COLLABTOOLS, KEY_PORTFOLIO);
-					if (mapKeyProperty == null) {
-						PortfolioV2Module moduleV2 = CoreSpringFactory.getImpl(PortfolioV2Module.class);
-						if(moduleV2.isEnabled()) {
-							PortfolioService portfolioService = CoreSpringFactory.getImpl(PortfolioService.class);
-							Binder binder = portfolioService.createNewBinder(group.getName(), group.getDescription(), null, null);
-							CoreSpringFactory.getImpl(BinderUserInformationsDAO.class).updateBinderUserInformationsInSync(binder, ureq.getIdentity());
-							mapKeyProperty = npm.createPropertyInstance(null, null, PROP_CAT_BG_COLLABTOOLS, KEY_PORTFOLIO, null, binder.getKey(), "2", null);
-							BinderSecurityCallback secCallback = BinderSecurityCallbackFactory.getCallbackForBusinessGroup();
-							BinderController binderCtrl = new BinderController(ureq, wControl, stackPanel, secCallback, binder, BinderConfiguration.createBusinessGroupConfig());					
-							List<ContextEntry> entries = BusinessControlFactory.getInstance().createCEListFromResourceType("Toc");
-							binderCtrl.activate(ureq, entries, null);
-							ctrl = binderCtrl;
 
-							ThreadLocalUserActivityLogger.addLoggingResourceInfo(LoggingResourceable.wrap(binder));
-							ThreadLocalUserActivityLogger.log(PortfolioLoggingAction.PORTFOLIO_BINDER_CREATED, getClass());
-						} else {
-							EPFrontendManager ePFMgr = CoreSpringFactory.getImpl(EPFrontendManager.class);
-							PortfolioStructureMap map = ePFMgr.createAndPersistPortfolioDefaultMap(group.getName(), group.getDescription());					
-							Translator pT = Util.createPackageTranslator(EPCreateMapController.class, ureq.getLocale());					
-							// add a page, as each map should have at least one per default!
-							ePFMgr.createAndPersistPortfolioPage(map, pT.translate("new.page.title"), pT.translate("new.page.desc"));
-							mapKeyProperty = npm.createPropertyInstance(null, null, PROP_CAT_BG_COLLABTOOLS, KEY_PORTFOLIO, null, map.getKey(), null, null);
-							EPSecurityCallback secCallback = new EPSecurityCallbackImpl(true, true);
-							ctrl = EPUIFactory.createMapViewController(ureq, wControl, map, secCallback);
-						}
-						npm.saveProperty(mapKeyProperty);
-					} else {
-						ctrl = createPortfolioController(ureq, wControl, stackPanel, mapProperty);
+	// LMSUZH-465: Reverted code to OO-10.5 using ePortfolio-1.0 in group collaboration tools
+	public EPMapViewController createPortfolioController(final UserRequest ureq, WindowControl wControl, final BusinessGroup group) {
+		final EPFrontendManager ePFMgr = (EPFrontendManager)CoreSpringFactory.getBean("epFrontendManager");
+		final NarrowedPropertyManager npm = NarrowedPropertyManager.getInstance(ores);
+		//TODO gsync
+		PortfolioStructureMap map = coordinatorManager.getCoordinator().getSyncer().doInSync(ores, new SyncerCallback<PortfolioStructureMap>(){
+			public PortfolioStructureMap execute() {
+				PortfolioStructureMap aMap;
+				Long mapKey;
+				Property mapKeyProperty = npm.findProperty(null, null, PROP_CAT_BG_COLLABTOOLS, KEY_PORTFOLIO);
+				if (mapKeyProperty == null) {
+					// First call of portfolio-tool, create new map and save
+					aMap = ePFMgr.createAndPersistPortfolioDefaultMap(group.getName(), group.getDescription());
+					Translator pT = Util.createPackageTranslator(EPCreateMapController.class, ureq.getLocale());
+					// add a page, as each map should have at least one per default!
+					final String title = pT.translate("new.page.title");
+					final String description = pT.translate("new.page.desc");
+					ePFMgr.createAndPersistPortfolioPage(aMap, title, description);
+					mapKey = aMap.getKey();
+					if (log.isDebug()) {
+						log.debug("created new portfolio map in collab tools: mapid::" + mapKey + " for ores::" + ores.getResourceableTypeName() + "/"
+								+ ores.getResourceableId());
 					}
-					return ctrl;
+					mapKeyProperty = npm.createPropertyInstance(null, null, PROP_CAT_BG_COLLABTOOLS, KEY_PORTFOLIO, null, mapKey, null, null);
+					npm.saveProperty(mapKeyProperty);
+				} else {
+					// map does already exist, load map with key from properties
+					mapKey = mapKeyProperty.getLongValue();
+					aMap = (PortfolioStructureMap) ePFMgr.loadPortfolioStructureByKey(mapKey);
+					if (aMap == null) { throw new AssertException("Unable to load portfolio map with key " + mapKey + " for ores "
+							+ ores.getResourceableTypeName() + " with key " + ores.getResourceableId()); }
+					if (log.isDebug()) {
+						log.debug("loading portfolio map in collab tools from properties: foid::" + mapKey + " for ores::"
+								+ ores.getResourceableTypeName() + "/" + ores.getResourceableId());
+					}
 				}
-			});
-		}
+				return aMap;
+			}});
+
+		EPSecurityCallback secCallback = new EPSecurityCallbackImpl(true, true);
+		return EPUIFactory.createMapViewController(ureq, wControl, map, secCallback);
 	}
-	
+
 	/**
-	 * 
+	 *
 	 * @param ureq
 	 * @param wControl
 	 * @param mapProperty The property is mandatory!
@@ -586,7 +583,7 @@ public class CollaborationTools implements Serializable {
 			Property mapProperty) {
 		Long key = mapProperty.getLongValue();
 		String version = mapProperty.getStringValue();
-		
+
 		Controller ctrl;
 		if("2".equals(version)) {
 			PortfolioService portfolioService = CoreSpringFactory.getImpl(PortfolioService.class);
@@ -598,7 +595,7 @@ public class CollaborationTools implements Serializable {
 		} else {
 			PortfolioStructureMap map = (PortfolioStructureMap) CoreSpringFactory.getImpl(EPFrontendManager.class)
 					.loadPortfolioStructureByKey(key);
-			EPSecurityCallback secCallback = new EPSecurityCallbackImpl(true, true);
+		EPSecurityCallback secCallback = new EPSecurityCallbackImpl(true, true);
 			ctrl = EPUIFactory.createMapViewController(ureq, wControl, map, secCallback);
 		}
 		return ctrl;

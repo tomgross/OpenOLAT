@@ -24,9 +24,7 @@
 */
 package org.olat.course.condition;
 
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.List;
+import java.util.*;
 
 import org.olat.core.gui.UserRequest;
 import org.olat.core.gui.components.form.flexible.FormItemContainer;
@@ -40,6 +38,7 @@ import org.olat.core.gui.control.WindowControl;
 import org.olat.core.gui.control.generic.closablewrapper.CloseableModalController;
 import org.olat.course.groupsandrights.CourseGroupManager;
 import org.olat.group.BusinessGroup;
+import org.olat.group.BusinessGroupManagedFlag;
 import org.olat.group.ui.NewBGController;
 import org.olat.repository.RepositoryEntry;
 import org.olat.repository.RepositoryEntryManagedFlag;
@@ -58,17 +57,20 @@ public class GroupSelectionController extends FormBasicController {
 	private MultipleSelectionElement entrySelector;
 	private FormLink createNew;
 	private CourseGroupManager courseGrpMngr;
+	private final boolean disableSelectionOfGroupsWithManagedMembersManagement;
 	private NewBGController groupCreateCntrllr;
 	private CloseableModalController cmc;
 	
 	private String[] groupNames;
 	private String[] groupKeys;
+	private Set<String> disabledKeys = new HashSet<>();
 	private boolean createEnable;
 
 	public GroupSelectionController(UserRequest ureq, WindowControl wControl, boolean allowCreate,
-			CourseGroupManager courseGrpMngr, List<Long> selectionKeys) {
+			CourseGroupManager courseGrpMngr, List<Long> selectionKeys, boolean disableSelectionOfGroupsWithManagedMembersManagement) {
 		super(ureq, wControl, "group_or_area_selection");
 		this.courseGrpMngr = courseGrpMngr;
+		this.disableSelectionOfGroupsWithManagedMembersManagement = disableSelectionOfGroupsWithManagedMembersManagement;
 
 		RepositoryEntry re = RepositoryManager.getInstance().lookupRepositoryEntry(courseGrpMngr.getCourseResource(), false);
 		createEnable = allowCreate && !RepositoryEntryManagedFlag.isManaged(re, RepositoryEntryManagedFlag.groups);
@@ -80,14 +82,24 @@ public class GroupSelectionController extends FormBasicController {
 			entrySelector.select(selectionKey.toString(), true);
 		}
 	}
-	
+
+	public GroupSelectionController(UserRequest ureq, WindowControl wControl, boolean allowCreate,
+									CourseGroupManager courseGrpMngr, List<Long> selectionKeys) {
+		this(ureq, wControl, allowCreate, courseGrpMngr, selectionKeys, false);
+	}
+
 	private void loadNamesAndKeys() {
 		List<BusinessGroup> groups = courseGrpMngr.getAllBusinessGroups();
 		groupNames = new String[groups.size()];
 		groupKeys = new String[groups.size()];
 		for(int i=groups.size(); i-->0; ) {
 			groupNames[i] = groups.get(i).getName();
-			groupKeys[i] = groups.get(i).getKey().toString();
+			String key = groups.get(i).getKey().toString();
+			groupKeys[i] = key;
+			if (disableSelectionOfGroupsWithManagedMembersManagement
+					&& BusinessGroupManagedFlag.isManaged(groups.get(i), BusinessGroupManagedFlag.membersmanagement)) {
+				disabledKeys.add(key);
+			}
 		}
 
 	}
@@ -131,7 +143,7 @@ public class GroupSelectionController extends FormBasicController {
 	}
 
 	/**
-	 * @see org.olat.core.gui.control.DefaultController#doDispose(boolean)
+	 * @see org.olat.core.gui.control.DefaultController#doDispose()
 	 */
 	@Override
 	protected void doDispose() {
@@ -146,6 +158,7 @@ public class GroupSelectionController extends FormBasicController {
 		}
 
 		entrySelector = uifactory.addCheckboxesVertical("entries",  null, formLayout, groupKeys, groupNames, 1);
+		entrySelector.setEnabled(disabledKeys, false);
 		uifactory.addFormSubmitButton("subm", "apply", formLayout);
 		uifactory.addFormCancelButton("cancel", formLayout, ureq, getWindowControl());
 	}

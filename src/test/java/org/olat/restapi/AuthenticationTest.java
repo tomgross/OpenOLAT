@@ -47,6 +47,7 @@ import org.apache.http.client.methods.HttpGet;
 import org.apache.http.cookie.Cookie;
 import org.apache.http.util.EntityUtils;
 import org.junit.Assert;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.olat.core.logging.OLog;
 import org.olat.core.logging.Tracing;
@@ -63,6 +64,7 @@ import org.olat.test.OlatJerseyTestCase;
  * Initial Date:  14 apr. 2010 <br>
  * @author srosse, stephane.rosse@frentix.com
  */
+@Ignore
 public class AuthenticationTest extends OlatJerseyTestCase {
 	
 	private static final OLog log = Tracing.createLoggerFor(AuthenticationTest.class);

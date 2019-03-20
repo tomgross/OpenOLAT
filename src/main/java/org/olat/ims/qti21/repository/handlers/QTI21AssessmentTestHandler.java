@@ -122,7 +122,7 @@ public class QTI21AssessmentTestHandler extends FileHandler {
 
 	@Override
 	public boolean isCreate() {
-		return true;
+		return false;
 	}
 
 	@Override

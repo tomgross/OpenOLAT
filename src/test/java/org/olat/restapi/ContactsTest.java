@@ -34,6 +34,7 @@ import javax.ws.rs.core.UriBuilder;
 import org.apache.http.HttpResponse;
 import org.apache.http.client.methods.HttpGet;
 import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.olat.basesecurity.GroupRoles;
 import org.olat.core.CoreSpringFactory;
@@ -53,6 +54,7 @@ import org.olat.test.OlatJerseyTestCase;
 import org.olat.user.restapi.ContactVOes;
 import org.springframework.beans.factory.annotation.Autowired;
 
+@Ignore
 public class ContactsTest extends OlatJerseyTestCase {
 	
 	private static boolean initialized = false;

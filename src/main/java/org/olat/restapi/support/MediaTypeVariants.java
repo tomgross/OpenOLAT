@@ -48,13 +48,13 @@ public class MediaTypeVariants {
 	static {
 		Map<String, String> pagingSpec = new HashMap<String, String>();
 		pagingSpec.put("pagingspec","1.0");
-		VARIANT_JSON = new Variant(APPLICATION_JSON, null, null);
+		VARIANT_JSON = new Variant(APPLICATION_JSON, "", "");
 		APPLICATION_JSON_PAGED = new MediaType("application","json", pagingSpec);
-		VARIANT_JSON_PAGED = new Variant(APPLICATION_JSON_PAGED, null, null);
+		VARIANT_JSON_PAGED = new Variant(APPLICATION_JSON_PAGED, "", "");
 
-		VARIANT_XML = new Variant(APPLICATION_XML, null, null);
+		VARIANT_XML = new Variant(APPLICATION_XML, "", "");
 		APPLICATION_XML_PAGED = new MediaType("application","xml", pagingSpec);
-		VARIANT_XML_PAGED = new Variant(APPLICATION_XML_PAGED, null, null);
+		VARIANT_XML_PAGED = new Variant(APPLICATION_XML_PAGED, "", "");
 		
 		variants.add(VARIANT_JSON);
 		variants.add(VARIANT_JSON_PAGED);

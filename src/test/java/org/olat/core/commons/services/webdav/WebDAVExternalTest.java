@@ -32,6 +32,7 @@ import org.apache.http.HttpResponse;
 import org.apache.http.client.methods.HttpGet;
 import org.apache.http.util.EntityUtils;
 import org.apache.poi.util.IOUtils;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.xml.sax.Attributes;
 import org.xml.sax.InputSource;
@@ -48,6 +49,7 @@ import org.xml.sax.helpers.DefaultHandler;
  * @author srosse, stephane.rosse@frentix.com, http://www.frentix.com
  *
  */
+@Ignore
 public class WebDAVExternalTest {
 	
 	@Test

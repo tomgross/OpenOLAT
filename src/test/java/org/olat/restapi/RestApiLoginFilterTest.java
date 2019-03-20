@@ -43,6 +43,7 @@ import org.apache.http.HttpException;
 import org.apache.http.HttpResponse;
 import org.apache.http.client.methods.HttpGet;
 import org.apache.http.cookie.Cookie;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.olat.core.CoreSpringFactory;
 import org.olat.core.util.StringHelper;
@@ -59,6 +60,7 @@ import org.olat.test.OlatJerseyTestCase;
  * Initial Date:  14 apr. 2010 <br>
  * @author srosse, stephane.rosse@frentix.com
  */
+@Ignore
 public class RestApiLoginFilterTest extends OlatJerseyTestCase {
 	
 

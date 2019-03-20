@@ -31,6 +31,9 @@ import org.olat.repository.CatalogEntry;
  * Initial date: 12.03.2014<br>
  * @author srosse, stephane.rosse@frentix.com, http://www.frentix.com
  *
+ * TODO sev26
+ * Its one parameter container class and not many i.e. params. In order not to
+ * confuse the reader, rename it to "Param".
  */
 public class SearchMyRepositoryEntryViewParams {
 	private Identity identity;

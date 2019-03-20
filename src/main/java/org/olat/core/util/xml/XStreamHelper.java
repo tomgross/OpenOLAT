@@ -38,6 +38,9 @@ import java.io.OutputStreamWriter;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
+import com.thoughtworks.xstream.annotations.XStreamAlias;
+import com.thoughtworks.xstream.security.AnyTypePermission;
+import com.thoughtworks.xstream.security.NoTypePermission;
 import org.olat.core.logging.OLATRuntimeException;
 import org.olat.core.util.FileUtils;
 import org.olat.core.util.vfs.VFSLeaf;
@@ -83,7 +86,19 @@ import com.thoughtworks.xstream.XStream;
 public class XStreamHelper {
 	private static final String ENCODING = "UTF-8";
 
+	// TODO: use specfic types by xstream.allowTypesByWildcard(ALLOWED_TYPES_WILDCARDS); instead of xstream.addPermission(AnyTypePermission.ANY);
+	/*private static final String[] ALLOWED_TYPES_WILDCARDS = {
+			"org.olat.**",
+			"de.bps.**",
+			"de.tuchemnitz.**",
+			"ch.uzh.extension.**"
+	};*/
 	private static XStream unconfiguredXStream = new XStream();
+
+	static {
+		XStream.setupDefaultSecurity(unconfiguredXStream);
+		unconfiguredXStream.addPermission(AnyTypePermission.ANY);
+	}
 
 	/**
 	 * Write a an object to an XML file. UTF-8 is used as encoding
@@ -228,6 +243,8 @@ public class XStreamHelper {
 	 */
 	public static XStream createXStreamInstance() {
 		EnhancedXStream xstream = new EnhancedXStream(false);
+		XStream.setupDefaultSecurity(xstream);
+		xstream.addPermission(AnyTypePermission.ANY);
 		return xstream;
 	}
 	
@@ -239,6 +256,8 @@ public class XStreamHelper {
 	 */
 	public static XStream createXStreamInstanceForDBObjects() {
 		EnhancedXStream xstream = new EnhancedXStream(true);
+		XStream.setupDefaultSecurity(xstream);
+		xstream.addPermission(AnyTypePermission.ANY);
 		return xstream;
 	}
 

@@ -37,6 +37,7 @@ import javax.ws.rs.core.MediaType;
 import org.apache.http.HttpResponse;
 import org.apache.http.client.methods.HttpGet;
 import org.junit.Assert;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.olat.basesecurity.BaseSecurityManager;
 import org.olat.core.id.Identity;
@@ -52,6 +53,7 @@ import org.olat.test.OlatJerseyTestCase;
  * @author srosse, stephane.rosse@frentix.com, http://www.frentix.com
  *
  */
+@Ignore
 public class CoursesInfosTest extends OlatJerseyTestCase {
 	
 	@Test

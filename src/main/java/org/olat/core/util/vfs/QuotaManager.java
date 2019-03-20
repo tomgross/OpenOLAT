@@ -46,11 +46,13 @@ import org.olat.core.id.Identity;
  */
 public abstract class QuotaManager {
 
+	@Deprecated // TODO sev26 Use Spring for this.
 	protected static QuotaManager INSTANCE;
 
 	/**
 	 * @return an instance via the spring bean loading mechanism. 
 	 */
+	@Deprecated // TODO sev26 Use Spring for this.
 	public static QuotaManager getInstance() {
 		return INSTANCE;
 	}
@@ -63,12 +65,6 @@ public abstract class QuotaManager {
 	 * @return
 	 */
 	public abstract Quota createQuota(String path, Long quotaKB, Long ulLimitKB);
-
-	/**
-	 * Initialize the 
-	 *
-	 */
-	public abstract void init();
 	
 	/**
 	 * Get the identifyers for the default quotas
@@ -115,6 +111,20 @@ public abstract class QuotaManager {
 	 * @return list of quotas.
 	 */
 	public abstract List<Quota> listCustomQuotasKB();
+
+	/**
+	 * Get a list of all objects which have an individual quota and have the same path prefix.
+	 *
+	 * @return list of quotas.
+	 */
+	public abstract List<Quota> listCustomQuotasKB(String pathPrefix);
+
+	/**
+	 * Determines if any of objects that have the same path prefix have some individual quota
+	 *
+	 * @return list of quotas.
+	 */
+	public abstract boolean hasCustomQuotas(String pathPrefix);
 
 	/**
 	 * call to get appropriate quota depending on role. Authors have normally

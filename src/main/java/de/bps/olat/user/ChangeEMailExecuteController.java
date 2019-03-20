@@ -119,7 +119,6 @@ public class ChangeEMailExecuteController extends ChangeEMailController implemen
 			if (value != null && value.equals("true")) {
 				ident.getUser().setProperty("emailDisabled", "false");
 			}
-			ident.getUser().setProperty("email", mails.get("changedEMail"));
 			// success info message
 			wControl.setInfo(pT.translate("success.change.email", new String[] { mails.get("currentEMail"), mails.get("changedEMail") }));
 			// remove keys

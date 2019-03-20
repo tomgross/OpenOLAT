@@ -30,6 +30,7 @@ import org.olat.basesecurity.IdentityRef;
 import org.olat.commons.info.model.InfoMessage;
 import org.olat.commons.info.model.InfoMessageImpl;
 import org.olat.commons.info.notification.InfoSubscriptionManager;
+import org.olat.core.commons.modules.bc.vfs.OlatRootFolderImpl;
 import org.olat.core.commons.services.notifications.SubscriptionContext;
 import org.olat.core.id.Identity;
 import org.olat.core.id.OLATResourceable;
@@ -144,8 +145,8 @@ public class InfoMessageFrontendManagerImpl implements InfoMessageFrontendManage
 				bundle.setContext(context);
 				bundle.setFromId(from);
 				bundle.setContactList(contactList);
-				bundle.setContent(subject, body);
-				
+				bundle.setContent(subject, body, infoMessage.getAttachments());
+
 				MailerResult result = mailManager.sendMessage(bundle);
 				send = result.isSuccessful();
 			} catch (Exception e) {

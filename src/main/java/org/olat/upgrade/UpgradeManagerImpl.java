@@ -25,9 +25,11 @@
 
 package org.olat.upgrade;
 
-import java.util.Iterator;
+import org.olat.core.commons.persistence.DB;
+import org.springframework.beans.factory.annotation.Autowired;
 
-import org.olat.core.commons.persistence.DBFactory;
+import javax.inject.Provider;
+import java.util.Iterator;
 
 /**
  * 
@@ -37,12 +39,13 @@ import org.olat.core.commons.persistence.DBFactory;
  * @author guido
  */
 public class UpgradeManagerImpl extends UpgradeManager {
+
+	private final Provider<DB> dbInstance;
 	
-	/**
-	 * used by spring
-	 */
-	public UpgradeManagerImpl() {
-		//
+	@Autowired
+	public UpgradeManagerImpl(Provider<DB> dbInstance) {
+		super(dbInstance);
+		this.dbInstance = dbInstance;
 	}
 
 	/**
@@ -78,10 +81,10 @@ public class UpgradeManagerImpl extends UpgradeManager {
 				if (upgrade.doPostSystemInitUpgrade(this))
 					logAudit("Successfully installed PostSystemInitUpgrade::" + upgrade.getVersion());
 				//just in case a doPostSystemInitUpgrade did forget it.
-				DBFactory.getInstance().commitAndCloseSession();
+				dbInstance.get().commitAndCloseSession();
 			}
 		} catch (Throwable e) {
-			DBFactory.getInstance().rollbackAndCloseSession();
+			dbInstance.get().rollbackAndCloseSession();
 			logWarn("Error upgrading PostSystemInitUpgrade::" + upgrade.getVersion(), e);
 			abort(e);
 		} 
