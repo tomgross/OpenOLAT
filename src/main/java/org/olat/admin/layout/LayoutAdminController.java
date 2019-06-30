@@ -29,6 +29,7 @@ import java.util.Set;
 
 import org.apache.commons.lang.ArrayUtils;
 import org.olat.admin.SystemAdminMainController;
+import org.olat.core.OlatServletResource;
 import org.olat.core.dispatcher.impl.StaticMediaDispatcher;
 import org.olat.core.gui.UserRequest;
 import org.olat.core.gui.components.form.flexible.FormItem;
