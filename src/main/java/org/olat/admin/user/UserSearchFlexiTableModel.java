@@ -104,5 +104,12 @@ public class UserSearchFlexiTableModel extends DefaultTableDataModel<Identity> i
 		public UserSearchTableDataModelSorterDelegate(SortKey orderBy, UserSearchFlexiTableModel model, Locale locale) {
 			super(orderBy, model, locale);
 		}
+
+		@Override
+		protected void sort(List<Identity> rows) {
+			super.sort(rows);
+		}
+
 	}
+
 }
