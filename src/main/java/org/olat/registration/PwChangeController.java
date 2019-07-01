@@ -267,10 +267,19 @@ public class PwChangeController extends BasicController {
 		}
 		myContent.contextPut("pwKey", tk.getRegistrationKey());
 		StringBuilder body = new StringBuilder();
-		body.append(userTrans.translate("pwchange.intro", new String[] { identity.getName() }))
+		body.append("<style>")
+			.append(".o_footer {background: #FAFAFA; border: 1px solid #eee; border-radius: 5px; padding: 1em; margin: 1em;}")
+			.append(".o_body {background: #FAFAFA; padding: 1em; margin: 1em;}")
+			.append("</style>")
+			.append("<div class='o_body'>")
+			.append(userTrans.translate("pwchange.headline"))
+			.append(userTrans.translate("pwchange.intro", new String[] { identity.getName() }))
 		    .append(userTrans.translate("pwchange.body", new String[] { serverpath, tk.getRegistrationKey(), I18nManager.getInstance().getLocaleKey(ureq.getLocale()) }))
-		    .append(SEPARATOR)
-		    .append(userTrans.translate("reg.wherefrom", new String[] { serverpath, today, ip }));
+		    .append(userTrans.translate("pwchange.body.alt", new String[] { serverpath, tk.getRegistrationKey(), I18nManager.getInstance().getLocaleKey(ureq.getLocale()) }))
+		    .append("</div>")
+		    .append("<div class='o_footer'>")
+		    .append(userTrans.translate("reg.wherefrom", new String[] { serverpath, today, ip }))
+		    .append("</div>");
 
 		MailBundle bundle = new MailBundle();
 		bundle.setToId(identity);

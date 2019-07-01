@@ -1090,21 +1090,12 @@ public class EditorMainController extends MainLayoutBasicController implements G
 					}
 				}
 				
-				if (runContext.containsKey("changedaccess")) {
-					// there were changes made to the general course access
-					String newAccessStr = (String) runContext.get("changedaccess");
-					int newAccess;
-					boolean membersOnly = RepositoryEntry.MEMBERS_ONLY.equals(newAccessStr);
-					if(membersOnly) {
-						newAccess = RepositoryEntry.ACC_OWNERS;
-					} else {
-						newAccess = Integer.valueOf(newAccessStr);
-					}
-					
+				if (runContext.containsKey("accessAndProperties")) {
+					CourseAccessAndProperties accessAndProperties = (CourseAccessAndProperties) runContext.get("accessAndProperties");
 					// fires an EntryChangedEvent for repository entry notifying
 					// about modification.
-					publishManager.changeGeneralAccess(getIdentity(), newAccess, membersOnly);
-					hasChanges = true;
+					publishManager.changeAccessAndProperties(getIdentity(), accessAndProperties);
+					hasChanges = true;					
 				}
 				
 				if (runContext.containsKey("catalogChoice")) {

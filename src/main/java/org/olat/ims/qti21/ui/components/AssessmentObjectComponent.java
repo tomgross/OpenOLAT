@@ -53,6 +53,8 @@ public abstract class AssessmentObjectComponent extends AbstractComponent implem
 	
 	private Context context;
 	
+	private boolean hideFeedbacks = false;
+	
 	private String mapperUri;
 	private String submissionMapperUri;
 	private URI assessmentObjectUri;
@@ -94,6 +96,14 @@ public abstract class AssessmentObjectComponent extends AbstractComponent implem
 		this.assessmentObjectUri = assessmentObjectUri;
 	}
 	
+	public boolean isHideFeedbacks() {
+		return hideFeedbacks;
+	}
+
+	public void setHideFeedbacks(boolean hideFeedbacks) {
+		this.hideFeedbacks = hideFeedbacks;
+	}
+
 	public abstract String getResponseUniqueIdentifier(ItemSessionState itemSessionState, Interaction interaction);
 
 	public abstract Interaction getInteractionOfResponseUniqueIdentifier(String responseUniqueId);
@@ -184,7 +194,6 @@ public abstract class AssessmentObjectComponent extends AbstractComponent implem
 		jsa.addRequiredStaticJsFile("js/jquery/maphilight/jquery.maphilight.js");
 		jsa.addRequiredStaticJsFile("js/jquery/ui/jquery-ui-1.11.4.custom.qti.min.js");
 		
-
 		jsa.addRequiredStaticJsFile("js/jquery/openolat/jquery.paint.js");
 		
 		jsa.addRequiredStaticJsFile("js/jquery/qti/jquery.associate.js");
@@ -196,8 +205,10 @@ public abstract class AssessmentObjectComponent extends AbstractComponent implem
 		jsa.addRequiredStaticJsFile("js/jquery/qti/jquery.slider.js");
 		jsa.addRequiredStaticJsFile("js/jquery/qti/jquery.order.js");
 		jsa.addRequiredStaticJsFile("js/jquery/qti/jquery.match.js");
+		jsa.addRequiredStaticJsFile("js/jquery/qti/jquery.match_dnd.js");
 		jsa.addRequiredStaticJsFile("js/jquery/qti/jquery.gapMatch.js");
 		jsa.addRequiredStaticJsFile("js/jquery/qti/jquery.hotspot.js");
+
 	}
 	
 	@Override

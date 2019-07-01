@@ -1201,6 +1201,7 @@ create table o_as_entry (
    a_completion float,
    a_comment clob,
    a_coach_comment clob,
+   a_num_assessment_docs number(20) default 0 not null,
    fk_entry number(20) not null,
    a_subident varchar2(64 char),
    fk_reference_entry number(20),
@@ -1331,17 +1332,17 @@ create table o_goto_registrant (
 );
 
 create table o_vid_transcoding (
-   id int8 not null,
+   id number(20) not null,
    creationdate timestamp not null,
    lastmodified timestamp not null,
-   vid_resolution int8 default null,
-   vid_width int8 default null,
-   vid_height int8 default null,
-   vid_size int8 default null,
+   vid_resolution number(20) default null,
+   vid_width number(20) default null,
+   vid_height number(20) default null,
+   vid_size number(20) default null,
    vid_format varchar(128) default null,
-   vid_status int8 default null,
+   vid_status number(20) default null,
    vid_transcoder varchar(128) default null,
-   fk_resource_id int8 not null,
+   fk_resource_id number(20) not null,
    primary key (id)
 );
 
@@ -1486,6 +1487,7 @@ create table o_qti_assessmentitem_session (
    q_duration number(20),
    q_score decimal default null,
    q_manual_score decimal default null,
+   q_coach_comment CLOB,
    q_passed number default null,
    q_storage varchar2(1024 char),
    fk_assessmenttest_session number(20) not null,
@@ -1900,11 +1902,11 @@ create table o_rem_reminder (
 );
 
 create table o_rem_sent_reminder (
-   id int8 not null,
+   id number(20) not null,
    creationdate timestamp not null,
    r_status varchar(16),
-   fk_identity int8 not null,
-   fk_reminder int8 not null,
+   fk_identity number(20) not null,
+   fk_reminder number(20) not null,
    primary key (id)
 );
 

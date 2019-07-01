@@ -84,6 +84,8 @@ public class UserConstants {
 	public static final String ORGUNIT = "orgUnit";
 	/** STUDYSUBJECT user field identifier. */
 	public static final String STUDYSUBJECT = "studySubject";
+	/** USERNAME */
+	public static final String USERNAME  = "userName";
 
 	
 	/**

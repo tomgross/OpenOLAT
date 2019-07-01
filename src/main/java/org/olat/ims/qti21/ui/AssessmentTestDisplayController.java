@@ -862,6 +862,11 @@ public class AssessmentTestDisplayController extends BasicController implements 
 	private void handleTemporaryResponse(UserRequest ureq, Map<Identifier, ResponseInput> stringResponseMap) {
 		NotificationRecorder notificationRecorder = new NotificationRecorder(NotificationLevel.INFO);
 		TestSessionState testSessionState = testSessionController.getTestSessionState();
+		TestPlanNodeKey currentItemKey = testSessionState.getCurrentItemKey();
+		if(currentItemKey == null) {
+			return;//
+		}
+		
 		final Date timestamp = ureq.getRequestTimestamp();
 		
 		final Map<Identifier, ResponseData> responseDataMap = new HashMap<>();
@@ -875,9 +880,7 @@ public class AssessmentTestDisplayController extends BasicController implements 
             }
 		}
 		
-		TestPlanNodeKey currentItemKey = testSessionState.getCurrentItemKey();
 		ParentPartItemRefs parentParts = getParentSection(currentItemKey);
-
 		String assessmentItemIdentifier = currentItemKey.getIdentifier().toString();
 		AssessmentItemSession itemSession = qtiService
 				.getOrCreateAssessmentItemSession(candidateSession, parentParts, assessmentItemIdentifier);
@@ -957,6 +960,12 @@ public class AssessmentTestDisplayController extends BasicController implements 
 
 		NotificationRecorder notificationRecorder = new NotificationRecorder(NotificationLevel.INFO);
 		TestSessionState testSessionState = testSessionController.getTestSessionState();
+
+		TestPlanNodeKey currentItemKey = testSessionState.getCurrentItemKey();
+		if(currentItemKey == null && getLastEvent() != null && getLastEvent().getTestEventType() == CandidateTestEventType.REVIEW_ITEM) {
+			//someone try to send the form in review with tab / return
+			return;
+		}
 		
 		final Map<Identifier,File> fileSubmissionMap = new HashMap<>();
 		final Map<Identifier, ResponseData> responseDataMap = new HashMap<>();
@@ -983,7 +992,6 @@ public class AssessmentTestDisplayController extends BasicController implements 
             }
 		}
 		
-		TestPlanNodeKey currentItemKey = testSessionState.getCurrentItemKey();
 		ParentPartItemRefs parentParts = getParentSection(currentItemKey);
 
 		String assessmentItemIdentifier = currentItemKey.getIdentifier().toString();
@@ -1447,11 +1455,11 @@ public class AssessmentTestDisplayController extends BasicController implements 
 	}
 	
 	private TestSessionController resumeSession(UserRequest ureq) {
-		Date currentRequestTimestamp = ureq.getRequestTimestamp();
+		Date requestTimestamp = ureq.getRequestTimestamp();
 		
         final NotificationRecorder notificationRecorder = new NotificationRecorder(NotificationLevel.INFO);
         TestSessionController controller =  createTestSessionController(notificationRecorder);
-        controller.unsuspendTestSession(currentRequestTimestamp);
+        controller.unsuspendTestSession(requestTimestamp);
        
         TestSessionState testSessionState = controller.getTestSessionState();
 		TestPlanNodeKey currentItemKey = testSessionState.getCurrentItemKey();
@@ -1462,7 +1470,7 @@ public class AssessmentTestDisplayController extends BasicController implements 
 			if(itemProcessingContext instanceof ItemSessionController
 					&& itemSessionState.isSuspended()) {
 				ItemSessionController itemSessionController = (ItemSessionController)itemProcessingContext;
-				itemSessionController.unsuspendItemSession(currentRequestTimestamp);
+				itemSessionController.unsuspendItemSession(requestTimestamp);
 			}
 		}
 		
@@ -1670,6 +1678,7 @@ public class AssessmentTestDisplayController extends BasicController implements 
 			qtiEl.setRenderNavigation(!showMenuTree);
 			qtiEl.setPersonalNotes(deliveryOptions.isPersonalNotes());
 			qtiEl.setShowTitles(deliveryOptions.isShowTitles());
+			qtiEl.setHideFeedbacks(deliveryOptions.isHideFeedbacks());
 			
 			qtiTreeEl.setResourceLocator(inputResourceLocator);
 			qtiTreeEl.setTestSessionController(testSessionController);
@@ -1964,7 +1973,8 @@ public class AssessmentTestDisplayController extends BasicController implements 
 					&& deliveryOptions.getAssessmentResultsOptions() != null
 					&& !deliveryOptions.getAssessmentResultsOptions().none()) {
 				removeAsListenerAndDispose(resultCtrl);
-				resultCtrl = new AssessmentResultController(ureq, getWindowControl(), assessedIdentity, anonym,
+				// show results in anonym mode to hide the user info table - user knows who he is (same as on test start page)
+				resultCtrl = new AssessmentResultController(ureq, getWindowControl(), assessedIdentity, true,
 						AssessmentTestDisplayController.this.getCandidateSession(),
 						fUnzippedDirRoot, mapperUri, null, deliveryOptions.getAssessmentResultsOptions(), false, true);
 				listenTo(resultCtrl);

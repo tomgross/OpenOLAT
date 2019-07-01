@@ -329,7 +329,7 @@ public class BusinessGroupDAOTest extends OlatTestCase {
 		group.setDescription("gdio-2-desc");
 
 		//update business group (semantic of Hibernate before JPA)
-		BusinessGroup updatedGroup = businessGroupDao.update(group);
+		BusinessGroup updatedGroup = businessGroupDao.merge(group);
 		Assert.assertNotNull(updatedGroup);
 		Assert.assertEquals(group, updatedGroup);
 		Assert.assertEquals("gdio-2-desc", updatedGroup.getDescription());

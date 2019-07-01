@@ -54,7 +54,6 @@ import org.olat.selenium.page.course.GroupTaskConfigurationPage;
 import org.olat.selenium.page.course.GroupTaskPage;
 import org.olat.selenium.page.course.GroupTaskToCoachPage;
 import org.olat.selenium.page.course.MembersPage;
-import org.olat.selenium.page.course.PublisherPageFragment.Access;
 import org.olat.selenium.page.graphene.OOGraphene;
 import org.olat.selenium.page.group.GroupPage;
 import org.olat.selenium.page.qti.QTI12Page;
@@ -230,7 +229,7 @@ public class AssessmentTest {
 		//publish the course
 		courseEditor
 			.publish()
-			.quickPublish(Access.membersOnly);
+			.quickPublish(UserAccess.membersOnly);
 		
 		//open the course and see the test start page
 		CoursePageFragment courseRuntime = courseEditor
@@ -919,7 +918,7 @@ public class AssessmentTest {
 		
 		courseEditor
 			.publish()
-			.quickPublish(Access.guests);
+			.quickPublish(UserAccess.guest);
 		
 		MembersPage membersPage = courseEditor
 			.clickToolbarBack()
@@ -1103,7 +1102,7 @@ public class AssessmentTest {
 		
 		courseEditor
 			.publish()
-			.quickPublish(Access.membersOnly);
+			.quickPublish(UserAccess.membersOnly);
 		
 		MembersPage membersPage = courseEditor
 			.clickToolbarBack()

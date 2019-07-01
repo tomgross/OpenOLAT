@@ -68,6 +68,7 @@ import org.olat.core.gui.control.generic.wizard.StepsMainRunController;
 import org.olat.core.gui.control.generic.wizard.StepsRunContext;
 import org.olat.core.gui.media.MediaResource;
 import org.olat.core.helpers.Settings;
+import org.olat.core.logging.AssertException;
 import org.olat.core.logging.activity.ThreadLocalUserActivityLogger;
 import org.olat.core.util.Formatter;
 import org.olat.core.util.Util;
@@ -149,8 +150,10 @@ public class AssessmentTestComposerController extends MainLayoutBasicController 
 	
 	private MenuTree menuTree;
 	private Dropdown exportItemTools, addItemTools, changeItemTools;
-	private Link newTestPartLink, newSectionLink, newSingleChoiceLink, newMultipleChoiceLink, newKPrimLink, newMatchLink,
-			newFIBLink, newNumericalLink, newHotspotLink, newHottextLink, newEssayLink, newUploadLink, newDrawingLink;
+	private Link newTestPartLink, newSectionLink, newSingleChoiceLink, newMultipleChoiceLink,
+			newKPrimLink, newMatchLink, newMatchDragAndDropLink,
+			newFIBLink, newNumericalLink, newHotspotLink, newHottextLink,
+			newEssayLink, newUploadLink, newDrawingLink;
 	private Link importFromPoolLink, importFromTableLink, exportToPoolLink, exportToDocxLink;
 	private Link reloadInCacheLink, deleteLink, copyLink;
 	private final TooledStackedPanel toolbar;
@@ -260,6 +263,9 @@ public class AssessmentTestComposerController extends MainLayoutBasicController 
 		newMatchLink = LinkFactory.createToolLink("new.match", translate("new.match"), this, "o_mi_qtimatch");
 		newMatchLink.setDomReplacementWrapperRequired(false);
 		addItemTools.addComponent(newMatchLink);
+		newMatchDragAndDropLink = LinkFactory.createToolLink("new.matchdraganddrop", translate("new.matchdraganddrop"), this, "o_mi_qtimatch_draganddrop");
+		newMatchDragAndDropLink.setDomReplacementWrapperRequired(false);
+		addItemTools.addComponent(newMatchDragAndDropLink);
 		
 		newFIBLink = LinkFactory.createToolLink("new.fib", translate("new.fib"), this, "o_mi_qtifib");
 		newFIBLink.setDomReplacementWrapperRequired(false);
@@ -359,7 +365,11 @@ public class AssessmentTestComposerController extends MainLayoutBasicController 
 	@Override
 	protected void doDispose() {
 		if (lockEntry != null && lockEntry.isSuccess()) {
-			CoordinatorManager.getInstance().getCoordinator().getLocker().releasePersistentLock(lockEntry);
+			try {
+				CoordinatorManager.getInstance().getCoordinator().getLocker().releasePersistentLock(lockEntry);
+			} catch (AssertException e) {
+				logWarn("Lock was already released", e);
+			}
 		}
 		if (activeSessionLock != null && activeSessionLock.isSuccess()) {
 			CoordinatorManager.getInstance().getCoordinator().getLocker().releaseLock(activeSessionLock);			
@@ -469,7 +479,9 @@ public class AssessmentTestComposerController extends MainLayoutBasicController 
 		} else if(newKPrimLink == source) {
 			doNewAssessmentItem(ureq, menuTree.getSelectedNode(), new KPrimAssessmentItemBuilder(translate("new.kprim"), translate("new.answer"), qtiService.qtiSerializer()));
 		} else if(newMatchLink == source) {
-			doNewAssessmentItem(ureq, menuTree.getSelectedNode(), new MatchAssessmentItemBuilder(translate("new.match"), qtiService.qtiSerializer()));
+			doNewAssessmentItem(ureq, menuTree.getSelectedNode(), new MatchAssessmentItemBuilder(translate("new.match"), QTI21Constants.CSS_MATCH_MATRIX, qtiService.qtiSerializer()));
+		} else if(newMatchDragAndDropLink == source) {
+			doNewAssessmentItem(ureq, menuTree.getSelectedNode(), new MatchAssessmentItemBuilder(translate("new.matchdraganddrop"), QTI21Constants.CSS_MATCH_DRAG_AND_DROP, qtiService.qtiSerializer()));
 		} else if(newFIBLink == source) {
 			doNewAssessmentItem(ureq, menuTree.getSelectedNode(), new FIBAssessmentItemBuilder(translate("new.fib"), EntryType.text, qtiService.qtiSerializer()));
 		} else if(newNumericalLink == source) {
@@ -694,22 +706,31 @@ public class AssessmentTestComposerController extends MainLayoutBasicController 
 	private void doInsert(UserRequest ureq, List<QuestionItemView> items) {
 		TreeNode selectedNode = menuTree.getSelectedNode();
 		TreeNode sectionNode = getNearestSection(selectedNode);
-		
+
+		boolean allOk = true;
 		String firstItemId = null;
 		Map<AssessmentItemRef,AssessmentItem> flyingObjects = new HashMap<>();
 		try {
 			AssessmentSection section = (AssessmentSection)sectionNode.getUserObject();
 			for(QuestionItemView item:items) {
 				AssessmentItem assessmentItem = qti21QPoolServiceProvider.exportToQTIEditor(item, getLocale(), unzippedDirRoot);
-				AssessmentItemRef itemRef = doInsert(section, assessmentItem);
-				if(firstItemId == null) {
-					firstItemId = itemRef.getIdentifier().toString();
+				if(assessmentItem != null) {
+					AssessmentItemRef itemRef = doInsert(section, assessmentItem);
+					if(firstItemId == null) {
+						firstItemId = itemRef.getIdentifier().toString();
+					}
+					flyingObjects.put(itemRef, assessmentItem);
+				} else {
+					allOk &= false;
 				}
-				flyingObjects.put(itemRef, assessmentItem);
 			}
 		} catch (IOException | URISyntaxException e) {
 			showError("error.import.question");
 			logError("", e);
+		}
+		
+		if(!allOk) {
+			showError("error.import.question");
 		}
 		
 		if(firstItemId != null) {

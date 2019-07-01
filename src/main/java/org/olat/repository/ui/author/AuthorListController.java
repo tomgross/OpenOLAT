@@ -128,6 +128,7 @@ public class AuthorListController extends FormBasicController implements Activat
 
 	private ToolsController toolsCtrl;
 	protected CloseableModalController cmc;
+	private SendMailController sendMailCtrl;
 	private StepsMainRunController wizardCtrl;
 	private AuthorSearchController searchCtrl;
 	private UserSearchController userSearchCtr;
@@ -144,7 +145,7 @@ public class AuthorListController extends FormBasicController implements Activat
 	
 	private Link importLink;
 	private Dropdown createDropdown;
-	private FormLink addOwnersButton, deleteButton, copyButton;
+	private FormLink sendMailButton, addOwnersButton, deleteButton, copyButton;
 
 	private LockResult lockResult;
 	private final AtomicInteger counter = new AtomicInteger();
@@ -356,6 +357,7 @@ public class AuthorListController extends FormBasicController implements Activat
 
 	protected void initBatchButtons(FormItemContainer formLayout) {
 		if(hasAuthorRight) {
+			sendMailButton = uifactory.addFormLink("tools.send.mail", formLayout, Link.BUTTON);
 			addOwnersButton = uifactory.addFormLink("tools.add.owners", formLayout, Link.BUTTON);
 			copyButton = uifactory.addFormLink("details.copy", formLayout, Link.BUTTON);
 			deleteButton = uifactory.addFormLink("details.delete", formLayout, Link.BUTTON);
@@ -509,6 +511,9 @@ public class AuthorListController extends FormBasicController implements Activat
 			}
 			cmc.deactivate();
 			cleanUp();
+		} else if(sendMailCtrl == source) {
+			cmc.deactivate();
+			cleanUp();
 		} else if(toolsCtrl == source) {
 			if(event == Event.DONE_EVENT) {
 				toolsCalloutCtrl.deactivate();
@@ -547,6 +552,7 @@ public class AuthorListController extends FormBasicController implements Activat
 		removeAsListenerAndDispose(confirmDeleteCtrl);
 		removeAsListenerAndDispose(toolsCalloutCtrl);
 		removeAsListenerAndDispose(userSearchCtr);
+		removeAsListenerAndDispose(sendMailCtrl);
 		removeAsListenerAndDispose(createCtrl);
 		removeAsListenerAndDispose(importCtrl);
 		removeAsListenerAndDispose(wizardCtrl);
@@ -556,6 +562,7 @@ public class AuthorListController extends FormBasicController implements Activat
 		confirmDeleteCtrl = null;
 		toolsCalloutCtrl = null;
 		userSearchCtr = null;
+		sendMailCtrl = null;
 		createCtrl = null;
 		importCtrl = null;
 		wizardCtrl = null;
@@ -575,6 +582,13 @@ public class AuthorListController extends FormBasicController implements Activat
 			List<AuthoringEntryRow> rows = getMultiSelectedRows();
 			if(!rows.isEmpty()) {
 				doAddOwners(ureq, rows);
+			} else {
+				showWarning("bulk.update.nothing.selected");
+			}
+		} else if(sendMailButton == source) {
+			List<AuthoringEntryRow> rows = getMultiSelectedRows();
+			if(!rows.isEmpty()) {
+				doSendMail(ureq, rows);
 			} else {
 				showWarning("bulk.update.nothing.selected");
 			}
@@ -765,6 +779,20 @@ public class AuthorListController extends FormBasicController implements Activat
 			}
 		}
 		return rows;
+	}
+	
+	private void doSendMail(UserRequest ureq, List<AuthoringEntryRow> rows) {
+		if(sendMailCtrl != null) return;
+
+		removeAsListenerAndDispose(userSearchCtr);
+		sendMailCtrl = new SendMailController(ureq, getWindowControl(), rows);
+		listenTo(sendMailCtrl);
+		
+		String title = translate("tools.send.mail");
+		cmc = new CloseableModalController(getWindowControl(), translate("close"), sendMailCtrl.getInitialComponent(),
+				true, title);
+		listenTo(cmc);
+		cmc.activate();
 	}
 	
 	private void doAddOwners(UserRequest ureq, List<AuthoringEntryRow> rows) {

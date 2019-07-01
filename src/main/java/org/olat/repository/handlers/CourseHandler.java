@@ -80,6 +80,7 @@ import org.olat.course.Structure;
 import org.olat.course.assessment.AssessmentMode;
 import org.olat.course.cleanup.CourseCleanupJob;
 import org.olat.course.config.CourseConfig;
+import org.olat.course.editor.CourseAccessAndProperties;
 import org.olat.course.export.CourseEnvironmentMapper;
 import org.olat.course.groupsandrights.CourseGroupManager;
 import org.olat.course.groupsandrights.PersistingCourseGroupManager;
@@ -552,12 +553,16 @@ public class CourseHandler implements RepositoryHandler {
 		final CourseCreationHelper ccHelper = new CourseCreationHelper(ureq.getLocale(), repoEntry, courseConfig , course);
 		StepRunnerCallback finishCallback = new StepRunnerCallback() {
 			public Step execute(UserRequest uureq, WindowControl control, StepsRunContext runContext) {
+				// retrieve access and properties
+				CourseAccessAndProperties accessAndProps = (CourseAccessAndProperties) runContext.get("accessAndProperties");
+				courseConfig.setAccessAndProperties(accessAndProps);
+				
 				// here goes the code which reads out the wizards data from the runContext and then does some wizardry
 				ccHelper.finalizeWorkflow(uureq);
 				control.setInfo(CourseCreationMailHelper.getSuccessMessageString(uureq));
 				// send notification mail
 				final MailerResult mr = CourseCreationMailHelper.sentNotificationMail(uureq, ccHelper.getConfiguration());
-				MailHelper.printErrorsAndWarnings(mr, control, uureq.getLocale());
+				MailHelper.printErrorsAndWarnings(mr, control, uureq.getUserSession().getRoles().isOLATAdmin(), uureq.getLocale());
 				return StepsMainRunController.DONE_MODIFIED;
 			}
 		};

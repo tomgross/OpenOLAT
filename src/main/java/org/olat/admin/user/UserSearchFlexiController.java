@@ -167,6 +167,8 @@ public class UserSearchFlexiController extends FlexiAutoCompleterController {
 
 			searchFormContainer = FormLayoutContainer.createDefaultFormLayout("usersearchPanel", getTranslator());
 			searchFormContainer.setRootForm(mainForm);
+			searchFormContainer.setElementCssClass("o_sel_usersearch_searchform");
+			searchFormContainer.setFormTitle(translate("header.normal"));
 			layoutCont.add(searchFormContainer);
 			layoutCont.add("usersearchPanel", searchFormContainer);
 			
@@ -414,9 +416,12 @@ public class UserSearchFlexiController extends FlexiAutoCompleterController {
 			if (userPropertyHandler == null) continue;
 			FormItem ui = propFormItems.get(userPropertyHandler.getName());
 			String uiValue = userPropertyHandler.getStringValue(ui);
-			if (StringHelper.containsNonWhitespace(uiValue)) {
+			if(userPropertyHandler.getName().startsWith("genericCheckboxProperty")) {
+				if(!"false".equals(uiValue)) {
+					userPropertiesSearch.put(userPropertyHandler.getName(), uiValue);
+				}
+			} else if (StringHelper.containsNonWhitespace(uiValue)) {
 				userPropertiesSearch.put(userPropertyHandler.getName(), uiValue);
-				getLogger().info("Search property:" + userPropertyHandler.getName() + "=" + uiValue);
 			}
 		}
 		if (userPropertiesSearch.isEmpty()) {

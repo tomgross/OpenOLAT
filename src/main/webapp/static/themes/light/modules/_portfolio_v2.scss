@@ -37,6 +37,14 @@
 .o_page_lead {
 	padding: $o-portfolio-lead-space-sm * 2;
 	
+	h2 {
+		margin-bottom: 5px;
+	}
+	.o_portfolio_page_meta {
+		margin-bottom: 5px;
+	
+	}
+	
 	.o_page_summary {
 		font-size: $o-portfolio-page-summary-font-size;
 		
@@ -189,6 +197,18 @@
 			margin-bottom: 0.5em;
 		}
 	}
+}
+
+
+.o_portfolio_categories {
+	.tag {
+		font-size: 80%;
+		font-weight: normal;
+	}
+}
+.o_portfolio_last_modified + .o_portfolio_categories, 
+.o_portfolio_page_meta + .o_portfolio_categories  {
+	margin-left: 1em;
 }
 
 .o_rendertype_classic {

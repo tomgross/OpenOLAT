@@ -75,6 +75,8 @@ import org.olat.repository.RepositoryManager;
 import org.olat.repository.controllers.EntryChangedEvent;
 import org.olat.repository.controllers.EntryChangedEvent.Change;
 import org.olat.repository.manager.CatalogManager;
+import org.olat.resource.accesscontrol.ACService;
+import org.olat.resource.accesscontrol.OfferAccess;
 import org.olat.resource.references.Reference;
 import org.olat.resource.references.ReferenceManager;
 import org.olat.user.UserManager;
@@ -704,6 +706,24 @@ public class PublishProcess {
 
 	public void changeGeneralAccess(Identity author, int access, boolean membersOnly){
 		RepositoryManager.getInstance().setAccess(repositoryEntry, access, membersOnly);
+		MultiUserEvent modifiedEvent = new EntryChangedEvent(repositoryEntry, author, Change.modifiedAtPublish, "publish");
+		CoordinatorManager.getInstance().getCoordinator().getEventBus().fireEventToListenersOf(modifiedEvent, repositoryEntry);
+	}
+	
+	public void changeAccessAndProperties(Identity author, CourseAccessAndProperties accessAndProps) {
+		RepositoryManager manager = RepositoryManager.getInstance();
+		
+		manager.setAccessAndProperties(accessAndProps.getRepositoryEntry(), accessAndProps.getAccess(),
+				accessAndProps.isMembersOnly(), accessAndProps.isCanCopy(), accessAndProps.isCanReference(),
+				accessAndProps.isCanDownload());
+		manager.setLeaveSetting(accessAndProps.getRepositoryEntry(), accessAndProps.getSetting());
+		
+		List<OfferAccess> offerAccess = accessAndProps.getOfferAccess();
+		ACService acService = CoreSpringFactory.getImpl(ACService.class);
+		for (OfferAccess newLink : offerAccess) {
+			acService.saveOfferAccess(newLink);
+		}
+		
 		MultiUserEvent modifiedEvent = new EntryChangedEvent(repositoryEntry, author, Change.modifiedAtPublish, "publish");
 		CoordinatorManager.getInstance().getCoordinator().getEventBus().fireEventToListenersOf(modifiedEvent, repositoryEntry);
 	}

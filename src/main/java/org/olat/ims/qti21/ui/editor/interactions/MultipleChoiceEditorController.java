@@ -100,6 +100,7 @@ public class MultipleChoiceEditorController extends FormBasicController {
 		formLayout.add("metadata", metadata);
 
 		titleEl = uifactory.addTextElement("title", "form.imd.title", -1, itemBuilder.getTitle(), metadata);
+		titleEl.setElementCssClass("o_sel_assessment_item_title");
 		titleEl.setMandatory(true);
 		
 		String description = itemBuilder.getQuestion();
@@ -157,6 +158,7 @@ public class MultipleChoiceEditorController extends FormBasicController {
 
 		// Submit Button
 		FormLayoutContainer buttonsContainer = FormLayoutContainer.createDefaultFormLayout_2_10("buttons", getTranslator());
+		buttonsContainer.setElementCssClass("o_sel_choices_save");
 		buttonsContainer.setRootForm(mainForm);
 		formLayout.add(buttonsContainer);
 		formLayout.add("buttons", buttonsContainer);

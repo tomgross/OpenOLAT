@@ -45,7 +45,7 @@ import org.openqa.selenium.interactions.Actions;
  */
 public class OOGraphene {
 
-	private static final long poolingDuration = 25;//ms
+	private static final long poolingDuration = 50;//ms
 	private static final long waitTinyDuration = 15;//seconds
 
 	private static final By closeBlueBoxButtonBy = By.cssSelector("div.o_alert_info div.o_sel_info_message a.o_alert_close.o_sel_info_close i.o_icon_close");
@@ -100,6 +100,18 @@ public class OOGraphene {
 	}
 	
 	/**
+	 * Wait until the element is not visible.
+	 * 
+	 * @param element
+	 * @param timeoutInSeconds
+	 * @param browser
+	 */
+	public static void waitElementUntilNotVisible(By element, int timeoutInSeconds, WebDriver browser) {
+		Graphene.waitModel(browser).withTimeout(timeoutInSeconds, TimeUnit.SECONDS)
+			.pollingEvery(poolingDuration, TimeUnit.MILLISECONDS).until().element(element).is().not().visible();
+	}
+	
+	/**
 	 * Wait until the element is visible.
 	 * 
 	 * @param element The element to be visible
@@ -145,6 +157,18 @@ public class OOGraphene {
 			.pollingEvery(poolingDuration, TimeUnit.MILLISECONDS).until().element(element).is().present();
 	}
 	
+	/**
+	 * The method is very, very experimental and not reliable. Only for research purpose.
+	 * 
+	 * @param by
+	 * @param browser
+	 */
+	public static void waitElementInViewport(By by, WebDriver browser) {
+		Graphene.waitModel(browser).withTimeout(5, TimeUnit.SECONDS)
+			.pollingEvery(poolingDuration, TimeUnit.MILLISECONDS)
+			.until(new InViewportPredicate(by));
+	}
+	
 	public static void waitGui(WebDriver browser) {
 		Graphene.waitGui(browser);
 	}
@@ -159,7 +183,8 @@ public class OOGraphene {
 	// <div id="o_fi1000000416_diw" class="o_richtext_mce"> <iframe id="o_fi1000000416_ifr">
 	public static final void tinymce(String content, WebDriver browser) {
 		Graphene.waitModel(browser).withTimeout(waitTinyDuration, TimeUnit.SECONDS)
-			.pollingEvery(poolingDuration, TimeUnit.MILLISECONDS).until(new TinyMCELoadedPredicate());
+			.pollingEvery(poolingDuration, TimeUnit.MILLISECONDS)
+			.until(new TinyMCELoadedPredicate());
 		((JavascriptExecutor)browser).executeScript("top.tinymce.activeEditor.setContent('" + content + "')");
 	}
 	
@@ -170,7 +195,8 @@ public class OOGraphene {
 		String tinyId = tinyIdEl.getAttribute("id").replace("_diw", "");
 
 		Graphene.waitModel(browser).withTimeout(waitTinyDuration, TimeUnit.SECONDS)
-			.pollingEvery(poolingDuration, TimeUnit.MILLISECONDS).until(new TinyMCELoadedByIdPredicate(tinyId));
+			.pollingEvery(poolingDuration, TimeUnit.MILLISECONDS)
+			.until(new TinyMCELoadedByIdPredicate(tinyId));
 		((JavascriptExecutor)browser).executeScript("top.tinymce.editors['" + tinyId + "'].setContent('" + content + "')");
 	}
 	
@@ -280,6 +306,16 @@ public class OOGraphene {
 		} catch (Exception e) {
 			//e.printStackTrace();
 		}
+	}
+	
+	public static final void closeErrorBox(WebDriver browser) {
+		By errorBoxBy = By.cssSelector(".modal-body.alert.alert-danger");
+		waitElement(errorBoxBy, 5, browser);
+		By closeButtonBy = By.cssSelector("div.modal-dialog button.close");
+		waitElement(closeButtonBy, 5, browser);
+		browser.findElement(closeButtonBy).click();
+		By dialogBy = By.cssSelector("div.modal-dialog");
+		OOGraphene.waitElementDisappears(dialogBy, 2, browser);
 	}
 	
 	public static final void waitAndCloseBlueMessageWindow(WebDriver browser) {

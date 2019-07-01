@@ -86,6 +86,7 @@ import org.olat.ims.qti.export.QTIExportFIBItemFormatConfig;
 import org.olat.ims.qti.export.QTIExportFormatter;
 import org.olat.ims.qti.export.QTIExportFormatterCSVType1;
 import org.olat.ims.qti.export.QTIExportItemFormatConfig;
+import org.olat.ims.qti.export.QTIExportItemFormatDelegate;
 import org.olat.ims.qti.export.QTIExportKPRIMItemFormatConfig;
 import org.olat.ims.qti.export.QTIExportMCQItemFormatConfig;
 import org.olat.ims.qti.export.QTIExportManager;
@@ -260,7 +261,8 @@ public class IQTESTCourseNode extends AbstractAccessableCourseNode implements Pe
 				if(options.isAdmin()) {
 					tools.add(new QTI21ResetToolController(ureq, wControl, courseEnv, options, this));
 				}
-				if(qtiService.needManualCorrection(qtiTestEntry)) {
+				if(qtiService.needManualCorrection(qtiTestEntry)
+						|| IQEditController.CORRECTION_MANUAL.equals(getModuleConfiguration().getStringValue(IQEditController.CONFIG_CORRECTION_MODE))) {
 					tools.add(new QTI21CorrectionToolController(ureq, wControl, courseEnv, options, this));
 				}
 				if(getModuleConfiguration().getBooleanSafe(IQEditController.CONFIG_DIGITAL_SIGNATURE, false)) {
@@ -474,6 +476,11 @@ public class IQTESTCourseNode extends AbstractAccessableCourseNode implements Pe
 		return true;
 	}
 
+	@Override
+	public boolean hasIndividualAsssessmentDocuments() {
+		return true;// like user comment
+	}
+
 	/**
 	 * @see org.olat.course.nodes.AssessableCourseNode#hasPassedConfigured()
 	 */
@@ -549,6 +556,24 @@ public class IQTESTCourseNode extends AbstractAccessableCourseNode implements Pe
 			am.saveNodeComment(this, coachingIdentity, mySelf, userComment);
 		}
 	}
+	
+	@Override
+	public void addIndividualAssessmentDocument(File document, String filename, UserCourseEnvironment userCourseEnvironment, Identity coachingIdentity) {
+		if(document != null) {
+			AssessmentManager am = userCourseEnvironment.getCourseEnvironment().getAssessmentManager();
+			Identity assessedIdentity = userCourseEnvironment.getIdentityEnvironment().getIdentity();
+			am.addIndividualAssessmentDocument(this, coachingIdentity, assessedIdentity, document, filename);
+		}
+	}
+
+	@Override
+	public void removeIndividualAssessmentDocument(File document, UserCourseEnvironment userCourseEnvironment, Identity coachingIdentity) {
+		if(document != null) {
+			AssessmentManager am = userCourseEnvironment.getCourseEnvironment().getAssessmentManager();
+			Identity assessedIdentity = userCourseEnvironment.getIdentityEnvironment().getIdentity();
+			am.removeIndividualAssessmentDocument(this, coachingIdentity, assessedIdentity, document);
+		}
+	}
 
 	/**
 	 * @see org.olat.course.nodes.AssessableCourseNode#getUserCoachComment(org.olat.course.run.userview.UserCourseEnvironment)
@@ -567,9 +592,13 @@ public class IQTESTCourseNode extends AbstractAccessableCourseNode implements Pe
 	@Override
 	public String getUserUserComment(UserCourseEnvironment userCourseEnvironment) {
 		AssessmentManager am = userCourseEnvironment.getCourseEnvironment().getAssessmentManager();
-		Identity mySelf = userCourseEnvironment.getIdentityEnvironment().getIdentity();
-		String userCommentValue = am.getNodeComment(this, mySelf);
-		return userCommentValue;
+		return am.getNodeComment(this, userCourseEnvironment.getIdentityEnvironment().getIdentity());
+	}
+	
+	@Override
+	public List<File> getIndividualAssessmentDocuments(UserCourseEnvironment userCourseEnvironment) {
+		AssessmentManager am = userCourseEnvironment.getCourseEnvironment().getAssessmentManager();
+		return am.getIndividualAssessmentDocuments(this, userCourseEnvironment.getIdentityEnvironment().getIdentity());
 	}
 
 	/**
@@ -627,6 +656,8 @@ public class IQTESTCourseNode extends AbstractAccessableCourseNode implements Pe
 	 */
 	@Override
 	public void cleanupOnDelete(ICourse course) {
+		super.cleanupOnDelete(course);
+		
 		CoursePropertyManager pm = course.getCourseEnvironment().getCoursePropertyManager();
 		// 1) Delete all properties: score, passed, log, comment, coach_comment,
 		// attempts
@@ -667,7 +698,6 @@ public class IQTESTCourseNode extends AbstractAccessableCourseNode implements Pe
 			} else if(ImsQTI21Resource.TYPE_NAME.equals(re.getOlatResource().getResourceableTypeName())) {
 				// 2a) create export resource
 				QTI21Service qtiService = CoreSpringFactory.getImpl(QTI21Service.class);
-
 				List<Identity> identities = ScoreAccountingHelper.loadUsers(courseEnv, options);
 				new QTI21ResultsExportMediaResource(courseEnv, identities, this, qtiService, ureq, locale).exportTestResults(exportStream);
 				// excel results
@@ -684,12 +714,12 @@ public class IQTESTCourseNode extends AbstractAccessableCourseNode implements Pe
 				String shortTitle = getShortTitle();
 				QTIExportManager qem = QTIExportManager.getInstance();
 				QTIExportFormatter qef = new QTIExportFormatterCSVType1(locale, "\t", "\"", "\r\n", false);
-				if (options != null && options.getQtiExportItemFormatConfig() != null) {
+				if (options != null && options.getExportFormat() != null) {
 					Map<Class<?>, QTIExportItemFormatConfig> itemConfigs = new HashMap<>();
 					Class<?>[] itemTypes = new Class<?>[] {QTIExportSCQItemFormatConfig.class, QTIExportMCQItemFormatConfig.class,
 						QTIExportKPRIMItemFormatConfig.class, QTIExportFIBItemFormatConfig.class, QTIExportEssayItemFormatConfig.class};
 					for (Class<?> itemClass : itemTypes) {
-						itemConfigs.put(itemClass, options.getQtiExportItemFormatConfig());						
+						itemConfigs.put(itemClass, new QTIExportItemFormatDelegate(options.getExportFormat()));						
 					}
 					qef.setMapWithExportItemConfigs(itemConfigs);
 				}

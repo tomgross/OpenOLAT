@@ -193,6 +193,8 @@ $fa-css-prefix: "o_icon" !default;
 .o_icon_previous_toolbar:before { content: $fa-var-caret-left; }
 .o_icon_print:before { content: $fa-var-print;}
 .o_icon_private:before { content: $fa-var-print;}
+.o_icon_progress_success:before { content: $fa-var-check; color: #e5efe5}
+.o_icon_progress_danger:before { content: $fa-var-times; color: #efe5e5}
 .o_icon_provider_adfs:before { content: $fa-var-windows;}
 .o_icon_provider_facebook:before { content: $fa-var-facebook;}
 .o_icon_provider_google:before { content: $fa-var-google-plus;}
@@ -363,6 +365,7 @@ $fa-css-prefix: "o_icon" !default;
 .o_vitero_icon:before { content: $fa-var-desktop;}
 .o_openmeetings_icon:before { content: $fa-var-desktop;}
 .o_gotomeeting_icon:before { content: $fa-var-desktop;}
+.o_card2brain_icon:before { content: $fa-var-th;}
 
 
 /* portal icons */
@@ -438,6 +441,7 @@ $fa-css-prefix: "o_icon" !default;
 .o_mi_qtisection:before { content: $fa-var-cubes; }
 .o_mi_qtisc:before { content: $fa-var-dot-circle-o; }
 .o_mi_qtimatch:before { content: $fa-var-table; }
+.o_mi_qtimatch_draganddrop:before { content: $fa-var-clone; }
 .o_mi_qtimc:before { content: $fa-var-check-square-o; }
 .o_mi_qtikprim:before { content: $fa-var-check-square;  }
 .o_mi_qtifib:before { content: $fa-var-ellipsis-h; }
@@ -469,6 +473,9 @@ $fa-css-prefix: "o_icon" !default;
 .o_icon_qti_suspend:before { content: $fa-var-pause; }
 .o_icon_qti_close_results:before { content: $fa-var-window-close; }
 .o_icon_qti_hint:before { content: $fa-var-question-circle; }
+.o_icon_qti_summary_notAnswered:before { content: $fa-var-circle; color: $o-qti-status-notAnswered-color; }
+.o_icon_qti_summary_ended:before { content: $fa-var-times-circle; color: $brand-danger; }
+.o_icon_qti_summary_correct:before { content: $fa-var-check-circle; color: $brand-success; }
 
 /* coaching */
 .o_black_led:before { content: $fa-var-circle; color: $brand-primary; }
