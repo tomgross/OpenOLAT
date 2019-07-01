@@ -34,6 +34,8 @@ import org.olat.core.gui.translator.Translator;
 import org.olat.core.logging.OLog;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.Util;
+import org.olat.course.CourseFactory;
+import org.olat.course.nodes.CourseNode;
 import org.olat.course.nodes.gta.GTAManager;
 import org.olat.course.nodes.gta.ui.GTARunController;
 import org.olat.group.BusinessGroupService;
@@ -83,7 +85,9 @@ public class GTANotificationsHandler implements NotificationsHandler  {
 					si = NotificationsManager.getInstance().getNoSubscriptionInfo();
 				} else {
 					String displayName = notifications.getDisplayName();
-					String title = translator.translate("notifications.header", new String[]{ displayName });
+					CourseNode node = CourseFactory.loadCourse(p.getResId()).getRunStructure().getNode(p.getSubidentifier());
+					String shortName = (node != null ? node.getShortName() : "");
+					String title = translator.translate("notifications.header", new String[]{ displayName, shortName });
 					TitleItem titleItem = new TitleItem(title, CSS_CLASS_ICON);
 					si = new SubscriptionInfo(subscriber.getKey(), p.getType(), titleItem, items);
 				}
@@ -103,9 +107,12 @@ public class GTANotificationsHandler implements NotificationsHandler  {
 		String title;
 		try {
 			Translator translator = Util.createPackageTranslator(GTARunController.class, locale);
-			Long resId = subscriber.getPublisher().getResId();
+			Publisher publisher = subscriber.getPublisher();
+			Long resId = publisher.getResId();
 			String displayName = RepositoryManager.getInstance().lookupDisplayNameByOLATResourceableId(resId);
-			title = translator.translate("notifications.header", new String[]{ displayName });
+			CourseNode node = CourseFactory.loadCourse(resId).getRunStructure().getNode(publisher.getSubidentifier());
+			String shortName = (node != null ? node.getShortName() : "");
+			title = translator.translate("notifications.header", new String[]{ displayName, shortName });
 		} catch (Exception e) {
 			log.error("Error while creating task notifications for subscriber: " + subscriber.getKey(), e);
 			title = "-";

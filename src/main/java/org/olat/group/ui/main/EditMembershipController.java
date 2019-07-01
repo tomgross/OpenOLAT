@@ -88,7 +88,7 @@ public class EditMembershipController extends FormBasicController {
 	private final boolean overrideManaged;
 	private final BusinessGroup businessGroup;
 	private final RepositoryEntry repoEntry;
-	
+
 	@Autowired
 	private RepositoryManager repositoryManager;
 	@Autowired
@@ -106,7 +106,7 @@ public class EditMembershipController extends FormBasicController {
 		this.businessGroup = businessGroup;
 		this.withButtons = true;
 		this.overrideManaged = overrideManaged;
-		
+
 		memberships = repositoryManager.getRepositoryEntryMembership(repoEntry, member);
 		initForm(ureq);
 		loadModel(member);
@@ -141,7 +141,7 @@ public class EditMembershipController extends FormBasicController {
 		this.businessGroup = businessGroup;
 		this.withButtons = true;
 		this.overrideManaged = overrideManaged;
-		
+
 		memberships = Collections.emptyList();
 
 		initForm(ureq);
@@ -158,7 +158,7 @@ public class EditMembershipController extends FormBasicController {
 		this.businessGroup = businessGroup;
 		this.withButtons = false;
 		this.overrideManaged = overrideManaged;
-		
+
 		memberships = Collections.emptyList();
 
 		initForm(ureq);
@@ -202,9 +202,10 @@ public class EditMembershipController extends FormBasicController {
 		List<MemberOption> options = new ArrayList<MemberOption>();
 		for(StatisticsBusinessGroupRow group:groups) {
 			boolean managed = BusinessGroupManagedFlag.isManaged(group.getManagedFlags(), BusinessGroupManagedFlag.membersmanagement) && !overrideManaged;
-			MemberOption option = new MemberOption(group);
+            boolean excludeGroupCoachesFromMembersManagementEnabled = BusinessGroupManagedFlag.isManaged(group.getManagedFlags(), BusinessGroupManagedFlag.excludeGroupCoachesFromMembersmanagement);
+            MemberOption option = new MemberOption(group);
 			BGPermission bgPermission = PermissionHelper.getPermission(group.getKey(), memberToLoad, groupMemberships);
-			option.setTutor(createSelection(bgPermission.isTutor(), !managed, GroupRoles.coach.name()));
+			option.setTutor(createSelection(bgPermission.isTutor(), !managed || excludeGroupCoachesFromMembersManagementEnabled, GroupRoles.coach.name()));
 			option.setParticipant(createSelection(bgPermission.isParticipant() || defaultMembership, !managed, GroupRoles.participant.name()));
 			boolean waitingListEnable = !managed && group.isWaitingListEnabled();
 			option.setWaiting(createSelection(bgPermission.isWaitingList(), waitingListEnable, GroupRoles.waiting.name()));

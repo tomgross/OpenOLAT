@@ -30,14 +30,13 @@ import java.util.Set;
 import org.olat.basesecurity.BaseSecurity;
 import org.olat.basesecurity.BaseSecurityModule;
 import org.olat.basesecurity.events.SingleIdentityChosenEvent;
+import org.olat.core.commons.persistence.SortKey;
 import org.olat.core.gui.UserRequest;
 import org.olat.core.gui.Windows;
 import org.olat.core.gui.components.Component;
 import org.olat.core.gui.components.form.flexible.FormItem;
 import org.olat.core.gui.components.form.flexible.FormItemContainer;
-import org.olat.core.gui.components.form.flexible.elements.FlexiTableElement;
-import org.olat.core.gui.components.form.flexible.elements.FormLink;
-import org.olat.core.gui.components.form.flexible.elements.TextElement;
+import org.olat.core.gui.components.form.flexible.elements.*;
 import org.olat.core.gui.components.form.flexible.impl.Form;
 import org.olat.core.gui.components.form.flexible.impl.FormEvent;
 import org.olat.core.gui.components.form.flexible.impl.FormLayoutContainer;
@@ -101,15 +100,16 @@ public class UserSearchFlexiController extends FlexiAutoCompleterController {
 	
 	private FormLink backLink, searchButton;
 	private TextElement loginEl;
+	private List<UserPropertyHandler> userPropertyHandlers;
 	private Map <String,FormItem>propFormItems;
 	private FlexiTableElement tableEl;
 	private UserSearchFlexiTableModel userTableModel;
 	private FormLayoutContainer autoCompleterContainer;
 	private FormLayoutContainer searchFormContainer;
-	
-	private final boolean isAdministrativeUser;
+
 	private final List<UserPropertyHandler> userSearchFormPropertyHandlers;
 
+	private boolean isAdministrativeUser;
 	@Autowired
 	private UserManager userManager;
 	@Autowired
@@ -147,7 +147,8 @@ public class UserSearchFlexiController extends FlexiAutoCompleterController {
 
 			// insert a autocompleter search
 			Roles roles = ureq.getUserSession().getRoles();
-			boolean autoCompleteAllowed = securityModule.isUserAllowedAutoComplete(roles);
+			// TODO: LMSUZH-225: Workaround to make autocomplete usersearch disappear
+			boolean autoCompleteAllowed = false; // boolean autoCompleteAllowed = securityModule.isUserAllowedAutoComplete(roles);			
 			boolean ajax = Windows.getWindows(ureq).getWindowManager().isAjaxEnabled();
 			if (ajax && autoCompleteAllowed) {
 				//auto complete
@@ -172,6 +173,7 @@ public class UserSearchFlexiController extends FlexiAutoCompleterController {
 			loginEl = uifactory.addTextElement("login", "search.form.login", 128, "", searchFormContainer);
 			loginEl.setVisible(isAdministrativeUser);
 
+			userPropertyHandlers = userManager.getUserPropertyHandlersFor(UserSearchForm.class.getCanonicalName(), isAdministrativeUser);
 			
 			propFormItems = new HashMap<>();
 			for (UserPropertyHandler userPropertyHandler : userSearchFormPropertyHandlers) {
@@ -202,7 +204,7 @@ public class UserSearchFlexiController extends FlexiAutoCompleterController {
 			FlexiTableColumnModel tableColumnModel = FlexiTableDataModelFactory.createFlexiTableColumnModel();
 			int colPos = 0;
 			if(isAdministrativeUser) {
-				tableColumnModel.addFlexiColumnModel(new DefaultFlexiColumnModel("table.user.login", colPos++));
+				tableColumnModel.addFlexiColumnModel(new DefaultFlexiColumnModel("table.user.login", colPos++, true, "login"));
 			}
 			List<UserPropertyHandler> userPropertyHandlers = userManager.getUserPropertyHandlersFor(usageIdentifyer, isAdministrativeUser);
 			List<UserPropertyHandler> resultingPropertyHandlers = new ArrayList<UserPropertyHandler>();
@@ -212,7 +214,7 @@ public class UserSearchFlexiController extends FlexiAutoCompleterController {
 				boolean visible = UserManager.getInstance().isMandatoryUserProperty(usageIdentifyer , userPropertyHandler);
 				if(visible) {
 					resultingPropertyHandlers.add(userPropertyHandler);
-					tableColumnModel.addFlexiColumnModel(new DefaultFlexiColumnModel(userPropertyHandler.i18nColumnDescriptorLabelKey(), colPos++));
+					tableColumnModel.addFlexiColumnModel(new DefaultFlexiColumnModel(userPropertyHandler.i18nColumnDescriptorLabelKey(), colPos++, true, userPropertyHandler.getName()));
 				}
 			}
 			tableColumnModel.addFlexiColumnModel(new DefaultFlexiColumnModel("select", translate("select"), "select"));
@@ -223,7 +225,7 @@ public class UserSearchFlexiController extends FlexiAutoCompleterController {
 			tableEl.setCustomizeColumns(false);
 			tableEl.setMultiSelect(true);
 			tableEl.setSelectAllEnable(true);
-			
+
 			layoutCont.put("userTable", tableEl.getComponent());
 		}
 	}

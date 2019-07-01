@@ -20,6 +20,7 @@
 package org.olat.modules.fo.archiver.formatters;
 
 import java.io.File;
+import java.net.MalformedURLException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -30,6 +31,8 @@ import java.util.Set;
 
 import org.olat.core.id.Identity;
 import org.olat.core.id.UserConstants;
+import org.olat.core.logging.OLog;
+import org.olat.core.logging.Tracing;
 import org.olat.core.util.Formatter;
 import org.olat.core.util.StringHelper;
 import org.olat.core.util.nodes.INode;
@@ -44,21 +47,23 @@ import org.olat.core.util.vfs.filters.VFSItemMetaFilter;
 import org.olat.modules.fo.archiver.MessageNode;
 
 /**
- * 
+ *
  * Initial date: 13.11.2015<br>
  * @author srosse, stephane.rosse@frentix.com, http://www.frentix.com
  *
  */
 public class ForumOpenXMLFormatter extends ForumFormatter {
-	
+
+	private final static OLog LOG = Tracing.createLoggerFor(ForumOpenXMLFormatter.class);
+
 	private final VFSItemMetaFilter filter = new VFSItemMetaFilter();
 
 	private boolean firstThread = true;
-	
+
 	private final Formatter formatter;
 	private final VFSContainer forumContainer;
 	private final OpenXMLDocument document = new OpenXMLDocument();
-	
+
 	private final Set<String> attachmentsFilenames = new HashSet<>();
 	private final Map<File,DocReference> fileToAttachmentsMap = new HashMap<>();
 
@@ -68,11 +73,11 @@ public class ForumOpenXMLFormatter extends ForumFormatter {
 		this.forumContainer = forumContainer;
 		formatter = Formatter.getInstance(locale);
 	}
-	
+
 	public OpenXMLDocument getOpenXMLDocument() {
 		return document;
 	}
-	
+
 	public Map<File,DocReference> getAttachments() {
 		return fileToAttachmentsMap;
 	}
@@ -95,12 +100,12 @@ public class ForumOpenXMLFormatter extends ForumFormatter {
 	@Override
 	public void visit(INode node) {
 		MessageNode m = (MessageNode) node;
-		
+
 		StringBuilder creatorAndDate = new StringBuilder();
 		Identity creator = m.getCreator();
 		if(StringHelper.containsNonWhitespace(m.getPseudonym())) {
 			creatorAndDate.append(m.getPseudonym())
-			  .append(" ");
+					.append(" ");
 			if(m.isGuest()) {
 				creatorAndDate.append(translator.translate("guest.suffix"));
 			} else {
@@ -130,7 +135,7 @@ public class ForumOpenXMLFormatter extends ForumFormatter {
 			StringBuilder modSb = new StringBuilder();
 			if(modifier.equals(creator) && StringHelper.containsNonWhitespace(m.getPseudonym())) {
 				modSb.append(m.getPseudonym())
-				  .append(" ");
+						.append(" ");
 				if(m.isGuest()) {
 					modSb.append(translator.translate("guest.suffix"));
 				} else {
@@ -138,28 +143,28 @@ public class ForumOpenXMLFormatter extends ForumFormatter {
 				}
 			} else {
 				modSb.append(translator.translate("msg.modified")).append(": ")
-				     .append(modifier.getUser().getProperty(UserConstants.FIRSTNAME, null))
-				     .append(" ")
-				     .append(modifier.getUser().getProperty(UserConstants.LASTNAME,  null))
-				     .append(" ")
-				     .append(formatter.formatDateAndTime(m.getModifiedDate()));
+						.append(modifier.getUser().getProperty(UserConstants.FIRSTNAME, null))
+						.append(" ")
+						.append(modifier.getUser().getProperty(UserConstants.LASTNAME,  null))
+						.append(" ")
+						.append(formatter.formatDateAndTime(m.getModifiedDate()));
 			}
 			document.appendSubtitle(modSb.toString());
 		}
-		
+
 		String body = m.getBody();
 		if(body != null) {
 			body = body.replace("<p>&nbsp;", "<p>");
 		}
 		document.appendHtmlText(body, new Spacing(180, 0));
-		
+
 		// message attachments
 		VFSItem attachmentsItem = forumContainer.resolve(m.getKey().toString());
 		if(attachmentsItem instanceof VFSContainer) {
 			processAttachments((VFSContainer)attachmentsItem);
 		}
 	}
-	
+
 	private void processAttachments(VFSContainer attachmentsContainer) {
 		List<VFSItem> attachments = new ArrayList<VFSItem>(attachmentsContainer.getItems(filter));
 		for(VFSItem attachment:attachments) {
@@ -168,27 +173,36 @@ public class ForumOpenXMLFormatter extends ForumFormatter {
 				document.appendText(translator.translate("attachments"), true, Style.bold);
 			}
 		}
-		
-		
+
+
 		for(VFSItem attachment:attachments) {
 			if(attachment instanceof LocalFileImpl) {
 				File file = ((LocalFileImpl)attachment).getBasefile();
 				String filename = file.getName();
 				int lastDot = filename.lastIndexOf('.');
-				
+
 				boolean attach = true;
 				if (lastDot > 0) {
 					String extension = filename.substring(lastDot + 1).toLowerCase();
 					if("jpeg".equals(extension) || "jpg".equals(extension) || "gif".equals(extension) || "png".equals(extension)) {
-						document.appendImage(file);
+						try {
+							document.appendImage(file.toURI().toURL());
+						} catch (MalformedURLException e) {
+							LOG.error(e.getMessage());
+						}
+
 						attach = false;
 					}
 				}
-				
+
 				if(attach) {
 					StringBuilder attachSb = new StringBuilder(64);
 					String uniqueFilename = getUniqueFilename(file);
-					fileToAttachmentsMap.put(file, new DocReference("", uniqueFilename, null, file));
+					try {
+						fileToAttachmentsMap.put(file, new DocReference("", uniqueFilename, null, file.toURI().toURL()));
+					} catch (MalformedURLException e) {
+						LOG.error(e.getMessage());
+					}
 					attachSb.append(filename).append(": /attachments/").append(uniqueFilename);
 					document.appendText(attachSb.toString(), true);
 				}
@@ -205,7 +219,7 @@ public class ForumOpenXMLFormatter extends ForumFormatter {
 	public StringBuilder closeForum() {
 		return new StringBuilder();
 	}
-	
+
 	private String getUniqueFilename(File image) {
 		String filename = image.getName().toLowerCase();
 		int extensionIndex = filename.lastIndexOf('.');
@@ -228,6 +242,6 @@ public class ForumOpenXMLFormatter extends ForumFormatter {
 		} else {
 			attachmentsFilenames.add(filename);
 		}
-		return filename;	
+		return filename;
 	}
 }

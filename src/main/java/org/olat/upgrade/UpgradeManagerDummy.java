@@ -24,6 +24,10 @@
 */
 package org.olat.upgrade;
 
+import org.olat.core.commons.persistence.DB;
+import org.springframework.beans.factory.annotation.Autowired;
+
+import javax.inject.Provider;
 
 /**
  * Description:<br>
@@ -35,7 +39,12 @@ package org.olat.upgrade;
  */
 public class UpgradeManagerDummy extends UpgradeManager {
 
-	/**
+	@Autowired
+    public UpgradeManagerDummy(Provider<DB> dbInstance) {
+        super(dbInstance);
+    }
+
+    /**
 	 * Execute the pre system init code of all upgrades in the order as they were configured
 	 * in the configuration file
 	 */

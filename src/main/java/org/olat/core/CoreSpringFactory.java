@@ -26,28 +26,28 @@
 
 package org.olat.core;
 
+import org.olat.core.logging.AssertException;
+import org.olat.core.logging.OLATRuntimeException;
+import org.olat.core.logging.OLog;
+import org.olat.core.logging.Tracing;
+import org.springframework.beans.factory.BeanFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.ApplicationContext;
+import org.springframework.core.Ordered;
+import org.springframework.core.annotation.Order;
+import org.springframework.core.io.Resource;
+import org.springframework.web.context.ServletContextAware;
+import org.springframework.web.context.WebApplicationContext;
+import org.springframework.web.context.support.WebApplicationContextUtils;
+
+import javax.inject.Provider;
+import javax.servlet.ServletContext;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.concurrent.ConcurrentHashMap;
-
-import javax.servlet.ServletContext;
-
-import org.olat.core.logging.AssertException;
-import org.olat.core.logging.OLATRuntimeException;
-import org.olat.core.logging.OLog;
-import org.olat.core.logging.Tracing;
-import org.springframework.beans.BeansException;
-import org.springframework.beans.factory.BeanFactory;
-import org.springframework.beans.factory.BeanFactoryAware;
-import org.springframework.beans.factory.support.DefaultListableBeanFactory;
-import org.springframework.context.ApplicationContext;
-import org.springframework.core.io.Resource;
-import org.springframework.web.context.ServletContextAware;
-import org.springframework.web.context.WebApplicationContext;
-import org.springframework.web.context.support.WebApplicationContextUtils;
 
 /**
  * Description:<br>
@@ -60,22 +60,23 @@ import org.springframework.web.context.support.WebApplicationContextUtils;
  * 
  * @author patrickb
  */
-public class CoreSpringFactory implements ServletContextAware, BeanFactoryAware {
+@Order(Ordered.HIGHEST_PRECEDENCE)
+public class CoreSpringFactory implements ServletContextAware {
 	
 	private static final OLog log = Tracing.createLoggerFor(CoreSpringFactory.class);
 	
 	// Access servletContext only for spring beans admin-functions
 	public static ServletContext servletContext;
-	private static DefaultListableBeanFactory beanFactory;
 	private static Map<Class<?>, String> idToBeans = new ConcurrentHashMap<Class<?>, String>();
-	
+	private static Provider<BeanFactory> beanFactory;
+
 	/**
 	 * [used by spring only]
 	 */
-	private CoreSpringFactory() {
-		//
+	@Autowired
+	private CoreSpringFactory(Provider<BeanFactory> beanFactory) {
+		CoreSpringFactory.beanFactory = beanFactory;
 	}
-
 
 	/**
 	 * wrapper to the applicationContext (we are facading spring's
@@ -97,12 +98,7 @@ public class CoreSpringFactory implements ServletContextAware, BeanFactoryAware 
 		}
 		return res;
 	}
-	
-	public static String resolveProperty(String name) {
-		String rv = beanFactory.resolveEmbeddedValue("${" + name + "}");
-		return rv;
-	}
-	
+
 	public static void autowireObject(Object bean) {
 		ApplicationContext context = WebApplicationContextUtils.getWebApplicationContext(CoreSpringFactory.servletContext);
 		context.getAutowireCapableBeanFactory().autowireBean(bean);
@@ -121,13 +117,28 @@ public class CoreSpringFactory implements ServletContextAware, BeanFactoryAware 
 	}
 	
 	/**
-	 * @param interfaceImpl
+	 * @param interfaceClass
 	 *            The bean name to check for. Be sure the bean does exist,
 	 *            otherwise an NoSuchBeanDefinitionException will be thrown
 	 * @return The bean
 	 */
 	public static <T> T getImpl(Class<T> interfaceClass) {
-		ApplicationContext context = WebApplicationContextUtils.getWebApplicationContext(CoreSpringFactory.servletContext);
+
+		ApplicationContext context;
+		int i = 0;
+		do {
+			context = WebApplicationContextUtils.getWebApplicationContext(CoreSpringFactory.servletContext);
+			// Wait for max 30 sec until Web ApplicationContext has been started
+			if (context == null) {
+				try {
+					Thread.sleep(1000);
+				} catch (InterruptedException e) {
+					// ignore
+				}
+			}
+			i++;
+		} while (context == null && i < 30);
+
 		if(context == null) {
 			log.warn("Calling this bean before the Spring web application is started: " + interfaceClass.getName());
 			return null;
@@ -152,7 +163,7 @@ public class CoreSpringFactory implements ServletContextAware, BeanFactoryAware 
 	}
 
 	/**
-	 * @param beanName
+	 * @param interfaceName
 	 *            The bean name to check for. Be sure the bean does exist,
 	 *            otherwise an NoSuchBeanDefinitionException will be thrown
 	 * @return The bean
@@ -170,16 +181,7 @@ public class CoreSpringFactory implements ServletContextAware, BeanFactoryAware 
 		Object o = context.getBean(interfaceName.getName());
 		return o;
 	}
-	
-	/**
-	 * 
-	 * @param beanName
-	 * @return
-	 */
-	public static boolean containsSingleton(String beanName) {
-		return beanFactory.containsSingleton(beanName);
-	}
-	
+
 	/**
 	 * @param beanName
 	 *            The bean name to check for
@@ -230,8 +232,12 @@ public class CoreSpringFactory implements ServletContextAware, BeanFactoryAware 
 		return clone;
 	}
 
-	@Override
-	public void setBeanFactory(BeanFactory beanFactory) throws BeansException {
-		CoreSpringFactory.beanFactory = (DefaultListableBeanFactory) beanFactory;
+	/**
+ 	 * Depending on the initialization order (see also the {@link Order}
+	 * annotation of this class), this method may fail.
+ 	 */
+	public static BeanFactory getBeanFactory() {
+		assert beanFactory != null;
+		return beanFactory.get();
 	}
 }

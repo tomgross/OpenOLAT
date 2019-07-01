@@ -69,9 +69,24 @@ public class RepositoryEntryMyCourseImpl implements RepositoryEntryMyView, Creat
 	private final long launchCounter;
 
 	private final long offersAvailable;
-	
+
+	/**
+	 * TODO sev26
+	 * It is very hard to grasp the meaning of the parameters. Add some
+	 * comments.
+	 * @param re
+	 * @param stats
+	 * @param marked Is the entry bookmarked?
+	 * @param offersAvailable
+	 * @param myRating What is the rating (how many stars)?
+	 */
 	public RepositoryEntryMyCourseImpl(RepositoryEntry re, RepositoryEntryStatistics stats,
 			boolean marked, long offersAvailable, Integer myRating) {
+		/**
+		 * TODO sev26
+		 * What is the purpose here? Creating a snapshot? If so, please use
+		 * ".clone()". If not, remove all members.
+		 */
 		key = re.getKey();
 		externalId = re.getExternalId();
 		externalRef = re.getExternalRef();
@@ -93,6 +108,11 @@ public class RepositoryEntryMyCourseImpl implements RepositoryEntryMyView, Creat
 		this.marked = marked;
 		this.myRating = myRating;
 
+		/**
+		 * TODO sev26
+		 * Use a separate constructor that has no
+		 * {@link RepositoryEntryStatistics} parameter.
+		 */
 		if(stats != null) {
 			averageRating = stats.getRating();
 			numOfRatings = stats.getNumOfRatings();

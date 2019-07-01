@@ -191,6 +191,10 @@ public class UploadCertificateController extends FormBasicController {
 					fileEl.setErrorKey("upload.error.noindex", null);
 				}
 				allOk = visitor.hasFound();
+				try {
+					path.getFileSystem().close(); // LMSUZH-45 make sure that ZipFileSystem is closed, so that resource is really freed.
+				} catch (UnsupportedOperationException e) {
+				}
 
 				formatEl.setVisible(allOk);
 				orientationEl.setVisible(allOk);

@@ -52,6 +52,7 @@ import org.olat.repository.RepositoryEntry;
 import org.olat.repository.RepositoryService;
 import org.olat.repository.controllers.EntryChangedEvent;
 import org.olat.repository.controllers.EntryChangedEvent.Change;
+import org.olat.repository.manager.RepositoryEntryDeletionException;
 import org.olat.resource.references.ReferenceInfos;
 import org.olat.resource.references.ReferenceManager;
 import org.olat.util.logging.activity.LoggingResourceable;
@@ -290,7 +291,15 @@ public class ConfirmDeletePermanentlyController extends FormBasicController {
 		for(RepositoryEntry entry:entries) {
 			RepositoryEntry reloadedEntry = repositoryService.loadByKey(entry.getKey());
 			if(reloadedEntry != null) {
-				ErrorList errors = repositoryService.deletePermanently(reloadedEntry, getIdentity(), roles, getLocale());
+				ErrorList errors = new ErrorList();
+				try {
+					errors = repositoryService.deletePermanently(reloadedEntry, getIdentity(), roles, getLocale());
+				} catch (RepositoryEntryDeletionException e) {
+					allOk = false;
+					errors.setError(e.getMessage());
+					errorList.add(errors);
+					continue;
+				}
 				ThreadLocalUserActivityLogger.log(LearningResourceLoggingAction.LEARNING_RESOURCE_DELETE, getClass(),
 						LoggingResourceable.wrap(reloadedEntry, OlatResourceableType.genRepoEntry));
 				if (errors.hasErrors()) {

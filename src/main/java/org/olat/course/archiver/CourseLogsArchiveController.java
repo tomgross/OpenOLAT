@@ -94,7 +94,7 @@ public class CourseLogsArchiveController extends BasicController {
 		boolean isOLATAdmin = ureq.getUserSession().getRoles().isOLATAdmin();
 		boolean isOresOwner = RepositoryManager.getInstance().isOwnerOfRepositoryEntry(identity, re);
 		boolean isOresInstitutionalManager = RepositoryManager.getInstance().isInstitutionalRessourceManagerFor(identity, roles, re);
-		boolean aLogV = isOresOwner || isOresInstitutionalManager;
+		boolean aLogV = isOLATAdmin;
 		boolean uLogV = isOLATAdmin;
 		boolean sLogV = isOresOwner || isOresInstitutionalManager;
 		
@@ -169,25 +169,25 @@ public class CourseLogsArchiveController extends BasicController {
 		if (source == logFileChooserForm) {
 			if (event == Event.DONE_EVENT) {	
 				final boolean logAdminChecked = logFileChooserForm.logAdminChecked();
-		    final boolean logUserChecked = logFileChooserForm.logUserChecked();
-		    final boolean logStatisticChecked = logFileChooserForm.logStatChecked();
-		    
-	    	final Date begin = logFileChooserForm.getBeginDate();
-	    	final Date end = logFileChooserForm.getEndDate();
-	    	
-	    	if (end != null) {
-	    		//shift time from beginning to end of day
-	    		end.setTime(end.getTime() + 24 * 60 * 60 * 1000);
-	    	}
-	    	
-		    UserManager um = UserManager.getInstance();
-		    final String charset = um.getUserCharset(ureq.getIdentity());
-		    
-		    ICourse course = CourseFactory.loadCourse(ores);
-		    final String courseTitle = course.getCourseTitle();
+				final boolean logUserChecked = logFileChooserForm.logUserChecked();
+				final boolean logStatisticChecked = logFileChooserForm.logStatChecked() || logFileChooserForm.isCreateStatisticLogWithoutCheckboxSelection();
+
+				final Date begin = logFileChooserForm.getBeginDate();
+				final Date end = logFileChooserForm.getEndDate();
+
+				if (end != null) {
+					//shift time from beginning to end of day
+					end.setTime(end.getTime() + 24 * 60 * 60 * 1000);
+				}
+
+				UserManager um = UserManager.getInstance();
+				final String charset = um.getUserCharset(ureq.getIdentity());
+
+				ICourse course = CourseFactory.loadCourse(ores);
+				final String courseTitle = course.getCourseTitle();
 				final String targetDir = CourseFactory.getOrCreateDataExportDirectory(ureq.getIdentity(), courseTitle).getPath();
 		    
-		    final Long resId = ores.getResourceableId();
+				final Long resId = ores.getResourceableId();
 				final Locale theLocale = ureq.getLocale();
 				final String email = ureq.getIdentity().getUser().getProperty(UserConstants.EMAIL, ureq.getLocale());
 				

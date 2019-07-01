@@ -47,6 +47,8 @@ import org.olat.core.logging.OLog;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.Util;
 import org.olat.core.util.resource.OresHelper;
+import org.olat.course.CourseFactory;
+import org.olat.course.nodes.CourseNode;
 import org.olat.repository.RepositoryEntry;
 import org.olat.repository.RepositoryManager;
 
@@ -95,7 +97,10 @@ public class FileUploadNotificationHandler implements NotificationsHandler {
 				final List<DialogElement> dialogElements = elements.getDialogPropertyElements();
 				final Translator translator = Util.createPackageTranslator(FileUploadNotificationHandler.class, locale);
 
-				si = new SubscriptionInfo(subscriber.getKey(), p.getType(), new TitleItem(translator.translate("notifications.header", new String[]{displayname}), CSSS_CLASS_UPLOAD_ICON), null);
+				CourseNode node = CourseFactory.loadCourse(p.getResId()).getRunStructure().getNode(p.getSubidentifier());
+				String shortName = (node != null ? node.getShortName() : "");
+				String title = translator.translate("notifications.header", new String[]{displayname, shortName});
+				si = new SubscriptionInfo(subscriber.getKey(), p.getType(), new TitleItem(title, CSSS_CLASS_UPLOAD_ICON), null);
 				SubscriptionListItem subListItem;
 				for (DialogElement element : dialogElements) {
 					// do only show entries newer then the ones already seen
@@ -128,11 +133,14 @@ public class FileUploadNotificationHandler implements NotificationsHandler {
 	public String createTitleInfo(Subscriber subscriber, Locale locale) {
 		try {
 			Translator translator = Util.createPackageTranslator(FileUploadNotificationHandler.class, locale);
-			String displayname = RepositoryManager.getInstance().lookupDisplayNameByOLATResourceableId(subscriber.getPublisher().getResId());
+			Publisher publisher = subscriber.getPublisher();
+			String displayname = RepositoryManager.getInstance().lookupDisplayNameByOLATResourceableId(publisher.getResId());
 			if(displayname == null) {
-				checkPublisher(subscriber.getPublisher());
+				checkPublisher(publisher);
 			}
-			return translator.translate("notifications.header", new String[]{displayname});
+			CourseNode node = CourseFactory.loadCourse(publisher.getResId()).getRunStructure().getNode(publisher.getSubidentifier());
+			String shortName = (node != null ? node.getShortName() : "");
+			return translator.translate("notifications.header", new String[]{displayname, shortName});
 		} catch (Exception e) {
 			log.error("Error while creating assessment notifications for subscriber: " + subscriber.getKey(), e);
 			checkPublisher(subscriber.getPublisher());

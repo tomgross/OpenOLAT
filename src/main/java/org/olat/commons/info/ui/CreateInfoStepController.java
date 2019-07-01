@@ -79,6 +79,7 @@ public class CreateInfoStepController extends StepFormBasicController {
 	protected void formOK(UserRequest ureq) {
 		runContext.put(WizardConstants.MSG_TITLE, infoEditFormController.getTitle());
 		runContext.put(WizardConstants.MSG_MESSAGE, infoEditFormController.getMessage());
+		runContext.put(WizardConstants.MSG_ATTACHMENTS, infoEditFormController.getAttachments());
 		fireEvent(ureq, StepsEvent.ACTIVATE_NEXT);
 	}
 }

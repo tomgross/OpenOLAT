@@ -19,10 +19,7 @@
  */
 package org.olat.course.nodes.bc;
 
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.Comparator;
-import java.util.List;
+import java.util.*;
 
 import org.olat.core.CoreSpringFactory;
 import org.olat.core.commons.modules.bc.FolderModule;
@@ -39,12 +36,14 @@ import org.olat.core.gui.control.Event;
 import org.olat.core.gui.control.WindowControl;
 import org.olat.core.gui.control.controller.BasicController;
 import org.olat.core.gui.util.CSSHelper;
+import org.olat.core.id.Identity;
 import org.olat.core.util.vfs.LocalFileImpl;
 import org.olat.core.util.vfs.VFSContainer;
 import org.olat.core.util.vfs.VFSItem;
 import org.olat.core.util.vfs.VFSLeaf;
 import org.olat.core.util.vfs.filters.VFSItemExcludePrefixFilter;
 import org.olat.core.util.vfs.filters.VFSItemFilter;
+import org.olat.user.UserManager;
 
 /**
  * <h3>Description:</h3> The folder peekview controller displays the configurable
@@ -67,9 +66,19 @@ public class BCPeekviewController extends BasicController implements Controller 
 		}};
 	// the current course node id
 	private final String nodeId;
+	private final Identity identity;
 	
-	private static final VFSItemFilter attachmentExcludeFilter = new VFSItemExcludePrefixFilter(FolderComponent.ATTACHMENT_EXCLUDE_PREFIXES);
+	private VFSItemFilter getAttachmentExcludeFilter(boolean showHiddenFiles) {
+		ArrayList<String> prefixes = new ArrayList<>();
+		for (String prefix: FolderComponent.ATTACHMENT_EXCLUDE_PREFIXES) {
+			prefixes.add(prefix);
+		}
+		if (!showHiddenFiles) {
+			prefixes.add(".");
+		}
 
+		return new VFSItemExcludePrefixFilter(prefixes.stream().toArray(String[]::new));
+	}
 
 	/**
 	 * Constructor
@@ -82,6 +91,7 @@ public class BCPeekviewController extends BasicController implements Controller 
 	public BCPeekviewController(UserRequest ureq, WindowControl wControl, VFSContainer rootFolder, String nodeId, int itemsToDisplay) {		
 		super(ureq, wControl);
 		this.nodeId = nodeId;
+		this.identity = ureq.getIdentity();
 	
 		VelocityContainer peekviewVC = createVelocityContainer("peekview");
 		// add items, only as many as configured
@@ -150,7 +160,8 @@ public class BCPeekviewController extends BasicController implements Controller 
 	 */
 	private void addItems(VFSContainer container, List<VFSLeaf> allLeafs) {
 		// exclude files which are also excluded in FolderComponent
-		for (VFSItem vfsItem : container.getItems(attachmentExcludeFilter)) {
+		boolean showHiddenFiles = UserManager.getInstance().getShowHiddenFiles(identity);
+		for (VFSItem vfsItem : container.getItems(getAttachmentExcludeFilter(showHiddenFiles))) {
 			if (vfsItem instanceof VFSLeaf) {
 				// add leaf to our list
 				VFSLeaf leaf = (VFSLeaf) vfsItem;

@@ -272,7 +272,11 @@ public class OverviewRepositoryListController extends BasicController implements
 		mainVC.put("segmentCmp", markedStackPanel);
 		return markedCtrl;
 	}
-	
+
+	/**
+	 * TODO sev26
+	 * Why returning a value that no one needs?
+	 */
 	private RepositoryEntryListController doOpenMyCourses(UserRequest ureq) {
 		cleanUp();
 	

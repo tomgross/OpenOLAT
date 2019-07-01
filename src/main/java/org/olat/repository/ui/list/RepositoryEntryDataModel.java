@@ -56,52 +56,6 @@ class RepositoryEntryDataModel extends DefaultFlexiTableDataSourceModel<Reposito
 		if(item == null) {
 			return null;//don't break here
 		}
-		
-		switch(Cols.values()[col]) {
-			case key: return item.getKey();
-			case displayName: return item.getDisplayName();
-			case externalId: return item.getExternalId();
-			case externalRef: return item.getExternalRef();
-			case lifecycleLabel: return item.getLifecycleLabel();
-			case lifecycleSoftkey: return item.getLifecycleSoftKey();
-			case lifecycleStart: return item.getLifecycleStart();
-			case lifecycleEnd: return item.getLifecycleEnd();
-			case mark: return item.getMarkLink();
-			case select: return item.getSelectLink();
-			case start: return item.getStartLink();
-			case location: return item.getLocation();
-			case details: return item.getDetailsLink();
-			case ratings: return item.getRatingFormItem();
-			case comments: return item.getCommentsLink();
-		}
-		return null;
-	}
-	
-	public enum Cols {
-		key("table.header.key"),
-		displayName("cif.displayname"),
-		externalId("table.header.externalid"),
-		externalRef("table.header.externalref"),
-		lifecycleLabel("table.header.lifecycle.label"),
-		lifecycleSoftkey("table.header.lifecycle.softkey"),
-		lifecycleStart("table.header.lifecycle.start"),
-		lifecycleEnd("table.header.lifecycle.end"),
-		location("table.header.location"),
-		details("table.header.details"),
-		select("table.header.details"),
-		start("table.header.start"),
-		mark("table.header.mark"),
-		ratings("ratings"),
-		comments("comments");
-		
-		private final String i18nKey;
-		
-		private Cols(String i18nKey) {
-			this.i18nKey = i18nKey;
-		}
-		
-		public String i18nKey() {
-			return i18nKey;
-		}
+		return item.getValueAt(col);
 	}
 }

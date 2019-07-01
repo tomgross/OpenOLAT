@@ -27,6 +27,7 @@ import java.util.Collections;
 import java.util.Date;
 
 import org.junit.Assert;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.olat.core.logging.OLog;
 import org.olat.core.logging.Tracing;
@@ -143,6 +144,7 @@ public class BigAssessmentTestPackageBuilder {
 	}
 	
 
+	@Ignore   // Path on line 164 only valid for Frentix!
 	@Test
 	public void openBigTest_twice() {
 		final long time = openBigTest_sub();

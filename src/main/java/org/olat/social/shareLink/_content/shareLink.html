@@ -43,10 +43,10 @@
 				<i class="o_icon o_icon_delicious o_icon-lg"></i>
 			</a>
 		#elseif ($link == "digg")
-			<a id="o_digg" href="#" title="$r.translateInAttribute("share.digg")" onclick="window.open('http://digg.com/submit?url='+encodeURIComponent(o_shareSocialUrl())+'&amp;title='+encodeURIComponent(o_shareSocialTitle()));return false;">		
+			<a id="o_digg" href="#" title="$r.translateInAttribute("share.digg")" onclick="window.open('http://digg.com/submit?url='+encodeURIComponent(o_shareSocialUrl())+'&amp;title='+encodeURIComponent(o_shareSocialTitle()));return false;">
 				<i class="o_icon o_icon_digg o_icon-lg"></i>
 			</a>
-		#elseif ($link == "mail")	
+		#elseif ($link == "mail")
 			<a id="o_mail" href="javascript: window.location.href='mailto:?subject=' + encodeURIComponent(o_shareSocialTitle()) + '&body=' + encodeURIComponent(o_shareSocialUrl());" title="$r.translateInAttribute("share.mail")">
  				<i class="o_icon o_icon_mailto o_icon-lg"></i>
  			</a>

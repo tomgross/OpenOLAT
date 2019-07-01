@@ -163,6 +163,11 @@ public abstract class UserManager extends BasicManager {
 	 */
 	public abstract String getUserCharset(Identity identity);
 
+
+	public abstract void setShowHiddenFiles(Identity identity, boolean showHiddenFiles);
+
+	public abstract boolean getShowHiddenFiles(Identity identity);
+
 	/**
 	 * Validates an OLAT password on a syntactical level. 
 	 * 

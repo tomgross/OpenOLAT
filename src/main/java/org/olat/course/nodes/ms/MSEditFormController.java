@@ -24,6 +24,7 @@ import java.util.Map;
 import org.olat.core.gui.UserRequest;
 import org.olat.core.gui.components.form.flexible.FormItem;
 import org.olat.core.gui.components.form.flexible.FormItemContainer;
+import org.olat.core.gui.components.form.flexible.elements.MultipleSelectionElement;
 import org.olat.core.gui.components.form.flexible.elements.RichTextElement;
 import org.olat.core.gui.components.form.flexible.elements.SelectionElement;
 import org.olat.core.gui.components.form.flexible.elements.SingleSelection;
@@ -35,6 +36,7 @@ import org.olat.core.gui.control.Controller;
 import org.olat.core.gui.control.Event;
 import org.olat.core.gui.control.WindowControl;
 import org.olat.core.util.StringHelper;
+import org.olat.course.nodes.GTACourseNode;
 import org.olat.course.nodes.MSCourseNode;
 import org.olat.modules.ModuleConfiguration;
 
@@ -80,6 +82,15 @@ public class MSEditFormController extends FormBasicController {
 	/** Rich text input element for a notice to all tutors. */
 	private RichTextElement infotextCoach;
 
+	/** Switch for rendering email confirmation UI */
+	private boolean confirmationEmailConf = false;
+
+	/** Rich text input element for an email notification. */
+	private RichTextElement emailTextEl;
+
+	/** Selection element for choosing recipients for confirmation email */
+	private MultipleSelectionElement emailRecipientEl;
+
 	/** The keys for true / false dropdowns. */
 	private String[] trueFalseKeys;
 
@@ -87,6 +98,7 @@ public class MSEditFormController extends FormBasicController {
 	private String[] passedTypeValues;
 
 	private  static final String scoreRex = "^[0-9]+(\\.[0-9]+)?$";
+
 	/**
 	 * Creates this controller.
 	 * 
@@ -95,7 +107,18 @@ public class MSEditFormController extends FormBasicController {
 	 * @param modConfig
 	 */
 	public MSEditFormController(UserRequest ureq, WindowControl wControl, ModuleConfiguration modConfig) {
-		super(ureq, wControl, FormBasicController.LAYOUT_DEFAULT);
+		super(ureq, wControl, FormBasicController.LAYOUT_BAREBONE);
+		this.modConfig = modConfig;
+		this.trueFalseKeys = new String[] { Boolean.TRUE.toString(), Boolean.FALSE.toString() };
+
+		this.passedTypeValues = new String[] { translate("form.passedtype.cutval"), translate("form.passedtype.manual") };
+		initForm(ureq);
+	}
+
+	public MSEditFormController(UserRequest ureq, WindowControl wControl, ModuleConfiguration modConfig, boolean confirmationEmailConf) {
+		super(ureq, wControl, FormBasicController.LAYOUT_BAREBONE);
+		this.confirmationEmailConf = confirmationEmailConf;
+
 		this.modConfig = modConfig;
 		this.trueFalseKeys = new String[] { Boolean.TRUE.toString(), Boolean.FALSE.toString() };
 
@@ -104,7 +127,7 @@ public class MSEditFormController extends FormBasicController {
 	}
 
 	/**
-	 * 
+	 *
 	 * @see org.olat.core.gui.components.form.flexible.impl.FormBasicController#doDispose
 	 *      ()
 	 */
@@ -148,10 +171,15 @@ public class MSEditFormController extends FormBasicController {
 	 */
 	@Override
 	protected void initForm(FormItemContainer formLayout, Controller listener, UserRequest ureq) {
-		formLayout.setElementCssClass("o_sel_course_ms_form");
+		// config
+		FormLayoutContainer configCont = FormLayoutContainer.createDefaultFormLayout("config", getTranslator());
+		configCont.setFormTitle(translate("assessment.config.title"));
+		configCont.setElementCssClass("o_sel_course_ms_form");
+		configCont.setRootForm(mainForm);
+		formLayout.add(configCont);
 
 		// Create the "score granted" field...
-		scoreGranted = uifactory.addCheckboxesHorizontal("form.score", formLayout, new String[]{"xx"}, new String[]{null});
+		scoreGranted = uifactory.addCheckboxesHorizontal("form.score", configCont, new String[]{"xx"}, new String[]{null});
 		scoreGranted.addActionListener(FormEvent.ONCLICK);
 		Boolean sf = (Boolean) modConfig.get(MSCourseNode.CONFIG_KEY_HAS_SCORE_FIELD);
 		scoreGranted.select("xx", sf == null ? false : sf.booleanValue());
@@ -162,25 +190,25 @@ public class MSEditFormController extends FormBasicController {
 		if (min == null) {
 			min = new Float(0.0);
 		}
-		minVal = uifactory.addTextElement("form.min", "form.min", 8, min.toString(), formLayout);
+		minVal = uifactory.addTextElement("form.min", "form.min", 8, min.toString(), configCont);
 		minVal.setDisplaySize(5);
 		minVal.setRegexMatchCheck(scoreRex, "form.error.wrongFloat");
 		minVal.setElementCssClass("o_sel_course_ms_min_val");
-		
+
+		// ...and maximum value input.
 		Float max = (Float) modConfig.get(MSCourseNode.CONFIG_KEY_SCORE_MAX);
 		if (max == null) {
 			max = new Float(0.0);
 		}
-		// ...and maximum value input.
-		maxVal = uifactory.addTextElement("form.max", "form.max", 8, max.toString(), formLayout);
+		maxVal = uifactory.addTextElement("form.max", "form.max", 8, max.toString(), configCont);
 		maxVal.setDisplaySize(5);
 		maxVal.setRegexMatchCheck(scoreRex, "form.error.wrongFloat");
 		maxVal.setElementCssClass("o_sel_course_ms_max_val");
-		
-		uifactory.addSpacerElement("spacer1", formLayout, false);
+
+		uifactory.addSpacerElement("spacer1", configCont, false);
 
 		// Create the "display passed / failed"
-		displayPassed = uifactory.addCheckboxesHorizontal("form.passed", formLayout, new String[]{"xx"}, new String[]{null});
+		displayPassed = uifactory.addCheckboxesHorizontal("form.passed", configCont, new String[]{"xx"}, new String[]{null});
 		displayPassed.addActionListener(FormEvent.ONCLICK);
 		Boolean pf = (Boolean) modConfig.get(MSCourseNode.CONFIG_KEY_HAS_PASSED_FIELD);
 		if (pf == null) pf = Boolean.TRUE;
@@ -189,7 +217,7 @@ public class MSEditFormController extends FormBasicController {
 		// ...the automatic / manual dropdown (note that TRUE means automatic and
 		// FALSE means manually)...
 		Float cut = (Float) modConfig.get(MSCourseNode.CONFIG_KEY_PASSED_CUT_VALUE);
-		displayType = uifactory.addRadiosVertical("form.passed.type", formLayout, trueFalseKeys, passedTypeValues);
+		displayType = uifactory.addRadiosVertical("form.passed.type", configCont, trueFalseKeys, passedTypeValues);
 		displayType.addActionListener(FormEvent.ONCLICK);
 		displayType.setElementCssClass("o_sel_course_ms_display_type");
 
@@ -200,33 +228,67 @@ public class MSEditFormController extends FormBasicController {
 
 		// ...and the passing grade input field.
 		if (cut == null) cut = new Float(0.0);
-		cutVal = uifactory.addTextElement("form.cut", "form.cut", 8, cut.toString(), formLayout);
+		cutVal = uifactory.addTextElement("form.cut", "form.cut", 8, cut.toString(), configCont);
 		cutVal.setDisplaySize(5);
 		cutVal.setRegexMatchCheck(scoreRex, "form.error.wrongFloat");
 		cutVal.setElementCssClass("o_sel_course_ms_cut_val");
 
-		uifactory.addSpacerElement("spacer2", formLayout, false);
+		uifactory.addSpacerElement("spacer2", configCont, false);
 
 		// Create the "individual comment" dropdown.
-		commentFlag = uifactory.addCheckboxesHorizontal("form.comment", formLayout, new String[]{"xx"}, new String[]{null});
+		commentFlag = uifactory.addCheckboxesHorizontal("form.comment", configCont, new String[]{"xx"}, new String[]{null});
 		Boolean cf = (Boolean) modConfig.get(MSCourseNode.CONFIG_KEY_HAS_COMMENT_FIELD);
 		if (cf == null) cf = Boolean.TRUE;
 		commentFlag.select("xx", cf.booleanValue());
 
-		uifactory.addSpacerElement("spacer3", formLayout, false);
+		uifactory.addSpacerElement("spacer3", configCont, false);
 
 		// Create the rich text fields.
 		String infoUser = (String) modConfig.get(MSCourseNode.CONFIG_KEY_INFOTEXT_USER);
-		if (infoUser == null) infoUser = new String("");
+		if (infoUser == null) infoUser = "";
 		infotextUser = uifactory.addRichTextElementForStringDataMinimalistic("infotextUser", "form.infotext.user", infoUser, 10, -1,
-				formLayout, getWindowControl());
+				configCont, getWindowControl());
 
 		String infoCoach = (String) modConfig.get(MSCourseNode.CONFIG_KEY_INFOTEXT_COACH);
-		if (infoCoach == null) infoCoach = new String("");
+		if (infoCoach == null) infoCoach = "";
 		infotextCoach = uifactory.addRichTextElementForStringDataMinimalistic("infotextCoach", "form.infotext.coach", infoCoach, 10, -1,
-				formLayout, getWindowControl());
+				configCont, getWindowControl());
 
-		
+
+		if (confirmationEmailConf) {
+			//confirmation
+			FormLayoutContainer confirmationCont = FormLayoutContainer.createDefaultFormLayout("confirmation", getTranslator());
+			confirmationCont.setFormTitle(translate("assessment.confirmation.title"));
+			confirmationCont.setRootForm(mainForm);
+			formLayout.add(confirmationCont);
+
+			//message for users
+			String mailText = modConfig.getStringValue(GTACourseNode.GTASK_ASSESSMENT_TEXT);
+			if (!StringHelper.containsNonWhitespace(mailText)) {
+				mailText = translate("assessment.email.template");
+			}
+			emailTextEl = uifactory.addRichTextElementForStringDataMinimalistic("task.mail.text", "assessment.email.label", mailText, 10, -1, confirmationCont, getWindowControl());
+			emailTextEl.setMandatory(true);
+
+			String[] emailRecipientKeys = new String[] {
+					GTACourseNode.GTASK_ASSESSMENT_MAIL_CONFIRMATION_OWNER,
+					GTACourseNode.GTASK_ASSESSMENT_MAIL_CONFIRMATION_COACH_COURSE,
+					GTACourseNode.GTASK_ASSESSMENT_MAIL_CONFIRMATION_COACH_GROUP,
+					GTACourseNode.GTASK_ASSESSMENT_MAIL_CONFIRMATION_PARTICIPANT
+			};
+
+			String[] emailRecipientValues = new String[] {
+					translate("email.recipient.owner"),
+					translate("email.recipient.coach.course"),
+					translate("email.recipient.coach.group"),
+					translate("email.recipient.participant")
+			};
+			emailRecipientEl = uifactory.addCheckboxesHorizontal("email.recipient.roles", "assessment.email.confirmation.roles", confirmationCont, emailRecipientKeys, emailRecipientValues);
+			emailRecipientEl.select(emailRecipientKeys[0], modConfig.getBooleanSafe(GTACourseNode.GTASK_ASSESSMENT_MAIL_CONFIRMATION_OWNER));
+			emailRecipientEl.select(emailRecipientKeys[1], modConfig.getBooleanSafe(GTACourseNode.GTASK_ASSESSMENT_MAIL_CONFIRMATION_COACH_COURSE));
+			emailRecipientEl.select(emailRecipientKeys[2], modConfig.getBooleanSafe(GTACourseNode.GTASK_ASSESSMENT_MAIL_CONFIRMATION_COACH_GROUP));
+			emailRecipientEl.select(emailRecipientKeys[3], modConfig.getBooleanSafe(GTACourseNode.GTASK_ASSESSMENT_MAIL_CONFIRMATION_PARTICIPANT));
+		}
 
 		// Create submit and cancel buttons
 		final FormLayoutContainer buttonLayout = FormLayoutContainer.createButtonLayout("buttonLayout", getTranslator());
@@ -371,7 +433,6 @@ public class MSEditFormController extends FormBasicController {
 			// remove old config
 			moduleConfiguration.remove(MSCourseNode.CONFIG_KEY_INFOTEXT_USER);
 		}
-
 		String ic = infotextCoach.getValue();
 		if (StringHelper.containsNonWhitespace(ic)) {
 			moduleConfiguration.set(MSCourseNode.CONFIG_KEY_INFOTEXT_COACH, ic);
@@ -379,11 +440,36 @@ public class MSEditFormController extends FormBasicController {
 			// remove old config
 			moduleConfiguration.remove(MSCourseNode.CONFIG_KEY_INFOTEXT_COACH);
 		}
+
+		if (confirmationEmailConf) {
+			// set confirmation email text only if something is in there
+			if (emailTextEl != null) {
+				String et = emailTextEl.getValue();
+				if (StringHelper.containsNonWhitespace(et)) {
+					moduleConfiguration.set(GTACourseNode.GTASK_ASSESSMENT_TEXT, et);
+				} else {
+					// remove old config
+					moduleConfiguration.remove(GTACourseNode.GTASK_ASSESSMENT_TEXT);
+				}
+			}
+
+			// email confirmations
+			if (emailRecipientEl != null) {
+				boolean emailConfirmationOwner = emailRecipientEl.isSelected(0);
+				moduleConfiguration.setBooleanEntry(GTACourseNode.GTASK_ASSESSMENT_MAIL_CONFIRMATION_OWNER, emailConfirmationOwner);
+				boolean emailConfirmationCoachCourse = emailRecipientEl.isSelected(1);
+				moduleConfiguration.setBooleanEntry(GTACourseNode.GTASK_ASSESSMENT_MAIL_CONFIRMATION_COACH_COURSE, emailConfirmationCoachCourse);
+				boolean emailConfirmationCoachGroup = emailRecipientEl.isSelected(2);
+				moduleConfiguration.setBooleanEntry(GTACourseNode.GTASK_ASSESSMENT_MAIL_CONFIRMATION_COACH_GROUP, emailConfirmationCoachGroup);
+				boolean emailConfirmationParticipant = emailRecipientEl.isSelected(3);
+				moduleConfiguration.setBooleanEntry(GTACourseNode.GTASK_ASSESSMENT_MAIL_CONFIRMATION_PARTICIPANT, emailConfirmationParticipant);
+			}
+		}
 	}
 
 	/**
 	 * @param config the module configuration
-	 * @return true if valid, false otherwhise
+	 * @return true if valid, false otherwise
 	 */
 	public static boolean isConfigValid(ModuleConfiguration config) {
 		boolean isValid = true;
@@ -422,6 +508,10 @@ public class MSEditFormController extends FormBasicController {
 		if (!((confElement == null) || (confElement instanceof String))) return false;
 
 		confElement = config.get(MSCourseNode.CONFIG_KEY_INFOTEXT_COACH);
+		if (!((confElement == null) || (confElement instanceof String))) return false;
+
+		// confirmation mail text is optional
+		confElement = config.get(GTACourseNode.GTASK_ASSESSMENT_TEXT);
 		if (!((confElement == null) || (confElement instanceof String))) return false;
 
 		return isValid;

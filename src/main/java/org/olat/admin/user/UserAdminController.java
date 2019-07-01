@@ -25,16 +25,8 @@
 
 package org.olat.admin.user;
 
-import java.util.List;
-
 import org.olat.admin.user.course.CourseOverviewController;
-import org.olat.admin.user.groups.GroupOverviewController;
-import org.olat.basesecurity.Authentication;
-import org.olat.basesecurity.BaseSecurity;
-import org.olat.basesecurity.BaseSecurityManager;
-import org.olat.basesecurity.BaseSecurityModule;
-import org.olat.basesecurity.Constants;
-import org.olat.basesecurity.SecurityGroup;
+import org.olat.basesecurity.*;
 import org.olat.core.commons.modules.bc.FolderConfig;
 import org.olat.core.commons.persistence.DBFactory;
 import org.olat.core.commons.services.notifications.ui.NotificationSubscriptionController;
@@ -44,6 +36,7 @@ import org.olat.core.gui.components.link.Link;
 import org.olat.core.gui.components.link.LinkFactory;
 import org.olat.core.gui.components.panel.Panel;
 import org.olat.core.gui.components.stack.BreadcrumbedStackedPanel;
+import org.olat.core.gui.components.tabbedpane.Tab;
 import org.olat.core.gui.components.tabbedpane.TabbedPane;
 import org.olat.core.gui.components.velocity.VelocityContainer;
 import org.olat.core.gui.control.Controller;
@@ -52,22 +45,28 @@ import org.olat.core.gui.control.WindowControl;
 import org.olat.core.gui.control.controller.BasicController;
 import org.olat.core.gui.control.generic.dtabs.Activateable2;
 import org.olat.core.id.Identity;
+import org.olat.core.id.OLATResourceable;
+import org.olat.core.id.context.BusinessControlFactory;
 import org.olat.core.id.context.ContextEntry;
 import org.olat.core.id.context.StateEntry;
 import org.olat.core.logging.OLATSecurityException;
+import org.olat.core.logging.activity.ThreadLocalUserActivityLogger;
 import org.olat.core.util.WebappHelper;
 import org.olat.core.util.resource.OresHelper;
 import org.olat.core.util.vfs.QuotaManager;
 import org.olat.course.certificate.ui.CertificateAndEfficiencyStatementListController;
+import org.olat.group.ui.main.UserAdminBusinessGroupListController;
 import org.olat.ldap.LDAPLoginManager;
 import org.olat.ldap.LDAPLoginModule;
 import org.olat.properties.Property;
-import org.olat.user.ChangePrefsController;
-import org.olat.user.DisplayPortraitController;
-import org.olat.user.ProfileAndHomePageEditController;
-import org.olat.user.PropFoundEvent;
-import org.olat.user.UserPropertiesController;
+import org.olat.user.*;
+import org.olat.util.logging.activity.LoggingResourceable;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.ApplicationContext;
+
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 
 /**
  *  Initial Date:  Jul 29, 2003
@@ -110,7 +109,6 @@ public class UserAdminController extends BasicController implements Activateable
 	private Link backLink;
 	private ProfileAndHomePageEditController userProfileCtr;
 	private CourseOverviewController courseCtr;
-	private GroupOverviewController grpCtr;
 	private CertificateAndEfficiencyStatementListController efficicencyCtrl;
 
 	private final boolean isOlatAdmin;
@@ -121,6 +119,8 @@ public class UserAdminController extends BasicController implements Activateable
 	private LDAPLoginModule ldapLoginModule;
 	@Autowired
 	private LDAPLoginManager ldapLoginManager;
+	@Autowired
+	private ApplicationContext applicationContext;
 
 	/**
 	 * Constructor that creates a back - link as default
@@ -274,7 +274,7 @@ public class UserAdminController extends BasicController implements Activateable
 		userTabP = new TabbedPane("userTabP", ureq.getLocale());
 		userTabP.addListener(this);
 		
-		/**
+		/*
 		 *  Determine, whether the user admin is or is not able to edit all fields in user
 		 *  profile form. The system admin is always able to do so.
 		 */
@@ -283,40 +283,46 @@ public class UserAdminController extends BasicController implements Activateable
 			canEditAllFields = Boolean.TRUE;
 		}
 
+		// Prepare tab entries
+		List<Tab> tabs = new ArrayList<>();
+
 		userProfileCtr = new ProfileAndHomePageEditController(ureq, getWindowControl(), identity, canEditAllFields.booleanValue());
 		listenTo(userProfileCtr);
-		userTabP.addTab(translate(NLS_EDIT_UPROFILE), userProfileCtr.getInitialComponent());
+		tabs.add(new Tab(translate(NLS_EDIT_UPROFILE), userProfileCtr.getInitialComponent(), 10));
 		
 		prefsCtr = new ChangePrefsController(ureq, getWindowControl(), identity);
-		userTabP.addTab(translate(NLS_EDIT_UPREFS), prefsCtr.getInitialComponent());
+		tabs.add(new Tab(translate(NLS_EDIT_UPREFS), prefsCtr.getInitialComponent(), 20));
 
 		if (isPasswordChangesAllowed(identity)) {
 			pwdCtr =  new UserChangePasswordController(ureq, getWindowControl(), identity);				
 			listenTo(pwdCtr); // listen when finished to update authentications model
-			userTabP.addTab(translate(NLS_EDIT_UPWD), pwdCtr.getInitialComponent());
+			tabs.add(new Tab(translate(NLS_EDIT_UPWD), pwdCtr.getInitialComponent(), 30));
 		}
 		
 		Boolean canAuth = BaseSecurityModule.USERMANAGER_ACCESS_TO_AUTH;
 		if (canAuth.booleanValue() || isOlatAdmin) {
 			authenticationsCtr =  new UserAuthenticationsEditorController(ureq, getWindowControl(), identity);
-			userTabP.addTab(translate(NLS_EDIT_UAUTH), authenticationsCtr.getInitialComponent());
+			tabs.add(new Tab(translate(NLS_EDIT_UAUTH), authenticationsCtr.getInitialComponent(), 40));
 		}
 		
 		Boolean canProp = BaseSecurityModule.USERMANAGER_ACCESS_TO_PROP;
 		if (canProp.booleanValue() || isOlatAdmin) {
 			propertiesCtr = new UserPropertiesController(ureq, getWindowControl(), identity);			
 			this.listenTo(propertiesCtr);
-			userTabP.addTab(translate(NLS_EDIT_UPROP), propertiesCtr.getInitialComponent());
+			tabs.add(new Tab(translate(NLS_EDIT_UPROP), propertiesCtr.getInitialComponent(), 50));
 		}
-		
-		Boolean canStartGroups = BaseSecurityModule.USERMANAGER_CAN_START_GROUPS;
-		grpCtr = new GroupOverviewController(ureq, getWindowControl(), identity, canStartGroups);
-		listenTo(grpCtr);
-		userTabP.addTab(translate(NLS_VIEW_GROUPS), grpCtr.getInitialComponent());
-		
+
+		OLATResourceable ores = OresHelper.createOLATResourceableInstance("AllGroups", 0L);
+		ThreadLocalUserActivityLogger.addLoggingResourceInfo(LoggingResourceable.wrapBusinessPath(ores));
+		WindowControl bwControl = BusinessControlFactory.getInstance().createBusinessWindowControl(ores, null, getWindowControl());
+		UserAdminBusinessGroupListController userAdminBusinessGroupListController = new UserAdminBusinessGroupListController(ureq, bwControl, "adm", identity);
+		listenTo(userAdminBusinessGroupListController);
+		tabs.add(new Tab(translate(NLS_VIEW_GROUPS), userAdminBusinessGroupListController.getInitialComponent(), 60));
+		userAdminBusinessGroupListController.doDefaultSearch();
+
 		courseCtr = new CourseOverviewController(ureq, getWindowControl(), identity);
 		listenTo(courseCtr);
-		userTabP.addTab(translate(NLS_VIEW_COURSES), courseCtr.getInitialComponent());
+		tabs.add(new Tab(translate(NLS_VIEW_COURSES), courseCtr.getInitialComponent(), 70));
 		
 		if (isOlatAdmin) {
 			efficicencyCtrl = new CertificateAndEfficiencyStatementListController(ureq, getWindowControl(), identity, true);
@@ -324,24 +330,35 @@ public class UserAdminController extends BasicController implements Activateable
 			stackPanel.pushController(translate(NLS_VIEW_EFF_STATEMENTS), efficicencyCtrl);
 			efficicencyCtrl.setBreadcrumbPanel(stackPanel);
 			stackPanel.setInvisibleCrumb(1);
-			userTabP.addTab(translate(NLS_VIEW_EFF_STATEMENTS), stackPanel);
+			tabs.add(new Tab(translate(NLS_VIEW_EFF_STATEMENTS), stackPanel, 80));
 		}
 
 		Boolean canSubscriptions = BaseSecurityModule.USERMANAGER_CAN_MODIFY_SUBSCRIPTIONS;
 		if (canSubscriptions.booleanValue() || isOlatAdmin) {
 			Controller subscriptionsCtr = new NotificationSubscriptionController(ureq, getWindowControl(), identity, true);
 			listenTo(subscriptionsCtr); // auto-dispose
-			userTabP.addTab(translate(NLS_VIEW_SUBSCRIPTIONS), subscriptionsCtr.getInitialComponent());			
+			tabs.add(new Tab(translate(NLS_VIEW_SUBSCRIPTIONS), subscriptionsCtr.getInitialComponent(), 90));
 		}
 		
 		rolesCtr = new SystemRolesAndRightsController(getWindowControl(), ureq, identity);
-		userTabP.addTab(translate(NLS_EDIT_UROLES), rolesCtr.getInitialComponent());
-		
+		tabs.add(new Tab(translate(NLS_EDIT_UROLES), rolesCtr.getInitialComponent(), 100));
+
 		Boolean canQuota = BaseSecurityModule.USERMANAGER_ACCESS_TO_QUOTA;
 		if (canQuota.booleanValue() || isOlatAdmin) {
 			String relPath = FolderConfig.getUserHomes() + "/" + identity.getName();
 			quotaCtr = QuotaManager.getInstance().getQuotaEditorInstance(ureq, getWindowControl(), relPath, false);
-			userTabP.addTab(translate(NLS_EDIT_UQUOTA), quotaCtr.getInitialComponent());
+			tabs.add(new Tab(translate(NLS_EDIT_UQUOTA), quotaCtr.getInitialComponent(), 110));
+		}
+
+		// Additional tabs (e.g. of an extension)
+		UserAdminControllerAdditionalTabs userAdminControllerAdditionalTabs =
+				(UserAdminControllerAdditionalTabs) applicationContext.getBean("userAdminControllerAdditionalTabs", ureq, getWindowControl(), identity);
+		tabs.addAll(userAdminControllerAdditionalTabs.getTabs());
+
+		// Sort tabs and add them to tabbed pane
+		Collections.sort(tabs);
+		for (Tab tab : tabs) {
+			userTabP.addTab(tab);
 		}
 		
 		// now push to velocity
@@ -381,11 +398,7 @@ public class UserAdminController extends BasicController implements Activateable
 		userShortDescrCtr = new UserShortDescription(ureq, getWindowControl(), identity);
 		myContent.put("userShortDescription", userShortDescrCtr.getInitialComponent());
 	}
-	
-	/**
-	 * 
-	 * @see org.olat.core.gui.control.DefaultController#doDispose(boolean)
-	 */
+
 	@Override
 	protected void doDispose() {
 		//child controllers registered with listenTo get disposed in BasicController

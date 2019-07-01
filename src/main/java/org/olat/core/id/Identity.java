@@ -77,5 +77,4 @@ public interface Identity extends CreateInfo, IdentityRef, Persistable {
 	 * @return Current identity status 
 	 */
 	public Integer getStatus();
-	
 }

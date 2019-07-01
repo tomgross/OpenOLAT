@@ -28,11 +28,7 @@ package org.olat.core.commons.modules.bc.components;
 
 import java.text.Collator;
 import java.text.DateFormat;
-import java.util.Collections;
-import java.util.Comparator;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Locale;
+import java.util.*;
 
 import org.olat.core.commons.controllers.linkchooser.CustomLinkTreeModel;
 import org.olat.core.commons.modules.bc.FolderLoggingAction;
@@ -56,6 +52,7 @@ import org.olat.core.util.vfs.VFSLeaf;
 import org.olat.core.util.vfs.filters.VFSItemExcludePrefixFilter;
 import org.olat.core.util.vfs.filters.VFSItemFilter;
 import org.olat.core.util.vfs.version.Versionable;
+import org.olat.user.UserManager;
 
 /**
  * Initial Date:  Feb 11, 2004
@@ -78,7 +75,7 @@ public class FolderComponent extends AbstractComponent {
 	// likely to be resolved after user logs out, caches get cleared - and if not the server
 	// restart overnight definitely removes those .nfs files.
 	// fxdiff: FXOLAT-333 hide all shadow-files per default
-	public static final String[] ATTACHMENT_EXCLUDE_PREFIXES = new String[]{"."};
+	public static final String[] ATTACHMENT_EXCLUDE_PREFIXES = new String[] {};
 
 	protected boolean sortAsc = true;													// asc or desc?
 	protected String sortCol = "";  													// column to sort
@@ -120,7 +117,15 @@ public class FolderComponent extends AbstractComponent {
 			CustomLinkTreeModel customLinkTreeModel) {
 		this(ureq, name, rootContainer, filter, customLinkTreeModel, null);
 	}
-	
+
+	private VFSItemExcludePrefixFilter getExcludeFilter(boolean showHiddenFiles) {
+		VFSItemExcludePrefixFilter filter = new VFSItemExcludePrefixFilter(ATTACHMENT_EXCLUDE_PREFIXES);
+		if (!showHiddenFiles) {
+			filter.addExcludedPrefix(".");
+		}
+		return filter;
+	}
+
 	public FolderComponent(UserRequest ureq, String name,
 			VFSContainer rootContainer, VFSItemFilter filter,
 			CustomLinkTreeModel customLinkTreeModel, VFSContainer externContainerForCopy) {
@@ -129,7 +134,10 @@ public class FolderComponent extends AbstractComponent {
 		this.filter = filter;
 		this.customLinkTreeModel = customLinkTreeModel;
 		this.externContainerForCopy = externContainerForCopy;
-		exclFilter = new VFSItemExcludePrefixFilter(ATTACHMENT_EXCLUDE_PREFIXES);
+
+		boolean showHiddenFiles = UserManager.getInstance().getShowHiddenFiles(ureq.getIdentity());
+		exclFilter = getExcludeFilter(showHiddenFiles);
+
 		Locale locale = ureq.getLocale();
 		collator = Collator.getInstance(locale);
 		translator = Util.createPackageTranslator(FolderRunController.class, locale);

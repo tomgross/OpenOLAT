@@ -10,13 +10,6 @@
 
 	<context:component-scan base-package="org.olat.login" />
   
-	<bean id="OLATAuthenticationProvider" class="org.olat.login.auth.AuthenticationProvider" >
-		<constructor-arg index="0" value="OLAT"/>
-		<constructor-arg index="1" value="org.olat.login.OLATAuthenticationController"/>
-		<constructor-arg index="2" value="${olatprovider.enable}"/>
-		<constructor-arg index="3" value="${olatprovider.default}"/>
-		<constructor-arg index="4" value="o_icon_provider_olat"/>
-	</bean>
 
 	<bean id="ShibUZHAuthenticationProvider" class="org.olat.login.auth.AuthenticationProvider" >
 		<constructor-arg index="0" value="Shib"/>
@@ -40,6 +33,14 @@
 		<constructor-arg index="2" value="${ldap.enable}"/>
 		<constructor-arg index="3" value="${ldap.default}"/>
 		<constructor-arg index="4" value="o_icon_provider_ldap"/>
+	</bean>
+
+	<bean id="OLATAuthenticationProvider" class="org.olat.login.auth.AuthenticationProvider" >
+		<constructor-arg index="0" value="OLAT"/>
+		<constructor-arg index="1" value="org.olat.login.OLATAuthenticationController"/>
+		<constructor-arg index="2" value="${olatprovider.enable}"/>
+		<constructor-arg index="3" value="${olatprovider.default}"/>
+		<constructor-arg index="4" value="o_icon_provider_olat"/>
 	</bean>
 
 	<bean id="OAuthAuthenticationProvider" class="org.olat.login.oauth.OAuthAuthenticationProvider" >

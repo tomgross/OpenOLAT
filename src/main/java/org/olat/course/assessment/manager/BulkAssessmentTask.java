@@ -60,10 +60,7 @@ import org.olat.core.util.Util;
 import org.olat.core.util.WebappHelper;
 import org.olat.core.util.ZipUtil;
 import org.olat.core.util.i18n.I18nManager;
-import org.olat.core.util.mail.ContactList;
-import org.olat.core.util.mail.MailBundle;
-import org.olat.core.util.mail.MailContextImpl;
-import org.olat.core.util.mail.MailManager;
+import org.olat.core.util.mail.*;
 import org.olat.core.util.resource.OresHelper;
 import org.olat.core.util.vfs.VFSContainer;
 import org.olat.core.util.vfs.VFSItem;
@@ -93,10 +90,11 @@ import org.olat.course.run.environment.CourseEnvironment;
 import org.olat.course.run.scoring.ScoreEvaluation;
 import org.olat.course.run.userview.UserCourseEnvironment;
 import org.olat.course.run.userview.UserCourseEnvironmentImpl;
+import org.olat.modules.assessment.model.AssessmentEntryStatus;
 import org.olat.repository.RepositoryEntry;
 import org.olat.user.UserManager;
 import org.olat.util.logging.activity.LoggingResourceable;
-
+import org.springframework.beans.factory.annotation.Autowired;
 
 
 /**
@@ -251,6 +249,8 @@ public class BulkAssessmentTask implements LongRunnable, TaskAwareRunnable, Sequ
 		String businessPath = "";
 		ICourse course = CourseFactory.loadCourse(courseRes);
 		CourseNode node = course.getRunStructure().getNode(courseNodeIdent);
+
+		// Summary email for course creator/modifiers
 		String courseTitle = course.getCourseTitle();
 		String nodeTitle = node.getShortTitle();
 		String numOfAssessedIds = Integer.toString(datas == null ? 0 : datas.getRowsSize());
@@ -262,7 +262,25 @@ public class BulkAssessmentTask implements LongRunnable, TaskAwareRunnable, Sequ
 		mail.setContent(subject, body);
 		mailManager.sendMessage(mail);
 	}
-	
+
+	private void doGradedEmail(RepositoryEntry courseEntry, GTACourseNode gtaNode, org.olat.course.nodes.gta.Task assignedTask, Identity assessedIdentity) {
+		String language = assessedIdentity.getUser().getPreferences().getLanguage();
+		Locale locale = I18nManager.getInstance().getLocaleOrDefault(language);
+		Translator translator = Util.createPackageTranslator(BulkAssessmentOverviewController.class, locale,
+				Util.createPackageTranslator(GTAManager.class, locale));
+
+		final GTAManager gtaManager = CoreSpringFactory.getImpl(GTAManager.class);
+		// Build the list of recipients for the message according to configuration of the course element
+		List<Identity> recipients = gtaManager.addRecipients(courseEntry, gtaNode, assessedIdentity);
+
+
+		String subject = translator.translate("assessment.email.subject");
+		MailContext context = new MailContextImpl(courseRes, courseNodeIdent, "");
+
+		gtaManager.sendGradedEmail(gtaNode, assessedIdentity, recipients, subject, assignedTask.getTaskName(), context, translator);
+	}
+
+
 	public static String renderFeedback(List<BulkAssessmentFeedback> feedbacks, Translator translator) {
 		UserManager userManager = CoreSpringFactory.getImpl(UserManager.class);
 		
@@ -395,8 +413,8 @@ public class BulkAssessmentTask implements LongRunnable, TaskAwareRunnable, Sequ
 			if (hasPassed && passed != null && cut == null) { // Configuration of manual assessment --> Display passed/not passed: yes, Type of display: Manual by tutor
 				ScoreEvaluation seOld = courseNode.getUserScoreEvaluation(uce);
 				Float oldScore = seOld.getScore();
-				ScoreEvaluation se = new ScoreEvaluation(oldScore, passed);
-				// Update score,passed properties in db, and the user's efficiency statement
+				ScoreEvaluation se = new ScoreEvaluation(oldScore, passed, AssessmentEntryStatus.done, seOld.getUserVisible(), true, seOld.getAssessmentID());
+				// Update score, passed properties in db, and the user's efficiency statement
 				boolean incrementAttempts = false;
 				courseNode.updateUserScoreEvaluation(se, uce, coachIdentity, incrementAttempts);
 			}
@@ -416,7 +434,7 @@ public class BulkAssessmentTask implements LongRunnable, TaskAwareRunnable, Sequ
 				GTACourseNode gtaNode = (GTACourseNode)courseNode;
 				if((hasScore && score != null) || (hasPassed && passed != null)) {
 					//pushed to graded
-					updateTasksState(gtaNode, uce, TaskProcess.grading);
+					updateTasksState(gtaNode, uce, TaskProcess.graded);
 				} else if(hasReturnFiles) {
 					//push to revised
 					updateTasksState(gtaNode, uce, TaskProcess.correction);
@@ -447,7 +465,11 @@ public class BulkAssessmentTask implements LongRunnable, TaskAwareRunnable, Sequ
 				gtaManager.createTask(null, taskList, status, null, identity, courseNode);
 			}
 		}
-		
+
+		if (gtaTask != null && status == TaskProcess.graded) {
+			doGradedEmail(entry, courseNode, gtaTask, identity);
+		}
+
 		gtaManager.nextStep(status, courseNode);
 	}
 	

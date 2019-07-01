@@ -43,6 +43,7 @@ import org.olat.core.commons.persistence.DB;
 import org.olat.core.logging.OLog;
 import org.olat.core.logging.Tracing;
 import org.olat.core.logging.activity.LoggingObject;
+import org.springframework.beans.factory.annotation.Autowired;
 
 /**
  * 
@@ -62,26 +63,19 @@ public class SimpleLogExporter implements ICourseLogExporter {
 	private static final OLog log = Tracing.createLoggerFor(SimpleLogExporter.class);
 	private static final String LINE_SEPARATOR = System.getProperty("line.separator");
 	
-	private DB dbInstance;
-	private LogLineConverter logLineConverter_;
-	
-	private SimpleLogExporter() {
-		// this empty constructor is ok - instantiated via spring
-	}
-	
-	/** injected by spring **/
-	public void setLogLineConverter(LogLineConverter logLineConverter) {
-		logLineConverter_ = logLineConverter;
-	}
-	
-	public void setDbInstance(DB dbInstance) {
+	private final DB dbInstance;
+	private final LogLineConverter logLineConverter_;
+
+	@Autowired
+	private SimpleLogExporter(DB dbInstance, LogLineConverter logLineConverter_) {
 		this.dbInstance = dbInstance;
+		this.logLineConverter_ = logLineConverter_;
 	}
 
 	@Override
 	public void exportCourseLog(File outFile, String charset, Long resourceableId, Date begin, Date end, boolean resourceAdminAction, boolean anonymize) {
 
-		
+		@SuppressWarnings("JpaQlInspection")
 		String query = "select v from org.olat.core.logging.activity.LoggingObject v " + "where v.resourceAdminAction = :resAdminAction "
 				+ "AND ( " 
 				+ "(v.targetResId = :resId) OR " 
@@ -104,6 +98,7 @@ public class SimpleLogExporter implements ICourseLogExporter {
 				.setParameter("resAdminAction", resourceAdminAction)
 				.setParameter("resId", Long.toString(resourceableId));
 		if (begin != null) {
+			//noinspection JpaQueryApiInspection
 			dbQuery.setParameter("createdAfter", begin, TemporalType.DATE);
 		}
 		if (end != null) {
@@ -111,6 +106,7 @@ public class SimpleLogExporter implements ICourseLogExporter {
 			cal.setTime(end);
 			cal.add(Calendar.DAY_OF_MONTH, 1);
 			end = cal.getTime();
+			//noinspection JpaQueryApiInspection
 			dbQuery.setParameter("createdBefore", end, TemporalType.DATE);
 		}
 		

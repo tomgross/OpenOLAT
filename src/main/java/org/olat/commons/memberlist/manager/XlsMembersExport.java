@@ -24,11 +24,13 @@ import java.io.OutputStream;
 import java.util.Date;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 import org.olat.admin.landingpages.ui.RulesDataModel;
 import org.olat.core.gui.media.MediaResource;
 import org.olat.core.gui.translator.Translator;
 import org.olat.core.id.Identity;
+import org.olat.core.id.UserConstants;
 import org.olat.core.logging.OLog;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.Formatter;
@@ -47,7 +49,6 @@ public class XlsMembersExport {
 	
 	private static final OLog log = Tracing.createLoggerFor(XlsMembersExport.class);
 
-
 	public MediaResource export(List<Identity> rows, Map<Identity, StringBuilder> members, Translator translator, List<UserPropertyHandler> userPropertyHandlers) {
 	
 		String label = "TableExport_"
@@ -59,8 +60,13 @@ public class XlsMembersExport {
 			protected void generate(OutputStream out) {
 				try (OpenXMLWorkbook workbook = new OpenXMLWorkbook(out, 1)) {
 					OpenXMLWorksheet sheet = workbook.nextWorksheet();
-					createHeader(userPropertyHandlers, translator, sheet, workbook);
-					createData(members, rows, userPropertyHandlers, sheet);
+					// LMSUZH-566: Do not export email addresses even if email functionality is enabled in course element
+					List<UserPropertyHandler> allowedPropertyHandlers = userPropertyHandlers
+							.stream()
+							.filter(userPropertyHandler -> !UserConstants.EMAIL.equals(userPropertyHandler.getName()))
+							.collect(Collectors.toList());
+					createHeader(allowedPropertyHandlers, translator, sheet, workbook);
+					createData(members, rows, allowedPropertyHandlers, sheet);
 				} catch (IOException e) {
 					log.error("Unable to export xlsx", e);
 				}
@@ -68,7 +74,7 @@ public class XlsMembersExport {
 		};
 	}
 
-	private void createHeader(List<UserPropertyHandler> userPropertyHandlers, Translator translator, 
+	protected void createHeader(List<UserPropertyHandler> userPropertyHandlers, Translator translator,
 			OpenXMLWorksheet sheet,	OpenXMLWorkbook workbook) {
 		Row headerRow = sheet.newRow();
 		for (int c = 0; c < userPropertyHandlers.size(); c++) {
@@ -80,7 +86,7 @@ public class XlsMembersExport {
 		headerRow.addCell(userPropertyHandlers.size(), roleTranslator.translate("rules.role"));
 	}
 
-	private void createData(Map<Identity, StringBuilder> members, List<Identity> rows, List<UserPropertyHandler> userPropertyHandlers, OpenXMLWorksheet sheet) {
+	protected void createData(Map<Identity, StringBuilder> members, List<Identity> rows, List<UserPropertyHandler> userPropertyHandlers, OpenXMLWorksheet sheet) {
 		sheet.setHeaderRows(1);
 		for (int r = 0; r < rows.size(); r++) {
 			Row dataRow = sheet.newRow();
@@ -91,5 +97,5 @@ public class XlsMembersExport {
 			dataRow.addCell(userPropertyHandlers.size(), members.get(rows.get(r)).toString());
 		}
 	}
-	
+
 }

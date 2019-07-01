@@ -121,8 +121,7 @@ public class IQSURVCourseNode extends AbstractAccessableCourseNode implements QT
 	@Override
 	public TabbableController createEditController(UserRequest ureq, WindowControl wControl, BreadcrumbPanel stackPanel, ICourse course, UserCourseEnvironment euce) {
 		TabbableController childTabCntrllr = new IQEditController(ureq, wControl, stackPanel, course, this, euce);
-		CourseNode chosenNode = course.getEditorTreeModel().getCourseNode(euce.getCourseEditorEnv().getCurrentCourseNodeId());
-		return new NodeEditController(ureq, wControl, course.getEditorTreeModel(), course, chosenNode, euce, childTabCntrllr);
+		return new NodeEditController(ureq, wControl, course.getEditorTreeModel(), course, euce, childTabCntrllr);
 	}
 
 	/**
@@ -166,7 +165,7 @@ public class IQSURVCourseNode extends AbstractAccessableCourseNode implements QT
 				}
 			}
 		}
-		
+
 		Controller ctrl = TitledWrapperHelper.getWrapper(ureq, wControl, controller, this, "o_iqsurv_icon");
 		return new NodeRunConstructionResult(ctrl);
 	}
@@ -199,7 +198,7 @@ public class IQSURVCourseNode extends AbstractAccessableCourseNode implements QT
 			QTI21StatisticsSecurityCallback secCallback = new QTI21StatisticsSecurityCallback(admin, admin && deliveryOptions.isAllowAnonym());
 			return new QTI21StatisticResourceResult(qtiSurveyEntry, courseEntry, this, searchParams, secCallback);
 		}
-		
+
 		QTIStatisticSearchParams searchParams = new QTIStatisticSearchParams(courseOres.getResourceableId(), getIdent());
 		searchParams.setLimitToGroups(options.getParticipantsGroups());
 		return new QTIStatisticResourceResult(courseOres, this, qtiSurveyEntry, searchParams);

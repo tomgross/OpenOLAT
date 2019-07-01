@@ -106,8 +106,10 @@ public class QuestionMetadataEditController extends FormBasicController {
 		String numAnswerAlt = item.getNumOfAnswerAlternatives() < 0 ? "" : Integer.toString(item.getNumOfAnswerAlternatives());
 		numAnswerAltEl = uifactory.addTextElement("question.numOfAnswerAlternatives", "question.numOfAnswerAlternatives", 24, numAnswerAlt, formLayout);
 		numAnswerAltEl.setDisplaySize(4);
-		
-		uifactory.addStaticTextElement("question.usage", Integer.toString(item.getUsage()), formLayout);
+
+		// LMSUZH-671 quick fix to prevent meaningless field which always shows zero. Uncomment next line when item.getUsage() can show real number instead.
+		//uifactory.addStaticTextElement("question.usage", Integer.toString(item.getUsage()), formLayout);
+
 		String[] assessmentTypeKeys = new String[]{ "summative", "formative", "both"};
 		String[] assessmentTypeValues = new String[]{
 			translate("question.assessmentType.summative"), translate("question.assessmentType.formative"),

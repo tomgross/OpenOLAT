@@ -1,28 +1,28 @@
 /**
-* OLAT - Online Learning and Training<br>
-* http://www.olat.org
-* <p>
-* Licensed under the Apache License, Version 2.0 (the "License"); <br>
-* you may not use this file except in compliance with the License.<br>
-* You may obtain a copy of the License at
-* <p>
-* http://www.apache.org/licenses/LICENSE-2.0
-* <p>
-* Unless required by applicable law or agreed to in writing,<br>
-* software distributed under the License is distributed on an "AS IS" BASIS, <br>
-* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. <br>
-* See the License for the specific language governing permissions and <br>
-* limitations under the License.
-* <p>
-* Copyright (c) since 2004 at Multimedia- & E-Learning Services (MELS),<br>
-* University of Zurich, Switzerland.
-* <hr>
-* <a href="http://www.openolat.org">
-* OpenOLAT - Online Learning and Training</a><br>
-* This file has been modified by the OpenOLAT community. Changes are licensed
-* under the Apache 2.0 license as the original file.  
-* <p>
-*/ 
+ * OLAT - Online Learning and Training<br>
+ * http://www.olat.org
+ * <p>
+ * Licensed under the Apache License, Version 2.0 (the "License"); <br>
+ * you may not use this file except in compliance with the License.<br>
+ * You may obtain a copy of the License at
+ * <p>
+ * http://www.apache.org/licenses/LICENSE-2.0
+ * <p>
+ * Unless required by applicable law or agreed to in writing,<br>
+ * software distributed under the License is distributed on an "AS IS" BASIS, <br>
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. <br>
+ * See the License for the specific language governing permissions and <br>
+ * limitations under the License.
+ * <p>
+ * Copyright (c) since 2004 at Multimedia- & E-Learning Services (MELS),<br>
+ * University of Zurich, Switzerland.
+ * <hr>
+ * <a href="http://www.openolat.org">
+ * OpenOLAT - Online Learning and Training</a><br>
+ * This file has been modified by the OpenOLAT community. Changes are licensed
+ * under the Apache 2.0 license as the original file.
+ * <p>
+ */
 
 package org.olat.core.commons.modules.bc;
 
@@ -45,16 +45,17 @@ import org.springframework.stereotype.Service;
  * @author Mike Stock
  */
 @Service
-public class FolderModule extends AbstractSpringModule {	
-	
+public class FolderModule extends AbstractSpringModule {
+
 	private static final OLog log = Tracing.createLoggerFor(FolderModule.class);
 
 	private static final String CONFIG_FORCE_DOWNLOAD = "forceDownload";
-	
+
 	@Value("${folder.root}")
 	private String homesRoot;
 	@Value("${folder.editFileSizeLimitBytes:524288}")
 	private int maxEditSizeLimit;
+	private static final String CONFIG_ZIPSELECTIONMAXSIZEMB = "MaxZipSelectionSizeMb";
 	@Value("${folder.maxulmb}")
 	private int maxULMB;
 	@Value("${folder.quotamb}")
@@ -65,10 +66,10 @@ public class FolderModule extends AbstractSpringModule {
 	private boolean sendDocToExtern;
 	@Value("${folder.force.download:true}")
 	private String forceDownload;
-	
+
 	@Autowired
 	private FolderVersioningConfigurator versioning;
-	
+
 	@Autowired
 	public FolderModule(CoordinatorManager coordinatorManager) {
 		super(coordinatorManager);
@@ -85,11 +86,11 @@ public class FolderModule extends AbstractSpringModule {
 			// on current server. someone may start junit test and not realize that this
 			// can have side effects to a running instance on the same server...
 			FolderConfig.setFolderRoot(homesRoot + "_junittest");
-		} else { 
+		} else {
 			FolderConfig.setFolderRoot(homesRoot);
 		}
 		log.info("Folder root set to '" + FolderConfig.getCanonicalRoot() + "'.");
-		
+
 		FolderConfig.setMaxEditSizeLimit(maxEditSizeLimit);
 		// Set maximum upload filesize
 		FolderConfig.setLimitULKB(maxULMB * 1024);
@@ -101,7 +102,7 @@ public class FolderModule extends AbstractSpringModule {
 		FolderConfig.setSendDocumentLinkOnly(sendDocLinkyOnly);
 		//set default
 		FolderConfig.setSendDocumentToExtern(sendDocToExtern);
-		
+
 		// create tmp directory
 		new File(FolderConfig.getCanonicalTmpDir()).mkdirs();
 	}
@@ -116,7 +117,7 @@ public class FolderModule extends AbstractSpringModule {
 		FolderConfig.setVersioningConfigurator(versioning);
 		updateProperties();
 	}
-	
+
 	private void updateProperties() {
 		String enabled = getStringPropertyValue(CONFIG_FORCE_DOWNLOAD, true);
 		if(StringHelper.containsNonWhitespace(enabled)) {
@@ -140,11 +141,11 @@ public class FolderModule extends AbstractSpringModule {
 		String enabled = enable ? "true" : "false";
 		setStringProperty(CONFIG_FORCE_DOWNLOAD, enabled, true);
 	}
-	
+
 	public String getCanonicalRoot() {
 		return FolderConfig.getCanonicalRoot();
 	}
-	
+
 	public String getCanonicalTmpDir() {
 		return FolderConfig.getCanonicalTmpDir();
 	}

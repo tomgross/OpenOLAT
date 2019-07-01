@@ -20,14 +20,7 @@
 package org.olat.core.commons.controllers.navigation;
 
 import java.text.DateFormatSymbols;
-import java.util.Calendar;
-import java.util.Collections;
-import java.util.Date;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Locale;
-import java.util.SortedMap;
-import java.util.TreeMap;
+import java.util.*;
 
 /**
  * The data model for the YearNavigation.
@@ -62,9 +55,10 @@ public class YearNavigationModel {
 	 * @param datedObjects
 	 */
 	private void initializeYears(List<? extends Dated> datedObjects) {
+		List<Dated> copy = new ArrayList<>(datedObjects);
 		years = new TreeMap<Integer, Year>();
-		Collections.sort(datedObjects, new DatedComparator());
-		for (Dated item : datedObjects) {
+		Collections.sort(copy, new DatedComparator());
+		for (Dated item : copy) {
 			if(item.getDate() != null) {
 				add(item);
 			}

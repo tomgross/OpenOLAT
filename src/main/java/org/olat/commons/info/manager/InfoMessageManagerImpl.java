@@ -34,6 +34,7 @@ import org.olat.core.id.Identity;
 import org.olat.core.id.OLATResourceable;
 import org.olat.core.util.StringHelper;
 import org.olat.group.BusinessGroupRef;
+import org.springframework.beans.factory.annotation.Autowired;
 
 /**
  * 
@@ -46,21 +47,14 @@ import org.olat.group.BusinessGroupRef;
  */
 public class InfoMessageManagerImpl extends InfoMessageManager {
 	
-	private DB dbInstance;
+	private final DB dbInstance;
 	
 	/**
 	 * [used by Spring]
 	 */
-	private InfoMessageManagerImpl() {
+	public InfoMessageManagerImpl(DB dbInstance) {
+        this.dbInstance = dbInstance;
 		INSTANCE = this;
-	}
-	
-	/**
-	 * [used by Spring]
-	 * @param dbInstance
-	 */
-	public void setDbInstance(DB dbInstance) {
-		this.dbInstance = dbInstance;
 	}
 
 	@Override
@@ -97,7 +91,7 @@ public class InfoMessageManagerImpl extends InfoMessageManager {
 			}
 		}
 	}
-	
+
 
 	@Override
 	public List<InfoMessage> loadInfoMessagesOfIdentity(BusinessGroupRef businessGroup, IdentityRef identity) {
@@ -181,7 +175,7 @@ public class InfoMessageManagerImpl extends InfoMessageManager {
 			.append(" left join fetch msg.modifier modifier")
 			.append(" left join fetch modifier.user");
 		}
-		
+
 		if(ores != null) {
 			appendAnd(sb, "msg.resId=:resId and msg.resName=:resName ");
 		}

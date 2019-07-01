@@ -41,13 +41,13 @@
 	    <property name="parserPoolSize" value="${velocity.parser.pool.size}" />	
 	</bean>
 
-	<bean id="mapperSlayerTrigger" class="org.springframework.scheduling.quartz.CronTriggerBean">
+	<bean id="mapperSlayerTrigger" class="org.springframework.scheduling.quartz.CronTriggerFactoryBean">
 	    <property name="jobDetail" ref="mapperSlayerJob" />
 	    <property name="cronExpression" value="0 5 0/1 * * ?" />
 		<property name="startDelay" value="200000" />
 	</bean>
 	
-	<bean id="mapperSlayerJob" class="org.springframework.scheduling.quartz.JobDetailBean" lazy-init="true">
+	<bean id="mapperSlayerJob" class="org.springframework.scheduling.quartz.JobDetailFactoryBean" lazy-init="true">
 	  <property name="jobClass" value="org.olat.core.dispatcher.mapper.manager.MapperZombieSlayerJob" />
 	</bean>
 

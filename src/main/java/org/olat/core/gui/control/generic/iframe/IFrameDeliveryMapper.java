@@ -598,11 +598,9 @@ public class IFrameDeliveryMapper implements Mapper {
 		}
 		
 		public void appendJsMath() {
-			append("<script type=\"text/javascript\" src=\"");
-			append(WebappHelper.getMathJaxCdn());
-			append("MathJax.js?config=TeX-AMS-MML_HTMLorMML\"></script>\n");
-			append("<script type=\"text/javascript\">\n");
-			append("MathJax.Hub.Config({\n");	
+			append("<script type=\"text/x-mathjax-config\">\n");
+			append("MathJax.Hub.Config({\n");
+			append(" root: \"" + WebappHelper.getMathJaxCdn() + "\",\n");
 			append(" extensions: [\"jsMath2jax.js\"],\n");
 			append(" showProcessingMessages: false,\n");
 			append(" jsMath2jax: {\n");
@@ -613,6 +611,9 @@ public class IFrameDeliveryMapper implements Mapper {
 			append(" }\n");
 			append("});");
 			append("</script>");
+			append("<script type=\"text/javascript\" src=\"");
+			append(WebappHelper.getMathJaxCdn());
+			append("/MathJax.js?config=TeX-AMS-MML_HTMLorMML\"></script>\n");
 		}
 		
 		public void appendGlossary() {

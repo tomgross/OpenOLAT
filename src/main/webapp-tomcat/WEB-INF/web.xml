@@ -142,6 +142,10 @@
 		<servlet-class>org.olat.core.servlets.OpenOLATServlet</servlet-class>
 		<!-- Set the load order -->
 		<load-on-startup>1</load-on-startup>
+		<multipart-config>
+			<location>/tmp</location>
+			<file-size-threshold>10240</file-size-threshold>
+		</multipart-config>
 	</servlet>
 	<servlet>
 		<servlet-name>rawservlet</servlet-name>
@@ -165,7 +169,7 @@
 	<!-- Jersey REST Servlet -->
 	<servlet>
 		<servlet-name>RESTServletAdaptor</servlet-name>
-		<servlet-class>com.sun.jersey.spi.container.servlet.ServletContainer</servlet-class>
+		<servlet-class>org.glassfish.jersey.servlet.ServletContainer</servlet-class>
 		<init-param>
 			<param-name>com.sun.jersey.config.feature.Redirect</param-name>
 			<param-value>true</param-value>

@@ -93,7 +93,9 @@ public interface ICourse extends OLATResourceable {
 	 * @return the container to the coursefolder of this course
 	 */
 	public VFSContainer getCourseFolderContainer();
-	
+
+	public boolean exceedsSizeLimit();
+
 	/**
 	 * Give the possibility to override the read-only mode of the containers
 	 * if the course is closed.

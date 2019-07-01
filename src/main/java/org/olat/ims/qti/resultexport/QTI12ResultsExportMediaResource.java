@@ -44,6 +44,7 @@ import javax.servlet.http.HttpServletResponse;
 
 import org.apache.velocity.VelocityContext;
 import org.dom4j.Document;
+import org.olat.core.OlatServletResource;
 import org.olat.core.gui.UserRequest;
 import org.olat.core.gui.media.MediaResource;
 import org.olat.core.gui.render.velocity.VelocityHelper;
@@ -167,11 +168,9 @@ public class QTI12ResultsExportMediaResource implements MediaResource {
 			convertToZipEntry(zout, exportFolderName + "/index.html", usersHTML);
 			
 			//Copy resource files or file trees to export file tree 
-			File sasstheme = new File(WebappHelper.getContextRealPath("/static/offline/qti"));
-			fsToZip(zout, sasstheme.toPath(), exportFolderName + "/css/offline/qti/");
+			OlatServletResource.appendDirectory(zout, "/static/offline/qti", exportFolderName + "/css/offline/qti/");
 			
-			File fontawesome = new File(WebappHelper.getContextRealPath("/static/font-awesome"));
-			fsToZip(zout, fontawesome.toPath(), exportFolderName + "/css/font-awesome/");
+			OlatServletResource.appendDirectory(zout, "/static/font-awesome", exportFolderName + "/css/font-awesome/");
 
 			zout.close();
 
@@ -254,11 +253,9 @@ public class QTI12ResultsExportMediaResource implements MediaResource {
 		convertToZipEntry(zout, exportFolderName + "/index.html", usersHTML);
 		
 		//Copy resource files or file trees to export file tree 
-		File sasstheme = new File(WebappHelper.getContextRealPath("/static/offline/qti"));
-		fsToZip(zout, sasstheme.toPath(), exportFolderName + "/css/offline/qti/");
+		OlatServletResource.appendDirectory(zout, "/static/offline/qti", exportFolderName + "/css/offline/qti/");
 		
-		File fontawesome = new File(WebappHelper.getContextRealPath("/static/font-awesome"));
-		fsToZip(zout, fontawesome.toPath(), exportFolderName + "/css/font-awesome/");
+		OlatServletResource.appendDirectory(zout, "/static/font-awesome", exportFolderName + "/css/font-awesome/");
 	}
 	
 	private String createLink(String name, String href, boolean userview){
@@ -350,6 +347,7 @@ public class QTI12ResultsExportMediaResource implements MediaResource {
 		return idPath.replace(idDir, "") + resultSet.getAssessmentID() + ".html";
 	}
 	
+	@Deprecated
 	private void fsToZip(ZipOutputStream zout, final Path sourceFolder, final String targetPath) throws IOException {
 		Files.walkFileTree(sourceFolder, new SimpleFileVisitor<Path>() {
 			@Override

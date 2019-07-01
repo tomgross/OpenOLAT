@@ -20,15 +20,16 @@
 
 package org.olat.core.commons.services.tagging.manager;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.StringTokenizer;
-
 import org.olat.core.commons.persistence.DB;
 import org.olat.core.commons.persistence.DBQuery;
 import org.olat.core.commons.services.tagging.model.TagImpl;
 import org.olat.core.manager.BasicManager;
 import org.olat.core.util.StringHelper;
+import org.springframework.beans.factory.annotation.Autowired;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.StringTokenizer;
 
 /**
  * 
@@ -41,18 +42,10 @@ import org.olat.core.util.StringHelper;
  */
 public class SimpleTagProposalManager extends BasicManager implements TagProposalManager {
 
-	private DB dbInstance;
-	
-	public SimpleTagProposalManager() {
-		//
-	}
-	
-	
-	/**
-	 * [used by Spring]
-	 * @param dbInstance
-	 */
-	public void setDbInstance(DB dbInstance) {
+	private final DB dbInstance;
+
+	@Autowired
+	public SimpleTagProposalManager(DB dbInstance) {
 		this.dbInstance = dbInstance;
 	}
 

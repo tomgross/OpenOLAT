@@ -25,7 +25,7 @@ import java.util.Set;
 
 import javax.ws.rs.core.Application;
 
-import org.codehaus.jackson.jaxrs.JacksonJaxbJsonProvider;
+import org.glassfish.jersey.jackson.internal.jackson.jaxrs.json.JacksonJaxbJsonProvider;
 import org.olat.core.CoreSpringFactory;
 
 /**
@@ -42,7 +42,7 @@ public class OlatRestApplication extends Application {
 	@Override
 	public Set<Class<?>> getClasses() {
 		Set<Class<?>> classes = new HashSet<Class<?>>();
-		classes.add(JacksonJaxbJsonProvider.class);	
+		classes.add(JacksonJaxbJsonProvider.class);
 		classes.addAll(getRestRegistrationService().getClasses());
 		return classes;
 	}
