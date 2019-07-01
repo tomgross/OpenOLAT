@@ -31,6 +31,8 @@ import org.olat.core.gui.control.controller.BasicController;
 import org.olat.core.gui.control.generic.closablewrapper.CloseableModalController;
 import org.olat.core.id.Identity;
 import org.olat.core.id.OLATResourceable;
+import org.olat.core.util.StringHelper;
+import org.olat.core.util.mail.*;
 import org.olat.core.util.resource.OresHelper;
 import org.olat.course.CourseFactory;
 import org.olat.course.ICourse;
@@ -43,10 +45,13 @@ import org.olat.course.nodes.gta.TaskProcess;
 import org.olat.course.nodes.ms.MSCourseNodeRunController;
 import org.olat.course.run.scoring.AssessmentEvaluation;
 import org.olat.course.run.userview.UserCourseEnvironment;
+import org.olat.modules.ModuleConfiguration;
 import org.olat.modules.assessment.model.AssessmentEntryStatus;
 import org.olat.modules.assessment.ui.event.AssessmentFormEvent;
 import org.olat.repository.RepositoryEntry;
 import org.springframework.beans.factory.annotation.Autowired;
+
+import java.util.*;
 
 /**
  * 
@@ -71,7 +76,9 @@ public class GTACoachedParticipantGradingController extends BasicController {
 
 	@Autowired
 	private GTAManager gtaManager;
-	
+	@Autowired
+	private MailManager mailManager;
+
 	public GTACoachedParticipantGradingController(UserRequest ureq, WindowControl wControl,
 			OLATResourceable courseOres, GTACourseNode gtaNode, Task assignedTask, 
 			UserCourseEnvironment coachCourseEnv, Identity assessedIdentity) {
@@ -158,7 +165,14 @@ public class GTACoachedParticipantGradingController extends BasicController {
 		
 		AssessmentEvaluation scoreEval = gtaNode.getUserScoreEvaluation(assessedUserCourseEnv);
 		if(scoreEval.getAssessmentStatus() == AssessmentEntryStatus.done) {
-			assignedTask = gtaManager.updateTask(assignedTask, TaskProcess.graded, gtaNode);
+ 			RepositoryEntry courseEntry = coachCourseEnv.getCourseEnvironment().getCourseGroupManager().getCourseEntry();
+  			if(assignedTask == null) {
+  				TaskList taskList = gtaManager.createIfNotExists(courseEntry, gtaNode);
+  				assignedTask = gtaManager.createTask(null, taskList, TaskProcess.graded, null, assessedIdentity, gtaNode);
+  			} else {
+  				assignedTask = gtaManager.updateTask(assignedTask, TaskProcess.graded, gtaNode);
+  			}
+ 			doGradedEmail(courseEntry, gtaNode, assignedTask);
 			fireEvent(ureq, Event.CHANGED_EVENT);
 		}
 	}
@@ -176,4 +190,49 @@ public class GTACoachedParticipantGradingController extends BasicController {
 		listenTo(cmc);
 		cmc.activate();
 	}
+
+	private void doGradedEmail(RepositoryEntry courseEntry, GTACourseNode gtaNode, Task assignedTask) {
+		ModuleConfiguration config = gtaNode.getModuleConfiguration();
+		String body = config.getStringValue(GTACourseNode.GTASK_ASSESSMENT_TEXT);
+		if (StringHelper.containsNonWhitespace(body)) {
+
+			// Build the list of recipients for the message according to configuration of the course element
+			boolean sendToOwners = config.getBooleanSafe(GTACourseNode.GTASK_ASSESSMENT_MAIL_CONFIRMATION_OWNER);
+			boolean sendToCourseCoaches = config.getBooleanSafe(GTACourseNode.GTASK_ASSESSMENT_MAIL_CONFIRMATION_COACH_COURSE);
+			boolean sendToGroupCoaches = config.getBooleanSafe(GTACourseNode.GTASK_ASSESSMENT_MAIL_CONFIRMATION_COACH_GROUP);
+			boolean sendToParticipants = config.getBooleanSafe(GTACourseNode.GTASK_ASSESSMENT_MAIL_CONFIRMATION_PARTICIPANT);
+			List<Identity> recipients = addRecipients(courseEntry, sendToOwners, sendToParticipants, sendToCourseCoaches, sendToGroupCoaches);
+
+			// Prepare mail template
+			String subject = translate("assessment.email.subject");
+			MailTemplate template = new GTAAssessmentMailTemplate(subject, body, assignedTask.getTaskName(), getIdentity(), getTranslator());
+
+			// send message to all found recipients
+			if (recipients.size() > 0) {
+				MailContext context = new MailContextImpl(getWindowControl().getBusinessControl().getAsString());
+				MailerResult result = new MailerResult();
+				MailBundle[] bundles = mailManager.makeMailBundles(context, recipients, template, null, UUID.randomUUID().toString(), result);
+				mailManager.sendMessage(bundles);
+			}
+		}
+	}
+
+	private List<Identity> addRecipients(RepositoryEntry courseEntry, boolean addOwners, boolean addParticipants, boolean addCourseCoaches, boolean addGroupCoaches) {
+		List<Identity> recipients = new ArrayList<>();
+		if (addOwners) {
+			recipients.addAll(gtaManager.getCourseOwners(courseEntry));
+		}
+		if (addCourseCoaches) {
+			recipients.addAll(gtaManager.getCourseCoaches(courseEntry));
+		}
+		if (addGroupCoaches) {
+			recipients.addAll(gtaManager.getGroupCoaches(gtaNode));
+		}
+		if (addParticipants) {
+			recipients.addAll(Collections.singletonList(assessedIdentity));
+		}
+		return recipients;
+	}
+
+
 }
