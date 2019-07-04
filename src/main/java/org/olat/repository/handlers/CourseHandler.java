@@ -82,6 +82,8 @@ import org.olat.course.CourseModule;
 import org.olat.course.ICourse;
 import org.olat.course.PersistingCourseImpl;
 import org.olat.course.Structure;
+import org.olat.course.assessment.AssessmentMode;
+import org.olat.course.cleanup.CourseCleanupJob;
 import org.olat.course.config.CourseConfig;
 import org.olat.course.editor.CourseAccessAndProperties;
 import org.olat.course.export.CourseEnvironmentMapper;
@@ -124,10 +126,10 @@ import de.tuchemnitz.wizard.workflows.coursecreation.steps.CcStep00;
 /**
  * Initial Date: Apr 15, 2004
  *
- * @author 
- * 
+ * @author
+ *
  * Comment: Mike Stock
- * 
+ *
  */
 public class CourseHandler implements RepositoryHandler {
 
@@ -138,7 +140,7 @@ public class CourseHandler implements RepositoryHandler {
 	public boolean supportCreate(Identity identity, Roles roles) {
 		return true;
 	}
-	
+
 	@Override
 	public RepositoryEntry createResource(Identity initialAuthor, String displayname, String description,
 			Object createObject, Organisation organisation, Locale locale) {
@@ -153,7 +155,7 @@ public class CourseHandler implements RepositoryHandler {
 		log.info(Tracing.M_AUDIT, "Course created: {}", course.getCourseTitle());
 		return re;
 	}
-	
+
 	@Override
 	public boolean isPostCreateWizardAvailable() {
 		return true;
@@ -175,18 +177,18 @@ public class CourseHandler implements RepositoryHandler {
 		try {
 			IndexFileFilter visitor = new IndexFileFilter();
 			Path fPath = PathUtils.visit(file, filename, visitor);
-			
+
 			if(visitor.isValid()) {
 				Path repoXml = fPath.resolve("export/repo.xml");
 				if(repoXml != null) {
 					eval.setValid(true);
-					
+
 					RepositoryEntryImport re = RepositoryEntryImportExport.getConfiguration(repoXml);
 					if(re != null) {
 						eval.setDisplayname(re.getDisplayname());
 						eval.setDescription(re.getDescription());
 					}
-					
+
 					eval.setReferences(hasReferences(fPath));
 				}
 			}
@@ -232,7 +234,7 @@ public class CourseHandler implements RepositoryHandler {
 		}
 		return hasReferences;
 	}
-	
+
 	@Override
 	public RepositoryEntry importResource(Identity initialAuthor, String initialAuthorAlt, String displayname,
 			String description, boolean withReferences, Organisation organisation, Locale locale, File file, String filename) {
@@ -253,7 +255,7 @@ public class CourseHandler implements RepositoryHandler {
 		Structure runStructure = course.getRunStructure();
 		runStructure.getRootNode().removeAllChildren();
 		CourseFactory.saveCourse(course.getResourceableId());
-		
+
 		//import references
 		CourseEditorTreeNode rootNode = (CourseEditorTreeNode)course.getEditorTreeModel().getRootNode();
 		importReferences(rootNode, course, initialAuthor, organisation, locale, withReferences);
@@ -297,27 +299,27 @@ public class CourseHandler implements RepositoryHandler {
 		CourseEditorTreeNode editorRootNode = ((CourseEditorTreeNode)course.getEditorTreeModel().getRootNode());
 		editorRootNode.getCourseNode().setShortTitle(Formatter.truncateOnly(displayname, 25)); //do not use truncate!
 		editorRootNode.getCourseNode().setLongTitle(displayname);
-	
+
 		// mark entire structure as dirty/new so the user can re-publish
 		markDirtyNewRecursively(editorRootNode);
 		// root has already been created during export. Unmark it.
-		editorRootNode.setNewnode(false);		
-		
+		editorRootNode.setNewnode(false);
+
 		//save and close edit session
 		CourseFactory.saveCourse(course.getResourceableId());
 		CourseFactory.closeCourseEditSession(course.getResourceableId(), true);
-		
+
 		RepositoryEntryImportExport imp = new RepositoryEntryImportExport(fImportBaseDirectory);
 		if(imp.anyExportedPropertiesAvailable()) {
 			re = imp.importContent(re, getMediaContainer(re));
 		}
-		
+
 		//import reminders
 		importReminders(re, fImportBaseDirectory, envMapper, initialAuthor);
-		
+
 		//clean up export folder
 		cleanExportAfterImport(fImportBaseDirectory);
-		
+
 		return re;
 	}
 	
@@ -330,8 +332,21 @@ public class CourseHandler implements RepositoryHandler {
 	
 	private void cleanExportAfterImport(File fImportBaseDirectory) {
 		try {
+			// prepare cleanup folder
+			String courseId = fImportBaseDirectory.getParentFile().getName();
+			File bcRoot = fImportBaseDirectory.getParentFile().getParentFile().getParentFile();
+			// LMSUZH-436: make sure that cleanup root folder exists before making any subfolders
+			File cleanupRoot = new File(bcRoot.getPath() + File.separator + CourseCleanupJob.CLEANUP_ROOT_DIR_NAME);
+			if (!cleanupRoot.exists() && !cleanupRoot.mkdir()) {
+				throw new IOException("Could not create cleanup folder");
+			}
+			File dir = new File(cleanupRoot.getPath() + File.separator + courseId);
+			if (!dir.mkdir()) {
+				throw new IOException("Could not move export to cleanup");
+			}
+			// move export folder to cleanup folder
 			Path exportDir = fImportBaseDirectory.toPath();
-			FileUtils.deleteDirsAndFiles(exportDir);
+			Files.move(exportDir, dir.toPath(), StandardCopyOption.REPLACE_EXISTING);
 		} catch (Exception e) {
 			log.error("", e);
 		}
@@ -451,8 +466,8 @@ public class CourseHandler implements RepositoryHandler {
 	public RepositoryEntry copy(Identity author, RepositoryEntry source, RepositoryEntry target) {
 		final OLATResource sourceResource = source.getOlatResource();
 		final OLATResource targetResource = target.getOlatResource();
-		
-		CourseFactory.copyCourse(sourceResource, targetResource);
+
+		copyCourse(sourceResource, targetResource);
 		 
 		//transaction copied
 		ICourse sourceCourse = CourseFactory.loadCourse(source);
@@ -477,6 +492,10 @@ public class CourseHandler implements RepositoryHandler {
 		
 		return target;
 	}
+
+	protected void copyCourse(OLATResourceable sourceResource, OLATResource targetResource) {
+		CourseFactory.copyCourse(sourceResource, targetResource);
+	}
 	
 	private void cloneLectureConfig(RepositoryEntry source, RepositoryEntry target) {
 		LectureService lectureService = CoreSpringFactory.getImpl(LectureService.class);
@@ -496,7 +515,7 @@ public class CourseHandler implements RepositoryHandler {
 				RuleSPI ruleSpi = reminderModule.getRuleSPIByType(rule.getType());
 				if(ruleSpi != null) {
 					ReminderRule clonedRule = ruleSpi.clone(rule, envMapper);
-					if (clonedRule != null) 
+					if (clonedRule != null)
 						clonedRules.getRules().add(clonedRule);
 				}
 			}
