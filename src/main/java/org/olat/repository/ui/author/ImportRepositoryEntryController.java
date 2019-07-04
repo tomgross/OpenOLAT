@@ -277,9 +277,14 @@ public class ImportRepositoryEntryController extends FormBasicController {
 			String uploadedFilename = uploadFileEl.getUploadFileName();
 			boolean withReferences = referencesEl.isAtLeastSelected(1);
 			
-			importedEntry = handler.importResource(getIdentity(), null, displayname,
-					"", withReferences, organisation, getLocale(), uploadedFile, uploadedFilename);
-			
+                        try {
+                                importedEntry = handler.importResource(getIdentity(), null, displayname,
+                                                "", withReferences, organisation, getLocale(), uploadedFile, uploadedFilename);
+                        } catch (Exception e) {
+                                logError("Exception when importing repository entry", e);
+                                importedEntry = null;
+                        }
+
 			if(importedEntry == null) {
 				showWarning("error.import");
 			} else {
