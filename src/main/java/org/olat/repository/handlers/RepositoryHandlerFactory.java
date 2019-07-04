@@ -55,9 +55,18 @@ import org.springframework.stereotype.Service;
  * Comment:  
  * 
  */
+
+/**
+ * TODO sev26
+ * Why not wiring the handlers directly?
+ */
 @Service
 public class RepositoryHandlerFactory {
 
+	/**
+	 * TODO sev26
+	 * Static handlers are not a good idea.
+	 */
 	private static Map<String, RepositoryHandler> handlerMap;
 	private static List<OrderedRepositoryHandler> handlerList;
 	static {
@@ -78,7 +87,11 @@ public class RepositoryHandlerFactory {
 		registerHandler(new SharedFolderHandler(), 40);
 		registerHandler(new GlossaryHandler(), 41);
 		registerHandler(new PortfolioHandler(), 42);
-		
+		registerHandler(new VideoHandler(), 43);
+		/**
+		 * TODO sev26
+		 * Create a new class rather than injecting the type as string.
+		 */
 		
 		DocumentEditorDelegate wordDelegate = new DocumentEditorDelegate(new WordVFSEditorDelegateType());
 		registerHandler(new WebDocumentHandler(DocFileResource.TYPE_NAME, wordDelegate, wordDelegate), 10001);
@@ -122,6 +135,10 @@ public class RepositoryHandlerFactory {
 	 * Get a repository handler which supports the given resourceable type.
 	 * @param resourceableTypeName
 	 * @return the handler or null if no appropriate handler could be found
+	 */
+	/**
+	 * TODO sev26
+	 * More than one handler per resourceable type should be possible.
 	 */
 	public RepositoryHandler getRepositoryHandler(String resourceableTypeName) {
 		return handlerMap.get(resourceableTypeName);
