@@ -169,6 +169,16 @@
 		<property name="i18nDescriptionKey" value="admin.menu.title.alt"/>
 		<property name="translationPackage" value="org.olat.modules.vitero.ui"/>
 		<property name="extensionPoints">
+			<list>
+				<value>org.olat.admin.SystemAdminMainController</value>
+			</list>
+		</property>
+	</bean>
+
+	<!-- OpenMeetings admin. panel -->
+	<bean class="org.olat.core.extensions.action.GenericActionExtension" init-method="initExtensionPoints">
+		<property name="order" value="7210" />
+		<property name="actionController">
 			<list>	
 				<value>org.olat.admin.SystemAdminMainController</value>		
 			</list>
@@ -295,5 +305,4 @@
 			</list>
 		</property>
 	</bean>
-	
 </beans>
