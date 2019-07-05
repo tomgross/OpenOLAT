@@ -78,9 +78,9 @@ public class QTIRuntimeController extends RepositoryEntryRuntimeController imple
 				&& QTI12To21Converter.isConvertible(re.getOlatResource());
 
 		if(canConvert) {
-			convertQTI21Link = LinkFactory.createToolLink("convert.qti.21", translate("tools.convert.qti21"), this, "o_FileResource-IMSQTI21_icon");
-			convertQTI21Link.setIconLeftCSS("o_icon o_FileResource-IMSQTI21_icon");
-			settingsDropdown.addComponent(convertQTI21Link);
+			//convertQTI21Link = LinkFactory.createToolLink("convert.qti.21", translate("tools.convert.qti21"), this, "o_FileResource-IMSQTI21_icon");
+			//convertQTI21Link.setIconLeftCSS("o_icon o_FileResource-IMSQTI21_icon");
+			//settingsDropdown.addComponent(convertQTI21Link);
 		}
 	}
 	
@@ -237,9 +237,9 @@ public class QTIRuntimeController extends RepositoryEntryRuntimeController imple
 		createConvertedTestController.setExampleAndHelp(translate("convert.qti21.hint"), "Change+from+QTI+1.2+to+QTI+2.1");
 		listenTo(createConvertedTestController);
 
-		localCmc = new CloseableModalController(getWindowControl(), translate("close"), createConvertedTestController.getInitialComponent(), true, translate("title.convert.qti21") );
-		localCmc.activate();
-		listenTo(localCmc);
+		//localCmc = new CloseableModalController(getWindowControl(), translate("close"), createConvertedTestController.getInitialComponent(), true, translate("title.convert.qti21") );
+		//localCmc.activate();
+		//listenTo(localCmc);
 	}
 
 	private enum Delayed {

@@ -51,7 +51,7 @@ import org.xml.sax.helpers.DefaultHandler;
  * 
  * @author gnaegi
  */
-public class SimpleHTMLTagsFilter implements Filter {
+public class SimpleHTMLTagsFilter extends StripHTMLTagsFilter {
 	private static final OLog log = Tracing.createLoggerFor(SimpleHTMLTagsFilter.class);
 
 	@Override
@@ -60,79 +60,12 @@ public class SimpleHTMLTagsFilter implements Filter {
 		if(original.isEmpty()) return "";
 		
 		try {
-			SAXParser parser = new SAXParser();
-			HTMLHandler contentHandler = new HTMLHandler(original.length());
-			parser.setContentHandler(contentHandler);
-			parser.parse(new InputSource(new StringReader(original)));
-			String text = contentHandler.toString();
-			text = text.replace('\u00a0', ' ');
+			String text = super.filter(original);
 			text = StringHelper.escapeHtml(text);
 			return text;
-		} catch (SAXException e) {
-			log.error("", e);
-			return null;
-		} catch (IOException e) {
-			log.error("", e);
-			return null;
 		} catch (Exception e) {
 			log.error("", e);
 			return null;
 		}
 	}
-	
-	private static class HTMLHandler extends DefaultHandler {
-		private boolean collect = true;
-		private boolean consumeBlanck = false;
-		private final LimitedContentWriter content;
-		
-		public HTMLHandler(int size) {
-			content = new LimitedContentWriter(size, FileDocumentFactory.getMaxFileSize());
-		}
-
-		@Override
-		public void startElement(String uri, String localName, String qName, Attributes attributes) {
-			String elem = localName.toLowerCase();
-			if("script".equals(elem)) {
-				collect = false;
-			// add a single whitespace before each block element but only if not there is not already a whitespace there
-			} else if("li".equals(elem)) {
-				content.append(" ");
-			} else if("br".equals(elem)) {
-				content.append(" ");
-			} else if(NekoHTMLFilter.blockTags.contains(elem) && content.length() > 0 && content.charAt(content.length() -1) != ' ' ) {
-				consumeBlanck = true;
-			}
-		}
-		
-		@Override
-		public void characters(char[] chars, int offset, int length) {
-			if(collect) {
-				if(consumeBlanck) {
-					if(content.length() > 0 && content.charAt(content.length() -1) != ' ' && length > 0 && chars[offset] != ' ') { 
-						content.append(' ');
-					}
-					consumeBlanck = false;
-				}
-				content.write(chars, offset, length);
-			}
-		}
-
-		@Override
-		public void endElement(String uri, String localName, String qName) {
-			String elem = localName.toLowerCase();
-			if("script".equals(elem)) {
-				collect = true;
-			} else if("li".equals(elem) || "p".equals(elem)) {
-				content.append(" ");
-			} else if(NekoHTMLFilter.blockTags.contains(elem) && content.length() > 0 && content.charAt(content.length() -1) != ' ' ) {
-				consumeBlanck = true;
-			}
-		}
-		
-		@Override
-		public String toString() {
-			return content.toString();
-		}
-	}
-
 }

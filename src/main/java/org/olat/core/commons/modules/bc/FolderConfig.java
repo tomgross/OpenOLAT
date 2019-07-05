@@ -41,6 +41,10 @@ public class FolderConfig {
 	private static final long LIMITULKB_DEFAULT = 20 * 1024;
 	/** QUOTAKB_DEFAULT configuration default value */
 	private static final int QUOTAKB_DEFAULT = 20 * 1024;
+	/** MAXZIPMB_DEFAULT configuration default value */
+	private static final int MAXZIPMB_DEFAULT = 500;
+	/** MAXEXPORTMB_DEFAULT configuration default value */
+	private static final int MAXEXPORTMB_DEFAULT = 5000;
 	/** FOLDERROOT_DEFAULT configuration default value */
 	private static final String FOLDERROOT_DEFAULT = "bcroot";
 	/** USERHOMES_DEFAULT configuration default value */
@@ -56,6 +60,9 @@ public class FolderConfig {
 
 	private static long limitULKB = LIMITULKB_DEFAULT;
 	private static long quotaKB = QUOTAKB_DEFAULT;
+	private static int maxZipSizeMB = MAXZIPMB_DEFAULT;
+	private static int maxCourseExportSizeMB = MAXEXPORTMB_DEFAULT;
+
 	private static long editFileSizeLimit;
 	private static final String META_DIR = "/.meta";
 	private static final String TMP_DIR = "/tmp";
@@ -193,6 +200,14 @@ public class FolderConfig {
 		return editFileSizeLimit;
 	}
 
+
+	public static int getMaxZipSizeMB() {
+		return maxZipSizeMB;
+	}
+
+	public static int getMaxCourseExportSizeMB() {
+		return maxCourseExportSizeMB;
+	}
 
 	/* =================  Setters  ================ */
 
@@ -358,5 +373,13 @@ public class FolderConfig {
 	 */
 	public static void setEPortfolioAddEnabled(boolean ePortfolioAddEnabled) {
 		FolderConfig.ePortfolioAddEnabled = ePortfolioAddEnabled;
+	}
+
+	public static void setMaxZipSizeMB(int maxZipSizeMB) {
+		FolderConfig.maxZipSizeMB = maxZipSizeMB;
+	}
+
+	public static void setMaxCourseExportSizeMB(int maxCourseExportSizeMB) {
+		FolderConfig.maxCourseExportSizeMB = maxCourseExportSizeMB;
 	}
 }

@@ -29,6 +29,8 @@ package org.olat.core.commons.modules.bc.commands;
 import java.util.ArrayList;
 import java.util.List;
 
+import org.olat.commons.fileutil.ZipConfig;
+import org.olat.core.CoreSpringFactory;
 import org.olat.core.commons.modules.bc.FileSelection;
 import org.olat.core.commons.modules.bc.FolderEvent;
 import org.olat.core.commons.modules.bc.components.FolderComponent;
@@ -93,13 +95,30 @@ public class CmdZip extends FormBasicController implements FolderCommand {
 		if(status == FolderCommandStatus.STATUS_FAILED) {
 			return null;
 		}
-		
+
 		initForm(ureq);
+
+		boolean isSelectionSizeOK = getZipConfig().isItemsSizeOK(getItemSelection());
+		if (!isSelectionSizeOK) {
+			this.showError("zip.selection.too.big");
+			return null;
+		}
+
 		mainVC = createVelocityContainer("createZipPanel");
 		mainVC.contextPut("fileselection", selection);
 		return this;
 	}
-	
+
+	private List<VFSItem> getItemSelection() {
+		List<VFSItem> vfsFiles = new ArrayList<VFSItem>();
+		for (String fileName : selection.getFiles()) {
+			VFSItem item = currentContainer.resolve(fileName);
+			if (item != null)
+				vfsFiles.add(item);
+		}
+		return vfsFiles;
+	}
+
 	@Override
 	protected void initForm(FormItemContainer formLayout, Controller listener, UserRequest ureq) {
 		String files = selection.renderAsHtml();
@@ -142,6 +161,9 @@ public class CmdZip extends FormBasicController implements FolderCommand {
 		fireEvent(ureq, FolderCommand.FOLDERCOMMAND_FINISHED);
 	}
 
+	private ZipConfig getZipConfig() {
+		return (ZipConfig) CoreSpringFactory.getBean(ZipConfig.class);
+	}
 	/**
 	 * Creates a zipFile by using ZipUtil and fires Event.DONE_EVENT if successful.
 	 * 
@@ -159,19 +181,14 @@ public class CmdZip extends FormBasicController implements FolderCommand {
 			fireEvent(ureq, Event.FAILED_EVENT);
 			return;				
 		}
-		
-		List<VFSItem> vfsFiles = new ArrayList<VFSItem>();
-		for (String fileName : selection.getFiles()) {
-			VFSItem item = currentContainer.resolve(fileName);
-			if (item != null) {
-				vfsFiles.add(item);
-			}
-		}
+
+		List<VFSItem> vfsFiles = getItemSelection();
+
 		if (!ZipUtil.zip(vfsFiles, (VFSLeaf)zipFile, true)) {
 			// cleanup zip file
 			zipFile.delete();				
 			status = FolderCommandStatus.STATUS_FAILED;
-			fireEvent(ureq, FOLDERCOMMAND_FINISHED);
+			fireEvent(ureq, FolderCommand.FOLDERCOMMAND_FINISHED);
 		} else {
 			if(zipFile instanceof MetaTagged) {
 				MetaInfo info = ((MetaTagged)zipFile).getMetaInfo();

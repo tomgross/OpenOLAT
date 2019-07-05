@@ -23,35 +23,30 @@ import java.io.File;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.Date;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import javax.persistence.LockModeType;
 import javax.persistence.Query;
 
-import org.olat.basesecurity.GroupRoles;
-import org.olat.basesecurity.IdentityRef;
+import org.olat.basesecurity.*;
 import org.olat.core.commons.modules.bc.FolderConfig;
 import org.olat.core.commons.modules.bc.vfs.OlatRootFolderImpl;
 import org.olat.core.commons.persistence.DB;
 import org.olat.core.commons.services.notifications.PublisherData;
 import org.olat.core.commons.services.notifications.SubscriptionContext;
+import org.olat.core.gui.translator.Translator;
 import org.olat.core.id.Identity;
 import org.olat.core.logging.OLog;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.StringHelper;
 import org.olat.core.util.io.SystemFilenameFilter;
+import org.olat.core.util.mail.*;
 import org.olat.core.util.vfs.VFSContainer;
 import org.olat.core.util.vfs.VFSItem;
 import org.olat.core.util.vfs.VFSManager;
 import org.olat.core.util.xml.XStreamHelper;
+import org.olat.course.condition.Condition;
 import org.olat.course.nodes.GTACourseNode;
 import org.olat.course.nodes.gta.AssignmentResponse;
 import org.olat.course.nodes.gta.AssignmentResponse.Status;
@@ -68,20 +63,20 @@ import org.olat.course.nodes.gta.model.TaskDefinition;
 import org.olat.course.nodes.gta.model.TaskDefinitionList;
 import org.olat.course.nodes.gta.model.TaskImpl;
 import org.olat.course.nodes.gta.model.TaskListImpl;
+import org.olat.course.nodes.gta.ui.GTAAssessmentMailTemplate;
 import org.olat.course.nodes.gta.ui.events.SubmitEvent;
 import org.olat.course.run.environment.CourseEnvironment;
-import org.olat.group.BusinessGroup;
-import org.olat.group.BusinessGroupRef;
-import org.olat.group.BusinessGroupService;
-import org.olat.group.DeletableGroupData;
+import org.olat.group.*;
 import org.olat.group.area.BGAreaManager;
 import org.olat.group.manager.BusinessGroupRelationDAO;
 import org.olat.group.model.BusinessGroupRefImpl;
+import org.olat.group.model.SearchBusinessGroupParams;
 import org.olat.modules.ModuleConfiguration;
 import org.olat.modules.assessment.AssessmentService;
 import org.olat.modules.assessment.model.AssessmentEntryStatus;
 import org.olat.repository.RepositoryEntry;
 import org.olat.repository.RepositoryEntryRef;
+import org.olat.repository.RepositoryEntryRelationType;
 import org.olat.repository.manager.RepositoryEntryRelationDAO;
 import org.olat.resource.OLATResource;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -106,6 +101,10 @@ public class GTAManagerImpl implements GTAManager, DeletableGroupData {
 	private DB dbInstance;
 	@Autowired
 	private BGAreaManager areaManager;
+	@Autowired
+	protected BaseSecurity securityManager;
+	@Autowired
+	private MailManager mailManager;
 	@Autowired
 	private AssessmentService assessmentService;
 	@Autowired
@@ -789,6 +788,43 @@ public class GTAManagerImpl implements GTAManager, DeletableGroupData {
 	}
 
 	@Override
+	public List<Identity> getCourseOwners(RepositoryEntry repositoryEntry) {
+		return repositoryEntryRelationDao.getMembers(repositoryEntry, RepositoryEntryRelationType.defaultGroup,
+				GroupRoles.owner.name());
+	}
+
+	@Override
+	public List<Identity> getCourseCoaches(RepositoryEntry repositoryEntry) {
+		return repositoryEntryRelationDao.getMembers(repositoryEntry, RepositoryEntryRelationType.defaultGroup,
+				GroupRoles.coach.name());
+	}
+
+	@Override
+	public List<Identity> getGroupCoaches(GTACourseNode gtaNode) {
+		List<Long> coaches = new ArrayList<>();
+		Condition visibilityCondition = gtaNode.getPreConditionVisibility();
+		if (visibilityCondition != null) {
+			// get groups from visibility settings of course node
+			SearchBusinessGroupParams groupSearchParams = new SearchBusinessGroupParams(null, false, false);
+			groupSearchParams.setGroupKeys(visibilityCondition.getEasyModeGroupAccessIdList());
+			List<BusinessGroup> groups = businessGroupService.findBusinessGroups(groupSearchParams, gtaNode.getReferencedRepositoryEntry(), 0, -1);
+			// get group memberships and related identity keys for coaches
+			List<BusinessGroupMembership> memberships = businessGroupService.getBusinessGroupsMembership(groups);
+			for (BusinessGroupMembership membership : memberships) {
+				if (membership.isOwner()) {
+					coaches.add(membership.getIdentityKey());
+				}
+			}
+		}
+		// return identities
+		SearchIdentityParams identitySearchParams = new SearchIdentityParams();
+		identitySearchParams.setIdentityKeys(coaches);
+		return (coaches.size() > 0)
+				? securityManager.getIdentitiesByPowerSearch(identitySearchParams, 0, -1)
+				: new ArrayList<>();
+	}
+
+	@Override
 	public List<Task> getTasks(IdentityRef identity, RepositoryEntryRef entry, GTACourseNode cNode) {
 		StringBuilder sb = new StringBuilder();
 		sb.append("select task from gtatask task ")
@@ -1262,17 +1298,8 @@ public class GTAManagerImpl implements GTAManager, DeletableGroupData {
 	@Override
 	public void log(String step, String operation, Task assignedTask, Identity actor, Identity assessedIdentity, BusinessGroup assessedGroup,
 			CourseEnvironment courseEnv, GTACourseNode cNode) {
-		//log
 		String msg = step + " of " + assignedTask.getTaskName() + ": " + operation;
-		if(GTAType.group.name().equals(cNode.getModuleConfiguration().getStringValue(GTACourseNode.GTASK_TYPE))) {
-			log.audit(msg + " to business group: " + assessedGroup.getName(), null);
-			courseEnv.getAuditManager()
-				.appendToUserNodeLog(cNode, actor, assessedGroup, msg);
-		} else {
-			log.audit(msg, null);
-			courseEnv.getAuditManager()
-				.appendToUserNodeLog(cNode, actor, assessedIdentity, msg);
-		}
+		logMessage(actor, assessedIdentity, assessedGroup, courseEnv, cNode, msg);
 	}
 
 	@Override
@@ -1280,22 +1307,67 @@ public class GTAManagerImpl implements GTAManager, DeletableGroupData {
 			CourseEnvironment courseEnv, GTACourseNode cNode) {
 		String operation = event.getLogMessage();
 		String file = event.getFilename();
-		//log
 		String msg = step + " of " + assignedTask.getTaskName() + ": " + operation + " " + file;
-		if(GTAType.group.name().equals(cNode.getModuleConfiguration().getStringValue(GTACourseNode.GTASK_TYPE))) {
+		logMessage(actor, assessedIdentity, assessedGroup, courseEnv, cNode, msg);
+	}
+
+	private void logMessage(Identity actor, Identity assessedIdentity, BusinessGroup assessedGroup, CourseEnvironment courseEnv, GTACourseNode cNode, String msg) {
+		if (GTAType.group.name().equals(cNode.getModuleConfiguration().getStringValue(GTACourseNode.GTASK_TYPE))) {
 			log.audit(msg + " to business group: " + assessedGroup.getName(), null);
 			courseEnv.getAuditManager()
-				.appendToUserNodeLog(cNode, actor, assessedGroup, msg);
+					.appendToUserNodeLog(cNode, actor, assessedGroup, msg);
 		} else {
 			log.audit(msg, null);
 			courseEnv.getAuditManager()
-				.appendToUserNodeLog(cNode, actor, assessedIdentity, msg);
+					.appendToUserNodeLog(cNode, actor, assessedIdentity, msg);
 		}
 	}
-	
+
 	private interface TaskListSynched {
 		
 		public void sync();
 		
 	}
+
+	public void addUniqueIdentities(Map<Long, Identity> map, List<Identity> list) {
+		list.forEach(identity -> {
+			if (!map.containsKey(identity.getKey())) {
+				map.put(identity.getKey(), identity);
+			}
+		});
+	}
+
+	@Override
+	public List<Identity> addRecipients(RepositoryEntry courseEntry, GTACourseNode gtaNode, Identity assessedIdentity) {
+		ModuleConfiguration config = gtaNode.getModuleConfiguration();
+		Map<Long, Identity> recipients = new HashMap<>();
+
+		if (config.getBooleanSafe(GTACourseNode.GTASK_ASSESSMENT_MAIL_CONFIRMATION_OWNER)) {
+			addUniqueIdentities(recipients, getCourseOwners(courseEntry));
+		}
+		if (config.getBooleanSafe(GTACourseNode.GTASK_ASSESSMENT_MAIL_CONFIRMATION_COACH_COURSE)) {
+			addUniqueIdentities(recipients, getCourseCoaches(courseEntry));
+		}
+		if (config.getBooleanSafe(GTACourseNode.GTASK_ASSESSMENT_MAIL_CONFIRMATION_COACH_GROUP)) {
+			addUniqueIdentities(recipients, getGroupCoaches(gtaNode));
+		}
+		if (config.getBooleanSafe(GTACourseNode.GTASK_ASSESSMENT_MAIL_CONFIRMATION_PARTICIPANT)) {
+			addUniqueIdentities(recipients, Collections.singletonList(assessedIdentity));
+		}
+		return new ArrayList<>(recipients.values());
+	}
+
+	@Override
+	public void sendGradedEmail(GTACourseNode gtaNode, Identity assessedIdentity, List<Identity> recipients, String subject, String taskName, MailContext context, Translator translator) {
+		ModuleConfiguration config = gtaNode.getModuleConfiguration();
+		String body = config.getStringValue(GTACourseNode.GTASK_ASSESSMENT_TEXT);
+		if (StringHelper.containsNonWhitespace(body)) {
+			// Prepare mail template
+			MailTemplate template = new GTAAssessmentMailTemplate(subject, body, taskName, assessedIdentity, translator);
+			// send message to all found recipients
+			mailManager.sendToRecipientsList(context, template, recipients);
+		}
+	}
+
+
 }

@@ -24,6 +24,7 @@ import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.olat.NewControllerFactory;
+import org.olat.commons.fileutil.FileSizeLimitExceededException;
 import org.olat.core.commons.services.mark.Mark;
 import org.olat.core.commons.services.mark.MarkManager;
 import org.olat.core.gui.UserRequest;
@@ -46,15 +47,13 @@ import org.olat.core.gui.control.generic.layout.MainLayoutController;
 import org.olat.core.gui.media.MediaResource;
 import org.olat.core.id.OLATResourceable;
 import org.olat.core.id.Roles;
-import org.olat.core.id.context.BusinessControlFactory;
-import org.olat.core.id.context.ContextEntry;
-import org.olat.core.id.context.HistoryPoint;
-import org.olat.core.id.context.StateEntry;
+import org.olat.core.id.context.*;
 import org.olat.core.logging.OLATSecurityException;
 import org.olat.core.logging.activity.ThreadLocalUserActivityLogger;
 import org.olat.core.util.StringHelper;
 import org.olat.core.util.UserSession;
 import org.olat.core.util.Util;
+import org.olat.core.util.WebappHelper;
 import org.olat.core.util.coordinate.LockResult;
 import org.olat.core.util.event.EventBus;
 import org.olat.core.util.event.GenericEventListener;
@@ -76,12 +75,7 @@ import org.olat.repository.handlers.EditionSupport;
 import org.olat.repository.handlers.RepositoryHandler;
 import org.olat.repository.handlers.RepositoryHandlerFactory;
 import org.olat.repository.model.RepositoryEntrySecurity;
-import org.olat.repository.ui.author.AuthoringEditAccessController;
-import org.olat.repository.ui.author.CatalogSettingsController;
-import org.olat.repository.ui.author.ConfirmDeleteSoftlyController;
-import org.olat.repository.ui.author.CopyRepositoryEntryController;
-import org.olat.repository.ui.author.RepositoryEditDescriptionController;
-import org.olat.repository.ui.author.RepositoryMembersController;
+import org.olat.repository.ui.author.*;
 import org.olat.repository.ui.list.LeavingEvent;
 import org.olat.repository.ui.list.RepositoryEntryDetailsController;
 import org.olat.resource.OLATResource;
@@ -141,7 +135,7 @@ public class RepositoryEntryRuntimeController extends MainLayoutBasicController 
 	
 	protected boolean corrupted;
 	protected boolean overrideReadOnly = false;
-	private RepositoryEntry re;
+	protected RepositoryEntry re;
 	private LockResult lockResult;
 	private boolean assessmentLock;// by Assessment mode
 	private AssessmentMode assessmentMode;
@@ -150,7 +144,9 @@ public class RepositoryEntryRuntimeController extends MainLayoutBasicController 
 	
 	private final EventBus eventBus;
 	private HistoryPoint launchedFromPoint;
-	
+
+	private final String supportAddr;
+
 	@Autowired
 	protected ACService acService;
 	@Autowired
@@ -169,7 +165,9 @@ public class RepositoryEntryRuntimeController extends MainLayoutBasicController 
 	private AssessmentModeManager assessmentModeMgr;
 	@Autowired
 	private UserCourseInformationsManager userCourseInfoMgr;
-	
+	@Autowired
+	private RepositoryEditDescriptionControllerFactory repositoryEditDescriptionControllerFactory;
+
 	public RepositoryEntryRuntimeController(UserRequest ureq, WindowControl wControl, RepositoryEntry re,
 			RepositoryEntrySecurity reSecurity, RuntimeControllerCreator runtimeControllerCreator) {
 		this(ureq, wControl, re, reSecurity, runtimeControllerCreator, true, true);
@@ -182,7 +180,9 @@ public class RepositoryEntryRuntimeController extends MainLayoutBasicController 
 		
 		ThreadLocalUserActivityLogger.addLoggingResourceInfo(LoggingResourceable
 				.wrapBusinessPath(OresHelper.createOLATResourceableType("RepositorySite")));
-		
+
+		supportAddr = WebappHelper.getMailConfig("mailSupport");
+
 		//! check corrupted
 		corrupted = isCorrupted(re);
 		assessmentLock = isAssessmentLock(ureq, re, reSecurity);
@@ -192,12 +192,12 @@ public class RepositoryEntryRuntimeController extends MainLayoutBasicController 
 		if(Boolean.TRUE.equals(wcard)) {
 			overrideReadOnly = true;
 		}
-		
+
 		this.re = re;
 		this.showInfos = showInfos;
 		this.allowBookmark = allowBookmark;
 		this.runtimeControllerCreator = runtimeControllerCreator;
-		
+
 		if(assessmentLock) {
 			TransientAssessmentMode mode = session.getLockMode();
 			assessmentMode = assessmentModeMgr.getAssessmentModeById(mode.getModeKey());
@@ -318,7 +318,7 @@ public class RepositoryEntryRuntimeController extends MainLayoutBasicController 
 		detailsLink.setElementCssClass("o_sel_author_details");
 		detailsLink.setVisible(showInfos);
 		toolbarPanel.addTool(detailsLink);
-		
+
 		boolean marked = markManager.isMarked(re, getIdentity(), null);
 		String css = marked ? Mark.MARK_CSS_ICON : Mark.MARK_ADD_CSS_ICON;
 		bookmarkLink = LinkFactory.createToolLink("bookmark", translate("details.bookmark.label"), this, css);
@@ -326,7 +326,7 @@ public class RepositoryEntryRuntimeController extends MainLayoutBasicController 
 		bookmarkLink.setVisible(allowBookmark);
 		toolbarPanel.addTool(bookmarkLink, Align.right);
 	}
-	
+
 	protected void initRuntimeTools(Dropdown toolsDropdown) {
 		if (reSecurity.isEntryAdmin()) {
 			//tools
@@ -399,14 +399,14 @@ public class RepositoryEntryRuntimeController extends MainLayoutBasicController 
 			}
 		}
 	}
-	
+
 	protected void initDeleteTools(Dropdown settingsDropdown, boolean needSpacer) {
 		if(reSecurity.isEntryAdmin()) {
 			boolean deleteManaged = RepositoryEntryManagedFlag.isManaged(re, RepositoryEntryManagedFlag.delete);
 			if(needSpacer && settingsDropdown.size() > 0 && !deleteManaged) {
 				settingsDropdown.addComponent(new Spacer("close-delete"));
 			}
-	
+
 			if(!deleteManaged) {
 				String type = translate(handler.getSupportedType());
 				String deleteTitle = translate("details.delete.alt", new String[]{ type });
@@ -680,8 +680,12 @@ public class RepositoryEntryRuntimeController extends MainLayoutBasicController 
 		initToolbar();
 		cleanUp();
 	}
-	
+
 	protected final void doClose(UserRequest ureq) {
+		// Remove context to be closed from history stack
+		BusinessControl businessControl = getWindowControl().getBusinessControl();
+		UserSession userSession = ureq.getUserSession();
+		userSession.removeFromHistory(businessControl);
 		// Now try to go back to place that is attacked to (optional) root back business path
 		getWindowControl().getWindowBackOffice().getWindow().getDTabs()
 			.closeDTab(ureq, re.getOlatResource(), launchedFromPoint);
@@ -718,7 +722,7 @@ public class RepositoryEntryRuntimeController extends MainLayoutBasicController 
 		WindowControl bwControl = getSubWindowControl("Settings");
 		RepositoryEntry refreshedEntry = loadRepositoryEntry();
 		RepositoryEditDescriptionController ctrl
-			= new RepositoryEditDescriptionController(ureq, addToHistory(ureq, bwControl), refreshedEntry);
+				= repositoryEditDescriptionControllerFactory.create(ureq, addToHistory(ureq, bwControl), refreshedEntry);
 		listenTo(ctrl);
 		descriptionCtrl = pushController(ureq, translate("settings.editor"), ctrl);
 		currentToolCtr = descriptionCtrl;
@@ -831,19 +835,49 @@ public class RepositoryEntryRuntimeController extends MainLayoutBasicController 
 	}
 	
 	private void doCopy(UserRequest ureq) {
-		removeAsListenerAndDispose(cmc);
-		removeAsListenerAndDispose(copyCtrl);
+		RepositoryEntry entry = repositoryService.loadByKey(re.getKey());
+		OLATResourceable ores = entry.getOlatResource();
+		if (ores == null) {
+			showError("error.createcopy");
+			return;
+		}
 
-		copyCtrl = new CopyRepositoryEntryController(ureq, getWindowControl(), re);
-		listenTo(copyCtrl);
-		
-		String title = translate("details.copy");
-		cmc = new CloseableModalController(getWindowControl(), translate("close"), copyCtrl.getInitialComponent(), true, title);
-		listenTo(cmc);
-		cmc.activate();
+		final boolean isAlreadyLocked = handler.isLocked(ores);
+		lockResult = handler.acquireLock(ores, ureq.getIdentity());
+		if (lockResult == null || isSuccessfullyLocked(lockResult, isAlreadyLocked)) {
+			removeAsListenerAndDispose(copyCtrl);
+			try {
+				copyCtrl = new CopyRepositoryEntryController(ureq, getWindowControl(), re);
+			} catch (FileSizeLimitExceededException e) {
+				String exportMaxSize = String.valueOf(FileSizeLimitExceededException.getExportMaxSizeMB());
+				showError("error.copy.failed.too.big");
+				return;
+			} finally {
+				// release lock in any case, no matter copy was successful or not
+				if (isSuccessfullyLocked(lockResult, isAlreadyLocked)) {
+					handler.releaseLock(lockResult);
+					lockResult = null;
+				}
+			}
+			listenTo(copyCtrl);
+
+			removeAsListenerAndDispose(cmc);
+			String title = translate("details.copy");
+			cmc = new CloseableModalController(getWindowControl(), translate("close"), copyCtrl.getInitialComponent(), true, title);
+			listenTo(cmc);
+			cmc.activate();
+		} else if (lockResult != null && lockResult.isSuccess() && isAlreadyLocked) {
+			showWarning("warning.course.alreadylocked.bySameUser");
+			lockResult = null;
+		} else {
+			showWarning("warning.course.alreadylocked", lockResult.getOwner().getName());
+		}
 	}
 	
 	private void doDownload(UserRequest ureq) {
+		Roles roles = ureq.getUserSession().getRoles();
+		boolean isAdmin = roles.isOLATAdmin();
+
 		if (handler == null) {
 			StringBuilder sb = new StringBuilder(translate("error.download"));
 			sb.append(": No download handler for repository entry: ").append(
@@ -859,11 +893,16 @@ public class RepositoryEntryRuntimeController extends MainLayoutBasicController 
 			return;
 		}
 
+		if (!isAdmin && entry.exceedsSizeLimit()) {
+			showError("error.export.size.exceeded", new String[] { entry.getDisplayname() });
+			return;
+		}
+
 		boolean isAlreadyLocked = handler.isLocked(ores);
 		try {
 			lockResult = handler.acquireLock(ores, ureq.getIdentity());
 			if (lockResult == null
-					|| (lockResult != null && lockResult.isSuccess() && !isAlreadyLocked)) {
+					|| isSuccessfullyLocked(lockResult, isAlreadyLocked)) {
 				MediaResource mr = handler.getAsMediaResource(ores, false);
 				if (mr != null) {
 					repositoryService.incrementDownloadCounter(entry);
@@ -883,14 +922,20 @@ public class RepositoryEntryRuntimeController extends MainLayoutBasicController 
 						.getOwner());
 				showInfo("warning.course.alreadylocked", fullName);
 			}
+		} catch (Exception e) {
+			showError("error.export");
 		} finally {
-			if ((lockResult != null && lockResult.isSuccess() && !isAlreadyLocked)) {
+			if (isSuccessfullyLocked(lockResult, isAlreadyLocked)) {
 				handler.releaseLock(lockResult);
 				lockResult = null;
 			}
 		}
 	}
-	
+
+	private boolean isSuccessfullyLocked(LockResult lockResult, boolean isAlreadyLocked) {
+		return lockResult != null && lockResult.isSuccess() && !isAlreadyLocked;
+	}
+
 	private void doDelete(UserRequest ureq) {
 		if (!reSecurity.isEntryAdmin()) {
 			throw new OLATSecurityException("Trying to delete, but not allowed: user = " + ureq.getIdentity());
@@ -925,7 +970,7 @@ public class RepositoryEntryRuntimeController extends MainLayoutBasicController 
 			toolbarPanel.rootController(re.getDisplayname(), runtimeController);
 		}
 	}
-	
+
 	protected void disposeRuntimeController() {
 		if(runtimeController != null) {
 			removeAsListenerAndDispose(runtimeController);

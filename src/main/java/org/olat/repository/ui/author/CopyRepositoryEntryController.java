@@ -27,6 +27,7 @@ import org.olat.core.gui.components.form.flexible.impl.FormLayoutContainer;
 import org.olat.core.gui.control.Controller;
 import org.olat.core.gui.control.Event;
 import org.olat.core.gui.control.WindowControl;
+import org.olat.core.id.Roles;
 import org.olat.core.util.StringHelper;
 import org.olat.core.util.Util;
 import org.olat.repository.RepositoryEntry;
@@ -42,7 +43,7 @@ import org.springframework.beans.factory.annotation.Autowired;
  */
 public class CopyRepositoryEntryController extends FormBasicController {
 
-	private TextElement displaynameEl;
+	private TextElement displayNameElement;
 	
 	private RepositoryEntry copyEntry;
 	private final RepositoryEntry sourceEntry;
@@ -60,10 +61,11 @@ public class CopyRepositoryEntryController extends FormBasicController {
 
 	@Override
 	protected void initForm(FormItemContainer formLayout, Controller listener, UserRequest ureq) {
+		// LMSUZH-71: Copy a resource with Umlaut and the title of the copied resource is HTML escaped
 		String sourceName = sourceEntry.getDisplayname() + " " + translate("copy.suffix");
-		displaynameEl = uifactory.addTextElement("cif.displayname", "cif.displayname", 100, sourceName, formLayout);
-		displaynameEl.setDisplaySize(30);
-		displaynameEl.setMandatory(true);
+		displayNameElement = uifactory.addTextElement("cif.displayname", "cif.displayname", 100, sourceName, formLayout);
+		displayNameElement.setDisplaySize(30);
+		displayNameElement.setMandatory(true);
 		
 		FormLayoutContainer buttonContainer = FormLayoutContainer.createButtonLayout("buttonContainer", getTranslator());
 		formLayout.add("buttonContainer", buttonContainer);
@@ -83,9 +85,14 @@ public class CopyRepositoryEntryController extends FormBasicController {
 	
 	@Override
 	protected void formOK(UserRequest ureq) {
-		String displayname = displaynameEl.getValue();
-		copyEntry = repositoryService.copy(sourceEntry, getIdentity(), displayname);
-		fireEvent(ureq, Event.DONE_EVENT);
+		Roles roles = ureq.getUserSession().getRoles();
+		if (!roles.isOLATAdmin() && sourceEntry.exceedsSizeLimit()) {
+			showError("copy.skipped.sizelimit.exceeded");
+		} else {
+			String displayName = displayNameElement.getValue();
+			copyEntry = repositoryService.copy(sourceEntry, getIdentity(), displayName);
+			fireEvent(ureq, Event.DONE_EVENT);
+		}
 	}
 	
 	@Override
@@ -97,13 +104,13 @@ public class CopyRepositoryEntryController extends FormBasicController {
 	protected boolean validateFormLogic(UserRequest ureq) {
 		boolean allOk = true;
 		
-		if (!StringHelper.containsNonWhitespace(displaynameEl.getValue())) {
-			displaynameEl.setErrorKey("cif.error.displayname.empty", new String[] {});
+		if (!StringHelper.containsNonWhitespace(displayNameElement.getValue())) {
+			displayNameElement.setErrorKey("cif.error.displayname.empty", new String[] {});
 			allOk = false;
-		} else if (displaynameEl.hasError()) {
+		} else if (displayNameElement.hasError()) {
 			allOk = false;
 		} else {
-			displaynameEl.clearError();
+			displayNameElement.clearError();
 		}
 
 		return allOk & super.validateFormLogic(ureq);

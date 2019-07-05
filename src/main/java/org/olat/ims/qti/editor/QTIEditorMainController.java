@@ -1071,9 +1071,9 @@ public class QTIEditorMainController extends MainLayoutBasicController implement
 		createConvertedTestController.setDisplayname(qtiEntry.getDisplayname());
 		listenTo(createConvertedTestController);
 
-		cmc = new CloseableModalController(getWindowControl(), translate("close"), createConvertedTestController.getInitialComponent(), true, translate("title.convert.qti21") );
-		cmc.activate();
-		listenTo(cmc);
+		//cmc = new CloseableModalController(getWindowControl(), translate("close"), createConvertedTestController.getInitialComponent(), true, translate("title.convert.qti21") );
+		//cmc.activate();
+		//listenTo(cmc);
 	}
 
 	private void doExportDocx(UserRequest ureq) {
@@ -1180,9 +1180,9 @@ public class QTIEditorMainController extends MainLayoutBasicController implement
 		exportDocLink = LinkFactory.createToolLink(CMD_TOOLS_EXPORT_DOCX, translate("tools.export.docx"), this, "o_mi_docx_export");
 		exportDocLink.setIconLeftCSS("o_icon o_icon_download");
 		exportTools.addComponent(exportDocLink);
-		convertQTI21Link = LinkFactory.createToolLink(CMD_TOOLS_CONVERT_TO_QTI21, translate("tools.convert.qti21"), this, "o_FileResource-IMSQTI21_icon");
-		convertQTI21Link.setIconLeftCSS("o_icon o_FileResource-IMSQTI21_icon");
-		exportTools.addComponent(convertQTI21Link);
+		//convertQTI21Link = LinkFactory.createToolLink(CMD_TOOLS_CONVERT_TO_QTI21, translate("tools.convert.qti21"), this, "o_FileResource-IMSQTI21_icon");
+		//convertQTI21Link.setIconLeftCSS("o_icon o_FileResource-IMSQTI21_icon");
+		//exportTools.addComponent(convertQTI21Link);
 
 		//add
 		Dropdown addItemTools = new Dropdown("editTools", "tools.add.header", false, getTranslator());

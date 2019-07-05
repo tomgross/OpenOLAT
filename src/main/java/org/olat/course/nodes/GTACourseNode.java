@@ -133,7 +133,13 @@ public class GTACourseNode extends AbstractAccessableCourseNode implements Persi
 	public static final String GTASK_TASKS = "grouptask.tasks";
 	
 	public static final String GTASK_RELATIVE_DATES = "grouptask.rel.dates";
-	
+
+	public static final String GTASK_ASSIGNMENT_TEXT = "grouptask.assignment.text";
+	public static final String GTASK_ASSIGNMENT_MAIL_CONFIRMATION_OWNER = "grouptask.assignment.mail.confirmation.owner";
+	public static final String GTASK_ASSIGNMENT_MAIL_CONFIRMATION_COACH_COURSE = "grouptask.assignment.mail.confirmation.coach.course";
+	public static final String GTASK_ASSIGNMENT_MAIL_CONFIRMATION_COACH_GROUP = "grouptask.assignment.mail.confirmation.coach.group";
+	public static final String GTASK_ASSIGNMENT_MAIL_CONFIRMATION_PARTICIPANT = "grouptask.assignment.mail.confirmation.participant";
+
 	public static final String GTASK_ASSIGNEMENT_TYPE = "grouptask.assignement.type";
 	public static final String GTASK_ASSIGNEMENT_TYPE_AUTO = "auto";
 	public static final String GTASK_ASSIGNEMENT_TYPE_MANUAL = "manual";
@@ -150,10 +156,20 @@ public class GTACourseNode extends AbstractAccessableCourseNode implements Persi
 	public static final String GTASK_MAX_SUBMITTED_DOCS = "grouptask.max.submitted.docs";
 	
 	public static final String GTASK_SUBMISSION_TEXT = "grouptask.submission.text";
-	public static final String GTASK_SUBMISSION_MAIL_CONFIRMATION = "grouptask.submission.mail.confirmation";
-	
+	public static final String GTASK_SUBMISSION_MAIL_CONFIRMATION = "grouptask.submission.mail.confirmation"; // needed for backwards compatibility
+	public static final String GTASK_SUBMISSION_MAIL_CONFIRMATION_OWNER = "grouptask.submission.mail.confirmation.owner";
+	public static final String GTASK_SUBMISSION_MAIL_CONFIRMATION_COACH_COURSE = "grouptask.submission.mail.confirmation.coach.course";
+	public static final String GTASK_SUBMISSION_MAIL_CONFIRMATION_COACH_GROUP = "grouptask.submission.mail.confirmation.coach.group";
+	public static final String GTASK_SUBMISSION_MAIL_CONFIRMATION_PARTICIPANT = "grouptask.submission.mail.confirmation.participant";
+
+	public static final String GTASK_ASSESSMENT_TEXT = "grouptask.assessment.text";
+	public static final String GTASK_ASSESSMENT_MAIL_CONFIRMATION_OWNER = "grouptask.assessment.mail.confirmation.owner";
+	public static final String GTASK_ASSESSMENT_MAIL_CONFIRMATION_COACH_COURSE = "grouptask.assessment.mail.confirmation.coach.course";
+	public static final String GTASK_ASSESSMENT_MAIL_CONFIRMATION_COACH_GROUP = "grouptask.assessment.mail.confirmation.coach.group";
+	public static final String GTASK_ASSESSMENT_MAIL_CONFIRMATION_PARTICIPANT = "grouptask.assessment.mail.confirmation.participant";
+
 	public static final String GTASK_SOLUTIONS = "grouptask.solutions";
-	
+
 
 	public static final String TYPE_GROUP = "gta";
 	public static final String TYPE_INDIVIDUAL = "ita";
@@ -484,10 +500,11 @@ public class GTACourseNode extends AbstractAccessableCourseNode implements Persi
 	public CourseNode createInstanceForCopy(boolean isNewTitle, ICourse course, Identity author) {
 		GTACourseNode cNode = (GTACourseNode)super.createInstanceForCopy(isNewTitle, course, author);
 		GTAManager gtaManager = CoreSpringFactory.getImpl(GTAManager.class);
-		
+		CourseEnvironment courseEnvironment = course.getCourseEnvironment();
+
 		//copy tasks
-		File taskDirectory = gtaManager.getTasksDirectory(course.getCourseEnvironment(), this);
-		File copyTaskDirectory = gtaManager.getTasksDirectory(course.getCourseEnvironment(), cNode);
+		File taskDirectory = gtaManager.getTasksDirectory(courseEnvironment, this);
+		File copyTaskDirectory = gtaManager.getTasksDirectory(courseEnvironment, cNode);
 		FileUtils.copyDirContentsToDir(taskDirectory, copyTaskDirectory, false, "copy task course node");
 		
 		File taskDefinitions = new File(taskDirectory.getParentFile(), GTAManager.TASKS_DEFINITIONS);
@@ -497,8 +514,8 @@ public class GTACourseNode extends AbstractAccessableCourseNode implements Persi
 		}
 		
 		//copy solutions
-		File solutionsDirectory = gtaManager.getSolutionsDirectory(course.getCourseEnvironment(), this);
-		File copySolutionsDirectory = gtaManager.getSolutionsDirectory(course.getCourseEnvironment(), cNode);
+		File solutionsDirectory = gtaManager.getSolutionsDirectory(courseEnvironment, this);
+		File copySolutionsDirectory = gtaManager.getSolutionsDirectory(courseEnvironment, cNode);
 		FileUtils.copyDirContentsToDir(solutionsDirectory, copySolutionsDirectory, false, "copy task course node solutions");
 
 		File solutionDefinitions = new File(solutionsDirectory.getParentFile(), GTAManager.SOLUTIONS_DEFINITIONS);
@@ -514,6 +531,7 @@ public class GTACourseNode extends AbstractAccessableCourseNode implements Persi
 	public boolean archiveNodeData(Locale locale, ICourse course, ArchiveOptions options, ZipOutputStream exportStream, String charset) {
 		final GTAManager gtaManager = CoreSpringFactory.getImpl(GTAManager.class);
 		final ModuleConfiguration config =  getModuleConfiguration();
+		CourseEnvironment courseEnvironment = course.getCourseEnvironment();
 
 		String prefix;
 		if(GTAType.group.name().equals(config.getStringValue(GTACourseNode.GTASK_TYPE))) {
@@ -526,12 +544,12 @@ public class GTACourseNode extends AbstractAccessableCourseNode implements Persi
 				+ StringHelper.transformDisplayNameToFileSystemName(getShortName())
 				+ "_" + Formatter.formatDatetimeFilesystemSave(new Date(System.currentTimeMillis()));
 		
-		TaskList taskList = gtaManager.getTaskList(course.getCourseEnvironment().getCourseGroupManager().getCourseEntry(), this);
+		TaskList taskList = gtaManager.getTaskList(courseEnvironment.getCourseGroupManager().getCourseEntry(), this);
 
 		//save assessment datas
 		List<Identity> users = null;
 		if(config.getBooleanSafe(GTASK_GRADING)) {
-			users = ScoreAccountingHelper.loadUsers(course.getCourseEnvironment(), options);
+			users = ScoreAccountingHelper.loadUsers(courseEnvironment, options);
 			
 			String courseTitle = course.getCourseTitle();
 			String fileName = ExportUtil.createFileNameWithTimeStamp(courseTitle, "xlsx");
@@ -560,7 +578,7 @@ public class GTACourseNode extends AbstractAccessableCourseNode implements Persi
 				}
 			} else {
 				if(users == null) {
-					users = ScoreAccountingHelper.loadUsers(course.getCourseEnvironment(), options);
+					users = ScoreAccountingHelper.loadUsers(courseEnvironment, options);
 				}
 				
 				Set<Identity> uniqueUsers = new HashSet<>(users);
@@ -572,7 +590,7 @@ public class GTACourseNode extends AbstractAccessableCourseNode implements Persi
 
 		//copy solutions
 		if(config.getBooleanSafe(GTACourseNode.GTASK_SAMPLE_SOLUTION)) {
-			VFSContainer solutions = gtaManager.getSolutionsContainer(course.getCourseEnvironment(), this);
+			VFSContainer solutions = gtaManager.getSolutionsContainer(courseEnvironment, this);
 			if (solutions.exists()) {
 				String solutionDirName = dirName + "/solutions";
 				for(VFSItem solution:solutions.getItems(new SystemItemFilter())) {
@@ -587,7 +605,8 @@ public class GTACourseNode extends AbstractAccessableCourseNode implements Persi
 	private void archiveNodeData(ICourse course, Identity assessedIdentity, TaskList taskList, String dirName, ZipOutputStream exportStream) {
 		ModuleConfiguration config = getModuleConfiguration();
 		GTAManager gtaManager = CoreSpringFactory.getImpl(GTAManager.class);
-		
+		CourseEnvironment courseEnvironment = course.getCourseEnvironment();
+
 		int flow = 0;//for beautiful ordering
 		String userDirName = dirName + "/"
 				+ StringHelper.transformDisplayNameToFileSystemName(assessedIdentity.getName())
@@ -595,7 +614,7 @@ public class GTACourseNode extends AbstractAccessableCourseNode implements Persi
 		
 		Task task = gtaManager.getTask(assessedIdentity, taskList);
 		if(task != null && task.getTaskName() != null && config.getBooleanSafe(GTASK_ASSIGNMENT)) {
-			File taskDirectory = gtaManager.getTasksDirectory(course.getCourseEnvironment(), this);
+			File taskDirectory = gtaManager.getTasksDirectory(courseEnvironment, this);
 			File taskFile = new File(taskDirectory, task.getTaskName());
 			if(taskFile.exists()) {
 				String path = userDirName + "/"  + (++flow) + "_task/" + taskFile.getName(); 
@@ -604,13 +623,13 @@ public class GTACourseNode extends AbstractAccessableCourseNode implements Persi
 		}
 		
 		if(config.getBooleanSafe(GTASK_SUBMIT)) {
-			File submitDirectory = gtaManager.getSubmitDirectory(course.getCourseEnvironment(), this, assessedIdentity);
+			File submitDirectory = gtaManager.getSubmitDirectory(courseEnvironment, this, assessedIdentity);
 			String submissionDirName = userDirName + "/" + (++flow) + "_submissions";
 			ZipUtil.addDirectoryToZip(submitDirectory.toPath(), submissionDirName, exportStream);
 		}
 
 		if(config.getBooleanSafe(GTACourseNode.GTASK_REVIEW_AND_CORRECTION)) {
-			File correctionsDir = gtaManager.getCorrectionDirectory(course.getCourseEnvironment(), this, assessedIdentity);
+			File correctionsDir = gtaManager.getCorrectionDirectory(courseEnvironment, this, assessedIdentity);
 			String correctionDirName = userDirName + "/" + (++flow) + "_corrections";
 			ZipUtil.addDirectoryToZip(correctionsDir.toPath(), correctionDirName, exportStream);
 		}
@@ -618,11 +637,11 @@ public class GTACourseNode extends AbstractAccessableCourseNode implements Persi
 		if(task != null && config.getBooleanSafe(GTACourseNode.GTASK_REVISION_PERIOD)) {
 			int numOfIteration = task.getRevisionLoop();
 			for(int i=1; i<=numOfIteration; i++) {
-				File revisionDirectory = gtaManager.getRevisedDocumentsDirectory(course.getCourseEnvironment(), this, i, assessedIdentity);
+				File revisionDirectory = gtaManager.getRevisedDocumentsDirectory(courseEnvironment, this, i, assessedIdentity);
 				String revisionDirName = userDirName + "/" + (++flow) + "_revisions_" + i;
 				ZipUtil.addDirectoryToZip(revisionDirectory.toPath(), revisionDirName, exportStream);
 				
-				File correctionDirectory = gtaManager.getRevisedDocumentsCorrectionsDirectory(course.getCourseEnvironment(), this, i, assessedIdentity);
+				File correctionDirectory = gtaManager.getRevisedDocumentsCorrectionsDirectory(courseEnvironment, this, i, assessedIdentity);
 				String correctionDirName = userDirName + "/" + (++flow) + "_corrections_" + i;
 				ZipUtil.addDirectoryToZip(correctionDirectory.toPath(), correctionDirName, exportStream);
 			}
@@ -677,20 +696,21 @@ public class GTACourseNode extends AbstractAccessableCourseNode implements Persi
 	@Override
 	public void cleanupOnDelete(ICourse course) {
 		GTAManager gtaManager = CoreSpringFactory.getImpl(GTAManager.class);
+		CourseEnvironment courseEnvironment = course.getCourseEnvironment();
 		//tasks
-		File taskDirectory = gtaManager.getTasksDirectory(course.getCourseEnvironment(), this);
+		File taskDirectory = gtaManager.getTasksDirectory(courseEnvironment, this);
 		FileUtils.deleteDirsAndFiles(taskDirectory, true, true);
 		
 		//solutions
-		File solutionsDirectory = gtaManager.getSolutionsDirectory(course.getCourseEnvironment(), this);
+		File solutionsDirectory = gtaManager.getSolutionsDirectory(courseEnvironment, this);
 		FileUtils.deleteDirsAndFiles(solutionsDirectory, true, true);
 		
 		//clean up database
-		RepositoryEntry entry = course.getCourseEnvironment().getCourseGroupManager().getCourseEntry();
+		RepositoryEntry entry = courseEnvironment.getCourseGroupManager().getCourseEntry();
 		gtaManager.deleteTaskList(entry, this);
 		
 		//clean subscription
-		SubscriptionContext subscriptionContext = gtaManager.getSubscriptionContext(course.getCourseEnvironment(), this);
+		SubscriptionContext subscriptionContext = gtaManager.getSubscriptionContext(courseEnvironment, this);
 		NotificationsManager.getInstance().delete(subscriptionContext);
 	}
 
@@ -787,8 +807,7 @@ public class GTACourseNode extends AbstractAccessableCourseNode implements Persi
 	public TabbableController createEditController(UserRequest ureq, WindowControl wControl, BreadcrumbPanel stackPanel,
 			ICourse course, UserCourseEnvironment euce) {
 		GTAEditController editCtrl = new GTAEditController(ureq, wControl, this, course, euce);
-		CourseNode chosenNode = course.getEditorTreeModel().getCourseNode(euce.getCourseEditorEnv().getCurrentCourseNodeId());
-		return new NodeEditController(ureq, wControl, course.getEditorTreeModel(), course, chosenNode, euce, editCtrl);
+		return new NodeEditController(ureq, wControl, course.getEditorTreeModel(), course, euce, editCtrl);
 	}
 
 	@Override

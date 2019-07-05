@@ -37,10 +37,10 @@ import org.olat.core.gui.control.generic.closablewrapper.CloseableModalControlle
 import org.olat.core.gui.control.generic.modal.DialogBoxController;
 import org.olat.core.gui.control.generic.modal.DialogBoxUIFactory;
 import org.olat.core.id.Identity;
+import org.olat.core.util.StringHelper;
 import org.olat.core.util.coordinate.CoordinatorManager;
 import org.olat.core.util.io.SystemFilenameFilter;
-import org.olat.core.util.mail.ContactList;
-import org.olat.core.util.mail.ContactMessage;
+import org.olat.core.util.mail.*;
 import org.olat.core.util.vfs.VFSContainer;
 import org.olat.course.assessment.ui.tool.AssessmentFormCallback;
 import org.olat.course.nodes.GTACourseNode;
@@ -55,7 +55,9 @@ import org.olat.course.nodes.gta.ui.events.TaskMultiUserEvent;
 import org.olat.course.run.environment.CourseEnvironment;
 import org.olat.course.run.userview.UserCourseEnvironment;
 import org.olat.group.BusinessGroup;
+import org.olat.modules.ModuleConfiguration;
 import org.olat.modules.co.ContactFormController;
+import org.olat.repository.RepositoryEntry;
 import org.olat.resource.OLATResource;
 import org.olat.user.DisplayPortraitController;
 import org.olat.user.UserManager;
@@ -88,7 +90,7 @@ public class GTACoachController extends GTAAbstractController implements Assessm
 	
 	@Autowired
 	private UserManager userManager;
-	
+
 	public GTACoachController(UserRequest ureq, WindowControl wControl, CourseEnvironment courseEnv, GTACourseNode gtaNode,
 			UserCourseEnvironment coachCourseEnv, BusinessGroup assessedGroup,
 			boolean withTitle, boolean withGrading, boolean withSubscription) {
@@ -458,6 +460,7 @@ public class GTACoachController extends GTAAbstractController implements Assessm
 		}
 		if(task != null) {
 			task = gtaManager.updateTask(task, TaskProcess.graded, gtaNode);
+			doGradedEmail(courseEntry, gtaNode, task);
 			cleanUpProcess();
 			process(ureq);
 		}
@@ -751,18 +754,13 @@ public class GTACoachController extends GTAAbstractController implements Assessm
 		cmc = null;
 	}
 	
-	private TaskDefinition getTaskDefinition(Task task) {
-		if(task == null) return null;
-		
-		TaskDefinition taskDef = null;
-		List<TaskDefinition> availableTasks = gtaManager.getTaskDefinitions(courseEnv, gtaNode);
-		for(TaskDefinition availableTask:availableTasks) {
-			if(availableTask.getFilename() != null && availableTask.getFilename().equals(task.getTaskName())) {
-				taskDef = availableTask;
-				break;
-			}
-		}
-		return taskDef;
-	}
+	private void doGradedEmail(RepositoryEntry courseEntry, GTACourseNode gtaNode, Task assignedTask) {
+		// Build the list of recipients for the message according to configuration of the course element
+		List<Identity> recipients = gtaManager.addRecipients(courseEntry, gtaNode, assessedIdentity);
 
+		String subject = translate("assessment.email.subject");
+		MailContext context = new MailContextImpl(getWindowControl().getBusinessControl().getAsString());
+
+		gtaManager.sendGradedEmail(gtaNode, assessedIdentity, recipients, subject, assignedTask.getTaskName(), context, getTranslator());
+	}
 }

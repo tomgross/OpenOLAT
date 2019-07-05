@@ -5,13 +5,13 @@
 <meta name="google" content="notranslate" />
 <meta name="description" content="$r.translate("meta.description")" />
 <meta name="keywords" content="$r.translate("meta.keywords")" /> 
-<meta name="dcterms.creator" content="OpenOLAT - http://www.openolat.org" />
-<meta name="dcterms.subject" content="OpenOLAT - infinite learning - Your Open Source Learning Management System" />
-<meta name="dcterms.contributor" content="see http://www.openolat.org" />
+<meta name="dcterms.creator" content="OLAT - https://www.olat.org" />
+<meta name="dcterms.subject" content="OLAT - Learning Management System" />
+<meta name="dcterms.contributor" content="see https://www.olat.org" />
 <meta name="dcterms.date" content="2010-03-16" />
 <meta name="dcterms.type" content="Interactive Resource" />
-<meta name="dcterms.identifier" content="http://www.openolat.org" />
-<meta name="dcterms.rights" content="http://www.openolat.org" />
+<meta name="dcterms.identifier" content="https://www.olat.org" />
+<meta name="dcterms.rights" content="https://www.olat.org" />
 ## hide toolbar on ios with minimal-ui
 <meta name="viewport" content="minimal-ui, width=device-width, initial-scale=1">
 <meta http-equiv="Content-type" content="text/html; charset=utf-8" />
@@ -51,29 +51,27 @@ function o_start() {
 	o_info.initialPageLoadFinished = true;
 }
 function o_mathjax(fct_success) {
-	jQuery.ajax("${r.mathJaxCdn()}MathJax.js?config=TeX-AMS-MML_HTMLorMML", {
-		cache: true,
-		dataType: "script",
-		success: function() {
-	    	MathJax.Hub.Config({
-				extensions: ["jsMath2jax.js"],
-				messageStyle: 'none',
-				showProcessingMessages: false,
-				jsMath2jax: {
-					preview: "none"
-				},
-				tex2jax: {
-					ignoreClass: "math"
-				}
-			});
-	    	if(!(typeof fct_success === "undefined")) {
-	    		fct_success();
-	    	}
-		}
-	});
+    if(!(typeof fct_success === "undefined")) {
+        fct_success();
+    }
 }
 /* ]]> */
 </script>
+<script type="text/x-mathjax-config">
+MathJax.Hub.Config({
+    root: "${r.mathJaxCdn()}",
+    extensions: ["jsMath2jax.js"],
+    messageStyle: "none",
+    showProcessingMessages: false,
+    jsMath2jax: {
+        preview: "none"
+    },
+    tex2jax: {
+        ignoreClass: "math"
+    }
+});
+</script>
+<script type="text/javascript" src="${r.mathJaxCdn()}/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
 ## jQuery libraries
 <!--[if lt IE 9]>
 	<script type="text/javascript" src='$r.staticLink("js/jquery/jquery-1.9.1.min.js")'></script>
@@ -108,7 +106,7 @@ function o_mathjax(fct_success) {
 	<script type="text/javascript" src='$r.staticLink("bootstrap/javascripts/bootstrap/modal.js")'></script>
 	<script type="text/javascript" src='$r.staticLink("bootstrap/javascripts/bootstrap/tooltip.js")'></script>
 	<script type="text/javascript" src='$r.staticLink("bootstrap/javascripts/bootstrap/popover.js")'></script>
-	## The OpenOLAT video player. In separate file as it is also used in content iframes
+	## The OLAT video player. In separate file as it is also used in content iframes
 	<script type="text/javascript" src='$r.staticLink("movie/player.js")'></script>	
 #else
 	<script type="text/javascript" src='$r.staticLink("js/js.plugins.min.js")'></script>
@@ -155,7 +153,7 @@ $r.render("jsCssRawHtmlHeader", "pre-theme")
 ## 2) CSS theme inclusion and favicons
 <link rel="icon" href="${theme.getBaseURI()}favicon.ico" type="image/x-icon" /> 
 <link rel="shortcut icon" href="${theme.getBaseURI()}favicon.ico" type="image/x-icon" /> 
-<link id="o_theme_css" href="${theme.getBaseURI()}theme.css" rel="stylesheet" type="text/css" />
+<link id="o_theme_css" href="${theme.getBaseURI()}theme.css" rel="stylesheet" type="text/css" data-themePath="${theme.getBaseURI()}" />
 <!--[if IE 9]>
 <link id="o_theme_css_ie" href="${theme.getBaseURI()}theme_ie_completions.css" rel="stylesheet" type="text/css" />
 <![endif]-->
@@ -203,7 +201,6 @@ $r.render("jsCssRawHtmlHeader", "post-theme")
 		.o_custom_navbar-brand { background-image: none; }
 	#end
 </style>
-
 
 ## deprecated - include any raw header
 $r.renderHeaderIncludes()

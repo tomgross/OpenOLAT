@@ -34,6 +34,7 @@ import org.jboss.arquillian.junit.Arquillian;
 import org.jboss.arquillian.test.api.ArquillianResource;
 import org.jboss.shrinkwrap.api.spec.WebArchive;
 import org.junit.Assert;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.olat.restapi.support.vo.CourseVO;
@@ -68,6 +69,7 @@ import org.openqa.selenium.WebElement;
  * @author srosse, stephane.rosse@frentix.com, http://www.frentix.com
  *
  */
+@Ignore
 @RunWith(Arquillian.class)
 public class UserTest {
 	

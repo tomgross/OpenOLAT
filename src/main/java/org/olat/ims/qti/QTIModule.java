@@ -48,7 +48,7 @@ public class QTIModule extends AbstractSpringModule {
 	
 	@Override
 	public void init() {
-		RepositoryHandlerFactory.registerHandler(new QTISurveyHandler(), 10);
+		RepositoryHandlerFactory.registerHandler(new QTISurveyHandler(), 11);
 		RepositoryHandlerFactory.registerHandler(new QTITestHandler(), 10);
 	}
 

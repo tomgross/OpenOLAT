@@ -19,8 +19,10 @@
  */
 package org.olat.modules.webFeed;
 
+import java.io.UnsupportedEncodingException;
 import java.net.MalformedURLException;
 import java.net.URL;
+import java.net.URLEncoder;
 import java.text.DateFormat;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -200,7 +202,11 @@ public class FeedViewHelper {
 			if (feed.isExternal()) {
 				file = item.getEnclosure().getExternalUrl();
 			} else if (feed.isInternal()) {
-				file = this.baseUri + "/" + item.getGuid() + "/" + MEDIA_DIR + "/" + enclosure.getFileName();
+				try {
+					file = this.baseUri + "/" + item.getGuid() + "/" + MEDIA_DIR + "/" + URLEncoder.encode(enclosure.getFileName(), "UTF-8");
+				} catch (UnsupportedEncodingException e) {
+					throw new RuntimeException(e);
+				}
 			}
 		}
 		return file;

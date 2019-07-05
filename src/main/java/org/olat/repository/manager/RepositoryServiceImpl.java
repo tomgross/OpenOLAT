@@ -76,6 +76,8 @@ import org.olat.repository.RepositoryModule;
 import org.olat.repository.RepositoryService;
 import org.olat.repository.handlers.RepositoryHandler;
 import org.olat.repository.handlers.RepositoryHandlerFactory;
+import org.olat.repository.listener.*;
+import org.olat.repository.manager.coursequery.MyCourseRepositoryQuery;
 import org.olat.repository.model.RepositoryEntryLifecycle;
 import org.olat.repository.model.RepositoryEntryStatistics;
 import org.olat.repository.model.RepositoryEntryToGroupRelation;
@@ -98,6 +100,15 @@ import org.springframework.stereotype.Service;
  *
  */
 @Service("repositoryService")
+/**
+ * TODO sev26
+ * Most of the methods just delegate the call to another service. This makes
+ * the code readability unnecessarily complex. Therefore this class should be
+ * removed.
+ *
+ * In addition, field injection is deprecated. Use JSR 330 constructor
+ * injection instead.
+ */
 public class RepositoryServiceImpl implements RepositoryService {
 	
 	private static final OLog log = Tracing.createLoggerFor(RepositoryServiceImpl.class);
@@ -121,7 +132,7 @@ public class RepositoryServiceImpl implements RepositoryService {
 	@Autowired
 	private RepositoryEntryStatisticsDAO repositoryEntryStatisticsDao;
 	@Autowired
-	private RepositoryEntryMyCourseQueries myCourseViewQueries;
+	private MyCourseRepositoryQuery myCourseViewQueries;
 	@Autowired
 	private RepositoryEntryAuthorQueries authorViewQueries;
 	@Autowired
@@ -142,8 +153,18 @@ public class RepositoryServiceImpl implements RepositoryService {
 	private PersistentTaskDAO persistentTaskDao;
 	@Autowired
 	private ReminderDAO reminderDao;
+    @Autowired
+    private AssessmentEntryDAO assessmentEntryDao;
 	@Autowired
-	private AssessmentEntryDAO assessmentEntryDao;
+	private BeforeRepositoryEntrySoftDeletionListener[] beforeRepositoryEntrySoftDeletionListeners;
+	@Autowired
+	private AfterRepositoryEntrySoftDeletionListener[] afterRepositoryEntrySoftDeletionListeners;
+	@Autowired
+	private BeforeRepositoryEntryPermanentDeletionListener[] beforeRepositoryEntryPermanentDeletionListeners;
+	@Autowired
+	private AfterRepositoryEntryPermanentDeletionListener[] afterRepositoryEntryPermanentDeletionListeners;
+	@Autowired
+	private AfterRepositoryEntryRestoreListener[] afterRepositoryEntryRestoreListeners;
 
 	@Autowired
 	private LifeFullIndexer lifeIndexer;
@@ -224,6 +245,12 @@ public class RepositoryServiceImpl implements RepositoryService {
 
 	@Override
 	public RepositoryEntry copy(RepositoryEntry sourceEntry, Identity author, String displayname) {
+		RepositoryHandler handler = RepositoryHandlerFactory.getInstance().getRepositoryHandler(sourceEntry);
+		return copy(sourceEntry, author, displayname, handler);
+	}
+
+	@Override
+	public RepositoryEntry copy(RepositoryEntry sourceEntry, Identity author, String displayname, RepositoryHandler handler) {
 		OLATResource sourceResource = sourceEntry.getOlatResource();
 		OLATResource copyResource = resourceManager.createOLATResourceInstance(sourceResource.getResourceableTypeName());
 		RepositoryEntry copyEntry = create(author, null, sourceEntry.getResourcename(), displayname,
@@ -237,8 +264,7 @@ public class RepositoryServiceImpl implements RepositoryService {
 		copyEntry.setObjectives(sourceEntry.getObjectives());
 		copyEntry.setRequirements(sourceEntry.getRequirements());
 		copyEntry = dbInstance.getCurrentEntityManager().merge(copyEntry);
-	
-		RepositoryHandler handler = RepositoryHandlerFactory.getInstance().getRepositoryHandler(sourceEntry);
+
 		copyEntry = handler.copy(author, sourceEntry, copyEntry);
 
 		//copy the image
@@ -327,8 +353,13 @@ public class RepositoryServiceImpl implements RepositoryService {
 	}
 	
 	@Override
-	public RepositoryEntry deleteSoftly(RepositoryEntry re, Identity deletedBy, boolean owners) {
+	public RepositoryEntry deleteSoftly(RepositoryEntry re, Identity deletedBy, boolean owners) throws RepositoryEntryDeletionException {
 		RepositoryEntry reloadedRe = repositoryEntryDAO.loadForUpdate(re);
+
+		for (BeforeRepositoryEntrySoftDeletionListener beforeRepositoryEntrySoftDeletionListener : beforeRepositoryEntrySoftDeletionListeners) {
+			beforeRepositoryEntrySoftDeletionListener.onAction(reloadedRe);
+		}
+
 		reloadedRe.setAccess(RepositoryEntry.DELETED);
 		if(reloadedRe.getDeletionDate() == null) {
 			// don't write the name of an admin which make a restore -> delete operation
@@ -353,21 +384,29 @@ public class RepositoryServiceImpl implements RepositoryService {
 			}
 		}
 		dbInstance.commit();
+
+		for (AfterRepositoryEntrySoftDeletionListener afterRepositoryEntrySoftDeletionListener : afterRepositoryEntrySoftDeletionListeners) {
+			afterRepositoryEntrySoftDeletionListener.onAction(reloadedRe);
+		}
+
 		return reloadedRe;
 	}
 
 	@Override
-	public RepositoryEntry restoreRepositoryEntry(RepositoryEntry entry) {
+	public RepositoryEntry restoreRepositoryEntry(RepositoryEntry entry, Identity restoredBy) {
 		RepositoryEntry reloadedRe = repositoryEntryDAO.loadForUpdate(entry);
 		reloadedRe.setAccess(RepositoryEntry.ACC_OWNERS);
 		reloadedRe.setStatusCode(RepositoryEntryStatus.REPOSITORY_STATUS_CLOSED);
 		reloadedRe = dbInstance.getCurrentEntityManager().merge(reloadedRe);
 		dbInstance.commit();
+		for (AfterRepositoryEntryRestoreListener afterRepositoryEntryRestoreListener : afterRepositoryEntryRestoreListeners) {
+			afterRepositoryEntryRestoreListener.onAction(reloadedRe, restoredBy);
+		}
 		return reloadedRe;
 	}
 
 	@Override
-	public ErrorList deletePermanently(RepositoryEntry entry, Identity identity, Roles roles, Locale locale) {
+	public ErrorList deletePermanently(RepositoryEntry entry, Identity identity, Roles roles, Locale locale) throws RepositoryEntryDeletionException {
 		ErrorList errors = new ErrorList();
 		
 		boolean debug = log.isDebug();
@@ -378,6 +417,11 @@ public class RepositoryServiceImpl implements RepositoryService {
 		if(debug) log.debug("deleteRepositoryEntry after load entry=" + entry);
 		RepositoryHandler handler = repositoryHandlerFactory.getRepositoryHandler(entry);
 		OLATResource resource = entry.getOlatResource();
+
+		for (BeforeRepositoryEntryPermanentDeletionListener beforeRepositoryEntryPermanentDeletionListener : beforeRepositoryEntryPermanentDeletionListeners) {
+			beforeRepositoryEntryPermanentDeletionListener.onAction(entry, resource);
+		}
+
 		//delete old context
 		if (!handler.readyToDelete(entry, identity, roles, locale, errors)) {
 			return errors;
@@ -402,12 +446,19 @@ public class RepositoryServiceImpl implements RepositoryService {
 		referenceManager.deleteAllReferencesOf(resource);
 		//delete all pending tasks
 		persistentTaskDao.delete(resource);
+		/**
+		 * TODO sev26
+		 * This commit is questionable.
+		 */
 		dbInstance.commit();
 		
 		// inform handler to do any cleanup work... handler must delete the
 		// referenced resourceable a swell.
 		handler.cleanupOnDelete(entry, resource);
-		dbInstance.commit();
+
+		for (AfterRepositoryEntryPermanentDeletionListener afterRepositoryEntryPermanentDeletionListener : afterRepositoryEntryPermanentDeletionListeners) {
+			afterRepositoryEntryPermanentDeletionListener.onAction(entry, resource);
+		}
 
 		//delete all test sessions
 		assessmentTestSessionDao.deleteAllUserTestSessionsByCourse(entry);
@@ -452,7 +503,6 @@ public class RepositoryServiceImpl implements RepositoryService {
 		if(reloadedResource != null) {
 			dbInstance.getCurrentEntityManager().remove(reloadedResource);
 		}
-		
 		dbInstance.commit();
 	}
 
@@ -640,11 +690,19 @@ public class RepositoryServiceImpl implements RepositoryService {
 	}
 
 	@Override
+	/**
+	 * TODO sev26
+	 * Just a delegation. Directly inject the service where it is required.
+	 */
 	public int countMyView(SearchMyRepositoryEntryViewParams params) {
 		return myCourseViewQueries.countViews(params);
 	}
 
 	@Override
+	/**
+	 * TODO sev26
+	 * Just a delegation. Directly inject the service where it is required.
+	 */
 	public List<RepositoryEntryMyView> searchMyView(SearchMyRepositoryEntryViewParams params,
 			int firstResult, int maxResults) {
 		return myCourseViewQueries.searchViews(params, firstResult, maxResults);

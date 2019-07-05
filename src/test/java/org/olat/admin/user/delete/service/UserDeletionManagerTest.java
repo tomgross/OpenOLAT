@@ -31,15 +31,12 @@ import static org.junit.Assert.assertTrue;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
 import org.junit.Assert;
 import org.junit.Test;
 import org.olat.basesecurity.BaseSecurity;
-import org.olat.basesecurity.BaseSecurityModule;
-import org.olat.core.commons.persistence.DB;
 import org.olat.core.commons.persistence.DBFactory;
 import org.olat.core.id.Identity;
 import org.olat.core.id.User;
@@ -55,20 +52,17 @@ import org.olat.portfolio.model.structel.PortfolioStructure;
 import org.olat.portfolio.model.structel.PortfolioStructureMap;
 import org.olat.test.JunitTestHelper;
 import org.olat.test.OlatTestCase;
-import org.olat.user.UserManager;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Component;
 
 /**
  * Description: <br>
  * 
  * @author Christian Guretzki
  */
+@Component
 public class UserDeletionManagerTest extends OlatTestCase {
-	
-	@Autowired
-	private DB dbInstance;
-	@Autowired
-	private UserManager userManager;
+
 	@Autowired
 	private BaseSecurity securityManager;
 	@Autowired
@@ -79,18 +73,11 @@ public class UserDeletionManagerTest extends OlatTestCase {
 	private UserDeletionManager userDeletionManager;
 	@Autowired
 	private BusinessGroupService businessGroupService;
-	
+
 	@Test
 	public void testDeleteIdentity() {
-		String username = "id-to-del-" + UUID.randomUUID();
-		String email = username + "@frentix.com";
-		User user = userManager.createUser("first" + username, "last" + username, email);
-		user.setProperty(UserConstants.COUNTRY, "");
-		user.setProperty(UserConstants.CITY, "Basel");
-		user.setProperty(UserConstants.INSTITUTIONALNAME, "Del-23");
-		user.setProperty(UserConstants.INSTITUTIONALUSERIDENTIFIER, "Del-24");
-		Identity identity = securityManager.createAndPersistIdentityAndUser(username, null, user, BaseSecurityModule.getDefaultAuthProviderIdentifier(), username, "secret");
-		dbInstance.commitAndCloseSession();
+		Identity identity = JunitTestHelper.createAndPersistIdentityAsUser("anIdentityToDelete");
+		dbInstance.commit();
 		// add some stuff
 		
 		//a default map
@@ -139,7 +126,7 @@ public class UserDeletionManagerTest extends OlatTestCase {
 		Assert.assertFalse(StringHelper.containsNonWhitespace(institutionalId));
 		String deletedEmail = deletedUser.getProperty(UserConstants.EMAIL, null);
 		Assert.assertNotNull(deletedEmail);
-		Assert.assertFalse(email.equals(deletedEmail));
+		Assert.assertFalse(identity.getUser().getEmail().equals(deletedEmail));
 	}
 
 	@Test

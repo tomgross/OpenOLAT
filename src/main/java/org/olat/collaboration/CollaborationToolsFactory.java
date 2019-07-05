@@ -101,7 +101,7 @@ public class CollaborationToolsFactory {
 		PortfolioV2Module portfolioV2Module = CoreSpringFactory.getImpl(PortfolioV2Module.class);
 		if (portfolioModule.isEnabled() || portfolioV2Module.isEnabled()) {
 			toolArr.add(CollaborationTools.TOOL_PORTFOLIO);
-		}	
+		}
 		OpenMeetingsModule openMeetingsModule = CoreSpringFactory.getImpl(OpenMeetingsModule.class);
 		if(openMeetingsModule.isEnabled()) {
 			toolArr.add(CollaborationTools.TOOL_OPENMEETINGS);

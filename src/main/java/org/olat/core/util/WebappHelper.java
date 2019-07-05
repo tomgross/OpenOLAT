@@ -424,7 +424,7 @@ public class WebappHelper implements Initializable, Destroyable, ServletContextA
 	/**
 	 * Test if filesystem is capable to store UTF-8 characters
 	 * Try to read/write a file with UTF-8 chars in the filename in a temporary directory.
-	 *
+	 * This test fails always under Windows.
 	 */
 	private void testUtf8FileSystem() {
 		File tmpDir = new File(new File(WebappHelper.getUserDataRoot()), "tmp");

@@ -46,7 +46,8 @@ public class LogFileChooserForm extends FormBasicController {
 	
     private boolean admin, u, a, s;
     
-    private SelectionElement sE,aE,uE;
+    private SelectionElement sE, aE, uE;
+	private boolean createStatisticLogWithoutCheckboxSelection;
     
   	private DateChooser beginDate;
   	private DateChooser endDate;
@@ -76,39 +77,43 @@ public class LogFileChooserForm extends FormBasicController {
     /**
      * @see org.olat.core.gui.components.Form#validate(org.olat.core.gui.UserRequest)
      */
-    public boolean validateFormLogic(UserRequest ureq) {
-    	boolean logChecked = false;
-    	boolean beginLessThanEndOk = true;
-    	
-    	aE.clearError();
-    	uE.clearError();
-    	sE.clearError();
-      if(aE.isSelected(0) || uE.isSelected(0) || sE.isSelected(0)){
-      	logChecked = true;
-      }else{
-      	if (sE.isVisible()) {
-      		sE.setErrorKey("course.logs.error", null);
-      	} else if (uE.isVisible()) {
-      		uE.setErrorKey("course.logs.error", null);
-      	} else {
-      		aE.setErrorKey("course.logs.error", null);
-      	}
-      }
-      
-      // note: we're no longer restricting to have both a begin and an end
-      //       - there is no underlying reason for limiting this
-      beginDate.clearError();
-      if((beginDate.getDate() != null)&&(endDate.getDate() != null)){
-      	if (beginDate.getDate().after(endDate.getDate())){
-      		beginLessThanEndOk= false;
-      		beginDate.setErrorKey("logfilechooserform.endlessthanbegin", null);
-      	}
-      }
-      
-      return logChecked && beginLessThanEndOk;
-    }
-    
-    /**
+	public boolean validateFormLogic(UserRequest ureq) {
+		boolean logChecked = false;
+		boolean beginLessThanEndOk = true;
+
+		if (createStatisticLogWithoutCheckboxSelection) {
+			logChecked = true;
+		} else {
+			aE.clearError();
+			uE.clearError();
+			sE.clearError();
+			if (aE.isSelected(0) || uE.isSelected(0) || sE.isSelected(0)) {
+				logChecked = true;
+			} else {
+				if (sE.isVisible()) {
+					sE.setErrorKey("course.logs.error", null);
+				} else if (uE.isVisible()) {
+					uE.setErrorKey("course.logs.error", null);
+				} else {
+					aE.setErrorKey("course.logs.error", null);
+				}
+			}
+		}
+
+		// note: we're no longer restricting to have both a begin and an end
+		//       - there is no underlying reason for limiting this
+		beginDate.clearError();
+		if ((beginDate.getDate() != null) && (endDate.getDate() != null)) {
+			if (beginDate.getDate().after(endDate.getDate())) {
+				beginLessThanEndOk = false;
+				beginDate.setErrorKey("logfilechooserform.endlessthanbegin", null);
+			}
+		}
+
+		return logChecked && beginLessThanEndOk;
+	}
+
+	/**
      * @return true if logAdmin is checked
      */
     public boolean logAdminChecked() {
@@ -151,6 +156,8 @@ public class LogFileChooserForm extends FormBasicController {
 		
 		@Override
 		protected void initForm(FormItemContainer formLayout, Controller listener, UserRequest ureq) {
+			createStatisticLogWithoutCheckboxSelection = false;
+
 			setFormTitle("menu.archivelogfiles");
 			setFormDescription("course.logs.intro");
 			setFormContextHelp("Record of Course Activities");
@@ -162,13 +169,27 @@ public class LogFileChooserForm extends FormBasicController {
 			aE.setVisible(admin || a);
 			uE.setVisible(admin || u);
 			sE.setVisible(admin || s);
-			
-			uifactory.addSpacerElement("spacer1", formLayout, true);
+
+			// If only the statics check box was to be displayed, we do not show any checkbox and create the statistic log by default.
+			if (sE.isVisible() && !aE.isVisible() && !uE.isVisible()) {
+				sE.setVisible(false);
+				// Use the label of the statistic checkbox as form description
+				setFormDescription("logfilechooserform.logstat");
+				createStatisticLogWithoutCheckboxSelection = true;
+			}
+
+			if (!createStatisticLogWithoutCheckboxSelection) {
+				uifactory.addSpacerElement("spacer1", formLayout, true);
+			}
 			
 			beginDate = uifactory.addDateChooser("startdate", "logfilechooserform.begindate", null, formLayout);
 			endDate = uifactory.addDateChooser("enddate", "logfilechooserform.enddate", null, formLayout);
 
 			uifactory.addFormSubmitButton("submit", "logfilechooserform.archive", formLayout);
+		}
+
+		public boolean isCreateStatisticLogWithoutCheckboxSelection() {
+			return createStatisticLogWithoutCheckboxSelection;
 		}
 
 		@Override

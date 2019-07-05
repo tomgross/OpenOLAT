@@ -38,5 +38,6 @@ public class WizardConstants {
 	
 	public static final String MSG_TITLE = "title";
 	public static final String MSG_MESSAGE = "message";
-	
+	public static final String MSG_ATTACHMENTS = "attachments";
+
 }

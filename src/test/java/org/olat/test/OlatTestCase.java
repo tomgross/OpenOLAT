@@ -38,11 +38,12 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.rules.TestName;
-import org.olat.core.commons.persistence.DBFactory;
+import org.olat.core.commons.persistence.DB;
 import org.olat.core.helpers.Settings;
 import org.olat.core.logging.OLog;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.event.FrameworkStartupEventChannel;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.core.io.Resource;
 import org.springframework.test.context.ContextConfiguration;
@@ -65,6 +66,9 @@ public abstract class OlatTestCase extends AbstractJUnit4SpringContextTests {
 	private static boolean postgresqlConfigured = false;
 	private static boolean oracleConfigured = false;
 	private static boolean started = false;
+
+	@Autowired
+	protected DB dbInstance;
 	
 	 @Rule public TestName name = new TestName();
 	
@@ -74,10 +78,6 @@ public abstract class OlatTestCase extends AbstractJUnit4SpringContextTests {
 	 * 
 	 * The normal flow is that the spring context gets loaded and befor each test method the @before will be executed and after the the method each time
 	 * the @after will be executed
-	 */
-	
-	/**
-	 * @param arg0
 	 */
 	public OlatTestCase() {
 		Settings.setJUnitTest(true);
@@ -93,7 +93,7 @@ public abstract class OlatTestCase extends AbstractJUnit4SpringContextTests {
 		
 		FrameworkStartupEventChannel.fireEvent();
 		
-		String dbVendor = DBFactory.getInstance().getDbVendor();
+		String dbVendor = dbInstance.getDbVendor();
 		postgresqlConfigured = dbVendor != null && dbVendor.startsWith("postgres");
 		oracleConfigured = dbVendor != null && dbVendor.startsWith("oracle");
 		
@@ -110,12 +110,12 @@ public abstract class OlatTestCase extends AbstractJUnit4SpringContextTests {
 	public void closeConnectionAfter() {
 		log.info("Method test finished: " + name.getMethodName() + "(" + this.getClass().getCanonicalName() + ")");
 		try {
-			DBFactory.getInstance().commitAndCloseSession();
+			dbInstance.commitAndCloseSession();
 		} catch (Exception e) {
 			e.printStackTrace();
 
 			try {
-				DBFactory.getInstance().rollbackAndCloseSession();
+				dbInstance.rollbackAndCloseSession();
 			} catch (Exception e1) {
 				e1.printStackTrace();
 			}
@@ -158,14 +158,14 @@ public abstract class OlatTestCase extends AbstractJUnit4SpringContextTests {
 						} else {
 							result.set(false);
 						}
-						DBFactory.getInstance().commitAndCloseSession();
+						dbInstance.commitAndCloseSession();
 						Thread.sleep(100);
 					}
 				} catch (Exception e) {
 					log.error("", e);
 					result.set(false);
 				} finally {
-					DBFactory.getInstance().closeSession();
+					dbInstance.closeSession();
 				}
 				countDown.countDown();
 			}

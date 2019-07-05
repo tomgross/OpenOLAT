@@ -26,11 +26,8 @@
 
 package org.olat.ims.cp;
 
-import java.io.File;
-import java.io.FileOutputStream;
-import java.io.IOException;
-import java.io.OutputStream;
-import java.net.URISyntaxException;
+import java.io.*;
+import java.net.MalformedURLException;
 import java.net.URL;
 
 import org.apache.commons.io.IOUtils;
@@ -60,6 +57,9 @@ import org.olat.repository.RepositoryEntry;
 import org.olat.repository.RepositoryManager;
 
 import com.thoughtworks.xstream.XStream;
+import org.springframework.beans.factory.annotation.Autowired;
+
+import javax.servlet.ServletContext;
 
 /**
  * The CP manager implementation.
@@ -82,11 +82,15 @@ public class CPManagerImpl extends CPManager {
 		configXstream.alias("packageConfig", CPPackageConfig.class);
 		configXstream.alias("deliveryOptions", DeliveryOptions.class);
 	}
+
+	private final ServletContext servletContext;
 	
 	/**
 	 * [spring]
 	 */
-	private CPManagerImpl() {
+	@Autowired
+	private CPManagerImpl(ServletContext servletContext) {
+		this.servletContext = servletContext;
 		INSTANCE = this;
 	}
 
@@ -400,20 +404,21 @@ public class CPManagerImpl extends CPManager {
 		path = path.replace("/ContentPackage", "/_resources/imscp.zip");
 
 		path = VFSManager.sanitizePath(path);
-		URL url = this.getClass().getResource(path);
 		try {
-			File f = new File(url.toURI());
-			if (f.exists() && root.exists()) {
-				FileUtils.copyFileToDir(f, root, "copy imscp template");
-			} else {
+			URL url = servletContext.getResource(path);
+			assert url != null;
+			try {
+				InputStream inputStream = url.openConnection().getInputStream();
+				FileUtils.saveToDir(inputStream, root, "imscp.zip");
+				return true;
+			} catch (IOException e) {
 				logError("cp template was not copied. Source:  " + url + " Target: " + root.getAbsolutePath(), null);
 			}
-		} catch (URISyntaxException e) {
-			logError("Bad url syntax when copying cp template. url: " + url + " Ores:" + ores.getResourceableId(), null);
-			return false;
+		} catch (MalformedURLException e) {
+			logError("Bad url syntax when copying cp template. url: " + path + " Ores:" + ores.getResourceableId(), null);
 		}
 
-		return true;
+		return false;
 	}
 
 }

@@ -43,7 +43,7 @@ import org.olat.core.util.openxml.OpenXMLWorksheet.Row;
 
 /**
  * Export as excel file with POI
- * 
+ *
  * Initial date: 11.02.2014<br>
  * @author srosse, stephane.rosse@frentix.com, http://www.frentix.com
  *
@@ -51,14 +51,14 @@ import org.olat.core.util.openxml.OpenXMLWorksheet.Row;
 public class XlsFlexiTableExporter implements FlexiTableExporter {
 	private static final OLog log = Tracing.createLoggerFor(XlsFlexiTableExporter.class);
 	private static final URLBuilder ubu = new EmptyURLBuilder();
-	
+
 	@Override
 	public MediaResource export(FlexiTableComponent ftC, List<FlexiColumnModel> columns, Translator translator) {
 
 		String label = "TableExport_"
 				+ Formatter.formatDatetimeFilesystemSave(new Date(System.currentTimeMillis()))
 				+ ".xlsx";
-		
+
 		return new OpenXMLWorkbookResource(label){
 			@Override
 			protected void generate(OutputStream out) {
@@ -74,7 +74,7 @@ public class XlsFlexiTableExporter implements FlexiTableExporter {
 	}
 
 	private void createHeader(List<FlexiColumnModel> columns, Translator translator,
-			OpenXMLWorksheet sheet, OpenXMLWorkbook workbook) {
+							  OpenXMLWorksheet sheet, OpenXMLWorkbook workbook) {
 		sheet.setHeaderRows(1);
 		Row headerRow = sheet.newRow();
 		for (int c=0; c<columns.size(); c++) {
@@ -86,16 +86,16 @@ public class XlsFlexiTableExporter implements FlexiTableExporter {
 	}
 
 	private void createData(FlexiTableComponent ftC, List<FlexiColumnModel> columns, Translator translator,
-			OpenXMLWorksheet sheet, OpenXMLWorkbook workbook) {
+							OpenXMLWorksheet sheet, OpenXMLWorkbook workbook) {
 		FlexiTableDataModel<?> dataModel = ftC.getFlexiTableElement().getTableDataModel();
-		
+
 		int numOfRow = dataModel.getRowCount();
 		int numOfColumns = columns.size();
 		for (int r=0; r<numOfRow; r++) {
 			Row dataRow = sheet.newRow();
 			for (int c = 0; c<numOfColumns; c++) {
 				FlexiColumnModel cd = columns.get(c);
-				
+
 				int colIndex = cd.getColumnIndex();
 				if(colIndex >= 0) {
 					Object value = dataModel.getValueAt(r, colIndex);
@@ -107,7 +107,7 @@ public class XlsFlexiTableExporter implements FlexiTableExporter {
 						StringOutput so = StringOutputPool.allocStringBuilder(1000);
 						cd.getCellRenderer().render(null, so, value, r, ftC, ubu, translator);
 						String cellValue = StringOutputPool.freePop(so);
-						
+
 						cellValue = StringHelper.stripLineBreaks(cellValue);
 						cellValue = FilterFactory.getHtmlTagsFilter().filter(cellValue);
 						if(StringHelper.containsNonWhitespace(cellValue)) {

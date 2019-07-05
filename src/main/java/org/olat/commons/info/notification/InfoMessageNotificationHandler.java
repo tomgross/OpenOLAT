@@ -42,6 +42,8 @@ import org.olat.core.id.context.BusinessControlFactory;
 import org.olat.core.logging.LogDelegator;
 import org.olat.core.util.Util;
 import org.olat.core.util.resource.OresHelper;
+import org.olat.course.CourseFactory;
+import org.olat.course.nodes.CourseNode;
 import org.olat.group.BusinessGroup;
 import org.olat.group.BusinessGroupService;
 import org.olat.repository.RepositoryEntry;
@@ -121,9 +123,18 @@ public class InfoMessageNotificationHandler extends LogDelegator implements Noti
 	public String createTitleInfo(Subscriber subscriber, Locale locale) {
 		Translator translator = Util.createPackageTranslator(this.getClass(), locale);
 		String displayName = RepositoryManager.getInstance().lookupDisplayNameByOLATResourceableId(subscriber.getPublisher().getResId());
-		return translator.translate("notification.title", new String[]{displayName});
+		Publisher p = subscriber.getPublisher();
+		CourseNode node = CourseFactory.loadCourse(p.getResId()).getRunStructure().getNode(getNodeId(p.getBusinessPath()));
+		String shortName = (node != null ? node.getShortName() : "");
+		return translator.translate("notification.title", new String[]{displayName, shortName});
 	}
-	
+
+	private String getNodeId(String businessPath) {
+		String[] parts = businessPath.split(":");
+		if (parts.length < 3) return "";
+		return parts[2].substring(0, parts[2].lastIndexOf("]"));
+	}
+
 	@Override
 	public String getType() {
 		return "InfoMessage";

@@ -40,6 +40,8 @@ import org.olat.core.util.StringHelper;
 import org.olat.core.util.Util;
 import org.olat.core.util.filter.FilterFactory;
 import org.olat.modules.fo.Forum;
+import org.olat.modules.fo.ForumCallback;
+import org.olat.modules.fo.Status;
 import org.olat.modules.fo.manager.ForumManager;
 import org.olat.modules.fo.ui.MessagePeekview;
 import org.olat.repository.RepositoryEntry;
@@ -75,7 +77,7 @@ public class FOPeekviewController extends BasicController implements Controller 
 	 * @param nodeId The course node ID
 	 * @param itemsToDisplay number of items to be displayed, must be > 0
 	 */
-	public FOPeekviewController(UserRequest ureq, WindowControl wControl, RepositoryEntry courseEntry, Forum forum, String nodeId, int itemsToDisplay) {		
+	public FOPeekviewController(UserRequest ureq, WindowControl wControl, RepositoryEntry courseEntry, Forum forum, String nodeId, int itemsToDisplay, final ForumCallback forumCallback) {
 		// Use fallback translator from forum
 		super(ureq, wControl, Util.createPackageTranslator(Forum.class, ureq.getLocale()));
 		this.nodeId = nodeId;
@@ -84,31 +86,37 @@ public class FOPeekviewController extends BasicController implements Controller 
 		VelocityContainer peekviewVC = createVelocityContainer("peekview");
 		// add items, only as many as configured
 		List<MessagePeekview> messages = forumManager.getPeekviewMessages(forum, itemsToDisplay);
-		// only take the configured amount of messages
+
+		final boolean isModerator = forumCallback.mayEditMessageAsModerator();
 		List<MessageView> views = new ArrayList<MessageView>(itemsToDisplay);
-		for (MessagePeekview message :messages) {
-			// add link to item
-			// Add link to jump to course node
-			Link nodeLink = LinkFactory.createLink("nodeLink_" + message.getKey(), peekviewVC, this);
-			nodeLink.setCustomDisplayText(StringHelper.escapeHtml(message.getTitle()));
-			nodeLink.setIconLeftCSS("o_icon o_icon_post");
-			nodeLink.setCustomEnabledLinkCSS("o_gotoNode");
-			nodeLink.setUserObject(message);	
-			
-			String body = message.getBody();
-			if(body.length() > 256) {
-				String truncateBody = FilterFactory.getHtmlTagsFilter().filter(body);
-				truncateBody = StringEscapeUtils.unescapeHtml(truncateBody);// remove entities
-				if(truncateBody.length() < 256) {
-					body = StringHelper.xssScan(body);
+		for (MessagePeekview message : messages) {
+			Status status = Status.getStatus(message.getStatusCode());
+			// OLATNG-198: allow moderators seeing hidden messages
+			if (!status.isHidden() || isModerator) {
+				// add link to item
+				// Add link to jump to course node
+				Link nodeLink = LinkFactory.createLink("nodeLink_" + message.getKey(), peekviewVC, this);
+				nodeLink.setCustomDisplayText(StringHelper.escapeHtml(message.getTitle()));
+				nodeLink.setIconLeftCSS("o_icon o_icon_post");
+				nodeLink.setCustomEnabledLinkCSS("o_gotoNode");
+				nodeLink.setUserObject(message);
+
+				String body = message.getBody();
+				if(body.length() > 256) {
+					String truncateBody = FilterFactory.getHtmlTagsFilter().filter(body);
+					truncateBody = StringEscapeUtils.unescapeHtml(truncateBody);// remove entities
+					if(truncateBody.length() < 256) {
+						body = StringHelper.xssScan(body);
+					} else {
+						truncateBody = Formatter.truncate(truncateBody, 256);// truncate
+						body = StringHelper.escapeHtml(truncateBody);//ok because html tags are filtered
+					}
 				} else {
-					truncateBody = Formatter.truncate(truncateBody, 256);// truncate
-					body = StringHelper.escapeHtml(truncateBody);//ok because html tags are filtered
+					body = StringHelper.xssScan(body);
 				}
-			} else {
-				body = StringHelper.xssScan(body);
+				views.add(new MessageView(message.getKey(), message.getCreationDate(), body));
 			}
-			views.add(new MessageView(message.getKey(), message.getCreationDate(), body));
+
 		}
 		peekviewVC.contextPut("messages", views);
 		// Add link to show all items (go to node)

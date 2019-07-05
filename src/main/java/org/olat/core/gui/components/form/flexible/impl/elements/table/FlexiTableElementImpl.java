@@ -34,6 +34,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import org.checkerframework.checker.initialization.qual.UnderInitialization;
+import org.checkerframework.checker.initialization.qual.UnknownInitialization;
+import org.checkerframework.checker.nullness.qual.EnsuresNonNull;
+import org.olat.core.commons.persistence.ResultInfos;
 import org.olat.core.commons.persistence.SortKey;
 import org.olat.core.gui.UserRequest;
 import org.olat.core.gui.components.Component;
@@ -97,7 +101,7 @@ public class FlexiTableElementImpl extends FormItemImpl implements FlexiTableEle
 	private int currentPage;
 	private int pageSize;
 	private final int defaultPageSize;
-	private boolean bordered; 
+	private boolean bordered;
 	private boolean editMode;
 	private boolean exportEnabled;
 	private boolean searchEnabled;
@@ -107,6 +111,8 @@ public class FlexiTableElementImpl extends FormItemImpl implements FlexiTableEle
 	private boolean extendedSearchExpanded = false;
 	private int columnLabelForDragAndDrop;
 	private String emptyTableMessageKey = null;
+
+	private final int minSearchLength;
 	
 	private VelocityContainer rowRenderer;
 	private VelocityContainer detailsRenderer;
@@ -120,6 +126,7 @@ public class FlexiTableElementImpl extends FormItemImpl implements FlexiTableEle
 	private ExtendedFlexiTableSearchController extendedSearchCtrl;
 	
 	private final FlexiTableDataModel<?> dataModel;
+	// TODO sev26: Do not mix the model with the view.
 	private final FlexiTableDataSource<?> dataSource;
 	private final FlexiTableComponent component;
 	private FlexiTableComponentDelegate componentDelegate;
@@ -142,13 +149,22 @@ public class FlexiTableElementImpl extends FormItemImpl implements FlexiTableEle
 	private Set<Integer> enabledColumnIndex = new HashSet<>();
 	
 	private Map<String,FormItem> components = new HashMap<>();
-	
+
 	public FlexiTableElementImpl(WindowControl wControl, String name, Translator translator, FlexiTableDataModel<?> tableModel) {
-		this(wControl, name, translator, tableModel, -1, true);
+		this(wControl, name, translator, tableModel, -1, true, 0);
+	}
+
+	public FlexiTableElementImpl(WindowControl wControl, String name, Translator translator, FlexiTableDataModel<?> tableModel, int minSearchLength) {
+		this(wControl, name, translator, tableModel, -1, true, minSearchLength);
+	}
+
+	public FlexiTableElementImpl(WindowControl wControl, String name, Translator translator,
+								 FlexiTableDataModel<?> tableModel, int pageSize, boolean loadOnStart) {
+		this(wControl, name, translator, tableModel, pageSize, loadOnStart, 0);
 	}
 	
 	public FlexiTableElementImpl(WindowControl wControl, String name, Translator translator,
-			FlexiTableDataModel<?> tableModel, int pageSize, boolean loadOnStart) {
+			FlexiTableDataModel<?> tableModel, int pageSize, boolean loadOnStart, int minSearchLength) {
 		super(name);
 		this.wControl = wControl;
 		this.dataModel = tableModel;
@@ -179,6 +195,8 @@ public class FlexiTableElementImpl extends FormItemImpl implements FlexiTableEle
 			//preload it
 			dataSource.load(null, null, null, 0, pageSize);
 		}
+
+		this.minSearchLength = minSearchLength;
 	}
 
 	@Override
@@ -197,7 +215,8 @@ public class FlexiTableElementImpl extends FormItemImpl implements FlexiTableEle
 	}
 
 	@Override
-	public void setRendererType(FlexiTableRendererType rendererType) {
+	@EnsuresNonNull("rendererType")
+	public void setRendererType(@UnderInitialization(FlexiTableElementImpl.class) FlexiTableElementImpl this, FlexiTableRendererType rendererType) {
 		// activate active render button
 		if(customTypeButton != null) {
 			customTypeButton.setActive(FlexiTableRendererType.custom == rendererType);
@@ -210,7 +229,7 @@ public class FlexiTableElementImpl extends FormItemImpl implements FlexiTableEle
 		if(component != null) {
 			component.setDirty(true);
 		}
-		
+
 
 	}
 	
@@ -226,13 +245,13 @@ public class FlexiTableElementImpl extends FormItemImpl implements FlexiTableEle
 			//custom
 			customTypeButton = new FormLinkImpl(dispatchId + "_customRTypeButton", "rCustomRTypeButton", "", Link.BUTTON + Link.NONTRANSLATED);
 			customTypeButton.setTranslator(translator);
-			customTypeButton.setIconLeftCSS("o_icon o_icon_table_custom o_icon-lg");
+			customTypeButton.setIconLeftCSS("o_icon o_icon_table o_icon-lg");
 			customTypeButton.setActive(FlexiTableRendererType.custom == rendererType);
 			components.put("rTypeCustom", customTypeButton);
 			//classic tables
 			classicTypeButton = new FormLinkImpl(dispatchId + "_classicRTypeButton", "rClassicRTypeButton", "", Link.BUTTON + Link.NONTRANSLATED);
 			classicTypeButton.setTranslator(translator);
-			classicTypeButton.setIconLeftCSS("o_icon o_icon_table o_icon-lg");
+			classicTypeButton.setIconLeftCSS("o_icon o_icon_list o_icon-lg");
 			classicTypeButton.setActive(FlexiTableRendererType.classic == rendererType);
 			components.put("rTypeClassic", classicTypeButton);
 			
@@ -277,7 +296,8 @@ public class FlexiTableElementImpl extends FormItemImpl implements FlexiTableEle
 	}
 
 	@Override
-	public void setCustomizeColumns(boolean customizeColumns) {
+	@EnsuresNonNull("customizeColumns")
+	public void setCustomizeColumns(@UnderInitialization(FlexiTableElementImpl.class) FlexiTableElementImpl this, boolean customizeColumns) {
 		this.customizeColumns = customizeColumns;
 	}
 
@@ -301,7 +321,7 @@ public class FlexiTableElementImpl extends FormItemImpl implements FlexiTableEle
 	}
 
 	@Override
-	public void setAndLoadPersistedPreferences(UserRequest ureq, String id) {
+	public void setAndLoadPersistedPreferences(@UnderInitialization(FlexiTableElementImpl.class) FlexiTableElementImpl this, UserRequest ureq, String id) {
 		persistentId = id;
 		loadCustomSettings(ureq);
 	}
@@ -587,7 +607,7 @@ public class FlexiTableElementImpl extends FormItemImpl implements FlexiTableEle
 	public void setExtendedFilterButton(String label, List<FlexiTableFilter> extendedFilters) {
 		if(StringHelper.containsNonWhitespace(label) && extendedFilters != null && extendedFilters.size() > 0) {
 			this.extendedFilters = extendedFilters;
-			
+
 			String dispatchId = component.getDispatchID();
 			extendedFilterButton = new FormLinkImpl(dispatchId + "_extFilterButton", "rExtFilterButton", "extfilter", Link.BUTTON | Link.NONTRANSLATED);
 			extendedFilterButton.setI18nKey(label);
@@ -601,7 +621,7 @@ public class FlexiTableElementImpl extends FormItemImpl implements FlexiTableEle
 			extendedFilters = null;
 		}
 	}
-	
+
 	@Override
 	public List<FlexiTableFilter> getSelectedExtendedFilters() {
 		List<FlexiTableFilter> selectedFilters = new ArrayList<>();
@@ -614,7 +634,7 @@ public class FlexiTableElementImpl extends FormItemImpl implements FlexiTableEle
 		}
 		return selectedFilters;
 	}
-	
+
 	@Override
 	public void setSelectedExtendedFilters(List<FlexiTableFilter> filters) {
 		if(extendedFilters != null && extendedFilters.size() > 0) {
@@ -633,7 +653,7 @@ public class FlexiTableElementImpl extends FormItemImpl implements FlexiTableEle
 	public FormLink getExtendedFilterButton() {
 		return extendedFilterButton;
 	}
-	
+
 	@Override
 	public boolean isSelectAllEnable() {
 		return selectAllEnabled;
@@ -972,7 +992,7 @@ public class FlexiTableElementImpl extends FormItemImpl implements FlexiTableEle
 			key = null;
 			orderBy = null;
 		}
-		
+
 		if(dataModel instanceof SortableFlexiTableDataModel) {
 			((SortableFlexiTableDataModel<?>)dataModel).sort(key);
 		} else if(dataSource != null) {
@@ -1097,7 +1117,7 @@ public class FlexiTableElementImpl extends FormItemImpl implements FlexiTableEle
 		}
 		doExtendedFilter(ureq);
 	}
-	
+
 	private void doExtendedFilter(UserRequest ureq) {
 		if(dataSource != null) {
 			rowCount = -1;
@@ -1112,7 +1132,7 @@ public class FlexiTableElementImpl extends FormItemImpl implements FlexiTableEle
 		getRootForm().fireFormEvent(ureq, new FlexiTableSearchEvent(FlexiTableSearchEvent.EXTENDED_FILTER, this,
 				getSearchText(), getSelectedFilters(), getSelectedExtendedFilters(), getConditionalQueries(), FormEvent.ONCLICK));
 	}
-	
+
 	private void doExport(UserRequest ureq) {
 		// ensure the all rows are loaded to export
 		if(dataSource != null) {
@@ -1147,7 +1167,7 @@ public class FlexiTableElementImpl extends FormItemImpl implements FlexiTableEle
 		callout.activate();
 		callout.addControllerListener(this);
 	}
-	
+
 	@Override
 	public void collapseExtendedSearch() {
 		extendedSearchExpanded = false;
@@ -1167,7 +1187,7 @@ public class FlexiTableElementImpl extends FormItemImpl implements FlexiTableEle
 
 	@Override
 	public boolean isColumnModelVisible(FlexiColumnModel col) {
-		return col.isAlwaysVisible() || enabledColumnIndex.contains(col.getColumnIndex());
+		return !col.isForExportOnly() && (col.isAlwaysVisible() || enabledColumnIndex.contains(col.getColumnIndex()));
 	}
 
 	@Override
@@ -1347,13 +1367,13 @@ public class FlexiTableElementImpl extends FormItemImpl implements FlexiTableEle
 		List<String> condQueries = extendedSearchCtrl.getConditionalQueries();
 		doSearch(ureq, FlexiTableSearchEvent.SEARCH, search, condQueries);
 	}
-	
+
 	protected void evalSearchRequest(UserRequest ureq) {
 		if(searchFieldEl == null || !searchFieldEl.isEnabled() || !searchFieldEl.isVisible()){
 			return;//this a default behavior which can occur without the search configured
 		}
 		searchFieldEl.evalFormRequest(ureq);
-		
+
 		String key = null;
 		if(searchFieldEl instanceof AutoCompleter) {
 			key = ((AutoCompleter)searchFieldEl).getKey();
@@ -1362,13 +1382,21 @@ public class FlexiTableElementImpl extends FormItemImpl implements FlexiTableEle
 
 		if(key != null) {
 			doSearch(ureq, FlexiTableSearchEvent.QUICK_SEARCH_KEY_SELECTION, key, null);
-		} else if(StringHelper.containsNonWhitespace(search)) {
-			doSearch(ureq, FlexiTableSearchEvent.QUICK_SEARCH, search, null);
+		} else if(StringHelper.containsNonWhitespace(search) || search.equals("")) {
+			if (search.length() < minSearchLength) {
+				if (minSearchLength == 1) {
+					wControl.setWarning(getTranslator().translate("cif.error.search.empty"));
+				} else {
+					wControl.setWarning(getTranslator().translate("cif.error.search.not.enough.chars", new String[]{Integer.toString(minSearchLength)}));
+				}
+			} else {
+				doSearch(ureq, FlexiTableSearchEvent.QUICK_SEARCH, search, null);
+			}
 		} else {
 			resetSearch(ureq);
 		}
 	}
-	
+
 	protected void resetQuickSearch(UserRequest ureq) {
 		if(searchFieldEl instanceof AutoCompleter) {
 			((AutoCompleter)searchFieldEl).setKey(null);
@@ -1376,7 +1404,7 @@ public class FlexiTableElementImpl extends FormItemImpl implements FlexiTableEle
 		searchFieldEl.setValue("");
 		resetSearch(ureq);
 	}
-	
+
 	@Override
 	public String getQuickSearchString() {
 		if(searchFieldEl != null && searchFieldEl.isEnabled() && searchFieldEl.isVisible()){
@@ -1452,8 +1480,7 @@ public class FlexiTableElementImpl extends FormItemImpl implements FlexiTableEle
 		if(dataSource != null) {
 			resetInternComponents();
 			dataSource.clear();
-			dataSource.load(null, null, null, 0, getPageSize());
-		} else {
+        } else {
 			getRootForm().fireFormEvent(ureq, new FlexiTableSearchEvent(this, FormEvent.ONCLICK));
 		}
 	}
@@ -1582,7 +1609,7 @@ public class FlexiTableElementImpl extends FormItemImpl implements FlexiTableEle
 	}
 
 	@Override
-	public void reloadData() {
+	public void reloadData(@UnderInitialization(FlexiTableElementImpl.class) FlexiTableElementImpl this) {
 		if(dataSource != null) {
 			dataSource.clear();
 			int firstResult = currentPage * getPageSize();
@@ -1663,7 +1690,7 @@ public class FlexiTableElementImpl extends FormItemImpl implements FlexiTableEle
 	}
 
 	@Override
-	public void setEmtpyTableMessageKey(String i18key) {
+	public void setEmtpyTableMessageKey(@UnderInitialization(FlexiTableElementImpl.class) FlexiTableElementImpl this, String i18key) {
 		this.emptyTableMessageKey  = i18key;
 	}
 	@Override
