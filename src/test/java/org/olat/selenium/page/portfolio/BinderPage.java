@@ -118,6 +118,7 @@ public class BinderPage {
 		OOGraphene.waitElement(deleteBy, 5, browser);
 		browser.findElement(deleteBy).click();
 		OOGraphene.waitBusy(browser);
+		OOGraphene.scrollTop(browser);
 		
 		//confirm check box
 		By confirmBoxBy = By.cssSelector("div.modal-body input[type='checkbox']");
@@ -126,6 +127,7 @@ public class BinderPage {
 		
 		By deleteButtonBy = By.cssSelector("div.modal-body div.o_button_group button.btn.btn-primary");
 		browser.findElement(deleteButtonBy).click();
+		OOGraphene.waitModalDialogDisappears(browser);
 		OOGraphene.waitAndCloseBlueMessageWindow(browser);
 		return new BindersPage(browser);
 	}
@@ -172,7 +174,7 @@ public class BinderPage {
 		browser.findElement(tocBy).click();
 		OOGraphene.waitBusy(browser);
 		By binderPageListBy = By.cssSelector("div.o_portfolio_entries");
-		OOGraphene.waitElement(binderPageListBy, 5, browser);
+		OOGraphene.waitElement(binderPageListBy, browser);
 		return this;
 	}
 	
@@ -230,7 +232,6 @@ public class BinderPage {
 		//click create button
 		By createBy = By.className("o_sel_pf_new_section");
 		browser.findElement(createBy).click();
-		OOGraphene.waitBusy(browser);
 		OOGraphene.waitModalDialog(browser);
 		By popupBy = By.cssSelector("div.modal-content fieldset.o_sel_pf_edit_section_form");
 		OOGraphene.waitElement(popupBy, 5, browser);
@@ -257,7 +258,6 @@ public class BinderPage {
 		By createBy = By.className("o_sel_pf_new_entry");
 		WebElement createButton = browser.findElement(createBy);
 		createButton.click();
-		OOGraphene.waitBusy(browser);
 		OOGraphene.waitModalDialog(browser);
 		By popupBy = By.cssSelector("div.modal-content fieldset.o_sel_pf_edit_entry_form");
 		OOGraphene.waitElement(popupBy, 5, browser);
@@ -287,7 +287,6 @@ public class BinderPage {
 		Assert.assertEquals(1, newAssignmentButtons.size());
 		newAssignmentButtons.get(0).click();
 		
-		OOGraphene.waitBusy(browser);
 		OOGraphene.waitModalDialog(browser);
 		By popupBy = By.cssSelector("div.modal-content fieldset.o_sel_pf_edit_assignment_form");
 		OOGraphene.waitElement(popupBy, 5, browser);
@@ -308,8 +307,9 @@ public class BinderPage {
 	}
 	
 	public EntryPage pickAssignment(String assignmentTitle) {
-		By assignmentButton = By.xpath("//div[contains(@class,'o_assignment_2_instantiate ')]/a[span[contains(text(),'" + assignmentTitle + "')]]");
-		browser.findElement(assignmentButton).click();
+		By assignmentSelectBy = By.xpath("//div[contains(@class,'o_section_lead')]//select[contains(@id,'o_fioassignments')]");
+		OOGraphene.waitElement(assignmentSelectBy, browser);
+		new Select(browser.findElement(assignmentSelectBy)).selectByVisibleText(assignmentTitle);
 		OOGraphene.waitBusy(browser);
 		assertOnPage(assignmentTitle);
 		return new EntryPage(browser);
@@ -348,7 +348,7 @@ public class BinderPage {
 	protected void confirm() {
 		By confirmButtonBy = By.xpath("//div[contains(@class,'modal-dialo')]//div[contains(@class,'modal-footer')]/a[contains(@onclick,'link_0')]");
 		OOGraphene.waitElement(confirmButtonBy, 5, browser);
-		OOGraphene.waitScrollTop(browser);
+		OOGraphene.waitBusyAndScrollTop(browser);
 		browser.findElement(confirmButtonBy).click();
 		OOGraphene.waitBusy(browser);
 	}

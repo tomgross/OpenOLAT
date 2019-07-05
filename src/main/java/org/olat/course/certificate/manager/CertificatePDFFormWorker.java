@@ -30,6 +30,7 @@ import java.util.List;
 import java.util.Locale;
 
 import org.apache.commons.io.IOUtils;
+import org.apache.logging.log4j.Logger;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDDocumentCatalog;
 import org.apache.pdfbox.pdmodel.interactive.form.PDAcroForm;
@@ -37,7 +38,6 @@ import org.apache.pdfbox.pdmodel.interactive.form.PDField;
 import org.olat.core.id.Identity;
 import org.olat.core.id.User;
 import org.olat.core.id.UserConstants;
-import org.olat.core.logging.OLog;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.Formatter;
 import org.olat.core.util.StringHelper;
@@ -58,7 +58,7 @@ import org.olat.user.propertyhandlers.UserPropertyHandler;
  */
 public class CertificatePDFFormWorker {
 
-	private static final OLog log = Tracing
+	private static final Logger log = Tracing
 			.createLoggerFor(CertificatePDFFormWorker.class);
 	
 	private final Float score;
@@ -66,21 +66,27 @@ public class CertificatePDFFormWorker {
 	private final Identity identity;
 	private final RepositoryEntry entry;
 
-	private Date dateCertification;
-	private Date dateFirstCertification;
-	private Date dateNextRecertification;
+	private final Date dateCertification;
+	private final Date dateFirstCertification;
+	private final Date dateNextRecertification;
+	private final String custom1;
+	private final String custom2;
+	private final String custom3;
 	private final String certificateURL;
 
 	private final Locale locale;
 	private final UserManager userManager;
 	private final CertificatesManagerImpl certificatesManager;
 
-	public CertificatePDFFormWorker(Identity identity, RepositoryEntry entry,
-			Float score, Boolean passed, Date dateCertification, Date dateFirstCertification,
-			Date dateNextRecertification, String certificateURL, Locale locale, UserManager userManager,
+	public CertificatePDFFormWorker(Identity identity, RepositoryEntry entry, Float score, Boolean passed,
+			Date dateCertification, Date dateFirstCertification, Date dateNextRecertification, String custom1,
+			String custom2, String custom3, String certificateURL, Locale locale, UserManager userManager,
 			CertificatesManagerImpl certificatesManager) {
 		this.entry = entry;
 		this.score = score;
+		this.custom1 = custom1;
+		this.custom2 = custom2;
+		this.custom3 = custom3;
 		this.locale = locale;
 		this.passed = passed;
 		this.identity = identity;
@@ -181,6 +187,8 @@ public class CertificatePDFFormWorker {
 		fillField("expenditureOfWorks", expenditureOfWorks, acroForm);
 		String mainLanguage = entry.getMainLanguage();
 		fillField("mainLanguage", mainLanguage, acroForm);
+		String location = entry.getLocation();
+		fillField("location", location, acroForm);
 		
 		if (entry.getLifecycle() != null) {
 			Formatter format = Formatter.getInstance(locale);
@@ -242,6 +250,9 @@ public class CertificatePDFFormWorker {
 	
 	
 	private void fillMetaInfos(PDAcroForm acroForm) throws IOException {
+		fillField("custom1", custom1, acroForm);
+		fillField("custom2", custom2, acroForm);
+		fillField("custom3", custom3, acroForm);
 		fillField("certificateVerificationUrl", certificateURL, acroForm);
 	}
 
@@ -256,7 +267,7 @@ public class CertificatePDFFormWorker {
 				field.setValue(value);
 			}
 
-			field.setReadonly(true);
+			field.setReadOnly(true);
 			field.setNoExport(true);
 		}
 	}

@@ -180,9 +180,10 @@ public class EfficiencyStatementPage {
 		}//
 		
 		By collectBy = By.xpath("//div[contains(@class,'o_sel_certificates_table')]//table//tr[td[contains(text(),'" + courseTitle + "')]]/td/a[contains(@href,'cmd.MEDIA')]");
-		OOGraphene.waitElement(collectBy, 5, browser);
+		OOGraphene.waitElement(collectBy, browser);
+		OOGraphene.scrollTo(collectBy, browser);
 		browser.findElement(collectBy).click();
-		OOGraphene.waitBusy(browser);
+		OOGraphene.waitTinymce(browser);
 		OOGraphene.waitModalDialog(browser);
 		return new MediaPage(browser);
 	}

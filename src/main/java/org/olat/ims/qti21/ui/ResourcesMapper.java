@@ -30,8 +30,9 @@ import org.olat.core.gui.media.FileMediaResource;
 import org.olat.core.gui.media.ForbiddenMediaResource;
 import org.olat.core.gui.media.MediaResource;
 import org.olat.core.gui.media.NotFoundMediaResource;
-import org.olat.core.logging.OLog;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
+import org.olat.core.util.FileUtils;
 import org.olat.core.util.StringHelper;
 
 /**
@@ -42,7 +43,7 @@ import org.olat.core.util.StringHelper;
  */
 public class ResourcesMapper implements Mapper {
 	
-	private static final OLog log = Tracing.createLoggerFor(ResourcesMapper.class);
+	private static final Logger log = Tracing.createLoggerFor(ResourcesMapper.class);
 	
 	private final URI assessmentObjectUri;
 	private final File submissionDirectory;
@@ -85,10 +86,15 @@ public class ResourcesMapper implements Mapper {
 			File file = new File(root.getParentFile(), filename);
 			if(file.exists()) {
 				if(file.getName().endsWith(".xml")) {
-					resource = new ForbiddenMediaResource(relPath);
-				} else {
+					resource = new ForbiddenMediaResource();
+				} else if(FileUtils.isInSubDirectory(root.getParentFile(), file)) {
 					resource = new FileMediaResource(file, true);
+				} else {
+					resource = new ForbiddenMediaResource();
 				}
+			} else if(filename.endsWith("/raw/_noversion_/images/transparent.gif")) {
+				String realPath = request.getServletContext().getRealPath("/static/images/transparent.gif");
+				resource = new FileMediaResource(new File(realPath), true);
 			} else {
 				String submissionName = null;
 				File storage = null;
@@ -117,15 +123,15 @@ public class ResourcesMapper implements Mapper {
 					if(submissionFile.exists()) {
 						resource = new FileMediaResource(submissionFile, true);
 					} else {
-						resource = new NotFoundMediaResource(href);
+						resource = new NotFoundMediaResource();
 					}
 				} else {
-					resource = new NotFoundMediaResource(href);
+					resource = new NotFoundMediaResource();
 				}
 			}
 		} catch (Exception e) {
 			log.error("", e);
-			resource = new NotFoundMediaResource(filename);
+			resource = new NotFoundMediaResource();
 		}
 		return resource;
 	}

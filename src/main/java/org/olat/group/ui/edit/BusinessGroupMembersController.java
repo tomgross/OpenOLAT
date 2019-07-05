@@ -21,6 +21,7 @@ package org.olat.group.ui.edit;
 
 import java.util.List;
 
+import org.olat.basesecurity.GroupRoles;
 import org.olat.core.gui.UserRequest;
 import org.olat.core.gui.components.Component;
 import org.olat.core.gui.components.link.Link;
@@ -101,7 +102,7 @@ public class BusinessGroupMembersController extends BasicController {
 		configForm.setMembershipConfiguration(businessGroup);
 		mainVC.put("configMembers", configForm.getInitialComponent());
 		
-		SearchMembersParams searchParams = new SearchMembersParams(false, false, false, true, true, true, true);
+		SearchMembersParams searchParams = new SearchMembersParams(true, GroupRoles.coach, GroupRoles.participant, GroupRoles.waiting);
 		membersController = new MemberListController(ureq, getWindowControl(), toolbarPanel, businessGroup, searchParams);
 		listenTo(membersController);
 		
@@ -203,13 +204,10 @@ public class BusinessGroupMembersController extends BasicController {
 	private void doChooseMembers(UserRequest ureq) {
 		removeAsListenerAndDispose(importMembersWizard);
 
-		Step start = new ImportMember_1b_ChooseMemberStep(ureq, null, businessGroup, false);
-		StepRunnerCallback finish = new StepRunnerCallback() {
-			@Override
-			public Step execute(UserRequest uureq, WindowControl wControl, StepsRunContext runContext) {
-				addMembers(runContext);
-				return StepsMainRunController.DONE_MODIFIED;
-			}
+		Step start = new ImportMember_1b_ChooseMemberStep(ureq, null, businessGroup, null, false);
+		StepRunnerCallback finish = (uureq, wControl, runContext) -> {
+			addMembers(runContext);
+			return StepsMainRunController.DONE_MODIFIED;
 		};
 		
 		importMembersWizard = new StepsMainRunController(ureq, getWindowControl(), start, finish, null,
@@ -221,7 +219,7 @@ public class BusinessGroupMembersController extends BasicController {
 	private void doImportMembers(UserRequest ureq) {
 		removeAsListenerAndDispose(importMembersWizard);
 
-		Step start = new ImportMember_1a_LoginListStep(ureq, null, businessGroup, false);
+		Step start = new ImportMember_1a_LoginListStep(ureq, null, businessGroup, null, false);
 		StepRunnerCallback finish = new StepRunnerCallback() {
 			@Override
 			public Step execute(UserRequest uureq, WindowControl wControl, StepsRunContext runContext) {
@@ -251,6 +249,6 @@ public class BusinessGroupMembersController extends BasicController {
 		MailTemplate template = (MailTemplate)runContext.get("mailTemplate");
 		MailPackage mailing = new MailPackage(template, getWindowControl().getBusinessControl().getAsString(), template != null);
 		businessGroupService.updateMemberships(getIdentity(), allModifications, mailing);
-		MailHelper.printErrorsAndWarnings(mailing.getResult(), getWindowControl(), getLocale());
+		MailHelper.printErrorsAndWarnings(mailing.getResult(), getWindowControl(), false, getLocale());
 	}
 }

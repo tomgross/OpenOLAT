@@ -26,24 +26,26 @@ package org.olat.admin.user.delete.service;
 
 import java.io.File;
 
+import org.apache.logging.log4j.Logger;
 import org.olat.basesecurity.BaseSecurity;
 import org.olat.core.CoreSpringFactory;
-import org.olat.core.commons.modules.bc.FolderConfig;
-import org.olat.core.commons.modules.bc.vfs.OlatRootFolderImpl;
-import org.olat.core.commons.services.taskexecutor.LongRunnable;
+import org.olat.core.commons.services.taskexecutor.LowPriorityRunnable;
 import org.olat.core.id.Identity;
-import org.olat.core.logging.OLog;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.FileUtils;
 import org.olat.core.util.StringHelper;
+import org.olat.core.util.io.SystemFileFilter;
+import org.olat.core.util.vfs.LocalFolderImpl;
+import org.olat.core.util.vfs.VFSManager;
 import org.olat.course.CourseFactory;
 import org.olat.course.ICourse;
 import org.olat.course.PersistingCourseImpl;
+import org.olat.course.assessment.manager.CourseAssessmentManagerImpl;
 import org.olat.course.nodes.ProjectBrokerCourseNode;
 import org.olat.course.nodes.TACourseNode;
+import org.olat.course.nodes.pf.manager.PFManager;
 import org.olat.course.nodes.ta.DropboxController;
 import org.olat.course.nodes.ta.ReturnboxController;
-import org.olat.ims.qti.editor.QTIEditorPackageImpl;
 import org.olat.resource.OLATResource;
 import org.olat.resource.OLATResourceManager;
 
@@ -53,10 +55,10 @@ import org.olat.resource.OLATResourceManager;
  * @author srosse, stephane.rosse@frentix.com, http://www.frentix.com
  *
  */
-public class DeleteUserDataTask implements LongRunnable {
+public class DeleteUserDataTask implements LowPriorityRunnable {
 	private static final long serialVersionUID = 4278304131373256050L;
 
-	private static final OLog log = Tracing.createLoggerFor(DeleteUserDataTask.class);
+	private static final Logger log = Tracing.createLoggerFor(DeleteUserDataTask.class);
 
 	private final Long identityKey;
 	private final String newDeletedUserName;//it's the used username, not the one (let the name because of XStream)
@@ -70,45 +72,8 @@ public class DeleteUserDataTask implements LongRunnable {
 	public void run() {
 		long startTime = System.currentTimeMillis();
 		Identity identity = CoreSpringFactory.getImpl(BaseSecurity.class).loadIdentityByKey(identityKey);
-		deleteHomesMetaAndVersionDataOf(identity);
-		deleteAllTempQtiEditorFilesOf(identity);
-		deleteAllDropboxReturnboxFilesOf(identity);
+		deleteAllCoursesUserFilesOf(identity);
 		log.info("Finished UserFileDeletionManager thread for identity=" + identity + " in " + (System.currentTimeMillis() - startTime) + " (ms)");
-	}
-	
-	/**
-	 * Delete the temporary files of the QTI-editor File e.g. /usr/local/olatfs/olat/olatdata/tmp/qtieditor/schuessler
-	 * @param identity
-	 */
-	private void deleteAllTempQtiEditorFilesOf(Identity identity) {
-		File userTempQtiEditorDir = new File(QTIEditorPackageImpl.getQTIEditorBaseDir(), newDeletedUserName);
-		if (userTempQtiEditorDir.exists()) {
-			FileUtils.deleteDirsAndFiles(userTempQtiEditorDir, true, true); 
-			log.audit("User-Deletion: identity=" + identity.getName() +" : QTI editor temp files deleted under dir=" + userTempQtiEditorDir.getAbsolutePath());
-		}
-	}
-
-	/**
-	 * Delete the meta and version data of the home.
-	 * @param identity
-	 */
-	private void deleteHomesMetaAndVersionDataOf(Identity identity) {
-		String userHome =  FolderConfig.getUserHomes().substring(1);
-		File metaHomeDir = new File(FolderConfig.getCanonicalMetaRoot(), userHome);
-		File metaHomeUserDir = new File(metaHomeDir, newDeletedUserName);
-		if(metaHomeUserDir.exists()) {
-			// the meta-data under home/<USER> can be deleted and must not be renamed
-			FileUtils.deleteDirsAndFiles(metaHomeUserDir, true, true); 			
-			log.audit("User-Deletion: Delete meta-data homes directory for identity=" + identity.getName()+ " directory=" + metaHomeUserDir.getAbsolutePath());
-		}
-
-		File versionHomeDir = new File(FolderConfig.getCanonicalVersionRoot(), userHome);
-		File versionHomeUserDir = new File(versionHomeDir, newDeletedUserName);
-		if(versionHomeUserDir.exists()) {
-			// the meta-data under home/<USER> can be deleted and must not be renamed
-			FileUtils.deleteDirsAndFiles(versionHomeUserDir, true, true); 			
-			log.audit("User-Deletion: Delete meta-data homes directory for identity=" + identity.getName()+ " directory=" + metaHomeUserDir.getAbsolutePath());
-		}
 	}
 
 	/**
@@ -116,33 +81,90 @@ public class DeleteUserDataTask implements LongRunnable {
 	 * 
 	 * @param identity
 	 */
-	private void deleteAllDropboxReturnboxFilesOf(Identity identity) {
-		File courseBaseDir = getCourseBaseContainer();
+	private void deleteAllCoursesUserFilesOf(Identity identity) {
+		File coursesBaseDir = getCoursesBaseContainer();
 		// loop over all courses path e.g. olatdata\bcroot\course\78931391428316\dropboxes\78933379704296\deltest 
 		//                                                                       ^^^^^^^^^ dirTypeName
-		String[] courseDirNames = courseBaseDir.list();
+		String[] courseDirNames = coursesBaseDir.list();
 		// 1. loop over all course-id e.g. 78931391428316
 		for (String courseDirName:courseDirNames) {
 			if(!StringHelper.isLong(courseDirName)) continue;
 			
-			File courseDir = new File(courseBaseDir, courseDirName);
+			File courseDir = new File(coursesBaseDir, courseDirName);
 			if (courseDir.isDirectory()) {
-				deleteAllDropboxReturnboxFiles(identity, courseDir);
+				deleteAssessmentDocuments(identity, courseDir);
+				deleteDropboxReturnbox(identity, courseDir);
+				deleteParticipantFolder(identity, courseDir);
+				deleteGTasks(identity, courseDir);
 			}
 		}
 	}
 	
-	private void deleteAllDropboxReturnboxFiles(Identity identity, File courseDir) {
+	/**
+	 * /coursedir/participantfolder/{node}/{identityKey}
+	 * @param identity
+	 * @param courseDir
+	 */
+	private void deleteParticipantFolder(Identity identity, File courseDir) {
+		File participantFoldersDir = new File(courseDir, PFManager.FILENAME_PARTICIPANTFOLDER);
+		if(participantFoldersDir.exists()) {
+			File[] nodeDirs = participantFoldersDir.listFiles(new SystemFileFilter(false, true));
+			for(File nodeDir:nodeDirs) {
+				File userDir = new File(nodeDir, identity.getKey().toString());
+				if(userDir.exists()) {
+					FileUtils.deleteDirsAndFiles(userDir, true, true); 
+					log.info(Tracing.M_AUDIT, "User-Deletion: identity=" + identity.getKey() +" : User file data deleted under dir=" + userDir.getAbsolutePath());
+				}
+			}
+		}
+	}
+	
+	/**
+	 * /coursedir/gtasks/{nodeId}/revisions/person_{identityKey}
+	 * @param identity
+	 * @param courseDir
+	 */
+	private void deleteGTasks(Identity identity, File courseDir) {
+		File gtasksDir = new File(courseDir, "gtasks");
+		if(gtasksDir.exists()) {
+			File[] nodeDirs = gtasksDir.listFiles(new SystemFileFilter(false, true));
+			for(File nodeDir:nodeDirs) {
+				File[] boxes = nodeDir.listFiles(new SystemFileFilter(false, true));
+				for(File box:boxes) {
+					File userDir = new File(box, "person_" + identity.getKey());
+					if(userDir.exists()) {
+						FileUtils.deleteDirsAndFiles(userDir, true, true); 
+						log.info(Tracing.M_AUDIT, "User-Deletion: identity=" + identity.getKey() +" : User file data deleted under dir=" + userDir.getAbsolutePath());
+					}
+				}
+			}
+		}
+	}
+
+	private void deleteAssessmentDocuments(Identity identity, File courseDir) {
+		File assessmentDocsDir = new File(courseDir, CourseAssessmentManagerImpl.ASSESSMENT_DOCS_DIR);
+		if(assessmentDocsDir.exists()) {
+			File[] nodeDirs = assessmentDocsDir.listFiles(new SystemFileFilter(false, true));
+			for(File nodeDir:nodeDirs) {
+				File userDir = new File(nodeDir, "person_" + identity.getKey());
+				if(userDir.exists()) {
+					FileUtils.deleteDirsAndFiles(userDir, true, true); 
+					log.info(Tracing.M_AUDIT, "User-Deletion: identity=" + identity.getKey() +" : User file data deleted under dir=" + userDir.getAbsolutePath());
+				}
+			}
+		}
+	}
+	
+	private void deleteDropboxReturnbox(Identity identity, File courseDir) {
 		File returnboxDir = new File(courseDir, ReturnboxController.RETURNBOX_DIR_NAME);
 		File dropboxDir = new File(courseDir, DropboxController.DROPBOX_DIR_NAME);
-		
 		if(returnboxDir.exists() || dropboxDir.exists()) {
 			ICourse currentCourse = null;
 			File[] dropboxReturnboxDirs = new File[]{ returnboxDir, dropboxDir};
 			for (File dropboxReturnboxDir: dropboxReturnboxDirs) {
 				if(!dropboxReturnboxDir.exists()) continue;
 				
-				File[] nodeDirs = dropboxReturnboxDir.listFiles();
+				File[] nodeDirs = dropboxReturnboxDir.listFiles(new SystemFileFilter(false, true));
 				// 3. loop over all node-id e.g. 78933379704296
 				for (File nodeDir:nodeDirs) {
 					String currentNodeId = nodeDir.getName();
@@ -156,12 +178,12 @@ public class DeleteUserDataTask implements LongRunnable {
 						deleteUserDirectory(identity, nodeDir);
 					} else if (isProjectBrokerNode(currentCourse, currentNodeId)) {
 						// additional loop over project-id
-						File[] projectDirs = nodeDir.listFiles();
+						File[] projectDirs = nodeDir.listFiles(new SystemFileFilter(false, true));
 						for (File projectDir:projectDirs) {
 							deleteUserDirectory(identity, projectDir);
 						}
 					} else {
-						log.warn("found dropbox or returnbox and node-type is NO Task- or ProjectBroker-Type courseId=" + courseDir.getName() + " nodeId=" + currentNodeId, null);
+						log.warn("found dropbox or returnbox and node-type is NO Task- or ProjectBroker-Type courseId=" + courseDir.getName() + " nodeId=" + currentNodeId);
 					}
 				}
 			}
@@ -176,7 +198,7 @@ public class DeleteUserDataTask implements LongRunnable {
 			if(resource != null) {
 				return CourseFactory.loadCourse(resId);
 			} else {
-				log.warn("course with resid=" + courseDir.getName() + " has a folder but no resource/repository entry", null);
+				log.warn("course with resid=" + courseDir.getName() + " has a folder but no resource/repository entry");
 			}
 		} catch (Exception e) {
 			log.error("could not load course with resid=" + courseDir.getName(), e);
@@ -198,7 +220,7 @@ public class DeleteUserDataTask implements LongRunnable {
 		if (userDir.exists()) {
 			// ok found a directory of a user => delete it
 			FileUtils.deleteDirsAndFiles(userDir, true, true); 
-			log.audit("User-Deletion: identity=" + identity.getName() +" : User file data deleted under dir=" + userDir.getAbsolutePath());
+			log.info(Tracing.M_AUDIT, "User-Deletion: identity=" + identity.getKey() +" : User file data deleted under dir=" + userDir.getAbsolutePath());
 		}
 	}
 	
@@ -206,8 +228,8 @@ public class DeleteUserDataTask implements LongRunnable {
 	 * 
 	 * @return e.g. olatdata\bcroot\course\
 	 */
-	private File getCourseBaseContainer() {
-		OlatRootFolderImpl courseRootContainer = new OlatRootFolderImpl(File.separator + PersistingCourseImpl.COURSE_ROOT_DIR_NAME + File.separator, null);
+	private File getCoursesBaseContainer() {
+		LocalFolderImpl courseRootContainer = VFSManager.olatRootContainer(File.separator + PersistingCourseImpl.COURSE_ROOT_DIR_NAME + File.separator, null);
 		return courseRootContainer.getBasefile(); 
 	}
 }

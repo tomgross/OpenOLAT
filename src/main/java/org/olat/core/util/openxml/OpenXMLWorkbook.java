@@ -32,9 +32,11 @@ import javax.xml.stream.XMLStreamException;
 import javax.xml.stream.XMLStreamWriter;
 
 import org.apache.commons.io.IOUtils;
-import org.olat.core.logging.OLog;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.StringHelper;
+import org.olat.core.util.filter.Filter;
+import org.olat.core.util.filter.FilterFactory;
 import org.olat.core.util.openxml.workbookstyle.Border;
 import org.olat.core.util.openxml.workbookstyle.CellStyle;
 import org.olat.core.util.openxml.workbookstyle.Fill;
@@ -48,7 +50,7 @@ import org.olat.core.util.openxml.workbookstyle.Font;
  */
 public class OpenXMLWorkbook implements Closeable {
 	
-	private static final OLog log = Tracing.createLoggerFor(OpenXMLWorkbook.class);
+	private static final Logger log = Tracing.createLoggerFor(OpenXMLWorkbook.class);
 	
 
 	public static final String SCHEMA_RELATIONSHIPS = "http://schemas.openxmlformats.org/package/2006/relationships";
@@ -67,6 +69,7 @@ public class OpenXMLWorkbook implements Closeable {
 	private List<OpenXMLWorksheet> worksheets = new ArrayList<>(10);
 	private final OpenXMLWorkbookStyles styles = new OpenXMLWorkbookStyles();
 	private OpenXMLWorkbookSharedStrings sharedStrings = new OpenXMLWorkbookSharedStrings();
+	private final Filter xmlCharactersFilter = FilterFactory.getXMLValidCharacterFilter();
 	
 	private int currentId = 4;
 	private boolean opened;
@@ -699,10 +702,24 @@ public class OpenXMLWorkbook implements Closeable {
 		if(style.getFill().getIndex() > 0) {
 			writer.writeAttribute("applyFill", "1");
 		}
-		
 		if(StringHelper.containsNonWhitespace(style.getApplyNumberFormat())) {
 			writer.writeAttribute("applyNumberFormat", style.getApplyNumberFormat());
-		}	
+		}
+		if(StringHelper.containsNonWhitespace(style.getApplyAlignment())) {
+			writer.writeAttribute("applyAlignment", style.getApplyAlignment());
+		}
+		
+		if(style.getAlignment() != null) {
+			writer.writeStartElement("alignment");
+			if(StringHelper.containsNonWhitespace(style.getAlignment().getVertical())) {
+				writer.writeAttribute("vertical", style.getAlignment().getVertical());
+			}
+			if(StringHelper.containsNonWhitespace(style.getAlignment().getWrapText())) {
+				writer.writeAttribute("wrapText", style.getAlignment().getWrapText());
+			}
+			writer.writeEndElement();
+		}
+		
 		writer.writeEndElement();
 	}
 		
@@ -812,10 +829,11 @@ public class OpenXMLWorkbook implements Closeable {
 			for (String sharedString: sharedStrings) {
 				writer.writeStartElement("si");
 				writer.writeStartElement("t");
-				if(sharedString.contains("<") || sharedString.contains(">")) {
-					writer.writeCData(sharedString);
+				String cleanedSharedString = xmlCharactersFilter.filter(sharedString);
+				if(cleanedSharedString.contains("<") || cleanedSharedString.contains(">")) {
+					writer.writeCData(cleanedSharedString);
 				} else {
-					writer.writeCharacters(sharedString);
+					writer.writeCharacters(cleanedSharedString);
 				}
 				writer.writeEndElement();
 				writer.writeEndElement();

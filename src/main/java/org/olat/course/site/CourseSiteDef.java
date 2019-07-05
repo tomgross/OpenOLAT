@@ -71,7 +71,9 @@ public class CourseSiteDef extends AbstractSiteDefinition implements SiteDefinit
 	public SiteInstance createSite(UserRequest ureq, WindowControl wControl, SiteConfiguration config) {
 		if(StringHelper.containsNonWhitespace(config.getSecurityCallbackBeanId())) {
 			return createSite(ureq, getCourseSiteconfiguration(), config);
-		} else if(!ureq.getUserSession().getRoles().isInvitee()) {
+		}
+		UserSession usess = ureq.getUserSession();
+		if(!usess.getRoles().isInvitee()) {
 			// only for registered users and guests
 			return createSite(ureq, getCourseSiteconfiguration(), config);
 		}
@@ -80,8 +82,7 @@ public class CourseSiteDef extends AbstractSiteDefinition implements SiteDefinit
 	
 	protected CourseSiteConfiguration getCourseSiteconfiguration() {
 		SiteDefinitions siteModule = CoreSpringFactory.getImpl(SiteDefinitions.class);
-		CourseSiteConfiguration config = siteModule.getConfigurationCourseSite1();
-		return config;
+		return siteModule.getConfigurationCourseSite1();
 	}
 	
 	protected SiteInstance createSite(UserRequest ureq, CourseSiteConfiguration courseConfig, SiteConfiguration config) {
@@ -91,22 +92,16 @@ public class CourseSiteDef extends AbstractSiteDefinition implements SiteDefinit
 		SiteSecurityCallback siteSecCallback = (SiteSecurityCallback)CoreSpringFactory.getBean(secCallbackBeanId);
 		
 		UserSession usess = ureq.getUserSession();
-		if(usess == null || usess.getRoles() == null) return null;
-
-		boolean canSeeToolController = usess.getRoles().isAuthor()
-				|| usess.getRoles().isOLATAdmin()
-				|| usess.getRoles().isInstitutionalResourceManager();
-		boolean showToolController = true;
-		if (!canSeeToolController && !courseConfig.isToolbar()) {
-			showToolController = false;
+		if(usess == null || usess.getRoles() == null) {
+			return null;
 		}
-		
+
 		LanguageConfiguration langConfig = getLanguageConfiguration(ureq, courseConfig);
 		if(langConfig == null) {
 			return null;
 		}
 		String icon = courseConfig.getNavIconCssClass();
-		return createCourseSiteInstance(langConfig, showToolController, siteSecCallback, icon);
+		return createCourseSiteInstance(langConfig, courseConfig.isToolbar(), siteSecCallback, icon);
 	}
 	
 	/**
@@ -138,7 +133,7 @@ public class CourseSiteDef extends AbstractSiteDefinition implements SiteDefinit
 			myLangConfig = defaultLangConfig;
 		}
 		
-		if(myLangConfig == null && config.getConfigurations().size() > 0) {
+		if(myLangConfig == null && !config.getConfigurations().isEmpty()) {
 			myLangConfig = config.getConfigurations().get(0);
 		}
 		

@@ -22,6 +22,7 @@ package org.olat.modules.portfolio.ui;
 import java.io.File;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Date;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -31,30 +32,42 @@ import javax.servlet.http.HttpServletRequest;
 import org.olat.core.dispatcher.mapper.Mapper;
 import org.olat.core.gui.UserRequest;
 import org.olat.core.gui.components.Component;
+import org.olat.core.gui.components.form.flexible.FormItem;
+import org.olat.core.gui.components.form.flexible.FormItemContainer;
+import org.olat.core.gui.components.form.flexible.elements.SingleSelection;
+import org.olat.core.gui.components.form.flexible.impl.FormBasicController;
+import org.olat.core.gui.components.form.flexible.impl.FormEvent;
 import org.olat.core.gui.components.image.ImageComponent;
 import org.olat.core.gui.components.link.Link;
 import org.olat.core.gui.components.link.LinkFactory;
 import org.olat.core.gui.components.velocity.VelocityContainer;
+import org.olat.core.gui.control.Controller;
 import org.olat.core.gui.control.Event;
 import org.olat.core.gui.control.WindowControl;
 import org.olat.core.gui.control.controller.BasicController;
+import org.olat.core.gui.control.generic.closablewrapper.CloseableModalController;
 import org.olat.core.gui.media.FileMediaResource;
 import org.olat.core.gui.media.MediaResource;
 import org.olat.core.id.Identity;
 import org.olat.core.util.StringHelper;
+import org.olat.core.util.io.SystemFileFilter;
 import org.olat.modules.portfolio.Assignment;
 import org.olat.modules.portfolio.BinderSecurityCallback;
 import org.olat.modules.portfolio.Category;
 import org.olat.modules.portfolio.Page;
 import org.olat.modules.portfolio.PageImageAlign;
 import org.olat.modules.portfolio.PageStatus;
+import org.olat.modules.portfolio.PageUserInformations;
+import org.olat.modules.portfolio.PageUserStatus;
 import org.olat.modules.portfolio.PortfolioRoles;
 import org.olat.modules.portfolio.PortfolioService;
 import org.olat.modules.portfolio.manager.PortfolioFileStorage;
 import org.olat.modules.portfolio.ui.event.ClosePageEvent;
+import org.olat.modules.portfolio.ui.event.DonePageEvent;
 import org.olat.modules.portfolio.ui.event.PublishEvent;
 import org.olat.modules.portfolio.ui.event.ReopenPageEvent;
 import org.olat.modules.portfolio.ui.event.RevisionEvent;
+import org.olat.modules.portfolio.ui.event.ToggleEditPageEvent;
 import org.olat.modules.portfolio.ui.model.UserAssignmentInfos;
 import org.olat.user.UserManager;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -68,15 +81,22 @@ import org.springframework.beans.factory.annotation.Autowired;
  */
 public class PageMetadataController extends BasicController {
 	
-	public static final int PICTURE_WIDTH = 300;
-	public static final int PICTURE_HEIGHT = (PICTURE_WIDTH / 3) * 2;//max-height=200px is defined in css
-	
-	private Link publishButton, revisionButton, closeButton, reopenButton;
+	public static final int PICTURE_WIDTH = 970 * 2;	// max width for large images: 1294 * 75% , x2 for high res displays
+	public static final int PICTURE_HEIGHT = 300 * 2 ; 	// max size for large images, see CSS, x2 for high res displays
+
+	private Link editLink;
+	private Link publishButton, revisionButton, closeButton, reopenButton, bookmarkButton;
 	private ImageComponent imageCmp;
 	private String mapperThumbnailUrl;
 	private VelocityContainer mainVC;
 	
+	private CloseableModalController cmc;
+	private UserInfosStatusController userStatusCtrl;
+	private CategoriesEditController categoriesEditCtr;
+	private ConfirmClosePageController confirmClosePageCtrl;
+	
 	private final Page page;
+	private PageUserInformations pageUserInfos;
 	private final List<Assignment> assignments;
 	private final BinderSecurityCallback secCallback;
 	
@@ -87,18 +107,53 @@ public class PageMetadataController extends BasicController {
 	@Autowired
 	private PortfolioFileStorage fileStorage;
 	
-	public PageMetadataController(UserRequest ureq, WindowControl wControl, BinderSecurityCallback secCallback, Page page) {
+	public PageMetadataController(UserRequest ureq, WindowControl wControl, BinderSecurityCallback secCallback,
+			Page page, boolean openInEditMode) {
 		super(ureq, wControl);
 		this.page = page;
 		this.secCallback = secCallback;
-		assignments = portfolioService.getAssignments(page, null);
+		assignments = portfolioService.getSectionsAssignments(page, null);
+		if(secCallback.canBookmark() || secCallback.canPageUserInfosStatus()) {
+			pageUserInfos = portfolioService.getPageUserInfos(page, getIdentity(), PageUserStatus.inProcess);
+		}
 
 		mainVC = createVelocityContainer("page_meta");
 		
+		initUserInfos(ureq);
 		initMetadata(ureq);
 		initAssignments(ureq);
 		initStatus();
+		editLink(!openInEditMode);
 		putInitialPanel(mainVC);
+	}
+	
+	private void initUserInfos(UserRequest ureq) {
+		if(secCallback.canBookmark()) {
+			bookmarkButton = LinkFactory.createLink("bookmark", "bookmark", "bookmark", null, getTranslator(), mainVC, this, Link.NONTRANSLATED);
+			bookmarkButton.setIconLeftCSS("o_icon o_icon-lg o_icon_bookmark");
+			bookmarkButton.setElementCssClass("o_sel_pf_bookmark_entry");
+			updateBookmarkIcon();
+		}
+		if(secCallback.canPageUserInfosStatus()) {
+			syncUserInfosStatus();
+			userStatusCtrl = new UserInfosStatusController(ureq, getWindowControl());
+			listenTo(userStatusCtrl);
+			mainVC.put("userStatus", userStatusCtrl.getInitialComponent());
+		}
+	}
+	
+	private void syncUserInfosStatus() {
+		PageStatus status = page.getPageStatus();
+		PageUserStatus userStatus = pageUserInfos.getStatus();
+		if((status == PageStatus.inRevision || status == PageStatus.published)
+				&& (userStatus == null || userStatus == PageUserStatus.incoming)) {
+			pageUserInfos.setStatus(PageUserStatus.inProcess);
+		} else if((status == PageStatus.closed || status == PageStatus.deleted)
+				&& (userStatus != PageUserStatus.done)) {
+			pageUserInfos.setStatus(PageUserStatus.done);
+		}
+		pageUserInfos.setRecentLaunch(new Date());
+		pageUserInfos = portfolioService.updatePageUserInfos(pageUserInfos);
 	}
 	
 	private void initMetadata(UserRequest ureq) {
@@ -122,11 +177,20 @@ public class PageMetadataController extends BasicController {
 		mainVC.contextPut("lastPublicationDate", page.getLastPublicationDate());
 
 		List<Category> categories = portfolioService.getCategories(page);
-		List<String> categoryNames = new ArrayList<>(categories.size());
-		for(Category category:categories) {
-			categoryNames.add(category.getName());
+		if (secCallback.canEditCategories(page)) {
+			// editable categories
+			categoriesEditCtr = new CategoriesEditController(ureq, getWindowControl(), categories);
+			listenTo(categoriesEditCtr);
+			mainVC.put("pageCategoriesCtr", categoriesEditCtr.getInitialComponent());			
+		} else {
+			// read-only categories
+			List<String> categoryNames = new ArrayList<>(categories.size());
+			for(Category category:categories) {
+				categoryNames.add(category.getName());
+			}
+			mainVC.contextPut("pageCategories", categoryNames);
 		}
-		mainVC.contextPut("pageCategories", categoryNames);
+		
 		mainVC.contextPut("lastModified", page.getLastModified());
 		
 		if(StringHelper.containsNonWhitespace(page.getImagePath())) {
@@ -158,8 +222,8 @@ public class PageMetadataController extends BasicController {
 
 			File storage = fileStorage.getAssignmentDirectory(assignment);
 			if(storage != null) {
-				documents = Arrays.<File>asList(storage.listFiles());
-				if(documents.size() > 0) {
+				documents = Arrays.<File>asList(storage.listFiles(SystemFileFilter.DIRECTORY_FILES));
+				if(!documents.isEmpty()) {
 					needMapper = true;
 				}
 			}
@@ -185,7 +249,7 @@ public class PageMetadataController extends BasicController {
 			}
 			String status = translate("status." + pageStatus.name());
 			mainVC.contextPut("pageStatus", status);
-			
+
 			if(secCallback.canPublish(page)) {
 				publishButton = LinkFactory.createButtonSmall("publish", mainVC, this);
 				publishButton.setIconLeftCSS("o_icon o_icon_publish o_icon-fw");
@@ -211,6 +275,25 @@ public class PageMetadataController extends BasicController {
 		}
 	}
 	
+	protected Link editLink(boolean edit) {
+		if(page.isEditable()) {
+			if(editLink == null) {
+				editLink = LinkFactory.createToolLink("edit.page.meta", translate("edit.page"), this);
+				editLink.setElementCssClass("o_sel_pf_edit_page_meta");
+				mainVC.put("edit.page.meta", editLink);
+			}
+			if(edit) {
+				editLink.setCustomDisplayText(translate("edit.page.meta"));
+				editLink.setIconRightCSS("o_icon o_icon-lg o_icon_toggle_off");
+			} else {
+				editLink.setCustomDisplayText(translate("edit.page.close"));
+				editLink.setIconRightCSS("o_icon o_icon-lg o_icon_toggle_on");
+			}
+			editLink.setVisible(secCallback.canEditPage(page));
+		}
+		return editLink;
+	}
+	
 	@Override
 	protected void doDispose() {
 		//
@@ -226,6 +309,58 @@ public class PageMetadataController extends BasicController {
 			fireEvent(ureq, new ClosePageEvent());
 		} else if(reopenButton == source) {
 			fireEvent(ureq, new ReopenPageEvent());
+		} else if(bookmarkButton == source) {
+			toogleBookmark();
+		} else if(editLink == source) {
+			fireEvent(ureq, new ToggleEditPageEvent());
+		}
+	}
+
+	@Override
+	protected void event(UserRequest ureq, Controller source, Event event) {
+		if (source == categoriesEditCtr) {
+			if (event == Event.CHANGED_EVENT) {				
+				portfolioService.updateCategories(page, categoriesEditCtr.getUpdatedCategories());
+				fireEvent(ureq, Event.CHANGED_EVENT);
+			}
+		} else if(confirmClosePageCtrl == source) {
+			cmc.deactivate();
+			cleanUp();
+			if(event instanceof ClosePageEvent) {
+				fireEvent(ureq, event);
+			}
+		} else if(cmc == source) {
+			cleanUp();
+		}
+	}
+	
+	private void cleanUp() {
+		removeAsListenerAndDispose(confirmClosePageCtrl);
+		removeAsListenerAndDispose(cmc);
+		confirmClosePageCtrl = null;
+		cmc = null;
+	}
+	
+	private void toogleBookmark() {
+		pageUserInfos.setMark(!pageUserInfos.isMark());
+		pageUserInfos = portfolioService.updatePageUserInfos(pageUserInfos);
+		updateBookmarkIcon();
+	}
+	
+	private void updateBookmarkIcon() {
+		if(pageUserInfos.isMark()) {
+			bookmarkButton.setIconLeftCSS("o_icon o_icon-lg o_icon_bookmark");
+		} else {
+			bookmarkButton.setIconLeftCSS("o_icon o_icon-lg o_icon_bookmark_add");
+		}
+	}
+	
+	private void doChangeUserStatus(UserRequest ureq, PageUserStatus newStatus) {
+		pageUserInfos.setStatus(newStatus);
+		pageUserInfos = portfolioService.updatePageUserInfos(pageUserInfos);
+		
+		if(newStatus == PageUserStatus.done) {
+			fireEvent(ureq, new DonePageEvent());
 		}
 	}
 	
@@ -236,11 +371,11 @@ public class PageMetadataController extends BasicController {
 			if(relPath.startsWith("/")) {
 				relPath = relPath.substring(1, relPath.length());
 			}
-			int index = relPath.indexOf("/");
+			int index = relPath.indexOf('/');
 			if(index > 0) {
 				String assignmentKey = relPath.substring(0, index);
 				
-				int indexName = relPath.indexOf("/");
+				int indexName = relPath.indexOf('/');
 				if(indexName > 0) {
 					String filename = relPath.substring(indexName + 1);
 					
@@ -250,11 +385,12 @@ public class PageMetadataController extends BasicController {
 							storage = fileStorage.getAssignmentDirectory(assignment);
 						}
 					}
-					
-					File[] documents = storage.listFiles();
-					for(File document:documents) {
-						if(filename.equalsIgnoreCase(document.getName())) {
-							return new FileMediaResource(document);
+					if(storage != null) {
+						File[] documents = storage.listFiles();
+						for(File document:documents) {
+							if(filename.equalsIgnoreCase(document.getName())) {
+								return new FileMediaResource(document);
+							}
 						}
 					}
 				}
@@ -274,6 +410,56 @@ public class PageMetadataController extends BasicController {
 		@Override
 		public MediaResource handle(String relPath, HttpServletRequest request) {
 			return new FileMediaResource(posterImage);
+		}
+	}
+	
+	private class UserInfosStatusController extends FormBasicController {
+		
+		private SingleSelection statusEl;
+		
+		public UserInfosStatusController(UserRequest ureq, WindowControl wControl) {
+			super(ureq, wControl, "page_meta_user_status");
+			initForm(ureq);
+		}
+
+		@Override
+		protected void doDispose() {
+			//
+		}
+
+		@Override
+		protected void initForm(FormItemContainer formLayout, Controller listener, UserRequest ureq) {
+			String[] keys = new String[] {
+					PageUserStatus.incoming.name(), PageUserStatus.inProcess.name(), PageUserStatus.done.name()
+				};
+			String[] values = new String[] {
+					translate("status.user.incoming"), translate("status.user.inProcess"), translate("status.user.done")
+				};
+			statusEl = uifactory.addDropdownSingleselect("user.status", "page.status", formLayout, keys, values, null);
+			statusEl.setDomReplacementWrapperRequired(false);
+			statusEl.addActionListener(FormEvent.ONCHANGE);
+			if(pageUserInfos != null && pageUserInfos.getStatus() != null) {
+				statusEl.select(pageUserInfos.getStatus().name(), true);
+			} else {
+				statusEl.select(keys[0], true);
+			}			
+		}
+		
+		@Override
+		protected void formInnerEvent(UserRequest ureq, FormItem source, FormEvent event) {
+			if(statusEl == source) {
+				if(statusEl.isOneSelected()) {
+					PageUserStatus selectedStatus = PageUserStatus
+							.valueOfWithDefault(statusEl.getSelectedKey());
+					doChangeUserStatus(ureq, selectedStatus);
+				}
+			}
+			super.formInnerEvent(ureq, source, event);
+		}
+
+		@Override
+		protected void formOK(UserRequest ureq) {
+			//
 		}
 	}
 }

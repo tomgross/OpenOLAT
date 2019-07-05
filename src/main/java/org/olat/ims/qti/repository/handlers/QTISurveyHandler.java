@@ -35,15 +35,23 @@ import org.olat.core.gui.components.stack.TooledStackedPanel;
 import org.olat.core.gui.control.Controller;
 import org.olat.core.gui.control.WindowControl;
 import org.olat.core.gui.control.generic.layout.MainLayoutController;
+import org.olat.core.gui.control.generic.messages.MessageUIFactory;
 import org.olat.core.gui.control.generic.wizard.StepsMainRunController;
 import org.olat.core.gui.media.MediaResource;
+import org.olat.core.gui.translator.Translator;
 import org.olat.core.id.Identity;
 import org.olat.core.id.OLATResourceable;
+import org.olat.core.id.Organisation;
+import org.olat.core.id.Roles;
 import org.olat.core.logging.AssertException;
+import org.olat.core.util.Util;
 import org.olat.course.assessment.AssessmentMode;
 import org.olat.course.assessment.manager.UserCourseInformationsManager;
+import org.olat.course.nodes.iq.IQEditController;
+import org.olat.course.nodes.iq.QTIResourceTypeModule;
 import org.olat.fileresource.FileResourceManager;
 import org.olat.fileresource.types.ResourceEvaluation;
+import org.olat.ims.qti.QTIModule;
 import org.olat.ims.qti.QTIRuntimeController;
 import org.olat.ims.qti.editor.QTIEditorMainController;
 import org.olat.ims.qti.fileresource.SurveyFileResource;
@@ -61,10 +69,6 @@ import org.olat.resource.OLATResource;
 import org.olat.resource.references.Reference;
 import org.olat.resource.references.ReferenceManager;
 
-import de.bps.onyx.plugin.OnyxModule;
-import de.bps.onyx.plugin.run.OnyxRunController;
-
-
 /**
  * Initial Date:  Apr 6, 2004
  *
@@ -76,8 +80,8 @@ import de.bps.onyx.plugin.run.OnyxRunController;
 public class QTISurveyHandler extends QTIHandler {
 	
 	@Override
-	public boolean isCreate() {
-		return true;
+	public boolean supportCreate(Identity identity, Roles roles) {
+		return CoreSpringFactory.getImpl(QTIModule.class).isCreateSurveyResourcesEnabled();
 	}
 
 	@Override
@@ -86,28 +90,46 @@ public class QTISurveyHandler extends QTIHandler {
 	}
 
 	@Override
-	public RepositoryEntry createResource(Identity initialAuthor, String displayname, String description, Object createObject, Locale locale) {
+	public RepositoryEntry createResource(Identity initialAuthor, String displayname, String description,
+			Object createObject, Organisation organisation, Locale locale) {
 		SurveyFileResource ores = new SurveyFileResource();
-		return super.createResource(AssessmentInstance.QMD_ENTRY_TYPE_SURVEY, ores, initialAuthor, displayname, description, createObject, locale);
+		return super.createResource(AssessmentInstance.QMD_ENTRY_TYPE_SURVEY, ores, initialAuthor, displayname, description, createObject, organisation, locale);
+	}
+
+	@Override
+	public boolean supportImport() {
+		return true;
 	}
 
 	@Override
 	public ResourceEvaluation acceptImport(File file, String filename) {
-		ResourceEvaluation eval = SurveyFileResource.evaluate(file, filename);
-		if(!eval.isValid() && CoreSpringFactory.getImpl(OnyxModule.class).isEnabled()) {
-			eval = OnyxModule.isOnyxTest(file, filename);
-		}
-		return eval;
+		return SurveyFileResource.evaluate(file, filename);
+	}
+
+	@Override
+	public boolean supportImportUrl() {
+		return false;
+	}
+
+	@Override
+	public ResourceEvaluation acceptImport(String url) {
+		return ResourceEvaluation.notValid();
 	}
 
 	@Override
 	public RepositoryEntry importResource(Identity initialAuthor, String initialAuthorAlt, String displayname, String description,
-			boolean withReferences, Locale locale, File file, String filename) {
-		return super.importResource(initialAuthor, displayname, description, new SurveyFileResource(), file, filename);
+			boolean withReferences, Organisation organisation, Locale locale, File file, String filename) {
+		return super.importResource(initialAuthor, displayname, description, organisation, new SurveyFileResource(), file, filename);
+	}
+	
+	@Override
+	public RepositoryEntry importResource(Identity initialAuthor, String initialAuthorAlt, String displayname,
+			String description, Organisation organisation, Locale locale, String url) {
+		return null;
 	}
 
 	@Override
-	public MediaResource getAsMediaResource(OLATResourceable res, boolean backwardsCompatible) {
+	public MediaResource getAsMediaResource(OLATResourceable res) {
 		return FileResourceManager.getInstance().getAsDownloadeableMediaResource(res);
 	}
 
@@ -122,8 +144,8 @@ public class QTISurveyHandler extends QTIHandler {
 	}
 
 	@Override
-	public EditionSupport supportsEdit(OLATResourceable resource) {
-		if(resource != null && OnyxModule.isOnyxTest(resource)) {
+	public EditionSupport supportsEdit(OLATResourceable resource, Identity identity, Roles roles) {
+		if(resource != null && QTIResourceTypeModule.isOnyxTest(resource)) {
 			return EditionSupport.no;
 		}
 		return EditionSupport.yes;
@@ -151,8 +173,9 @@ public class QTISurveyHandler extends QTIHandler {
 					OLATResource res = entry.getOlatResource();
 					CoreSpringFactory.getImpl(UserCourseInformationsManager.class)
 						.updateUserCourseInformations(entry.getOlatResource(), uureq.getIdentity());
-					if (OnyxModule.isOnyxTest(res)) {
-						runController = new OnyxRunController(uureq, wwControl, entry, false);
+					if (QTIResourceTypeModule.isOnyxTest(res)) {
+						Translator trans = Util.createPackageTranslator(IQEditController.class, ureq.getLocale());
+						runController = MessageUIFactory.createInfoMessage(ureq, wControl, "", trans.translate("error.onyx"));
 					} else {
 						Resolver resolver = new ImsRepositoryResolver(entry);
 						IQSecurityCallback secCallback = new IQPreviewSecurityCallback();
@@ -167,7 +190,7 @@ public class QTISurveyHandler extends QTIHandler {
 	@Override
 	public Controller createEditorController(RepositoryEntry re, UserRequest ureq, WindowControl wControl, TooledStackedPanel toolbar) {
 		OLATResource res = re.getOlatResource();
-		if (OnyxModule.isOnyxTest(res)) {
+		if (QTIResourceTypeModule.isOnyxTest(res)) {
 			return null;
 		}
 		

@@ -22,16 +22,17 @@ package org.olat.core.commons.services.notifications;
 import java.util.Collections;
 import java.util.Date;
 import java.util.HashMap;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 
+import org.olat.basesecurity.BaseSecurity;
+import org.olat.core.CoreSpringFactory;
 import org.olat.core.commons.services.notifications.ui.NotificationNewsController;
 import org.olat.core.gui.translator.Translator;
 import org.olat.core.id.Identity;
 import org.olat.core.id.User;
-import org.olat.core.logging.OLog;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.StringHelper;
 import org.olat.core.util.Util;
@@ -54,7 +55,7 @@ import org.olat.user.propertyhandlers.UserPropertyHandler;
 
 public class NotificationHelper {
 	
-	private static final OLog log = Tracing.createLoggerFor(NotificationHelper.class);
+	private static final Logger log = Tracing.createLoggerFor(NotificationHelper.class);
 	private static CacheWrapper<Long,String> userPropertiesCache;
 	
 	static {
@@ -73,30 +74,46 @@ public class NotificationHelper {
 	
 	public static Map<Subscriber, SubscriptionInfo> getSubscriptionMap(Locale locale, boolean showWithNewsOnly, Date compareDate, List<Subscriber> subs) {		
 		NotificationsManager man = NotificationsManager.getInstance();
-		Map<Subscriber, SubscriptionInfo> subToSubInfo = new HashMap<Subscriber, SubscriptionInfo>();
-		// calc subscriptioninfo for all subscriptions and, if only those with news
+		Map<Subscriber, SubscriptionInfo> subToSubInfo = new HashMap<>();
+		// calculate subscription info for all subscriptions and, if only those with news
 		// are to be shown, remove the other ones
-		for (Iterator<Subscriber> it_subs = subs.iterator(); it_subs.hasNext();) {
-			Subscriber subscriber = it_subs.next();
+		for (Subscriber subscriber:subs) {
 			Publisher pub = subscriber.getPublisher();
 			SubscriptionInfo subsInfo;
 			if (man.isPublisherValid(pub)) {
 				NotificationsHandler notifHandler = man.getNotificationsHandler(pub);
-				if (notifHandler!=null) {
+				if (notifHandler != null) {
 					subsInfo = notifHandler.createSubscriptionInfo(subscriber, locale, compareDate);
 				} else {
-					// OLAT-5647
 					log.error("getSubscriptionMap: No notificationhandler for valid publisher: "+pub+", resname: "+pub.getResName()+", businesspath: "+pub.getBusinessPath()+", subscriber: "+subscriber);
 					subsInfo = man.getNoSubscriptionInfo();
 				}
 			} else {
 				subsInfo = man.getNoSubscriptionInfo();
 			}
-			if (subsInfo.hasNews() || !showWithNewsOnly) {
+			if (subsInfo != null && subsInfo.hasNews() || !showWithNewsOnly) {
 				subToSubInfo.put(subscriber, subsInfo);
 			}
 		}
 		return subToSubInfo;
+	}
+	
+
+	public static String getFormatedName(Long identityKey) {
+		String formattedName;
+		if (identityKey == null) {
+			Translator trans = Util.createPackageTranslator(NotificationNewsController.class, I18nManager.getInstance().getLocaleOrDefault(null));
+			return trans.translate("user.unknown");
+		} else {
+			// Optimize: use from cache to not re-calculate user properties over and over again
+			formattedName = userPropertiesCache.get(identityKey);
+			if (formattedName != null) {
+				return formattedName;
+			}
+		}
+		
+		Identity identity = CoreSpringFactory.getImpl(BaseSecurity.class).loadIdentityByKey(identityKey);
+		return getFormatedName(identity);
 	}
 	
 	/**

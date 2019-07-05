@@ -36,10 +36,10 @@ import java.io.OutputStream;
 import java.util.ArrayList;
 import java.util.List;
 
+import org.olat.core.CoreSpringFactory;
 import org.olat.core.commons.modules.bc.FolderConfig;
-import org.olat.core.commons.modules.bc.vfs.OlatRootFileImpl;
-import org.olat.core.commons.modules.bc.vfs.OlatRootFolderImpl;
-import org.olat.core.logging.OLog;
+import org.olat.core.commons.services.vfs.VFSRepositoryService;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.FileUtils;
 import org.olat.core.util.StringHelper;
@@ -47,7 +47,45 @@ import org.olat.core.util.vfs.callbacks.VFSSecurityCallback;
 import org.olat.core.util.vfs.util.ContainerAndFile;
 
 public class VFSManager {
-	private static final OLog log = Tracing.createLoggerFor(VFSManager.class);
+	
+	private static final Logger log = Tracing.createLoggerFor(VFSManager.class);
+	
+	/**
+	 * The method create an instance of VFSLeaf
+	 * but doesn't create the file.
+	 * 
+	 * @param fileRelPath The relative path to bcroot.
+	 * @return An instance of VFSLeaf
+	 */
+	public static LocalFileImpl olatRootLeaf(String fileRelPath) {
+		File file = new File(FolderConfig.getCanonicalRoot() + fileRelPath);
+		return new LocalFileImpl(file, null);
+	}
+	
+	public static LocalFileImpl olatRootLeaf(String relPath, String filename) {
+		File file = new File(FolderConfig.getCanonicalRoot() + relPath, filename);
+		return new LocalFileImpl(file, null);
+	}
+	
+	public static LocalFolderImpl olatRootContainer(String fileRelPath) {
+		File file = new File(FolderConfig.getCanonicalRoot() + fileRelPath);
+		return new LocalFolderImpl(file, null);
+	}
+	
+	public static LocalFolderImpl olatRootContainer(String fileRelPath, VFSContainer parentContainer) {
+		File file = new File(FolderConfig.getCanonicalRoot() + fileRelPath);
+		return new LocalFolderImpl(file, parentContainer);
+	}
+	
+	public static File olatRootDirectory(String fileRelPath) {
+		File file = new File(FolderConfig.getCanonicalRoot() + fileRelPath);
+		return new LocalFolderImpl(file, null).getBasefile();
+	}
+	
+	public static File olatRootFile(String fileRelPath) {
+		File file = new File(FolderConfig.getCanonicalRoot() + fileRelPath);
+		return new LocalFileImpl(file, null).getBasefile();
+	}
 	
 	/**
 	 * Make sure we always have a path that starts with a "/".
@@ -153,25 +191,12 @@ public class VFSManager {
 			LocalFolderImpl l = (LocalFolderImpl) rootContainer;
 			File t = new File (l.getBasefile().getAbsolutePath(), childName);
 			if (t.exists()) {
-				String bcroot = FolderConfig.getCanonicalRoot();
-				String fsPath = t.getAbsolutePath();
 				if (t.isDirectory()) {
-					VFSContainer subContainer;
-					if (fsPath.startsWith(bcroot)) {
-						fsPath = fsPath.substring(bcroot.length(), fsPath.length());
-						subContainer = new OlatRootFolderImpl(fsPath, rootContainer);
-					} else {
-						subContainer = new LocalFolderImpl (t, rootContainer);
-					}
+					VFSContainer subContainer = new LocalFolderImpl (t, rootContainer);
 					String subPath = path.substring(childName.length() + 1);
 					return resolveFile(subContainer, subPath);
 				} else {
-					if (fsPath.startsWith(bcroot)) {
-						fsPath = fsPath.replace(bcroot,"");
-						return new OlatRootFileImpl(fsPath, rootContainer);
-					} else {
-						return new LocalFileImpl(t, rootContainer);
-					}
+					return new LocalFileImpl(t, rootContainer);
 				}
 			} else {
 				return null;
@@ -205,7 +230,7 @@ public class VFSManager {
 	public static VFSContainer resolveOrCreateContainerFromPath(VFSContainer baseContainer, String relContainerPath) {		
 		VFSContainer resultContainer = baseContainer;
 		if (!VFSConstants.YES.equals(baseContainer.canWrite())) {
-			log.error("Could not create relPath::" + relContainerPath + ", base container::" + getRealPath(baseContainer) + " not writable", null);
+			log.error("Could not create relPath::" + relContainerPath + ", base container::" + getRealPath(baseContainer) + " not writable");
 			resultContainer = null;
 		} else if (StringHelper.containsNonWhitespace(relContainerPath)){
 			// Try to resolve given rel path from current container
@@ -220,7 +245,7 @@ public class VFSManager {
 						if (resolvedPath == null) {
 							resultContainer = resultContainer.createChildContainer(segment);
 							if (resultContainer == null) {
-								log.error("Could not create container with name::" + segment + " in relPath::" + relContainerPath + " in base container::" + getRealPath(baseContainer), null);
+								log.error("Could not create container with name::" + segment + " in relPath::" + relContainerPath + " in base container::" + getRealPath(baseContainer));
 								break;
 							}						
 						} else {
@@ -228,7 +253,7 @@ public class VFSManager {
 								resultContainer = (VFSContainer) resolvedPath;							
 							} else {
 								resultContainer = null;
-								log.error("Could not create container with name::" + segment + " in relPath::" + relContainerPath + ", a file with this name exists (but not a directory) in base container::" + getRealPath(baseContainer), null);
+								log.error("Could not create container with name::" + segment + " in relPath::" + relContainerPath + ", a file with this name exists (but not a directory) in base container::" + getRealPath(baseContainer));
 								break;
 							}
 						}
@@ -240,7 +265,7 @@ public class VFSManager {
 					resultContainer = (VFSContainer) resolvedPath;
 				} else {
 					resultContainer = null;
-					log.error("Could not create relPath::" + relContainerPath + ", a file with this name exists (but not a directory) in base container::" + getRealPath(baseContainer), null);
+					log.error("Could not create relPath::" + relContainerPath + ", a file with this name exists (but not a directory) in base container::" + getRealPath(baseContainer));
 				}
 				
 			}
@@ -290,14 +315,14 @@ public class VFSManager {
 				if (resolvedFile == null) {
 					leaf = parent.createChildLeaf(fileName);
 					if (leaf == null) {
-						log.error("Could not create leaf with relPath::" + relFilePath + " in base container::" + getRealPath(baseContainer), null);
+						log.error("Could not create leaf with relPath::" + relFilePath + " in base container::" + getRealPath(baseContainer));
 					}
 				} else {
 					if (resolvedFile instanceof VFSLeaf) {
 						leaf = (VFSLeaf) resolvedFile;
 					} else {
 						leaf = null;
-						log.error("Could not create relPath::" + relFilePath + ", a directory with this name exists (but not a file) in base container::" + getRealPath(baseContainer), null);
+						log.error("Could not create relPath::" + relFilePath + ", a directory with this name exists (but not a file) in base container::" + getRealPath(baseContainer));
 					}
 				}
 				return leaf;			
@@ -473,7 +498,7 @@ public class VFSManager {
 		String absPath = "";
 		VFSItem tmpItem = item;		
 		// Check for merged containers to fix problems with named containers, see OLAT-3848
-		List<NamedContainerImpl> namedRootChilds = new ArrayList<NamedContainerImpl>();
+		List<NamedContainerImpl> namedRootChilds = new ArrayList<>();
 		for (VFSItem rootItem : rootContainer.getItems()) {
 			if (rootItem instanceof NamedContainerImpl) {
 				namedRootChilds.add((NamedContainerImpl) rootItem);
@@ -554,12 +579,8 @@ public class VFSManager {
 			buffer.append(targetA[i] + "/");
 		}
 		buffer.deleteCharAt(buffer.length() - 1);
-		String path = buffer.toString();
-
-		String trimmed = path; // selectedPath.substring(1);
-		return trimmed;
+		return buffer.toString();
 	}
-
 
 	/**
 	 * This method takes a VFSContainer and a relative path to a file that exists
@@ -608,6 +629,12 @@ public class VFSManager {
 				}
 				if(item instanceof MergeSource) {
 					rootDir = (MergeSource)item;
+					relFilePath = relFilePath.substring(stop);
+					return findWritableRootFolderForRecursion(rootDir, relFilePath, recursionLevel);
+				}
+				//very< special case for share folder in merged source
+				if(item instanceof LocalFolderImpl && "_sharedfolder_".equals(item.getName())) {
+					rootDir = (LocalFolderImpl)item;
 					relFilePath = relFilePath.substring(stop);
 					return findWritableRootFolderForRecursion(rootDir, relFilePath, recursionLevel);
 				}
@@ -692,54 +719,41 @@ public class VFSManager {
 	/**
 	 * Copies the content of the source to the target leaf.
 	 * 
-	 * @param source
-	 * @param target
+	 * @param source The source file
+	 * @param target The target file
+	 * @param withMetadata true if the metadata must be copied too
 	 * @return True on success, false on failure
 	 */
-	public static boolean copyContent(VFSLeaf source, VFSLeaf target) {
+	public static boolean copyContent(VFSLeaf source, VFSLeaf target, boolean withMetadata) {
 		boolean successful;
 		if (source != null && target != null) {
-			InputStream in = new BufferedInputStream(source.getInputStream());
-			OutputStream out = new BufferedOutputStream(target.getOutputStream(false));
-			// write the input to the output
-			try {
-				byte[] buf = new byte[FileUtils.BSIZE];
-				int i = 0;
-        while ((i = in.read(buf)) != -1) {
-            out.write(buf, 0, i);
-        }
+			try(InputStream in = new BufferedInputStream(source.getInputStream());
+				OutputStream out = new BufferedOutputStream(target.getOutputStream(false))) {
+				FileUtils.cpio(in, out, "Copy content");
 				successful = true;
-			} catch (IOException e) {
-				// something went wrong.
-				successful = false;
+			} catch(IOException e) {
 				log.error("Error while copying content from source: " + source.getName() + " to target: " + target.getName(), e);
-			} finally {
-				// Close streams
-				try {
-					if (out != null) {
-						out.flush();
-						out.close();
-					}
-					if (in != null) {
-						in.close();
-					}
-				} catch (IOException ex) {
-					log.error("Error while closing/cleaning up in- and output streams", ex);
-				}
+				successful = false;
+			}
+			
+			if(withMetadata && source.canMeta() == VFSConstants.YES && target.canMeta() == VFSConstants.YES) {
+				CoreSpringFactory.getImpl(VFSRepositoryService.class).copyTo(source, target, target.getParentContainer());
 			}
 		} else {
 			// source or target is null
 			successful = false;
-			if (log.isDebug()) log.debug("Either the source or the target is null. Content of leaf cannot be copied.");
+			if (log.isDebugEnabled()) log.debug("Either the source or the target is null. Content of leaf cannot be copied.");
 		}
 		return successful;
 	}
 	
 	/**
-	 * Copy the content of the source container to the target container.
-	 * @param source
-	 * @param target
-	 * @return
+	 * Copy the content of the source container to the target container without
+	 * versions or metadata.
+	 * 
+	 * @param source The source container
+	 * @param target the target container
+	 * @return true if successful
 	 */
 	public static boolean copyContent(VFSContainer source, VFSContainer target) {
 		if(!source.exists()) {
@@ -755,12 +769,10 @@ public class VFSManager {
 		if(target instanceof NamedContainerImpl) {
 			target = ((NamedContainerImpl)target).getDelegate();
 		}
-
+		
 		if(source instanceof LocalImpl && target instanceof LocalImpl) {
-			LocalImpl localSource = (LocalImpl)source;
-			LocalImpl localTarget = (LocalImpl)target;
-			File localSourceFile = localSource.getBasefile();
-			File localTargetFile = localTarget.getBasefile();
+			File localSourceFile = ((LocalImpl)source).getBasefile();
+			File localTargetFile = ((LocalImpl)target).getBasefile();
 			return FileUtils.copyDirContentsToDir(localSourceFile, localTargetFile, false, "VFScopyDir");
 		}
 		return false;
@@ -773,14 +785,17 @@ public class VFSManager {
 	 * @return
 	 */
 	public static boolean copyContent(File source, VFSLeaf target) {
-		try(InputStream inStream = new FileInputStream(source)) {
-			return copyContent(inStream, target, true);
+		try(InputStream in = new FileInputStream(source);
+				BufferedInputStream bis = new BufferedInputStream(in, FileUtils.BSIZE)) {
+			boolean ok = copyContent(bis, target);
+			CoreSpringFactory.getImpl(VFSRepositoryService.class).itemSaved(target);
+			return ok;
 		} catch(IOException ex) {
 			log.error("", ex);
 			return false;
 		}
 	}
-	
+
 	/**
 	 * Copies the stream to the target leaf.
 	 * 
@@ -789,52 +804,43 @@ public class VFSManager {
 	 * @return True on success, false on failure
 	 */
 	public static boolean copyContent(InputStream inStream, VFSLeaf target) {
-		return copyContent(inStream, target, true);
-	}
-	
-	/**
-	 * Copies the stream to the target leaf.
-	 * 
-	 * @param source
-	 * @param target
-	 * @param closeInput set to false if it's a ZipInputStream
-	 * @return True on success, false on failure
-	 */
-	public static boolean copyContent(InputStream inStream, VFSLeaf target, boolean closeInput) {
 		boolean successful;
 		if (inStream != null && target != null) {
-			InputStream in = new BufferedInputStream(inStream);
-			OutputStream out = new BufferedOutputStream(target.getOutputStream(false));
 			// write the input to the output
-			try {
-				byte[] buf = new byte[FileUtils.BSIZE];
-				int i = 0;
-        while ((i = in.read(buf)) != -1) {
-            out.write(buf, 0, i);
-        }
+			try(InputStream in = new BufferedInputStream(inStream);
+					OutputStream out = new BufferedOutputStream(target.getOutputStream(false))) {
+				FileUtils.cpio(in, out, "");
+				CoreSpringFactory.getImpl(VFSRepositoryService.class).itemSaved(target);
 				successful = true;
 			} catch (IOException e) {
 				// something went wrong.
 				successful = false;
 				log.error("Error while copying content from source: " + inStream + " to target: " + target.getName(), e);
-			} finally {
-				// Close streams
-				try {
-					if (out != null) {
-						out.flush();
-						out.close();
-					}
-					if (closeInput && in != null) {
-						in.close();
-					}
-				} catch (IOException ex) {
-					log.error("Error while closing/cleaning up in- and output streams", ex);
-				}
 			}
 		} else {
 			// source or target is null
 			successful = false;
-			if (log.isDebug()) log.debug("Either the source or the target is null. Content of leaf cannot be copied.");
+			if (log.isDebugEnabled()) log.debug("Either the source or the target is null. Content of leaf cannot be copied.");
+		}
+		return successful;
+	}
+	
+	public static boolean copyContent(VFSLeaf source, OutputStream outStream) {
+		boolean successful;
+		if (outStream != null && source != null) {
+			// write the input to the output
+			try(InputStream in = source.getInputStream()) {
+				FileUtils.cpio(in, outStream, "");
+				successful = true;
+			} catch (IOException e) {
+				// something went wrong.
+				successful = false;
+				log.error("Error while copying content from source: " + source + " to target stream.", e);
+			}
+		} else {
+			// source or target is null
+			successful = false;
+			if (log.isDebugEnabled()) log.debug("Either the source or the target is null. Content of leaf cannot be copied.");
 		}
 		return successful;
 	}
@@ -848,8 +854,7 @@ public class VFSManager {
 	public static String rename(VFSContainer container, String filename) {
 		String newName = filename;
 		VFSItem newFile = container.resolve(newName);
-		for(int count=0; newFile != null && count < 999 ; ) {
-			count++;
+		for(int count=1; newFile != null && count < 999 ; count++) {
 			newName = FileUtils.appendNumberAtTheEndOfFilename(filename, count);
 		    newFile = container.resolve(newName);
 		}

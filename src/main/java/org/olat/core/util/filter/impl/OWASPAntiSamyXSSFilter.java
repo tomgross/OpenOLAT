@@ -19,21 +19,8 @@
  */
 package org.olat.core.util.filter.impl;
 
-import java.io.InputStream;
-import java.io.PrintWriter;
-import java.io.StringWriter;
-import java.io.Writer;
-
-import org.olat.core.logging.OLATRuntimeException;
-import org.olat.core.logging.OLog;
-import org.olat.core.logging.Tracing;
 import org.olat.core.util.filter.Filter;
-import org.olat.core.util.vfs.VFSManager;
-import org.owasp.validator.html.AntiSamy;
-import org.owasp.validator.html.CleanResults;
-import org.owasp.validator.html.Policy;
-import org.owasp.validator.html.PolicyException;
-import org.owasp.validator.html.ScanException;
+import org.owasp.html.HtmlChangeListener;
 
 /**
  * Description:<br>
@@ -52,139 +39,43 @@ import org.owasp.validator.html.ScanException;
  */
 public class OWASPAntiSamyXSSFilter implements Filter {
 	
-	private static final OLog log = Tracing.createLoggerFor(OWASPAntiSamyXSSFilter.class);
-
-	//to be found in /_resources
-	private static final String POLICY_FILE = "antisamy-tinymce.xml";
-	private static boolean jUnitDebug;
-	private CleanResults cr;
-	private final int maxLength;
-	private final boolean entityEncodeIntlChars;
-	
-	private static Policy tinyMcePolicy;
-	private static Policy internalionalTinyMcePolicy;
-	
-	static {
-		try {
-			String fPath = VFSManager.sanitizePath(OWASPAntiSamyXSSFilter.class.getPackage().getName());
-			fPath = fPath.replace('.', '/');
-			fPath = fPath + "/_resources/" + POLICY_FILE;
-			InputStream inStream = OWASPAntiSamyXSSFilter.class.getResourceAsStream(fPath);
-			tinyMcePolicy = Policy.getInstance(inStream);
-			internalionalTinyMcePolicy = tinyMcePolicy.cloneWithDirective("entityEncodeIntlChars", "false");
-		} catch (Exception e) {
-			log.error("", e);
-		}
+	public OWASPAntiSamyXSSFilter() {
+		//
 	}
 	
-	public OWASPAntiSamyXSSFilter(){
-		this(-1, true, false);
-	}
-
-	/**
-	 * @param maxLength
-	 * @param junitDebug
-	 */
-	public OWASPAntiSamyXSSFilter(int maxLength, boolean junitDebug){
-		this(maxLength, true, junitDebug);
-	}
-	
-	public OWASPAntiSamyXSSFilter(int maxLength, boolean entityEncodeIntlChars, boolean junitDebug){
-		OWASPAntiSamyXSSFilter.jUnitDebug = junitDebug;
-		this.maxLength = maxLength;
-		this.entityEncodeIntlChars = entityEncodeIntlChars;
-	}
-	
-	/**
-	 * @see org.olat.core.util.filter.Filter#filter(java.lang.String)
-	 */
+	@Override
     public String filter(String original) {
-        if (jUnitDebug) System.out.println("************************************************");
-        if (jUnitDebug) System.out.println("              Input: " + original);
         if (original == null) {
-            if (log.isDebug()) log.debug("  Filter-Input was null, is this intended?", null);
             return null;
         }
-        String output = getCleanHTML(original);
-        if (original.equals(output)) {
-//            logInfo("          filter worked correctly!", null);
-		} else {
-			String errMsg = getOrPrintErrorMessages();
-			if (!errMsg.equals("")) {
-				log.warn(" Filter applied! => message from filter, check if this should not be allowed: " + errMsg, null);
-				log.info(" Original Input: \n" + original, null);
-				log.info("  Filter Result: \n" +  output, null);
-			} else {
-				log.debug(" Filter result doesn't match input! / no message from filter! maybe only some formatting differences.", null);
-			}
-		}
-		return output;
-	}
-
-	private void printOriginStackTrace() {
-		// use stacktrace to find out more where the filter was used
-		OLATRuntimeException ore = new OLATRuntimeException("XSSFilter dummy", null);
-		final Writer result = new StringWriter();
-		final PrintWriter printWriter = new PrintWriter(result);
-		ore.printStackTrace(printWriter);
+        return OpenOLATPolicy.POLICY_DEFINITION.sanitize(original);
 	}
 	
-	private String getCleanHTML(String original)	{
-		Policy policy;
-		if(entityEncodeIntlChars) {
-			policy = tinyMcePolicy;
-		} else {
-			policy = internalionalTinyMcePolicy;
-		}
-		if(maxLength > 0) {
-			policy = policy.cloneWithDirective("maxInputSize", Integer.toString(maxLength));
-		}
-
-		AntiSamy as = new AntiSamy();
-		cr = null;
-		try {
-			cr = as.scan(original, policy);
-		} catch (ScanException e) {
-			log.error("XSS Filter scan error", e);
-			printOriginStackTrace();
-		} catch (PolicyException e) {
-            log.error("XSS Filter policy error", e);
-            printOriginStackTrace();
-        } 
-        String output; 
-        try {
-            output = cr.getCleanHTML();
-        } catch (Exception | Error e){
-            output = "";
-            log.error("Error getting cleaned HTML from string::" + original, e);
+    public boolean errors(String original) {
+        if (original == null) {
+            return false;
         }
-        if (jUnitDebug) System.out.println("OWASP-AntiSamy-Outp: " + output);
-        getOrPrintErrorMessages();
-        if (jUnitDebug) System.out.println("OWASP-ParseTime:                    " + cr.getScanTime());
-		
-		return output;
+        ChangeListener listener = new ChangeListener();
+        OpenOLATPolicy.POLICY_DEFINITION.sanitize(original, listener, this);
+        return listener.getErrors() > 0;
 	}
-	
-	public int getNumOfErrors() {
-		if (cr != null) {
-			return cr.getNumberOfErrors();
+    
+    private static class ChangeListener implements HtmlChangeListener<OWASPAntiSamyXSSFilter> {
+    	
+    	private int errors = 0;
+    	
+    	public int getErrors() {
+    		return errors;
+    	}
+    	
+    	@Override
+		public void discardedTag(OWASPAntiSamyXSSFilter context, String elementName) {
+    		errors++;
 		}
-		return -1;
-	}
 
-	/**
-	 * get Errors/Messages from filter. 
-	 * This have not to be "errors", its what has been filtered and gets reported.
-	 * @return
-	 */
-	public String getOrPrintErrorMessages(){
-		String errors = "";
-		if (cr!=null){
-			if (cr.getNumberOfErrors()!=0) {
-				errors = "OWASP-Errors: " + cr.getErrorMessages();
-				if (jUnitDebug) System.out.println(errors);
-			}
+		@Override
+		public void discardedAttributes(OWASPAntiSamyXSSFilter context, String tagName, String... attributeNames) {
+			errors++;
 		}
-		return errors;
-	}
+    }
 }

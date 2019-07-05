@@ -20,14 +20,17 @@
 package org.olat.upgrade;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 import javax.persistence.PersistenceException;
 
-import org.olat.basesecurity.BaseSecurity;
+import org.apache.logging.log4j.Logger;
 import org.olat.basesecurity.Policy;
+import org.olat.basesecurity.PolicyImpl;
 import org.olat.basesecurity.SecurityGroup;
 import org.olat.core.commons.persistence.DB;
+import org.olat.core.logging.Tracing;
 import org.olat.group.right.BGRightManager;
 import org.olat.group.right.BGRightsRole;
 import org.olat.upgrade.model.BusinessGroupUpgrade;
@@ -40,6 +43,8 @@ import org.springframework.beans.factory.annotation.Autowired;
  *
  */
 public class OLATUpgrade_10_0_3 extends OLATUpgrade {
+
+	private static final Logger log = Tracing.createLoggerFor(OLATUpgrade_10_0_3.class);
 	
 	private static final int BATCH_SIZE = 50;
 	private static final String TASK_BUSINESS_GROUPS = "Upgrade rights groups";
@@ -47,8 +52,6 @@ public class OLATUpgrade_10_0_3 extends OLATUpgrade {
 
 	@Autowired
 	private DB dbInstance;
-	@Autowired
-	private BaseSecurity securityManager;
 	@Autowired
 	private BGRightManager bgRightManager;
 	
@@ -59,11 +62,6 @@ public class OLATUpgrade_10_0_3 extends OLATUpgrade {
 	@Override
 	public String getVersion() {
 		return VERSION;
-	}
-	
-	@Override
-	public boolean doPreSystemInitUpgrade(UpgradeManager upgradeManager) {
-		return false;
 	}
 
 	@Override
@@ -94,9 +92,9 @@ public class OLATUpgrade_10_0_3 extends OLATUpgrade {
 		uhd.setInstallationComplete(allOk);
 		upgradeManager.setUpgradesHistory(uhd, VERSION);
 		if(allOk) {
-			log.audit("Finished OLATUpgrade_10_0_3 successfully!");
+			log.info(Tracing.M_AUDIT, "Finished OLATUpgrade_10_0_3 successfully!");
 		} else {
-			log.audit("OLATUpgrade_10_0_3 not finished, try to restart OpenOLAT!");
+			log.info(Tracing.M_AUDIT, "OLATUpgrade_10_0_3 not finished, try to restart OpenOLAT!");
 		}
 		return allOk;
 	}
@@ -111,7 +109,7 @@ public class OLATUpgrade_10_0_3 extends OLATUpgrade {
 					processRightGroup(businessGroup); 
 				}
 				counter += businessGroups.size();
-				log.audit("Rights groups processed: " + businessGroups.size() + ", total processed (" + counter + ")");
+				log.info(Tracing.M_AUDIT, "Rights groups processed: " + businessGroups.size() + ", total processed (" + counter + ")");
 				dbInstance.commitAndCloseSession();
 			} while(businessGroups.size() == BATCH_SIZE);
 			uhd.setBooleanDataValue(TASK_BUSINESS_GROUPS, true);
@@ -145,10 +143,10 @@ public class OLATUpgrade_10_0_3 extends OLATUpgrade {
 	}
 	
 	private List<String> findBGRights(SecurityGroup secGroup) {
-		List<Policy> results = securityManager.getPoliciesOfSecurityGroup(secGroup);
+		List<Policy> results = getPoliciesOfSecurityGroup(secGroup);
 		// filter all business group rights permissions. group right permissions
 		// start with bgr.
-		List<String> rights = new ArrayList<String>();
+		List<String> rights = new ArrayList<>();
 		for (Policy rightPolicy:results) {
 			String right = rightPolicy.getPermission();
 			if (right.indexOf("bgr.") == 0) rights.add(right);
@@ -170,8 +168,16 @@ public class OLATUpgrade_10_0_3 extends OLATUpgrade {
 				.setMaxResults(maxResults)
 				.getResultList();
 	}
-	
-	
-	
-	
+
+	private List<Policy> getPoliciesOfSecurityGroup(SecurityGroup secGroup) {
+		if(secGroup == null ) return Collections.emptyList();
+		
+		StringBuilder sb = new StringBuilder(128);
+		sb.append("select poi from ").append(PolicyImpl.class.getName()).append(" as poi where poi.securityGroup.key=:secGroupKey");
+
+		return dbInstance.getCurrentEntityManager()
+				.createQuery(sb.toString(), Policy.class)
+				.setParameter("secGroupKey", secGroup.getKey())
+				.getResultList();
+	}
 }

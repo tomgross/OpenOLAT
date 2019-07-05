@@ -23,7 +23,6 @@ import static org.olat.commons.calendar.restapi.CalendarWSHelper.hasReadAccess;
 import static org.olat.commons.calendar.restapi.CalendarWSHelper.hasWriteAccess;
 import static org.olat.commons.calendar.restapi.CalendarWSHelper.processEvents;
 import static org.olat.restapi.security.RestSecurityHelper.getUserRequest;
-import static org.olat.restapi.security.RestSecurityHelper.isAdmin;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -43,7 +42,8 @@ import javax.ws.rs.core.Request;
 import javax.ws.rs.core.Response;
 import javax.ws.rs.core.Response.Status;
 
-import org.olat.basesecurity.BaseSecurityManager;
+import org.olat.basesecurity.BaseSecurity;
+import org.olat.basesecurity.OrganisationRoles;
 import org.olat.collaboration.CollaborationManager;
 import org.olat.collaboration.CollaborationTools;
 import org.olat.commons.calendar.CalendarManager;
@@ -56,7 +56,7 @@ import org.olat.core.gui.UserRequest;
 import org.olat.core.id.Identity;
 import org.olat.core.id.IdentityEnvironment;
 import org.olat.core.id.Roles;
-import org.olat.core.logging.OLog;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.nodes.INode;
 import org.olat.core.util.tree.Visitor;
@@ -77,15 +77,32 @@ import org.olat.repository.RepositoryManager;
 import org.olat.repository.model.SearchRepositoryEntryParameters;
 import org.olat.resource.accesscontrol.ACService;
 import org.olat.resource.accesscontrol.AccessResult;
+import org.olat.restapi.security.RestSecurityHelper;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Component;
 
 /**
  * 
  * @author srosse, stephane.rosse@frentix.com, http://www.frentix.com
  */
+@Component
 @Path("users/{identityKey}/calendars")
 public class UserCalendarWebService {
 	
-	private static final OLog log = Tracing.createLoggerFor(UserCalendarWebService.class);
+	private static final Logger log = Tracing.createLoggerFor(UserCalendarWebService.class);
+	
+	@Autowired
+	private ACService acManager;
+	@Autowired
+	private BaseSecurity securityManager;
+	@Autowired
+	private CalendarManager calendarManager;
+	@Autowired
+	private RepositoryManager repositoryManager;
+	@Autowired
+	private BusinessGroupService businessGroupService;
+	@Autowired
+	private CollaborationManager collaborationManager;
 	
 	
 	@GET
@@ -94,7 +111,8 @@ public class UserCalendarWebService {
 		UserRequest ureq = getUserRequest(httpRequest);
 		if(ureq.getIdentity() == null || !ureq.getUserSession().isAuthenticated()) {
 			return Response.serverError().status(Status.UNAUTHORIZED).build();
-		} else if (!ureq.getIdentity().getKey().equals(identityKey)  && !isAdmin(httpRequest)) {
+		}
+		if (!ureq.getIdentity().getKey().equals(identityKey)  && !isManager(identityKey, httpRequest)) {
 			return Response.serverError().status(Status.UNAUTHORIZED).build();
 		}
 		
@@ -117,14 +135,16 @@ public class UserCalendarWebService {
 		UserRequest ureq = getUserRequest(httpRequest);
 		if(ureq.getIdentity() == null || !ureq.getUserSession().isAuthenticated()) {
 			throw new WebApplicationException(Response.serverError().status(Status.UNAUTHORIZED).build());
-		} else if (!ureq.getIdentity().getKey().equals(identityKey) && !isAdmin(httpRequest)) {
+		}
+		if (!ureq.getIdentity().getKey().equals(identityKey) && !isManager(identityKey, httpRequest)) {
 			throw new WebApplicationException(Response.serverError().status(Status.UNAUTHORIZED).build());
 		}
 		
 		KalendarRenderWrapper calendar = getCalendar(ureq, calendarId);
 		if(calendar == null) {
 			throw new WebApplicationException(Response.serverError().status(Status.NOT_FOUND).build());
-		} else if (!hasReadAccess(calendar)) {
+		}
+		if (!hasReadAccess(calendar)) {
 			throw new WebApplicationException(Response.serverError().status(Status.UNAUTHORIZED).build());
 		}
 		
@@ -143,7 +163,8 @@ public class UserCalendarWebService {
 		UserRequest ureq = getUserRequest(httpRequest);
 		if(ureq.getIdentity() == null || !ureq.getUserSession().isAuthenticated()) {
 			return Response.serverError().status(Status.UNAUTHORIZED).build();
-		} else if (!ureq.getIdentity().getKey().equals(identityKey) && !isAdmin(httpRequest)) {
+		}
+		if (!ureq.getIdentity().getKey().equals(identityKey) && !isManager(identityKey, httpRequest)) {
 			return Response.serverError().status(Status.UNAUTHORIZED).build();
 		}
 		
@@ -179,10 +200,8 @@ public class UserCalendarWebService {
 		KalendarRenderWrapper wrapper = null;
 		if("group".equals(type) && calendarModule.isEnableGroupCalendar()) {
 			Long groupId = Long.parseLong(id);
-			BusinessGroupService bgs = CoreSpringFactory.getImpl(BusinessGroupService.class);
-			BusinessGroup group = bgs.loadBusinessGroup(groupId);
-			if(bgs.isIdentityInBusinessGroup(ureq.getIdentity(), group)) {
-				CollaborationManager collaborationManager = CoreSpringFactory.getImpl(CollaborationManager.class);
+			BusinessGroup group = businessGroupService.loadBusinessGroup(groupId);
+			if(businessGroupService.isIdentityInBusinessGroup(ureq.getIdentity(), group)) {
 				wrapper = collaborationManager.getCalendar(group, ureq, false);
 			}
 		} else if("course".equals(type) && (calendarModule.isEnableCourseElementCalendar() || calendarModule.isEnableCourseToolCalendar())) {
@@ -196,9 +215,11 @@ public class UserCalendarWebService {
 		} else if("user".equals(type) && calendarModule.isEnablePersonalCalendar()) {
 			if(id.equals(ureq.getIdentity().getName())) {
 				wrapper = getPersonalCalendar(ureq.getIdentity());
-			} else if(isAdmin(ureq.getHttpReq())) {
-				Identity identity = BaseSecurityManager.getInstance().findIdentityByName(id);
-				wrapper = getPersonalCalendar(identity);
+			} else {
+				Identity identity = securityManager.findIdentityByName(id);
+				if(isManager(identity, ureq.getHttpReq())) {
+					wrapper = getPersonalCalendar(identity);
+				}
 			}
 		}
 		return wrapper;
@@ -206,7 +227,6 @@ public class UserCalendarWebService {
 	
 	private KalendarRenderWrapper getPersonalCalendar(Identity identity) {
 		// get the personal calendar
-		CalendarManager calendarManager = CoreSpringFactory.getImpl(CalendarManager.class);
 		KalendarRenderWrapper calendarWrapper = calendarManager.getPersonalCalendar(identity);
 		calendarWrapper.setAccess(KalendarRenderWrapper.ACCESS_READ_WRITE);
 		calendarWrapper.setPrivateEventsVisible(true);
@@ -230,8 +250,6 @@ public class UserCalendarWebService {
 			}
 			
 			if(calendarModule.isEnableCourseToolCalendar() || calendarModule.isEnableCourseElementCalendar()) {
-				RepositoryManager rm = RepositoryManager.getInstance();
-				ACService acManager = CoreSpringFactory.getImpl(ACService.class);
 				SearchRepositoryEntryParameters repoParams = new SearchRepositoryEntryParameters(retrievedUser, roles, "CourseModule");
 				repoParams.setOnlyExplicitMember(true);
 				repoParams.setIdentity(retrievedUser);
@@ -240,7 +258,7 @@ public class UserCalendarWebService {
 				ienv.setIdentity(retrievedUser);
 				ienv.setRoles(roles);
 				
-				List<RepositoryEntry> entries = rm.genericANDQueryWithRolesRestriction(repoParams, 0, -1, true);
+				List<RepositoryEntry> entries = repositoryManager.genericANDQueryWithRolesRestriction(repoParams, 0, -1, true);
 				for(RepositoryEntry entry:entries) {
 					AccessResult result = acManager.isAccessible(entry, retrievedUser, false);
 					if(result.isAccessible()) {
@@ -268,8 +286,6 @@ public class UserCalendarWebService {
 			}
 			
 			if(calendarModule.isEnableGroupCalendar()) {
-				CollaborationManager collaborationManager = CoreSpringFactory.getImpl(CollaborationManager.class);
-				
 				//start found forums in groups
 				BusinessGroupService bgm = CoreSpringFactory.getImpl(BusinessGroupService.class);
 				SearchBusinessGroupParams params = new SearchBusinessGroupParams(retrievedUser, true, true);
@@ -283,12 +299,31 @@ public class UserCalendarWebService {
 		}
 	}
 	
+	private boolean isManager(Long identityKey, HttpServletRequest httpRequest) {
+		Identity identity = securityManager.loadIdentityByKey(identityKey);
+		return isManager(identity, httpRequest);
+	}
+	
+	private boolean isManager(Identity identity, HttpServletRequest httpRequest) {
+		if(identity == null) return false;
+		Roles managerRoles = RestSecurityHelper.getRoles(httpRequest);
+		if(!managerRoles.isAdministrator() && !managerRoles.isUserManager() && !managerRoles.isRolesManager()) {
+			return false;
+		}
+
+		Roles identityRoles = securityManager.getRoles(identity);
+		return managerRoles.isManagerOf(OrganisationRoles.usermanager, identityRoles)
+				|| managerRoles.isManagerOf(OrganisationRoles.rolesmanager, identityRoles)
+				|| managerRoles.isManagerOf(OrganisationRoles.administrator, identityRoles);
+		
+	}
+	
 	private static interface CalendarVisitor {
 		public void visit(KalendarRenderWrapper wrapper);
 	}
 	
 	private static class CollectCalendars implements CalendarVisitor {
-		private final List<KalendarRenderWrapper> wrappers = new ArrayList<KalendarRenderWrapper>();
+		private final List<KalendarRenderWrapper> wrappers = new ArrayList<>();
 
 		public List<KalendarRenderWrapper> getWrappers() {
 			return wrappers;

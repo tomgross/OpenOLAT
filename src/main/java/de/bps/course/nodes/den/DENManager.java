@@ -64,6 +64,7 @@ import org.olat.course.nodes.CourseNodeFactory;
 import org.olat.modules.co.ContactFormController;
 import org.olat.repository.RepositoryEntry;
 import org.olat.repository.RepositoryManager;
+import org.olat.user.UserManager;
 
 import de.bps.course.nodes.DENCourseNode;
 
@@ -763,7 +764,7 @@ public class DENManager {
 		}
 		contactList.addAllIdentites(participants);
 		cmsg.addEmailTo(contactList);
-		ContactFormController contactCtr = new ContactFormController(ureq, wControl, false, false, false, cmsg);
+		ContactFormController contactCtr = new ContactFormController(ureq, wControl, false, false, false, cmsg, null);
 		contactCtr.addControllerListener(listener);
 		sendMessageVC.contextPut("title", trans.translate("participants.message"));
 		sendMessageVC.put("contactForm", contactCtr.getInitialComponent());
@@ -810,7 +811,7 @@ public class DENManager {
 		String[] bodyArgs = new String[] {
 					identity.getUser().getProperty(UserConstants.FIRSTNAME, ureq.getLocale()),
 					identity.getUser().getProperty(UserConstants.LASTNAME, ureq.getLocale()),
-					identity.getUser().getProperty(UserConstants.EMAIL, ureq.getLocale()),
+					UserManager.getInstance().getUserDisplayEmail(identity, ureq.getLocale()),
 					"", subjectStr
 				};
 		
@@ -838,9 +839,9 @@ public class DENManager {
 		Identity identity = ureq.getIdentity();
 		
 		String[] bodyArgs = new String[] {
-				identity.getUser().getProperty(UserConstants.FIRSTNAME, ureq.getLocale()),
-				identity.getUser().getProperty(UserConstants.LASTNAME, ureq.getLocale()),
-				identity.getUser().getProperty(UserConstants.EMAIL, ureq.getLocale()),
+					identity.getUser().getProperty(UserConstants.FIRSTNAME, ureq.getLocale()),
+					identity.getUser().getProperty(UserConstants.LASTNAME, ureq.getLocale()),
+					UserManager.getInstance().getUserDisplayEmail(identity, ureq.getLocale()),
 					"", subjectStr
 				};
 		

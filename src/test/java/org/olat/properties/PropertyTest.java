@@ -40,7 +40,7 @@ import org.junit.Assert;
 import org.junit.Test;
 import org.olat.core.commons.persistence.DB;
 import org.olat.core.id.Identity;
-import org.olat.core.logging.OLog;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
 import org.olat.group.BusinessGroup;
 import org.olat.group.BusinessGroupService;
@@ -59,7 +59,7 @@ import org.springframework.beans.factory.annotation.Autowired;
  */
 public class PropertyTest extends OlatTestCase {
 
-	private static final OLog log = Tracing.createLoggerFor(PropertyTest.class);
+	private static final Logger log = Tracing.createLoggerFor(PropertyTest.class);
 
 	@Autowired
 	private DB dbInstance;
@@ -237,7 +237,7 @@ public class PropertyTest extends OlatTestCase {
 		dbInstance.commitAndCloseSession();
 		
 		//delete user 1 datas
-		pm.deleteUserData(id1, "del-" + id1.getName(), null);
+		pm.deleteUserData(id1, "del-" + id1.getName());
 		dbInstance.commitAndCloseSession();
 		
 		//check if really deleted

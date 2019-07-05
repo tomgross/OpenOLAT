@@ -26,6 +26,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.olat.core.CoreSpringFactory;
 import org.olat.core.gui.translator.Translator;
+import org.olat.core.id.Identity;
+import org.olat.core.id.UserConstants;
 import org.olat.core.logging.activity.ThreadLocalUserActivityLogger;
 import org.olat.core.util.Formatter;
 import org.olat.core.util.Util;
@@ -51,14 +53,21 @@ public class AssessmentEntryOutcomesListener implements OutcomesListener {
 	private AssessmentEntry assessmentEntry;
 	private final AssessmentService assessmentService;
 	
+	private final RepositoryEntry entry;
+	private final RepositoryEntry testEntry;
+	
 	private final boolean authorMode;
 	private final boolean needManualCorrection;
+	private AtomicBoolean incrementAttempts = new AtomicBoolean(true);
 
 	private AtomicBoolean start = new AtomicBoolean(true);
 	private AtomicBoolean close = new AtomicBoolean(true);
 	
-	public AssessmentEntryOutcomesListener(AssessmentEntry assessmentEntry, boolean needManualCorrection,
+	public AssessmentEntryOutcomesListener(RepositoryEntry entry, RepositoryEntry testEntry,
+			AssessmentEntry assessmentEntry, boolean needManualCorrection,
 			AssessmentService assessmentService, boolean authorMode) {
+		this.entry = entry;
+		this.testEntry = testEntry;
 		this.assessmentEntry = assessmentEntry;
 		this.assessmentService = assessmentService;
 		this.authorMode = authorMode;
@@ -67,19 +76,19 @@ public class AssessmentEntryOutcomesListener implements OutcomesListener {
 
 	@Override
 	public void decorateConfirmation(AssessmentTestSession candidateSession, DigitalSignatureOptions options, Date timestamp, Locale locale) {
-		decorateResourceConfirmation(candidateSession, options, timestamp, locale);
+		decorateResourceConfirmation(entry, testEntry, candidateSession, options, timestamp, locale);
 	}
 	
-	public static void decorateResourceConfirmation(AssessmentTestSession candidateSession, DigitalSignatureOptions options, Date timestamp, Locale locale) {
+	public static void decorateResourceConfirmation(RepositoryEntry entry, RepositoryEntry testEntry, AssessmentTestSession candidateSession,
+			DigitalSignatureOptions options, Date timestamp, Locale locale) {
 		MailBundle bundle = new MailBundle();
 		bundle.setToId(candidateSession.getIdentity());
-		String fullname = CoreSpringFactory.getImpl(UserManager.class).getUserDisplayName(candidateSession.getIdentity());
+		Identity assessedIdentity = candidateSession.getIdentity();
+		String fullname = CoreSpringFactory.getImpl(UserManager.class).getUserDisplayName(assessedIdentity);
 		Date assessedDate = candidateSession.getFinishTime() == null ? timestamp : candidateSession.getFinishTime();
 
 		
 		Translator translator = Util.createPackageTranslator(QTI21RuntimeController.class, locale);
-		RepositoryEntry entry = candidateSession.getRepositoryEntry();
-		RepositoryEntry testEntry = candidateSession.getTestEntry();
 		String[] args = new String[] {
 				entry.getDisplayname(),		// {0}
 				entry.getKey().toString(),	// {1}
@@ -88,7 +97,12 @@ public class AssessmentEntryOutcomesListener implements OutcomesListener {
 				testEntry.getDisplayname(),	// {4}
 				fullname,					// {5}
 				Formatter.getInstance(locale)
-					.formatDateAndTime(assessedDate) // {6}
+					.formatDateAndTime(assessedDate), 								// {6}
+				assessedIdentity.getName(),											// {7}
+				assessedIdentity.getUser()
+					.getProperty(UserConstants.INSTITUTIONALUSERIDENTIFIER, locale),	// {8}
+				assessedIdentity.getUser()
+					.getProperty(UserConstants.INSTITUTIONALNAME, locale),			// {9}
 		};
 
 		String subject = translator.translate("digital.signature.mail.subject", args);
@@ -98,8 +112,9 @@ public class AssessmentEntryOutcomesListener implements OutcomesListener {
 	}
 
 	@Override
-	public void updateOutcomes(Float updatedScore, Boolean updatedPassed) {
+	public void updateOutcomes(Float updatedScore, Boolean updatedPassed, Double completion) {
 		AssessmentEntryStatus assessmentStatus = AssessmentEntryStatus.inProgress;
+		assessmentEntry.setCompletion(completion);
 		assessmentEntry.setAssessmentStatus(assessmentStatus);
 		assessmentEntry = assessmentService.updateAssessmentEntry(assessmentEntry);
 		
@@ -110,7 +125,7 @@ public class AssessmentEntryOutcomesListener implements OutcomesListener {
 	}
 
 	@Override
-	public void submit(Float submittedScore, Boolean submittedPass, Long assessmentId) {
+	public void submit(Float submittedScore, Boolean submittedPass, Double completion, Long assessmentId) {
 		AssessmentEntryStatus assessmentStatus;
 		if(needManualCorrection) {
 			assessmentStatus = AssessmentEntryStatus.inReview;
@@ -124,7 +139,13 @@ public class AssessmentEntryOutcomesListener implements OutcomesListener {
 			assessmentEntry.setScore(new BigDecimal(Float.toString(submittedScore)));
 		}
 		assessmentEntry.setPassed(submittedPass);
+		assessmentEntry.setCompletion(completion);
 		assessmentEntry.setAssessmentId(assessmentId);
+		if(incrementAttempts.getAndSet(false)) {
+			int currentAttempts = assessmentEntry.getAttempts() == null ? 0 : assessmentEntry.getAttempts().intValue();
+			assessmentEntry.setAttempts(currentAttempts + 1);
+		}
+		
 		assessmentEntry = assessmentService.updateAssessmentEntry(assessmentEntry);
 		
 		boolean firstClose = close.getAndSet(false);

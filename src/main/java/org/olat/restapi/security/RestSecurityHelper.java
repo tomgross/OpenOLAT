@@ -19,30 +19,29 @@
  */
 package org.olat.restapi.security;
 
+import java.text.DateFormat;
+import java.text.ParseException;
+import java.text.SimpleDateFormat;
+import java.util.Calendar;
+import java.util.Date;
 import java.util.Locale;
-import java.util.UUID;
 
 import javax.servlet.http.HttpServletRequest;
 
-import org.olat.basesecurity.BaseSecurity;
-import org.olat.basesecurity.BaseSecurityManager;
-import org.olat.basesecurity.Constants;
 import org.olat.core.gui.UserRequest;
 import org.olat.core.id.Identity;
-import org.olat.core.id.OLATResourceable;
 import org.olat.core.id.Roles;
+import org.olat.core.util.StringHelper;
 import org.olat.core.util.i18n.I18nModule;
 import org.olat.course.ICourse;
 import org.olat.course.groupsandrights.CourseGroupManager;
 import org.olat.course.groupsandrights.CourseRights;
 import org.olat.dispatcher.LocaleNegotiator;
+import org.olat.repository.RepositoryEntryStatusEnum;
 
 /**
  * 
- * Description:<br>
- * TODO: srosse Class Description for RestSecurityHelper
  * 
- * <P>
  * Initial Date:  7 apr. 2010 <br>
  * @author srosse, stephane.rosse@frentix.com
  */
@@ -51,9 +50,6 @@ public class RestSecurityHelper {
 	public static final String SUB_CONTEXT = "/restapi";
 	public static final String SEC_TOKEN = "X-OLAT-TOKEN";
 	public static final String SEC_USER_REQUEST = "olat-user-request";
-	
-	protected static final String SYSTEM_MARKER = UUID.randomUUID().toString();
-	
 	
 	public static UserRequest getUserRequest(HttpServletRequest request) {
 		return (UserRequest)request.getAttribute(SEC_USER_REQUEST);
@@ -65,14 +61,10 @@ public class RestSecurityHelper {
 		return ureq.getIdentity();
 	}
 	
-	public static Identity getIdentity(Long identityKey) {
-		return BaseSecurityManager.getInstance().loadIdentityByKey(identityKey);
-	}
-	
-	public static boolean isUserManager(HttpServletRequest request) {
+	public static boolean isCurriculumManager(HttpServletRequest request) {
 		try {
 			Roles roles = getRoles(request);
-			return (roles.isUserManager() || roles.isOLATAdmin());
+			return (roles.isCurriculumManager() || roles.isAdministrator());
 		} catch (Exception e) {
 			return false;
 		}
@@ -81,48 +73,7 @@ public class RestSecurityHelper {
 	public static boolean isGroupManager(HttpServletRequest request) {
 		try {
 			Roles roles = getRoles(request);
-			return (roles.isGroupManager() || roles.isOLATAdmin());
-		} catch (Exception e) {
-			return false;
-		}
-	}
-	
-	public static boolean isAuthor(HttpServletRequest request) {
-		try {
-			Roles roles = getRoles(request);
-			return (roles.isAuthor() || roles.isOLATAdmin());
-		} catch (Exception e) {
-			return false;
-		}
-	}
-	
-	public static boolean isAuthorEditor(ICourse course, HttpServletRequest request) {
-		try {
-			Roles roles = getRoles(request);
-			if(roles.isOLATAdmin()) return true;
-			if(roles.isAuthor()) {
-				UserRequest ureq = getUserRequest(request);
-				Identity identity = ureq.getIdentity();
-				CourseGroupManager cgm = course.getCourseEnvironment().getCourseGroupManager();
-				return cgm.isIdentityCourseAdministrator(identity) || cgm.hasRight(identity, CourseRights.RIGHT_COURSEEDITOR);
-			}
-			return false;
-		} catch (Exception e) {
-			return false;
-		}
-	}
-	
-	public static boolean isAuthorEditor(OLATResourceable resourceable, HttpServletRequest request) {
-		try {
-			Roles roles = getRoles(request);
-			if(roles.isOLATAdmin()) return true;
-			if(roles.isAuthor()) {
-				UserRequest ureq = getUserRequest(request);
-				Identity identity = ureq.getIdentity();
-				BaseSecurity secMgr = BaseSecurityManager.getInstance();
-				return secMgr.isIdentityPermittedOnResourceable(identity, Constants.PERMISSION_ADMIN, resourceable);
-			}
-			return false;
+			return (roles.isGroupManager() || roles.isAdministrator());
 		} catch (Exception e) {
 			return false;
 		}
@@ -131,39 +82,12 @@ public class RestSecurityHelper {
 	public static boolean isAuthorGrpManager(ICourse course, HttpServletRequest request) {
 		try {
 			Roles roles = getRoles(request);
-			if(roles.isOLATAdmin()) return true;
+			if(roles.isAdministrator()) return true;
 			if(roles.isAuthor()) {
 				UserRequest ureq = getUserRequest(request);
 				Identity identity = ureq.getIdentity();
 				CourseGroupManager cgm = course.getCourseEnvironment().getCourseGroupManager();
-				boolean editor = cgm.hasRight(identity, CourseRights.RIGHT_GROUPMANAGEMENT);
-				return editor;
-			}
-			return false;
-		} catch (Exception e) {
-			return false;
-		}
-	}
-	
-	public static boolean isAdmin(HttpServletRequest request) {
-		try {
-			Roles roles = getRoles(request);
-			return roles.isOLATAdmin();
-		} catch (Exception e) {
-			return false;
-		}
-	}
-	
-	public static boolean isAdminOrSystem(HttpServletRequest request) {
-		try {
-			Roles roles = getRoles(request);
-			if(roles.isOLATAdmin()) {
-				return true;
-			}
-			UserRequest ureq = (UserRequest)request.getAttribute(SEC_USER_REQUEST);
-			if(ureq != null && ureq.getUserSession() != null
-					&& ureq.getUserSession().getEntry(SYSTEM_MARKER) != null) {
-				return true;
+				return cgm.hasRight(identity, CourseRights.RIGHT_GROUPMANAGEMENT);
 			}
 			return false;
 		} catch (Exception e) {
@@ -175,7 +99,7 @@ public class RestSecurityHelper {
 		UserRequest ureq= (UserRequest)request.getAttribute(SEC_USER_REQUEST);
 		if(ureq == null || ureq.getUserSession() == null || ureq.getUserSession().getRoles() == null) {
 			//guest roles
-			return new Roles(false, false, false, false, true, false, false);
+			return Roles.guestRoles();
 		}
 		return ureq.getUserSession().getRoles();
 	}
@@ -185,5 +109,59 @@ public class RestSecurityHelper {
 		UserRequest ureq= (UserRequest)request.getAttribute(SEC_USER_REQUEST);
 		if(ureq == null) return I18nModule.getDefaultLocale();
 		return LocaleNegotiator.getPreferedLocale(ureq);
+	}
+	
+	public static RepositoryEntryStatusEnum convertToEntryStatus(int accessCode, boolean membersOnly) {
+		switch(accessCode) {
+			case 0: return RepositoryEntryStatusEnum.trash;
+			case 1: return membersOnly ? RepositoryEntryStatusEnum.published : RepositoryEntryStatusEnum.preparation;
+			case 2: return RepositoryEntryStatusEnum.review;
+			default: return RepositoryEntryStatusEnum.published;
+		}
+	}
+	
+	public static Date parseDate(String date, Locale locale) {
+		if(StringHelper.containsNonWhitespace(date)) {
+			if(date.indexOf('T') > 0) {
+				if(date.indexOf('.') > 0) {
+					try {
+						return new SimpleDateFormat("yyyy-MM-dd'T'hh:mm:ss.S").parse(date);
+					} catch (ParseException e) {
+						//fail silently
+					}
+				} else {
+					try {
+						return new SimpleDateFormat("yyyy-MM-dd'T'hh:mm:ss").parse(date);
+					} catch (ParseException e) {
+						//fail silently
+					}
+				}
+			}
+			
+			//try with the locale
+			if(date.length() > 10) {
+				//probably date time
+				try {
+					DateFormat format = DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.MEDIUM, locale);
+					format.setLenient(true);
+					return format.parse(date);
+				} catch (ParseException e) {
+					//fail silently
+				}
+			} else {
+				try {
+					DateFormat format = DateFormat.getDateInstance(DateFormat.MEDIUM, locale);
+					format.setLenient(true);
+					return format.parse(date);
+				} catch (ParseException e) {
+					//fail silently
+				}
+			}
+		}
+		
+		Calendar cal = Calendar.getInstance();
+		cal.setTime(new Date());
+		cal.add(Calendar.MONTH, -1);
+		return cal.getTime();
 	}
 }

@@ -27,12 +27,12 @@ package org.olat.commons.coordinate.cluster.lock;
 import java.util.ArrayList;
 import java.util.List;
 
+import org.apache.logging.log4j.Logger;
 import org.olat.core.commons.persistence.DBFactory;
 import org.olat.core.gui.control.Event;
 import org.olat.core.id.Identity;
 import org.olat.core.id.OLATResourceable;
 import org.olat.core.logging.DBRuntimeException;
-import org.olat.core.logging.OLog;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.SignOnOffEvent;
 import org.olat.core.util.UserSession;
@@ -59,7 +59,7 @@ import org.olat.core.util.resource.OresHelper;
 // Must be abstract because Spring configuration of method 'getPersistentLockManager' :
 // to avoid circular reference method lookup is used for dependecy injection of persistent lock manager
 public class ClusterLocker implements Locker, GenericEventListener {
-	private static final OLog log = Tracing.createLoggerFor(ClusterLocker.class);
+	private static final Logger log = Tracing.createLoggerFor(ClusterLocker.class);
 
 	private Syncer syncer;
 	private EventBus eventBus;
@@ -113,7 +113,7 @@ public class ClusterLocker implements Locker, GenericEventListener {
 					// already locked by a user.
 					// if that user is us, we can reacquire it
 					LockEntry le = new LockEntry(li.getAsset(), li.getCreationDate().getTime(), li.getOwner());
-					if (requestor.getName().equals(li.getOwner().getName())) {
+					if (requestor.getKey().equals(li.getOwner().getKey())) {
 						// that's us -> success (asset, owner is the same, and we leave creationdate to when the lock was originally acquired, not when it was reacquired.
 						lres = new LockResultImpl(true, le);				
 					} else {

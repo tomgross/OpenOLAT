@@ -19,10 +19,12 @@
  */
 package org.olat.selenium.page.graphene;
 
+import java.util.function.Function;
+
+import org.apache.logging.log4j.Logger;
+import org.olat.core.logging.Tracing;
 import org.openqa.selenium.JavascriptExecutor;
 import org.openqa.selenium.WebDriver;
-
-import com.google.common.base.Predicate;
 
 /**
  * 
@@ -32,14 +34,21 @@ import com.google.common.base.Predicate;
  * @author srosse, stephane.rosse@frentix.com, http://www.frentix.com
  *
  */
-public class TinyMCELoadedPredicate implements Predicate<WebDriver> {
+public class TinyMCELoadedPredicate implements Function<WebDriver, Boolean> {
+
+	private static final Logger log = Tracing.createLoggerFor(TinyMCELoadedPredicate.class);
 	
 	@Override
-	public boolean apply(WebDriver driver) {
-        Object active = ((JavascriptExecutor)driver)
-        		.executeScript("return top != null && top.tinymce != null && top.tinymce.activeEditor != null "
-        				+ " && top.tinymce.activeEditor.initialized && top.tinymce.editors[0].initialized "
-        				+ " && (top.tinymce.editors.length > 1 ? top.tinymce.editors[1].initialized : true);");
-        return Boolean.TRUE.equals(active);
+	public Boolean apply(WebDriver driver) {
+        try {
+			Object active = ((JavascriptExecutor)driver)
+					.executeScript("return top != null && top.tinymce != null && top.tinymce.activeEditor != null "
+							+ " && top.tinymce.activeEditor.initialized && top.tinymce.editors[0].initialized "
+							+ " && (top.tinymce.editors.length > 1 ? top.tinymce.editors[1].initialized : true);");
+			return Boolean.TRUE.equals(active);
+		} catch (Exception e) {
+			log.error("", e);
+			return Boolean.FALSE;
+		}
     }
 }

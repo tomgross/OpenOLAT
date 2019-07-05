@@ -26,6 +26,7 @@
 
 package org.olat.core.commons.modules.bc.commands;
 
+import org.olat.core.CoreSpringFactory;
 import org.olat.core.commons.modules.bc.FileUploadController;
 import org.olat.core.commons.modules.bc.FolderEvent;
 import org.olat.core.commons.modules.bc.components.FolderComponent;
@@ -48,7 +49,7 @@ import org.olat.core.util.vfs.Quota;
 import org.olat.core.util.vfs.QuotaManager;
 import org.olat.core.util.vfs.VFSConstants;
 import org.olat.core.util.vfs.VFSContainer;
-import org.olat.core.util.vfs.VFSLeaf;
+import org.olat.core.util.vfs.VFSItem;
 import org.olat.core.util.vfs.VFSManager;
 import org.olat.core.util.vfs.callbacks.VFSSecurityCallback;
 
@@ -67,13 +68,12 @@ public class CmdUpload extends BasicController implements FolderCommand {
 	private int status = FolderCommandStatus.STATUS_SUCCESS;
 
 	private VelocityContainer mainVC;
-	private VFSContainer currentContainer, inheritingContainer;
+	private VFSContainer currentContainer;
+	private VFSContainer inheritingContainer;
 	private VFSSecurityCallback secCallback;
 
-	private FolderComponent folderComponent;
 	private ProgressBar ubar;
 	private String uploadFileName;
-	private VFSLeaf vfsNewFile;
 	private long quotaKB;
 	private long uploadLimitKB;
 	private boolean overwritten = false;
@@ -98,8 +98,7 @@ public class CmdUpload extends BasicController implements FolderCommand {
 		return execute(fc, ureq, trans, false);
 	}
 
-	public Controller execute(FolderComponent fc, UserRequest ureq, Translator trans, boolean cancelResetsButton) {
-		this.folderComponent = fc;
+	public Controller execute(FolderComponent folderComponent, UserRequest ureq, Translator trans, boolean cancelResetsButton) {
 		this.cancelResetsForm = cancelResetsButton;
 		
 		setTranslator(trans);
@@ -113,6 +112,7 @@ public class CmdUpload extends BasicController implements FolderCommand {
 		ubar = new ProgressBar("ubar");
 		ubar.setWidth(200);
 		ubar.setUnitLabel("MB");
+		ubar.setRenderLabelRights(true);
 		mainVC.put(ubar.getComponentName(), ubar);
 
 		// Calculate quota and limits
@@ -124,7 +124,7 @@ public class CmdUpload extends BasicController implements FolderCommand {
 		if (inheritingContainer != null) {
 			secCallback = inheritingContainer.getLocalSecurityCallback();
 			actualUsage = VFSManager.getUsageKB(inheritingContainer);
-			ubar.setActual(actualUsage/ 1024);
+			ubar.setActual(actualUsage / 1024f);
 			if (inheritingContainer.getLocalSecurityCallback().getQuota() != null) {
 				quotaKB = secCallback.getQuota().getQuotaKB().longValue();
 				uploadLimitKB = (int) secCallback.getQuota().getUlLimitKB().longValue();
@@ -133,16 +133,18 @@ public class CmdUpload extends BasicController implements FolderCommand {
 		// set wether we have a quota on this folder
 		if (quotaKB == Quota.UNLIMITED) {
 			ubar.setIsNoMax(true);
+		} else if(quotaKB == 0) {
+			ubar.setMax(quotaKB);
 		} else {
-			ubar.setMax(quotaKB / 1024);
+			ubar.setMax(quotaKB / 1024f);
 		}
 		// set default ulLimit if none is defined...
 		if (uploadLimitKB == Quota.UNLIMITED) {
-			uploadLimitKB = QuotaManager.getInstance().getDefaultQuotaDependingOnRole(ureq.getIdentity()).getUlLimitKB().longValue();
+			uploadLimitKB = CoreSpringFactory.getImpl(QuotaManager.class).getDefaultQuotaDependingOnRole(ureq.getIdentity(), ureq.getUserSession().getRoles()).getUlLimitKB().longValue();
 		}
 		
 		// Add file upload form
-		long remainingQuotaKB =  quotaKB - actualUsage;
+		long remainingQuotaKB;
 		if (quotaKB == Quota.UNLIMITED) remainingQuotaKB = quotaKB;
 		else if (quotaKB - actualUsage < 0) remainingQuotaKB = 0;
 		else remainingQuotaKB = quotaKB - actualUsage;
@@ -220,7 +222,7 @@ public class CmdUpload extends BasicController implements FolderCommand {
 				FolderEvent folderEvent = (FolderEvent) event;
 				// Get file from temp folder location
 				uploadFileName = folderEvent.getFilename();
-				vfsNewFile = (VFSLeaf) currentContainer.resolve(uploadFileName);
+				VFSItem vfsNewFile = currentContainer.resolve(uploadFileName);
 				overwritten = fileUploadCtr.isExistingFileOverwritten();
 				if (vfsNewFile != null) {
 					notifyFinished(ureq);

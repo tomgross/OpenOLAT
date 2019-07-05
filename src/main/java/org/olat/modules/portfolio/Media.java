@@ -22,6 +22,8 @@ package org.olat.modules.portfolio;
 import java.util.Date;
 
 import org.olat.core.id.Identity;
+import org.olat.modules.ceditor.model.DublinCoreMetadata;
+import org.olat.modules.ceditor.model.StoredData;
 
 /**
  * 
@@ -29,7 +31,7 @@ import org.olat.core.id.Identity;
  * @author srosse, stephane.rosse@frentix.com, http://www.frentix.com
  *
  */
-public interface Media extends MediaLight, DublinCoreMetadata {
+public interface Media extends StoredData, MediaLight, DublinCoreMetadata {
 
 	@Override
 	public Long getKey();
@@ -41,30 +43,19 @@ public interface Media extends MediaLight, DublinCoreMetadata {
 	public Date getCollectionDate();
 
 	@Override
-	public String getStoragePath();
-
-	@Override
-	public String getRootFilename();
-
-	@Override
 	public String getType();
 
 	@Override
 	public String getTitle();
 	
-	public void setTitle(String title);
-
 	@Override
-	public String getDescription();
+	public void setTitle(String title);
 	
 	public void setDescription(String description);
 	
 	public String getContent();
 	
 	public void setContent(String content);
-	
-	@Override
-	public String getBusinessPath();
 	
 	public Identity getAuthor();
 	

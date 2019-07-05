@@ -25,10 +25,11 @@ import java.util.List;
 import javax.persistence.TemporalType;
 import javax.persistence.TypedQuery;
 
+import org.olat.basesecurity.IdentityRef;
 import org.olat.core.commons.persistence.DB;
 import org.olat.core.id.Identity;
 import org.olat.core.id.OLATResourceable;
-import org.olat.core.logging.OLog;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
 import org.olat.instantMessaging.InstantMessage;
 import org.olat.instantMessaging.InstantMessageNotification;
@@ -45,7 +46,7 @@ import org.springframework.stereotype.Service;
 @Service
 public class InstantMessageDAO {
 	
-	private static final OLog log = Tracing.createLoggerFor(InstantMessageDAO.class);
+	private static final Logger log = Tracing.createLoggerFor(InstantMessageDAO.class);
 	
 	@Autowired
 	private DB dbInstance;
@@ -74,6 +75,14 @@ public class InstantMessageDAO {
 		}
 		return msgs.get(0);
 	}
+	
+	public List<InstantMessage> loadMessageBy(IdentityRef identity) {
+		String query = "select msg from instantmessage msg where msg.fromKey=:identityKey";
+		return dbInstance.getCurrentEntityManager()
+				.createQuery(query, InstantMessage.class)
+				.setParameter("identityKey", identity.getKey())
+				.getResultList();
+	}
 
 	public List<InstantMessage> getMessages(OLATResourceable ores, Date from, int firstResult, int maxResults) {
 		String queryName = (from == null ? "loadIMessageByResource" : "loadIMessageByResourceAndDate");
@@ -98,7 +107,18 @@ public class InstantMessageDAO {
 				.setParameter("resname", ores.getResourceableTypeName())
 				.executeUpdate();
 		if(count > 0) {
-			log.audit(count + " IM messages delete for resource: " + ores);
+			log.info(Tracing.M_AUDIT, count + " IM messages delete for resource: " + ores);
+		}
+		return count;
+	}
+	
+	public int deleteMessages(IdentityRef identity) {
+		int count = dbInstance.getCurrentEntityManager()
+				.createQuery("delete from instantmessage msg where msg.fromKey=:identityKey")
+				.setParameter("identityKey", identity.getKey())
+				.executeUpdate();
+		if(count > 0) {
+			log.info(Tracing.M_AUDIT, count + " IM messages delete for identity: " + identity.getKey());
 		}
 		return count;
 	}

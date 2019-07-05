@@ -37,6 +37,7 @@ import org.olat.modules.forms.handler.EvaluationFormHandler;
 import org.olat.modules.portfolio.Assignment;
 import org.olat.modules.portfolio.AssignmentStatus;
 import org.olat.modules.portfolio.AssignmentType;
+import org.olat.modules.portfolio.Binder;
 import org.olat.modules.portfolio.BinderRef;
 import org.olat.modules.portfolio.Page;
 import org.olat.modules.portfolio.PageBody;
@@ -44,9 +45,11 @@ import org.olat.modules.portfolio.PortfolioRoles;
 import org.olat.modules.portfolio.Section;
 import org.olat.modules.portfolio.SectionRef;
 import org.olat.modules.portfolio.model.AssignmentImpl;
+import org.olat.modules.portfolio.model.BinderImpl;
 import org.olat.modules.portfolio.model.EvaluationFormPart;
 import org.olat.modules.portfolio.model.SectionImpl;
 import org.olat.repository.RepositoryEntry;
+import org.olat.repository.RepositoryEntryRef;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
@@ -67,16 +70,18 @@ public class AssignmentDAO {
 	private EvaluationFormHandler formHandler;
 	
 	public Assignment createAssignment(String title, String summary, String content,
-			String storage, AssignmentType type, AssignmentStatus status, Section section,
+			String storage, AssignmentType type, boolean template, AssignmentStatus status, Section section, Binder binder,
 			boolean onlyAutoEvaluation, boolean reviewerSeeAutoEvaluation, boolean anonymousExternEvaluation, RepositoryEntry formEntry) {
 		AssignmentImpl assignment = new AssignmentImpl();
 		assignment.setCreationDate(new Date());
 		assignment.setLastModified(assignment.getCreationDate());
+		assignment.setTemplate(template);
 		assignment.setTitle(title);
 		assignment.setSummary(summary);
 		assignment.setContent(content);
 		assignment.setStorage(storage);
 		assignment.setSection(section);
+		assignment.setBinder(binder);
 		assignment.setType(type.name());
 		assignment.setStatus(status.name());
 		assignment.setOnlyAutoEvaluation(onlyAutoEvaluation);
@@ -84,21 +89,32 @@ public class AssignmentDAO {
 		assignment.setAnonymousExternalEvaluation(anonymousExternEvaluation);
 		assignment.setFormEntry(formEntry);
 		
-		((SectionImpl)section).getAssignments().size();
-		((SectionImpl)section).getAssignments().add(assignment);
+		if(section != null) {
+			((SectionImpl)section).getAssignments().size();
+			((SectionImpl)section).getAssignments().add(assignment);
+		} else if(binder != null) {
+			((BinderImpl)binder).getAssignments().size();
+			((BinderImpl)binder).getAssignments().add(assignment);
+		}
 		dbInstance.getCurrentEntityManager().persist(assignment);
-		dbInstance.getCurrentEntityManager().merge(section);
+		if(section != null) {
+			dbInstance.getCurrentEntityManager().merge(section);
+		} else if(binder != null) {
+			dbInstance.getCurrentEntityManager().merge(binder);
+		}
 		return assignment;
 	}
 	
-	public Assignment createAssignment(Assignment templateReference, AssignmentStatus status, Section section) {
+	public Assignment createAssignment(Assignment templateReference, AssignmentStatus status, Section section, Binder binder, boolean template) {
 		AssignmentImpl assignment = new AssignmentImpl();
 		assignment.setCreationDate(new Date());
 		assignment.setLastModified(assignment.getCreationDate());
+		assignment.setTemplate(template);
 		assignment.setTitle(templateReference.getTitle());
 		assignment.setSummary(templateReference.getSummary());
 		assignment.setContent(templateReference.getContent());
 		assignment.setSection(section);
+		assignment.setBinder(binder);
 		assignment.setType(templateReference.getAssignmentType().name());
 		assignment.setTemplateReference(templateReference);
 		assignment.setStatus(status.name());
@@ -108,10 +124,19 @@ public class AssignmentDAO {
 		assignment.setStorage(templateReference.getStorage());
 		assignment.setFormEntry(templateReference.getFormEntry());
 
-		((SectionImpl)section).getAssignments().size();
-		((SectionImpl)section).getAssignments().add(assignment);
+		if(section != null) {
+			((SectionImpl)section).getAssignments().size();
+			((SectionImpl)section).getAssignments().add(assignment);
+		} else if(binder != null) {
+			((BinderImpl)binder).getAssignments().size();
+			((BinderImpl)binder).getAssignments().add(assignment);
+		}
 		dbInstance.getCurrentEntityManager().persist(assignment);
-		dbInstance.getCurrentEntityManager().merge(section);
+		if(section != null) {
+			dbInstance.getCurrentEntityManager().merge(section);
+		} else if(binder != null) {
+			dbInstance.getCurrentEntityManager().merge(binder);	
+		}
 		return assignment;
 	}
 	
@@ -188,7 +213,8 @@ public class AssignmentDAO {
 	public Assignment loadAssignmentByKey(Long key) {
 		StringBuilder sb = new StringBuilder();
 		sb.append("select assignment from pfassignment as assignment")
-		  .append(" inner join fetch assignment.section as section")
+		  .append(" left join fetch assignment.section as section")
+		  .append(" left join fetch assignment.binder as binder")
 		  .append(" left join fetch assignment.page as page")
 		  .append(" left join fetch assignment.formEntry as formEntry")
 		  .append(" left join fetch formEntry.olatResource as resource")
@@ -199,6 +225,32 @@ public class AssignmentDAO {
 				.setParameter("assignmentKey", key)
 				.getResultList();
 		return assignments == null || assignments.isEmpty() ? null : assignments.get(0);
+	}
+	
+	public List<Assignment> loadBinderAssignmentsTemplates(BinderRef binder) {
+		StringBuilder sb = new StringBuilder();
+		sb.append("select assignment from pfassignment as assignment")
+		  .append(" inner join fetch assignment.binder binder")
+		  .append(" left join fetch assignment.formEntry as formEntry")
+		  .append(" where binder.key=:binderKey and assignment.template=true and assignment.page is null");
+		
+		return dbInstance.getCurrentEntityManager()
+				.createQuery(sb.toString(), Assignment.class)
+				.setParameter("binderKey", binder.getKey())
+				.getResultList();
+	}
+	
+	public boolean hasBinderAssignmentTemplate(BinderRef binder) {
+		StringBuilder sb = new StringBuilder();
+		sb.append("select assignment.key from pfassignment as assignment")
+		  .append(" inner join assignment.binder binder")
+		  .append(" where binder.key=:binderKey and assignment.template=true and assignment.page.key is null");
+		
+		List<Long> keys = dbInstance.getCurrentEntityManager()
+				.createQuery(sb.toString(), Long.class)
+				.setParameter("binderKey", binder.getKey())
+				.getResultList();
+		return keys != null && !keys.isEmpty() && keys.get(0) != null;
 	}
 	
 	public List<Assignment> loadAssignments(BinderRef binder, String searchString) {
@@ -257,8 +309,21 @@ public class AssignmentDAO {
 		return query.getResultList();
 	}
 	
+	public List<Assignment> loadAssignmentReferences(Assignment assignment) {
+		StringBuilder sb = new StringBuilder(512);
+		sb.append("select assignment from pfassignment as assignment")
+		  .append(" left join fetch assignment.section as section")
+		  .append(" left join fetch assignment.page as page")
+		  .append(" left join fetch assignment.formEntry as formEntry")
+		  .append(" where assignment.templateReference.key=:assignmentKey");
+		return dbInstance.getCurrentEntityManager()
+				.createQuery(sb.toString(), Assignment.class)
+				.setParameter("assignmentKey", assignment.getKey())
+				.getResultList();
+	}
+	
 	public List<Assignment> loadAssignments(Page page, String searchString) {
-		StringBuilder sb = new StringBuilder();
+		StringBuilder sb = new StringBuilder(512);
 		sb.append("select assignment from pfassignment as assignment")
 		  .append(" inner join fetch assignment.section as section")
 		  .append(" inner join fetch assignment.page as page")
@@ -287,11 +352,12 @@ public class AssignmentDAO {
 	
 	public List<Assignment> getOwnedAssignments(IdentityRef assignee) {
 		StringBuilder sb = new StringBuilder();
-		sb.append("select assignment from pfpage as page")
+		sb.append("select assignment from pfpage page")
 		  .append(" inner join page.body as body")
 		  .append(" inner join page.section as section")
 		  .append(" inner join section.binder as binder")
 		  .append(" inner join pfassignment assignment on (section.key = assignment.section.key)")
+		  .append(" left join fetch assignment.page as assignmentPage")
 		  .append(" where assignment.assignee.key is null or assignment.assignee.key=:assigneeKey")
 		  .append(" and exists (select pageMember from bgroupmember as pageMember")
 		  .append("     inner join pageMember.identity as ident on (ident.key=:assigneeKey and pageMember.role='").append(PortfolioRoles.owner.name()).append("')")
@@ -305,7 +371,7 @@ public class AssignmentDAO {
 	}
 	
 	public Assignment loadAssignment(PageBody body) {
-		StringBuilder sb = new StringBuilder();
+		StringBuilder sb = new StringBuilder(256);
 		sb.append("select assignment from pfassignment as assignment")
 		  .append(" inner join fetch assignment.page as page")
 		  .append(" left join fetch assignment.formEntry as formEntry")
@@ -320,7 +386,7 @@ public class AssignmentDAO {
 	}
 	
 	public boolean isAssignmentInUse(Assignment assignment) {
-		StringBuilder sb = new StringBuilder();
+		StringBuilder sb = new StringBuilder(128);
 		sb.append("select assignment.key from pfassignment as assignment")
 		  .append(" where assignment.templateReference.key=:assignmentKey");
 
@@ -330,7 +396,21 @@ public class AssignmentDAO {
 			.setFirstResult(0)
 			.setMaxResults(1)
 			.getResultList();
-		return counts != null && counts.size() > 0 && counts.get(0) != null && counts.get(0).intValue() >= 0;
+		return counts != null && !counts.isEmpty() && counts.get(0) != null && counts.get(0).intValue() >= 0;
+	}
+	
+	public boolean isFormEntryInUse(RepositoryEntryRef formEntry) {
+		StringBuilder sb = new StringBuilder(128);
+		sb.append("select assignment.key from pfassignment as assignment")
+		  .append(" where assignment.formEntry.key=:formEntryKey");
+
+		List<Long> counts = dbInstance.getCurrentEntityManager()
+			.createQuery(sb.toString(), Long.class)
+			.setParameter("formEntryKey", formEntry.getKey())
+			.setFirstResult(0)
+			.setMaxResults(1)
+			.getResultList();
+		return counts != null && !counts.isEmpty() && counts.get(0) != null && counts.get(0).intValue() >= 0;
 	}
 	
 	public int deleteAssignmentReference(Assignment assignment) {
@@ -339,6 +419,15 @@ public class AssignmentDAO {
 		return dbInstance.getCurrentEntityManager()
 				.createQuery(sb.toString())
 				.setParameter("assignmentKey", assignment.getKey())
+				.executeUpdate();
+	}
+	
+	public int deleteAssignmentBySection(Section section) {
+		StringBuilder sb = new StringBuilder();
+		sb.append("delete pfassignment assignment where assignment.section.key=:sectionKey");
+		return dbInstance.getCurrentEntityManager()
+				.createQuery(sb.toString())
+				.setParameter("sectionKey", section.getKey())
 				.executeUpdate();
 	}
 

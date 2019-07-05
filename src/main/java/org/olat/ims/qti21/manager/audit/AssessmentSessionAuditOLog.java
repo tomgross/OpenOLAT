@@ -22,9 +22,9 @@ package org.olat.ims.qti21.manager.audit;
 import java.io.IOException;
 import java.util.Map;
 
+import org.apache.logging.log4j.Logger;
 import org.olat.core.gui.render.StringOutput;
 import org.olat.core.id.Identity;
-import org.olat.core.logging.OLog;
 import org.olat.core.logging.Tracing;
 import org.olat.ims.qti21.AssessmentItemSession;
 import org.olat.ims.qti21.AssessmentResponse;
@@ -45,14 +45,14 @@ import uk.ac.ed.ph.jqtiplus.types.Identifier;
  */
 public class AssessmentSessionAuditOLog implements AssessmentSessionAuditLogger {
 
-	private static final OLog log = Tracing.createLoggerFor(AssessmentSessionAuditOLog.class);
+	private static final Logger log = Tracing.createLoggerFor(AssessmentSessionAuditOLog.class);
 
 	@Override
 	public void logCandidateEvent(CandidateEvent candidateEvent) {
 		try {
 			StringOutput sb = new StringOutput(255);
 			AuditLogFormatter.log(candidateEvent, null, sb);
-			log.audit("", sb.toString());
+			log.info(Tracing.M_AUDIT, sb.toString());
 		} catch (IOException e) {
 			log.error("", e);
 		}
@@ -63,7 +63,7 @@ public class AssessmentSessionAuditOLog implements AssessmentSessionAuditLogger 
 		try {
 			StringOutput sb = new StringOutput(255);
 			AuditLogFormatter.log(candidateEvent, candidateResponseMap, sb);
-			log.audit("", sb.toString());
+			log.info(Tracing.M_AUDIT, sb.toString());
 		} catch (IOException e) {
 			log.error("", e);
 		}
@@ -74,7 +74,7 @@ public class AssessmentSessionAuditOLog implements AssessmentSessionAuditLogger 
 		try {
 			StringOutput sb = new StringOutput(255);
 			AuditLogFormatter.logOutcomes(outcomes, sb);
-			log.audit("", sb.toString());
+			log.info(Tracing.M_AUDIT, sb.toString());
 		} catch (IOException e) {
 			log.error("", e);
 		}
@@ -86,13 +86,13 @@ public class AssessmentSessionAuditOLog implements AssessmentSessionAuditLogger 
 			StringOutput sb = new StringOutput(255);
 			sb.append("Test session ").append(candidateSession.getKey()).append(" (assessed identity=");
 			if(candidateSession.getIdentity() != null) {
-				sb.append(candidateSession.getIdentity().getKey()).append("/").append(candidateSession.getIdentity().getName());
+				sb.append(candidateSession.getIdentity().getKey());
 			} else {
 				sb.append(candidateSession.getAnonymousIdentifier());
 			}
 			sb.append(" ");
 			AuditLogFormatter.logCorrection(itemSession, coach, sb);
-			log.audit("", sb.toString());
+			log.info(Tracing.M_AUDIT, sb.toString());
 		} catch (IOException e) {
 			log.error("", e);
 		}
@@ -103,14 +103,42 @@ public class AssessmentSessionAuditOLog implements AssessmentSessionAuditLogger 
 		StringBuilder sb = new StringBuilder(255);
 		sb.append("Test session ").append(candidateSession.getKey()).append(" (assessed identity=");
 		if(candidateSession.getIdentity() != null) {
-			sb.append(candidateSession.getIdentity().getKey()).append("/").append(candidateSession.getIdentity().getName());
+			sb.append(candidateSession.getIdentity().getKey());
 		} else {
 			sb.append(candidateSession.getAnonymousIdentifier());
 		}
-		sb.append(" ) retrieved by coach ").append(coach.getKey()).append("/").append(coach.getName());
-		log.audit(sb.toString());
+		sb.append(" ) retrieved by coach ").append(coach.getKey());
+		log.info(Tracing.M_AUDIT, sb.toString());
 	}
 	
+	
+	
+	@Override
+	public void logTestReopen(AssessmentTestSession candidateSession, Identity coach) {
+		StringBuilder sb = new StringBuilder(255);
+		sb.append("Test session ").append(candidateSession.getKey()).append(" (assessed identity=");
+		if(candidateSession.getIdentity() != null) {
+			sb.append(candidateSession.getIdentity().getKey());
+		} else {
+			sb.append(candidateSession.getAnonymousIdentifier());
+		}
+		sb.append(" ) reopened by coach ").append(coach.getKey());
+		log.info(Tracing.M_AUDIT, sb.toString());
+	}
+
+	@Override
+	public void logTestExtend(AssessmentTestSession candidateSession, int extraTime, Identity coach) {
+		StringBuilder sb = new StringBuilder(255);
+		sb.append("Test session ").append(candidateSession.getKey()).append(" (assessed identity=");
+		if(candidateSession.getIdentity() != null) {
+			sb.append(candidateSession.getIdentity().getKey());
+		} else {
+			sb.append(candidateSession.getAnonymousIdentifier());
+		}
+		sb.append(" ) extended of ").append(extraTime).append(" by coach ").append(coach.getKey());
+		log.info(Tracing.M_AUDIT, sb.toString());
+	}
+
 	@Override
 	public void logAndThrowCandidateException(AssessmentTestSession session, CandidateExceptionReason reason, Exception ex) {
 		log.error(reason.name(), ex);

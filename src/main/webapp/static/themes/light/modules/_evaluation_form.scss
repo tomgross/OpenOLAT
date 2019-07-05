@@ -1,99 +1,224 @@
 .o_evaluation_form {
-
+	.o_evaluation_block {
+		margin-top: $o-evaluation-block-margin-top;
+		margin-bottom: $o-evaluation-block-margin-bottom;
+	}
+	
+	.o_rubric_name {
+		font-weight: bold;
+		margin-bottom: 1em;
+	}
+		
 	.o_evaluation_step_labels {
 		margin-bottom: $o-evaluation-step-labels-margin-bottom;
+		font-weight: $o-evaluation-step-labels-font-weight;
 		
 		div, span {
 			display:inline-block;
 			text-align: center;
+			align-self: flex-end;
+			-webkit-hyphens: auto;
+			-ms-hyphens: auto;
+			hyphens: auto;
 		}
+	}
+ 
+	.o_slider_wrapper {
+		height: 33px;
+		overflow: hidden;
 	}
 	
 	.o_slider {
 		margin-bottom: $o-evaluation-slider-margin-bottom;
+			
+		label {
+			padding: 0;
+		}
+		
+		input {
+			padding: 0;
+			margin: 0;
+			position: relative;
+		}
 	}
 	
 	.o_slider.hover {
 		background-color: $o-evaluation-slider-hover-background-color;
 	}
 	
-	.o_evaluation_discrete_slider {
-		.o_evaluation_step_labels {
-			position: relative;
-					
-		
-			div:first-child {
-				position: absolute;
-				left: 0px;
-				text-align: left;
-			}
-			
-			div {
-				display:inline-block;
-				text-align: center;
-			}
-			
-			div:last-child {
-				position: absolute;
-				right: 0px;
-				text-align: right;
+	.o_evaluation_continous {
+		.o_evaluation_no_response {
+			div.radio {
+				padding: 0;
+				margin: 0;
 			}
 		}
 	}
 	
 	.o_evaluation_discrete_radio {
 		.o_slider {
-			
-			input[type='radio'] {
-				padding: 0;
-				margin: 0;
-				position: relative;
+			.o_evaluation_steps {
+				display: flex;
+				justify-content: space-between;
+				
+				label {
+					padding: 0;
+					margin: 0;
+					text-align: center;
+				}
+				
+				.radio {
+					background-color: $o-evaluation-step-background-color;
+					padding: 0px;
+					margin-top: 0px;
+					text-align: center;
+					&:hover {
+						background-color: $o-evaluation-slider-hover-background-color;
+					}
+				}
 			}
 			
-			label {
-				padding: 0;
-				margin: 0;
-				text-align: center;
+			.o_evaluation_no_response {
+				div.radio {
+					margin-top: 2px;
+				}
 			}
-			
-			.o_evaluation_steps div.radio {
-				display:inline-block;
-				text-align: center;
-			}
+		}
+		
+		.o_evaluation_step_labels {
+			display: flex;
+			justify-content: space-between;
 		}
 	}
 	
 	.o_slider .ui-slider.ui-slider-horizontal.ui-widget-content {
 		margin-top: 0.3em;
+		margin-bottom: 10px;
 	}
 
 	.o_evaluation_left_label {
 		text-align: right;
+		font-weight: $o-evaluation-side-labels-font-weight;
+	}
+	
+	.o_evaluation_left_label.o_evaluation_left_label_la {
+		text-align: left;
+		padding-left: 0px;
+		font-weight: $o-evaluation-side-labels-font-weight;
 	}
 	
 	.o_evaluation_right_label {
 		text-align: left;
+		font-weight: $o-evaluation-side-labels-font-weight;
+	}
+	
+	.o_evaluation_text_legend {
+		margin-bottom: 1em;
+	}
+	
+	.o_evaluation_legend {
+		padding-left: 0.5em;
+		margin-bottom: 0.5em;
 	}
 	
 	.o_evaluation_textinput {
-		.o_evaluation_legend {
-			padding-left: 0.5em;
-			margin-bottom: 0.5em;
-		}
-	
 		.o_evaluation_text {
-			
 		}
+	}
+	
+	.o_evaluation_fileupload {
+		margin-bottom: 2em;
+		
+		.o_evaluation_thumb {
+		}
+		
+		.o_evaluation_filename {
+		}
+	}
+	
+	.o_evaluation_mc_other {
+		margin-top: -10px;
+		margin-left: 10px;
+		margin-right: 10px;
+	}
+	
+	.o_evaluation_rubric_diagrams {
+		.o_slider {
+			margin-left: 15px;
+			margin-right: 15px;
+		}
+		.o_end_label {
+			text-align: right;
+			padding-right: 20px;
+		}
+		.o_continous {
+			.x {
+				.tick {
+					visibility: hidden;
+				}
+			}
+		}
+	}
+	
+	.o_ed_rubrictablehandler {
+		.table {
+			margin-top: 5px;
+		}
+	}
+		
+	.svg-container {
+		display: inline-block;
+		position: relative;
+		width: 100%;
+		padding-bottom: 50%;
+		vertical-align: top;
+		overflow: hidden;
+	}
+	.svg-content-responsive {
+		display: inline-block;
+		position: absolute;
+		top: 10px;
+		left: 0;
 	}
 }
 
-@media (max-width: $screen-sm-min) {
-	.o_evaluation_form {
-		.o_evaluation_left_label {
+.d3chart {
+	.o_eva_bar { fill: $o-d3chart-default; }
+	.o_rubric_sufficient { fill: $o-evaluation-sufficient-color; }
+	.o_rubric_neutral { fill: $o-evaluation-neutral-color; }
+	.o_rubric_insufficient { fill: $o-evaluation-insufficient-color; }
+	.o_rubric_unrated { fill: $o-d3chart-default; }
+}
+
+.o_qual_hm_legend {
+	padding: 5px;
+	
+	li {
+		font-size: 90%;
+	}
+	.ident {
+		font-weight: bold;
+	}
+}
+
+.o_evaluation_discrete_slider {
+	.o_evaluation_step_labels {
+		position: relative;
+	
+		div:first-child {
+			position: absolute;
+			left: 0px;
 			text-align: left;
 		}
-	
-		.o_evaluation_right_label {
+		
+		div {
+			display:inline-block;
+			text-align: center;
+		}
+		
+		div:last-child {
+			position: absolute;
+			right: 0px;
 			text-align: right;
 		}
 	}
@@ -127,7 +252,18 @@
 	
 	.o_slider_editor {
 		margin-top: 10px;
-		position:relative;
+		
+		@media (max-width: $screen-md-min) {
+			margin-bottom: 20px;
+		}
+	}
+	
+	.o_evaluation_step_label {
+		@media (max-width: $screen-md-min) {
+			text-align: unset;
+			margin-bottom: 5px;
+			padding-top: unset;
+		}
 	}
 	
 	.o_evaluation_step_labels {
@@ -138,12 +274,201 @@
 		}
 	}
 	
-	.o_slider_editor_delete {
-		padding-right: 48px;
+	.o_slider_descrete_radio {
+		display: flex;
+		justify-content: space-between;
+				
+		.radio {
+			background-color: $o-evaluation-step-background-color;
+			padding: 0px;
+			margin-top: 0px;
+			text-align: center;
+			&:hover {
+				background-color: $o-evaluation-slider-hover-background-color;
+			}
+		}
+	}
+	
+	input[type="text"] {
+		@media (max-width: $screen-md-min) {
+			margin-bottom: 5px;
+		}
+	}
+	
+	.o_slider_continous {
+		padding-top: 10px;
+		padding-bottom: -10px;
+	}
+	
+	.o_slider_descrete {
+		padding-top: 5px;
+		padding-bottom: -5px;
+	}
+	
+	.o_evaluation_example {
+		font-size: 90%;
+	}
+	
+	.o_slider_top {
+		margin-top: 23px;
+	}
+	
+	.o_slider_buttons {
+		.pull-right {
+			div:not(:first-child) {
+				display: inline-block;
+			}
+			.btn {
+				margin-top: -3px;
+			}
+		}
+	}
+	
+	.o_slider_weight {
+		max-width: 40px;
+	}
+}
+
+@media (max-width: $screen-sm-min) {
+	.o_evaluation_form {
+		.o_evaluation_left_label {
+			text-align: left;
+			margin-bottom: 0.5em;
+		}
+	
+		.o_evaluation_right_label {
+			text-align: right;
+		}
 		
-		.o_slider_editor_delete_button {
-			position: absolute;
-			right: 15px;
+		.o_evaluation_no_response {
+			text-align: left;
+			.o_evaluation_no_resp_value {
+				font-weight: bold;
+			}
+		}
+		
+		.o_slider {
+			margin-bottom: 2em;
+			
+			div {
+				padding-left: 0;
+			}
+			
+			.o_evaluation_no_response {
+				margin-top: 0.7em;
+			}
 		}
 	}
 }
+
+@media (min-width: $screen-sm-min) {
+	.o_evaluation_form {
+		.o_evaluation_no_resp_value {
+			display:none;
+		}
+	}
+}
+
+/* Print styles */
+@media print {
+	.o_evaluation_discrete_radio .o_slider .o_evaluation_steps div.radio {
+		-webkit-print-color-adjust: exact;
+		color-adjust: exact;
+		background-color: $o-evaluation-step-background-color !important;
+	}
+	.o_icon_rubric_insufficient::before {
+		color: $o-evaluation-insufficient-color !important;
+	}
+	.o_icon_rubric_neutral::before {
+		color: $o-evaluation-neutral-color !important;
+	}
+	.o_icon_rubric_sufficient::before {
+		color: $o-evaluation-sufficient-color !important;
+	}
+}
+
+.o_eva_report_print {
+	#o_print_brand {
+		position: absolute;
+		top: 1cm;	
+		right: 1cm;
+		width: 5cm;
+		height: 4cm;
+		img {
+			width: 100%;
+		}
+	}
+	
+	.o_eva_content {
+		margin-top: 4em;
+	}
+		
+	.o_eva_overview {
+		.panel {
+			table {
+				margin: 0px 0px 1px 0px;
+			}
+		}
+	}
+	
+	.o_evaluation_duration,
+	.o_participated_users {
+		display:none;
+	}
+}
+
+.o_surv_run.withCmds {
+	.o_eva_report {
+		margin-top: -44px;
+	}
+}
+
+.o_eva_report {
+	.o_eva_overview {
+		.o_eva_rubric {
+			.table {
+				margin-top: 5px;
+			}
+		}
+	}
+	
+	.o_ed_rubrictablehandler {
+		.o_table_footer {
+			font-weight: bold;
+		}
+	}
+	
+	.o_rubric_avg {
+		font-weight: bold;
+		white-sprace: nowrap;
+	}
+	
+	.o_rubric_table {
+		.o_table_wrapper {
+			margin-bottom: 10px;
+		}
+	}
+	
+	.o_rubric_table_legend {
+		display: block;
+		
+		.ident {
+			font-weight: bold;
+		}
+		
+		.list-inline {
+			margin-bottom: 0px;
+		}
+	}
+	
+	.o_rubric_table_legend.o_last {
+		margin-bottom: 15px;
+	}
+}
+
+.o_evaluation_execution {
+	.o_evaluation_anonymous_info {
+		display: $o-evaluation-anonymous-info-display;
+	}
+}
+

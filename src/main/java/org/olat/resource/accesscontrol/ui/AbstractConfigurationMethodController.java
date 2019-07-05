@@ -33,10 +33,6 @@ import org.olat.resource.accesscontrol.model.AccessMethod;
 
 /**
  * 
- * Description:<br>
- * TODO: srosse Class Description for AbstractConfigurationMethodController
- * 
- * <P>
  * Initial Date:  18 avr. 2011 <br>
  * @author srosse, stephane.rosse@frentix.com, http://www.frentix.com
  */
@@ -55,13 +51,13 @@ public abstract class AbstractConfigurationMethodController extends FormBasicCon
 		final FormLayoutContainer buttonGroupLayout = FormLayoutContainer.createButtonLayout("buttonLayout", getTranslator());
 		buttonGroupLayout.setRootForm(mainForm);
 		formLayout.add(buttonGroupLayout);
-		
+
+		uifactory.addFormCancelButton("cancel", buttonGroupLayout, ureq, getWindowControl());
 		if(edit) {
 			uifactory.addFormSubmitButton("save", buttonGroupLayout);
 		} else {
 			uifactory.addFormSubmitButton("create", buttonGroupLayout);
 		}
-		uifactory.addFormCancelButton("cancel", buttonGroupLayout, ureq, getWindowControl());
 	}
 
 	@Override
@@ -73,6 +69,7 @@ public abstract class AbstractConfigurationMethodController extends FormBasicCon
 	
 	public abstract AccessMethod getMethod();
 
+	@Override
 	public FormItem getInitialFormItem() {
 		return flc;
 	}

@@ -75,7 +75,7 @@ public class PortfolioV2HomePage {
 		OOGraphene.waitElement(sharedWithMeLinkBy, 5, browser);
 		browser.findElement(sharedWithMeLinkBy).click();
 		
-		By sharedWithMeBy = By.cssSelector("div.o_table_flexi.o_binder_shared_items_listing");
+		By sharedWithMeBy = By.cssSelector("div.o_binder_shared_overview");
 		OOGraphene.waitElement(sharedWithMeBy, 5, browser);
 		return new SharedWithMePage(browser);
 	}
@@ -91,7 +91,7 @@ public class PortfolioV2HomePage {
 	}
 	
 	public EntriesPage openDeletedEntries() {
-		By goToTrashBy = By.xpath("//div[contains(@class,'o_button_group')]//a[contains(@onclick,'go.to.trash')]");
+		By goToTrashBy = By.cssSelector("a.o_sel_pf_trash");
 		OOGraphene.waitElement(goToTrashBy, 5, browser);
 		browser.findElement(goToTrashBy).click();
 		OOGraphene.waitBusy(browser);
@@ -105,6 +105,8 @@ public class PortfolioV2HomePage {
 		OOGraphene.waitElement(deletedBindersBy, 5, browser);
 		browser.findElement(deletedBindersBy).click();
 		OOGraphene.waitBusy(browser);
+		By deletedListingBy = By.cssSelector("div.o_portfolio_listing.o_portfolio_deleted_listing");
+		OOGraphene.waitElement(deletedListingBy, browser);
 		return new BindersPage(browser);
 	}
 	

@@ -20,10 +20,13 @@
 package org.olat.home;
 
 import java.io.File;
+import java.io.IOException;
+import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 
@@ -41,26 +44,28 @@ import org.olat.commons.calendar.model.CalendarUserConfiguration;
 import org.olat.commons.calendar.ui.components.KalendarRenderWrapper;
 import org.olat.core.CoreSpringFactory;
 import org.olat.core.commons.persistence.DB;
+import org.olat.core.commons.persistence.QueryBuilder;
 import org.olat.core.gui.UserRequest;
 import org.olat.core.gui.control.WindowControl;
 import org.olat.core.id.Identity;
-import org.olat.core.logging.OLog;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
-import org.olat.core.util.nodes.INode;
-import org.olat.core.util.tree.TreeVisitor;
-import org.olat.core.util.tree.Visitor;
+import org.olat.core.util.FileUtils;
 import org.olat.course.CorruptedCourseException;
 import org.olat.course.CourseFactory;
 import org.olat.course.ICourse;
 import org.olat.course.groupsandrights.CourseRights;
-import org.olat.course.nodes.CalCourseNode;
-import org.olat.course.nodes.CourseNode;
+import org.olat.course.nodes.cal.CourseCalendars;
 import org.olat.course.run.calendar.CourseLinkProviderController;
 import org.olat.group.BusinessGroup;
 import org.olat.group.BusinessGroupService;
 import org.olat.group.model.SearchBusinessGroupParams;
 import org.olat.repository.RepositoryEntry;
+import org.olat.repository.RepositoryEntryStatusEnum;
 import org.olat.resource.OLATResource;
+import org.olat.user.UserDataDeletable;
+import org.olat.user.UserDataExportable;
+import org.olat.user.manager.ManifestBuilder;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
@@ -71,9 +76,9 @@ import org.springframework.stereotype.Service;
  *
  */
 @Service
-public class HomeCalendarManager implements PersonalCalendarManager {
+public class HomeCalendarManager implements PersonalCalendarManager, UserDataDeletable, UserDataExportable {
 	
-	private static final OLog log = Tracing.createLoggerFor(HomeCalendarManager.class);
+	private static final Logger log = Tracing.createLoggerFor(HomeCalendarManager.class);
 	
 	@Autowired
 	private DB dbInstance;
@@ -158,15 +163,17 @@ public class HomeCalendarManager implements PersonalCalendarManager {
 		return aggregatedFiles;
 	}
 	
+	//
+	
 	@Override
 	public List<KalendarRenderWrapper> getListOfCalendarWrappers(UserRequest ureq, WindowControl wControl) {
 		if(!calendarModule.isEnabled()) {
-			return new ArrayList<KalendarRenderWrapper>();
+			return new ArrayList<>();
 		}
 		
 		Identity identity = ureq.getIdentity();
 		
-		List<KalendarRenderWrapper> calendars = new ArrayList<KalendarRenderWrapper>();
+		List<KalendarRenderWrapper> calendars = new ArrayList<>();
 		Map<CalendarKey,CalendarUserConfiguration> configMap = calendarManager
 				.getCalendarUserConfigurationsMap(ureq.getIdentity());
 		appendPersonalCalendar(identity, calendars, configMap);
@@ -240,9 +247,8 @@ public class HomeCalendarManager implements PersonalCalendarManager {
 				Long courseResourceableID = courseEntry.getOlatResource().getResourceableId();
 				try {
 					ICourse course = CourseFactory.loadCourse(courseEntry);
-					if(isCourseCalendarEnabled(course)) {
+					if(CourseCalendars.isCourseCalendarEnabled(course)) {
 						//calendar course aren't enabled per default but course node of type calendar are always possible
-						//REVIEW if (!course.getCourseEnvironment().getCourseConfig().isCalendarEnabled()) continue;
 						// add course calendar
 						KalendarRenderWrapper courseCalendarWrapper = calendarManager.getCourseCalendar(course);
 						boolean isPrivileged = GroupRoles.owner.name().equals(role) || editoredResources.contains(courseEntry.getOlatResource());
@@ -265,25 +271,15 @@ public class HomeCalendarManager implements PersonalCalendarManager {
 					}
 				} catch (CorruptedCourseException e) {
 					OLATResource olatResource = courseEntry.getOlatResource();
-					log.error("Corrupted course: " + olatResource.getResourceableTypeName() + " :: " + courseResourceableID, null);
+					log.error("Corrupted course: " + olatResource.getResourceableTypeName() + " :: " + courseResourceableID);
 				} catch (Exception e) {
 					OLATResource olatResource = courseEntry.getOlatResource();
-					log.error("Cannor read calendar of course: " + olatResource.getResourceableTypeName() + " :: " + courseResourceableID, null);
+					log.error("Cannor read calendar of course: " + olatResource.getResourceableTypeName() + " :: " + courseResourceableID);
 				}
 			}
 		}
 	}
-	
-	private boolean isCourseCalendarEnabled(ICourse course) {
-		if(course.getCourseConfig().isCalendarEnabled()) {
-			return true;
-		}
-		
-		CourseNode rootNode = course.getRunStructure().getRootNode();
-		CalCourseNodeVisitor v = new CalCourseNodeVisitor();
-		new TreeVisitor(v, rootNode, true).visitAll();
-		return v.isFound();
-	}
+
 	
 	/**
 	 * 
@@ -291,7 +287,7 @@ public class HomeCalendarManager implements PersonalCalendarManager {
 	 * @return List of array, first the repository entry, second the role
 	 */
 	private List<Object[]> getCourses(IdentityRef identity) {
-		StringBuilder sb = new StringBuilder();
+		QueryBuilder sb = new QueryBuilder(2048);
 		sb.append("select v, membership.role from repositoryentry  v ")
 		  .append(" inner join fetch v.olatResource as resource ")
 		  .append(" inner join v.groups as retogroup")
@@ -299,11 +295,11 @@ public class HomeCalendarManager implements PersonalCalendarManager {
 		  .append(" inner join baseGroup.members as membership")
 		  .append(" where v.olatResource.resName='CourseModule' and membership.identity.key=:identityKey and")
 		  .append(" (")
-		  .append("   (v.access=").append(RepositoryEntry.ACC_OWNERS).append(" and v.membersOnly=true and membership.role in ('").append(GroupRoles.owner.name()).append("','").append(GroupRoles.coach.name()).append("','").append(GroupRoles.participant.name()).append("'))")
+		  .append("   (v.status ").in(RepositoryEntryStatusEnum.reviewToClosed()).append(" and membership.role='").append(GroupRoles.owner.name()).append("')")
 		  .append("   or")
-		  .append("   (v.access>=").append(RepositoryEntry.ACC_OWNERS).append(" and membership.role='").append(GroupRoles.owner.name()).append("')")
+		  .append("   (v.status ").in(RepositoryEntryStatusEnum.coachPublishedToClosed()).append(" and membership.role='").append(GroupRoles.coach.name()).append("')")
 		  .append("   or")
-		  .append("   (v.access>=").append(RepositoryEntry.ACC_USERS).append(" and membership.role in ('").append(GroupRoles.coach.name()).append("','").append(GroupRoles.participant.name()).append("'))")
+		  .append("   (v.status ").in(RepositoryEntryStatusEnum.publishedAndClosed()).append(" and membership.role='").append(GroupRoles.participant.name()).append("')")
 		  .append(" )");
 		
 		return dbInstance.getCurrentEntityManager()
@@ -366,17 +362,46 @@ public class HomeCalendarManager implements PersonalCalendarManager {
 		}
 	}
 	
-	private static class CalCourseNodeVisitor implements Visitor {
-		private boolean found = false;
-		
-		public boolean isFound() {
-			return found;
+	@Override
+	public String getExporterID() {
+		return "calendars";
+	}
+
+	@Override
+	public void export(Identity identity, ManifestBuilder manifest, File archiveDirectory, Locale locale) {
+		File calendars = new File(archiveDirectory, "calendars");
+		File iCalFile = calendarManager.getCalendarICalFile(CalendarManager.TYPE_USER, identity.getName());
+		if(iCalFile != null && iCalFile.exists()) {
+			FileUtils.copyFileToDir(iCalFile, calendars, false, "Archive calendar");
+			manifest.appendFile("calendars/" + iCalFile.getName());
 		}
-		
-		@Override
-		public void visit(INode node) {
-			if(node instanceof CalCourseNode) {
-				found = true;
+		List<CalendarFileInfos> importedCalendars = importCalendarManager.getImportedCalendarInfosForIdentity(identity, false);
+		for(CalendarFileInfos importedCalendar:importedCalendars) {
+			File importedCalFile = importedCalendar.getCalendarFile();
+			if(importedCalFile != null && importedCalFile.exists()) {
+				FileUtils.copyFileToDir(importedCalFile, calendars, false, "Archive calendar");
+				manifest.appendFile("calendars/" + importedCalFile.getName());
+			}
+		}
+	}
+
+	@Override
+	public void deleteUserData(Identity identity, String newDeletedUserName) {
+		File iCalFile = calendarManager.getCalendarICalFile(CalendarManager.TYPE_USER, identity.getName());
+		deleteCalendarFile(iCalFile);
+
+		List<CalendarFileInfos> importedCalendars = importCalendarManager.getImportedCalendarInfosForIdentity(identity, false);
+		for(CalendarFileInfos importedCalendar:importedCalendars) {
+			deleteCalendarFile(importedCalendar.getCalendarFile());
+		}
+	}
+	
+	private void deleteCalendarFile(File calendarFile) {
+		if(calendarFile != null && calendarFile.exists()) {
+			try {
+				Files.deleteIfExists(calendarFile.toPath());
+			} catch (IOException e) {
+				log.error("Cannot delete calendar: " + calendarFile);
 			}
 		}
 	}

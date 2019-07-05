@@ -46,13 +46,14 @@ import java.util.Collections;
 import java.util.Date;
 import java.util.List;
 import java.util.Random;
+import java.util.TimeZone;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
 import org.apache.commons.io.FileUtils;
-import org.infinispan.manager.EmbeddedCacheManager;
 import org.junit.Assert;
+import org.junit.Assume;
 import org.junit.Test;
 import org.olat.commons.calendar.CalendarImportTest;
 import org.olat.commons.calendar.CalendarManager;
@@ -63,7 +64,7 @@ import org.olat.commons.calendar.ui.components.KalendarRenderWrapper;
 import org.olat.core.CoreSpringFactory;
 import org.olat.core.commons.persistence.DBFactory;
 import org.olat.core.id.Identity;
-import org.olat.core.logging.OLog;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.coordinate.Cacher;
 import org.olat.core.util.coordinate.CoordinatorManager;
@@ -77,7 +78,7 @@ import net.fortuna.ical4j.model.ValidationException;
 
 public class ICalFileCalendarManagerTest extends OlatTestCase {
 
-	private static final OLog log = Tracing.createLoggerFor(ICalFileCalendarManagerTest.class);
+	private static final Logger log = Tracing.createLoggerFor(ICalFileCalendarManagerTest.class);
 	
 	@Autowired
 	private ICalFileCalendarManager calendarManager;
@@ -87,8 +88,7 @@ public class ICalFileCalendarManagerTest extends OlatTestCase {
 	private final void emptyCalendarCache() {
 		CoordinatorManager coordinator = CoreSpringFactory.getImpl(CoordinatorManager.class);
 		Cacher cacher = coordinator.getCoordinator().getCacher();
-		EmbeddedCacheManager cm = cacher.getCacheContainer();
-		cm.getCache("CalendarManager@calendar").clear();
+		cacher.getCacheContainer().getCache("CalendarManager@calendar").clear();
 	}
 	
 	@Test
@@ -99,6 +99,9 @@ public class ICalFileCalendarManagerTest extends OlatTestCase {
 		Kalendar cal = calendarManager.getPersonalCalendar(test).getKalendar();
 		// 1. Test Add Event
 		Calendar calendar = Calendar.getInstance();
+		calendar.set(Calendar.HOUR_OF_DAY, 13);
+		calendar.set(Calendar.MINUTE, 12);
+		calendar.set(Calendar.SECOND, 0);
 		calendar.set(Calendar.MILLISECOND, 0);
 		Date start = calendar.getTime();
 
@@ -323,6 +326,8 @@ public class ICalFileCalendarManagerTest extends OlatTestCase {
 		File newCalendarFile = new File(calendarFile.getParentFile(), calendarFile.getName());
 		InputStream in = CalendarImportTest.class.getResourceAsStream("cal_without_dtend.ics");
 		FileUtils.copyInputStreamToFile(in, newCalendarFile);
+		in.close();
+		
 		//to be sure
 		emptyCalendarCache();
 		//load the calendar
@@ -397,6 +402,64 @@ public class ICalFileCalendarManagerTest extends OlatTestCase {
 	}
 	
 	/**
+	 * A recurring event with the start and end date reversed. This error
+	 * in the calendar cause the whole calendar to crash.
+	 * 
+	 * @throws URISyntaxException
+	 * @throws IOException
+	 */
+	@Test
+	public void testCalendarRecurringEventInversed() throws URISyntaxException, IOException {
+		Identity test = JunitTestHelper.createAndPersistIdentityAsRndUser("ur1-");
+		URL calendarUrl = CalendarImportTest.class.getResource("ReversedRecurringEvent.ics");
+		File calendarFile = new File(calendarUrl.toURI());
+		String calendarName = UUID.randomUUID().toString().replace("-", "");
+		
+		KalendarRenderWrapper importedCalendar = importCalendarManager
+				.importCalendar(test, calendarName, CalendarManager.TYPE_USER, calendarFile);
+		List<KalendarEvent> events = importedCalendar.getKalendar().getEvents();
+		Assert.assertEquals(1, events.size());
+		
+		Calendar cal = Calendar.getInstance();
+		cal.set(2018, 03, 10, 10, 00);
+		Date startDate = cal.getTime();
+		cal.set(2018, 03, 17);
+		Date endDate = cal.getTime();
+		
+		List<KalendarEvent> recurringEvents = calendarManager.getEvents(importedCalendar.getKalendar(), startDate, endDate, true);
+		Assert.assertEquals(0, recurringEvents.size());
+	}
+	
+	/**
+	 * A recurring event with missing end date. This error
+	 * in the calendar cause the whole calendar to crash.
+	 * 
+	 * @throws URISyntaxException
+	 * @throws IOException
+	 */
+	@Test
+	public void testCalendarRecurringEventMissingEndDate() throws URISyntaxException, IOException {
+		Identity test = JunitTestHelper.createAndPersistIdentityAsRndUser("ur1-");
+		URL calendarUrl = CalendarImportTest.class.getResource("RecurringEventMissingEnd.ics");
+		File calendarFile = new File(calendarUrl.toURI());
+		String calendarName = UUID.randomUUID().toString().replace("-", "");
+		
+		KalendarRenderWrapper importedCalendar = importCalendarManager
+				.importCalendar(test, calendarName, CalendarManager.TYPE_USER, calendarFile);
+		List<KalendarEvent> events = importedCalendar.getKalendar().getEvents();
+		Assert.assertEquals(1, events.size());
+		
+		Calendar cal = Calendar.getInstance();
+		cal.set(2018, 03, 10, 10, 00);
+		Date startDate = cal.getTime();
+		cal.set(2018, 03, 17);
+		Date endDate = cal.getTime();
+		
+		List<KalendarEvent> recurringEvents = calendarManager.getEvents(importedCalendar.getKalendar(), startDate, endDate, true);
+		Assert.assertEquals(0, recurringEvents.size());
+	}
+	
+	/**
 	 * Check a NPE
 	 * @throws IOException
 	 */
@@ -411,6 +474,8 @@ public class ICalFileCalendarManagerTest extends OlatTestCase {
 		File newCalendarFile = new File(calendarFile.getParentFile(), calendarFile.getName());
 		InputStream in = CalendarImportTest.class.getResourceAsStream("cal_without_dtend.ics");
 		FileUtils.copyInputStreamToFile(in, newCalendarFile);
+		in.close();
+		
 		//to be sure
 		emptyCalendarCache();
 		//load the calendar
@@ -573,7 +638,7 @@ public class ICalFileCalendarManagerTest extends OlatTestCase {
 	}
 	
 	@Test
-	public void testImportICal() throws URISyntaxException, IOException {
+	public void testImportICal_recurringEvent() throws URISyntaxException, IOException {
 		Identity test = JunitTestHelper.createAndPersistIdentityAsRndUser("ur1-");
 		URL calendarUrl = CalendarImportTest.class.getResource("RecurringEvent.ics");
 		File calendarFile = new File(calendarUrl.toURI());
@@ -583,8 +648,51 @@ public class ICalFileCalendarManagerTest extends OlatTestCase {
 				.importCalendar(test, calendarName, CalendarManager.TYPE_USER, calendarFile);
 		List<KalendarEvent> events = importedCalendar.getKalendar().getEvents();
 		Assert.assertEquals(2, events.size());
-
 	}
+	
+	@Test
+	public void testImportICal_outlookFullDay() throws URISyntaxException, IOException {
+		TimeZone vmTimeZone = TimeZone.getDefault();
+		TimeZone ooTimeZone = TimeZone.getTimeZone("Europe/Zurich");
+		Assume.assumeTrue(vmTimeZone.getRawOffset() == ooTimeZone.getRawOffset());
+
+		Identity test = JunitTestHelper.createAndPersistIdentityAsRndUser("ur2-");
+		URL calendarUrl = ICalFileCalendarManagerTest.class.getResource("Fullday_outlook.ics");
+		File calendarFile = new File(calendarUrl.toURI());
+		String calendarName = UUID.randomUUID().toString().replace("-", "");
+		
+		KalendarRenderWrapper importedCalendar = importCalendarManager
+				.importCalendar(test, calendarName, CalendarManager.TYPE_USER, calendarFile);
+		List<KalendarEvent> events = importedCalendar.getKalendar().getEvents();
+		Assert.assertEquals(1, events.size());
+		
+		KalendarEvent event = events.get(0);
+		Assert.assertTrue(event.isAllDayEvent());
+	}
+	
+	@Test
+	public void testImportICal_icalFullDay() throws URISyntaxException, IOException {
+		Identity test = JunitTestHelper.createAndPersistIdentityAsRndUser("ur3-");
+		URL calendarUrl = ICalFileCalendarManagerTest.class.getResource("Fullday_ical.ics");
+		File calendarFile = new File(calendarUrl.toURI());
+		String calendarName = UUID.randomUUID().toString().replace("-", "");
+		
+		KalendarRenderWrapper importedCalendar = importCalendarManager
+				.importCalendar(test, calendarName, CalendarManager.TYPE_USER, calendarFile);
+		List<KalendarEvent> events = importedCalendar.getKalendar().getEvents();
+		Assert.assertEquals(3, events.size());
+		
+		// 24 hours but on 2 days
+		KalendarEvent on2days = importedCalendar.getKalendar().getEvent("EFE10508-15B0-4FCE-A258-37BA642B760D", null);
+		Assert.assertFalse(on2days.isAllDayEvent());
+		// real all day with the iCal standard
+		KalendarEvent allDay = importedCalendar.getKalendar().getEvent("14C0ACCD-AC0B-4B10-A448-0BF129492091", null);
+		Assert.assertTrue(allDay.isAllDayEvent());
+		// almost a full day bit it miss one minute
+		KalendarEvent longDay = importedCalendar.getKalendar().getEvent("C562E736-DCFF-4002-9E5B-77D891D4A322", null);
+		Assert.assertFalse(longDay.isAllDayEvent());
+	}
+
 	
 	/**
 	 * Test concurrent add event with two threads and code-point to control concurrency.

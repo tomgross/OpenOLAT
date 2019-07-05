@@ -41,16 +41,15 @@ import org.olat.core.gui.control.generic.popup.PopupBrowserWindow;
 import org.olat.core.gui.control.generic.popup.PopupBrowserWindowController;
 import org.olat.core.gui.control.generic.popup.PopupBrowserWindowControllerCreator;
 import org.olat.core.helpers.Settings;
-import org.olat.core.manager.BasicManager;
 
 /**
  * Initial Date:  23.03.2006 <br>
  *
  * @author Felix Jost
  */
-public class WindowManagerImpl extends BasicManager implements WindowManager {
+public class WindowManagerImpl implements WindowManager {
 	
-	private List<WindowBackOfficeImpl> wbos = new ArrayList<WindowBackOfficeImpl>();
+	private List<WindowBackOfficeImpl> wbos = new ArrayList<>();
 	
 	private GlobalSettings globalSettings;
 	private boolean ajaxEnabled = false;

@@ -40,10 +40,10 @@ import java.util.zip.ZipOutputStream;
 
 import org.apache.commons.io.IOUtils;
 import org.olat.core.gui.translator.Translator;
-import org.olat.core.manager.BasicManager;
 import org.olat.core.util.ExportUtil;
 import org.olat.core.util.Formatter;
 import org.olat.core.util.Util;
+import org.olat.core.util.ZipUtil;
 import org.olat.ims.qti.QTIResult;
 import org.olat.ims.qti.QTIResultManager;
 import org.olat.ims.qti.export.helper.QTIItemObject;
@@ -51,11 +51,10 @@ import org.olat.ims.qti.export.helper.QTIObjectTreeBuilder;
 import org.olat.repository.RepositoryEntry;
 
 /**
- * Description: TODO
  * 
  * @author Alexander Schneider
  */
-public class QTIExportManager extends BasicManager{
+public class QTIExportManager {
 	
 	/**
 	 * <code>PACKAGE</code>
@@ -109,28 +108,28 @@ public class QTIExportManager extends BasicManager{
 	}
 	
 	public boolean selectAndExportResults(QTIExportFormatter qef, Long courseResId, String shortTitle,
-			String olatResourceDetail, RepositoryEntry testRe, ZipOutputStream exportStream, Locale locale,
-			String fileNameSuffix) throws IOException {
+			String olatResourceDetail, RepositoryEntry testRe, ZipOutputStream exportStream, String zipPath, 
+			Locale locale, String fileNameSuffix) throws IOException {
 		boolean resultsFoundAndExported = false;
 		QTIResultManager qrm = QTIResultManager.getInstance();
 		List<QTIResult> results = qrm.selectResults(courseResId, olatResourceDetail, testRe.getKey(), null, qef.getType());
-		if(results.size() > 0){
+		if(!results.isEmpty()){
 			List<QTIItemObject> qtiItemObjectList = new QTIObjectTreeBuilder().getQTIItemObjectList(testRe);
 			qef.setQTIItemObjectList(qtiItemObjectList);
-			if (results.size() > 0) {
+			if (!results.isEmpty()) {
 				createContentOfExportFile(results, qtiItemObjectList, qef);
-				String targetFileName = getFilename(shortTitle, fileNameSuffix);
+				String targetFileName = ZipUtil.concat(zipPath, getFilename(shortTitle, fileNameSuffix));
 				
 				exportStream.putNextEntry(new ZipEntry(targetFileName));
-				IOUtils.write(qef.getReport(), exportStream);
+				IOUtils.write(qef.getReport(), exportStream, "UTF-8");
 				exportStream.closeEntry();
 				resultsFoundAndExported = true;
 			}			
 		} else {
-			String targetFileName = getFilename(shortTitle, fileNameSuffix);			
+			String targetFileName = ZipUtil.concat(zipPath, getFilename(shortTitle, fileNameSuffix));
 			exportStream.putNextEntry(new ZipEntry(targetFileName));
 			Translator translator = Util.createPackageTranslator(QTIExportFormatter.class, locale);
-			IOUtils.write(translator.translate("archive.noresults.short"), exportStream);
+			IOUtils.write(translator.translate("archive.noresults.short"), exportStream, "UTF-8");
 			exportStream.closeEntry();
 			resultsFoundAndExported = true;
 		}

@@ -21,6 +21,8 @@ package org.olat.admin.landingpages.model;
 
 import org.olat.core.id.Roles;
 import org.olat.core.id.User;
+import org.apache.logging.log4j.Logger;
+import org.olat.core.logging.Tracing;
 import org.olat.core.util.StringHelper;
 import org.olat.core.util.UserSession;
 
@@ -32,12 +34,7 @@ import org.olat.core.util.UserSession;
  */
 public class Rule {
 	
-	public static final String AUTHOR = "author";
-	public static final String USER_MGR = "userManager";
-	public static final String GROUP_MGR = "groupManager";
-	public static final String RSRC_MGR = "institutionalResourceManager";
-	public static final String POOL_MGR = "poolAdmin";
-	public static final String ADMIN = "olatAdmin";
+	private static final Logger log = Tracing.createLoggerFor(Rule.class);
 	
 	private String role;
 	private String userAttributeKey;
@@ -86,16 +83,11 @@ public class Rule {
 		//match the role?
 		if(!"none".equals(role) && StringHelper.containsNonWhitespace(role)) {
 			Roles roles = userSession.getRoles();
-			switch(role) {
-				case AUTHOR: match &= roles.isAuthor(); break;
-				case USER_MGR: match &= roles.isUserManager(); break;
-				case GROUP_MGR: match &= roles.isGroupManager(); break;
-				case RSRC_MGR: match &= roles.isInstitutionalResourceManager(); break;
-				case POOL_MGR: match &= roles.isPoolAdmin(); break;
-				case ADMIN: match &= roles.isOLATAdmin(); break;
-				default: {
-					match &= false;
-				}
+			RoleToRule roleToRule = RoleToRule.valueOfConfiguration(role);
+			if(roleToRule != null) {
+				match &= roles.hasRole(roleToRule.role());
+			} else {
+				log.warn("Landing page rule with an unkown role: " + role);
 			}
 		}
 		

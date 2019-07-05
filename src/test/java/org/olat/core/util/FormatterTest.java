@@ -22,6 +22,7 @@ package org.olat.core.util;
 import java.util.Date;
 import java.util.GregorianCalendar;
 import java.util.Locale;
+import java.util.UUID;
 
 import org.apache.commons.lang.StringEscapeUtils;
 import org.junit.Assert;
@@ -133,5 +134,11 @@ public class FormatterTest {
 		Assert.assertEquals("532:23:45", Formatter.formatTimecode(1916625000l));
 	}
 	
-	
+	@Test
+	public void elementLatexFormattingScript() {
+		String domId = UUID.randomUUID().toString();
+		String latextFormatterJs = Formatter.elementLatexFormattingScript(domId);
+		Assert.assertNotNull(latextFormatterJs);
+		Assert.assertTrue(latextFormatterJs.contains(domId));
+	}
 }

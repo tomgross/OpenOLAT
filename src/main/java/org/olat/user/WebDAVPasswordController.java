@@ -20,6 +20,8 @@
 
 package org.olat.user;
 
+import static org.olat.login.ui.LoginUIFactory.formatDescriptionAsList;
+
 import java.util.List;
 
 import org.olat.basesecurity.Authentication;
@@ -44,6 +46,9 @@ import org.olat.core.gui.control.Controller;
 import org.olat.core.gui.control.WindowControl;
 import org.olat.core.util.StringHelper;
 import org.olat.core.util.Util;
+import org.olat.login.auth.OLATAuthManager;
+import org.olat.login.validation.SyntaxValidator;
+import org.olat.login.validation.ValidationResult;
 import org.springframework.beans.factory.annotation.Autowired;
 
 /**
@@ -60,19 +65,28 @@ public class WebDAVPasswordController extends FormBasicController {
 	private FormSubmit saveButton;
 	private FormCancel cancelButton;
 	private FormLink newButton;
+	private StaticTextElement rulesEl;
 	private TextElement passwordEl;
 	private TextElement confirmPasswordEl;
+	private StaticTextElement usernamesStaticEl;
 	private StaticTextElement passwordStaticEl;
 	private FormLayoutContainer accessDataFlc;
 	private FormLayoutContainer buttonGroupLayout;
 	
+	private final SyntaxValidator syntaxValidator;
+	
+	@Autowired
+	private UserModule userModule;
 	@Autowired
 	private BaseSecurity securityManager;
+	@Autowired
+	private OLATAuthManager olatAuthManager;
 	@Autowired
 	private WebDAVAuthManager webDAVAuthManager;
 	
 	public WebDAVPasswordController(UserRequest ureq, WindowControl wControl) {
 		super(ureq, wControl, "pwdav", Util.createPackageTranslator(FolderRunController.class, ureq.getLocale()));
+		this.syntaxValidator = olatAuthManager.createPasswordSytaxValidator();
 		initForm(ureq);
 	}
 	
@@ -87,7 +101,6 @@ public class WebDAVPasswordController extends FormBasicController {
 			
 			accessDataFlc = FormLayoutContainer.createDefaultFormLayout("flc_access_data", getTranslator());
 			layoutContainer.add(accessDataFlc);
-			uifactory.addStaticTextElement("pwdav.username", "pwdav.username", ureq.getIdentity().getName(), accessDataFlc);
 
 			boolean hasOlatToken = false;
 			boolean hasWebDAVToken = false;
@@ -95,10 +108,18 @@ public class WebDAVPasswordController extends FormBasicController {
 			for(Authentication auth : authentications) {
 				if(BaseSecurityModule.getDefaultAuthProviderIdentifier().equals(auth.getProvider())) {
 					hasOlatToken = true;
-				} else if(WebDAVAuthManager.PROVIDER_WEBDAV.equals(auth.getProvider())) {
+				} else if(WebDAVAuthManager.PROVIDER_WEBDAV.equals(auth.getProvider())
+						|| WebDAVAuthManager.PROVIDER_WEBDAV_EMAIL.equals(auth.getProvider())
+						|| WebDAVAuthManager.PROVIDER_WEBDAV_INSTITUTIONAL_EMAIL.equals(auth.getProvider())
+						|| WebDAVAuthManager.PROVIDER_HA1.equals(auth.getProvider())
+						|| WebDAVAuthManager.PROVIDER_HA1_EMAIL.equals(auth.getProvider())
+						|| WebDAVAuthManager.PROVIDER_HA1_INSTITUTIONAL_EMAIL.equals(auth.getProvider())) {
 					hasWebDAVToken = true;
 				}
 			}
+			
+			String usernames = getUsernames(authentications);
+			usernamesStaticEl = uifactory.addStaticTextElement("pwdav.username", "pwdav.username", usernames, accessDataFlc);
 			
 			if(hasOlatToken) {
 				String passwordPlaceholder = getTranslator().translate("pwdav.password.placeholder");
@@ -108,10 +129,15 @@ public class WebDAVPasswordController extends FormBasicController {
 				String passwordPlaceholder = getTranslator().translate(passwordPlaceholderKey);
 				passwordStaticEl = uifactory.addStaticTextElement("pwdav.password", "pwdav.password", passwordPlaceholder, accessDataFlc);
 
-				passwordEl = uifactory.addPasswordElement("pwdav.password.2", "pwdav.password", 64, "", accessDataFlc);
+				String descriptions = formatDescriptionAsList(syntaxValidator.getAllDescriptions(), getLocale());
+				rulesEl = uifactory.addStaticTextElement("pwdav.password.rules", null,
+						translate("pwdav.password.rules", new String[] { descriptions }), accessDataFlc);
+				rulesEl.setVisible(false);
+				
+				passwordEl = uifactory.addPasswordElement("pwdav.password.2", "pwdav.password", 5000, "", accessDataFlc);
 				passwordEl.setVisible(false);
 				passwordEl.setMandatory(true);
-				confirmPasswordEl = uifactory.addPasswordElement("pwdav.password.confirm", "pwdav.password.confirm", 64, "", accessDataFlc);
+				confirmPasswordEl = uifactory.addPasswordElement("pwdav.password.confirm", "pwdav.password.confirm", 5000, "", accessDataFlc);
 				confirmPasswordEl.setVisible(false);
 				confirmPasswordEl.setMandatory(true);
 
@@ -134,6 +160,35 @@ public class WebDAVPasswordController extends FormBasicController {
 		}
 	}
 	
+	private String getUsernames(List<Authentication> authentications) {
+		StringBuilder sb = new StringBuilder();
+		sb.append(getIdentity().getName());
+		if(userModule.isEmailUnique()) {
+			if(StringHelper.containsNonWhitespace(getIdentity().getUser().getEmail())) {
+				sb.append(", ").append(getIdentity().getUser().getEmail());
+			}
+			if(StringHelper.containsNonWhitespace(getIdentity().getUser().getInstitutionalEmail())) {
+				sb.append(", ").append(getIdentity().getUser().getInstitutionalEmail());
+			}
+		}
+
+		for(Authentication auth : authentications) {
+			if(WebDAVAuthManager.PROVIDER_WEBDAV.equals(auth.getProvider())
+					|| WebDAVAuthManager.PROVIDER_WEBDAV_EMAIL.equals(auth.getProvider())
+					|| WebDAVAuthManager.PROVIDER_WEBDAV_INSTITUTIONAL_EMAIL.equals(auth.getProvider())
+					|| WebDAVAuthManager.PROVIDER_HA1.equals(auth.getProvider())
+					|| WebDAVAuthManager.PROVIDER_HA1_EMAIL.equals(auth.getProvider())
+					|| WebDAVAuthManager.PROVIDER_HA1_INSTITUTIONAL_EMAIL.equals(auth.getProvider())) {
+				String authUsername = auth.getAuthusername();
+				if(sb.indexOf(authUsername) < 0) {
+					sb.append(", ").append(authUsername);
+				}
+			}
+		}
+		
+		return sb.toString();
+	}
+	
 	@Override
 	protected void doDispose() {
 		//auto-disposed
@@ -143,16 +198,13 @@ public class WebDAVPasswordController extends FormBasicController {
 	protected boolean validateFormLogic(UserRequest ureq) {
 		boolean allOk = true;
 		if(passwordEl.isVisible()) {
+			passwordEl.clearError();
 			String password = passwordEl.getValue();
-			boolean valid = UserManager.getInstance().syntaxCheckOlatPassword(passwordEl.getValue());
-			if(StringHelper.containsNonWhitespace(password) && valid) {
-				passwordEl.clearError();
-			} else if (!valid){
-				passwordEl.setErrorKey("form.checkPassword", null);
-				allOk = false;
-			} else {
-				passwordEl.setErrorKey("error.password.empty", null);
-				allOk = false;
+			ValidationResult validationResult = syntaxValidator.validate(password, getIdentity());
+			if (!validationResult.isValid()) {
+				String descriptions = formatDescriptionAsList(validationResult.getInvalidDescriptions(), getLocale());
+				passwordEl.setErrorKey("error.password.invalid", new String[] { descriptions });
+				allOk &= false;
 			}
 			
 			String confirmation = confirmPasswordEl.getValue();
@@ -195,6 +247,7 @@ public class WebDAVPasswordController extends FormBasicController {
 		passwordStaticEl.setVisible(!visible);
 		saveButton.setVisible(visible);
 		cancelButton.setVisible(visible);
+		rulesEl.setVisible(visible);
 		passwordEl.setVisible(visible);
 		confirmPasswordEl.setVisible(visible);
 		
@@ -205,6 +258,10 @@ public class WebDAVPasswordController extends FormBasicController {
 		
 		String buttonPlaceholderKey = auth == null ? "pwdav.password.new" : "pwdav.password.change";
 		newButton.setI18nKey(buttonPlaceholderKey);
+		
+		List<Authentication> authentications = securityManager.getAuthentications(ureq.getIdentity());
+		String usernames = getUsernames(authentications);
+		usernamesStaticEl.setValue(usernames);
 		
 		flc.setDirty(true);
 	}

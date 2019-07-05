@@ -29,7 +29,7 @@ import javax.naming.directory.Attribute;
 import javax.naming.directory.Attributes;
 import javax.naming.directory.SearchResult;
 
-import org.olat.core.logging.OLog;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.StringHelper;
 import org.olat.ldap.LDAPSyncConfiguration;
@@ -43,10 +43,10 @@ import org.olat.ldap.model.LDAPUser;
  */
 public class LDAPUserVisitor implements LDAPVisitor {
 	
-	private static final OLog log = Tracing.createLoggerFor(LDAPUserVisitor.class);
+	private static final Logger log = Tracing.createLoggerFor(LDAPUserVisitor.class);
 	
 	private final LDAPSyncConfiguration syncConfiguration;
-	private final List<LDAPUser> ldapUserList = new ArrayList<LDAPUser>();
+	private final List<LDAPUser> ldapUserList = new ArrayList<>();
 	
 	public LDAPUserVisitor(LDAPSyncConfiguration syncConfiguration) {
 		this.syncConfiguration = syncConfiguration;
@@ -69,6 +69,7 @@ public class LDAPUserVisitor implements LDAPVisitor {
 		ldapUser.setUserManager(hasAttributeValue(resAttribs, syncConfiguration.getUserManagerRoleAttribute(), syncConfiguration.getUserManagerRoleValue()));
 		ldapUser.setGroupManager(hasAttributeValue(resAttribs, syncConfiguration.getGroupManagerRoleAttribute(), syncConfiguration.getGroupManagerRoleValue()));
 		ldapUser.setQpoolManager(hasAttributeValue(resAttribs, syncConfiguration.getQpoolManagerRoleAttribute(), syncConfiguration.getQpoolManagerRoleValue()));
+		ldapUser.setCurriculumManager(hasAttributeValue(resAttribs, syncConfiguration.getCurriculumManagerRoleAttribute(), syncConfiguration.getCurriculumManagerRoleValue()));
 		ldapUser.setLearningResourceManager(hasAttributeValue(resAttribs, syncConfiguration.getLearningResourceManagerRoleAttribute(), syncConfiguration.getLearningResourceManagerRoleValue()));
 
 		List<String> groupList = parseGroupList(resAttribs, syncConfiguration.getGroupAttribute(), syncConfiguration.getGroupAttributeSeparator());

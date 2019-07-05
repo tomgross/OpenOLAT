@@ -22,8 +22,7 @@
 * This file has been modified by the OpenOLAT community. Changes are licensed
 * under the Apache 2.0 license as the original file.  
 * <p>
-*/ 
-
+*/
 package org.olat.core.util.mail;
 
 import java.util.ArrayList;
@@ -34,16 +33,13 @@ import java.util.Map;
 import org.olat.core.id.Identity;
 
 /**
- * Description:<br>
- * TODO: patrick Class Description for ContactMessage
- * <P>
  * Initial Date: Jan 22, 2006 <br>
  * 
  * @author patrick
  */
 public class ContactMessage {
 
-	private Map<String,ContactList> contactLists = new HashMap<String,ContactList>();
+	private Map<String,ContactList> contactLists = new HashMap<>();
 	private List<Identity> disabledIdentities;
 	private String bodyText;
 	private String subject;
@@ -53,9 +49,9 @@ public class ContactMessage {
 	 * 
 	 * @param from
 	 */
-	public ContactMessage(Identity from){
+	public ContactMessage(Identity from) {
 		this.from = from;
-		disabledIdentities = new ArrayList<Identity>();
+		disabledIdentities = new ArrayList<>();
 	}
 
 	public Identity getFrom(){
@@ -65,12 +61,15 @@ public class ContactMessage {
 	public void setSubject(String subject){
 		this.subject=subject;
 	}
+	
 	public String getSubject(){
 		return subject;
 	}
+	
 	public void setBodyText(String bodyText){
 		this.bodyText=bodyText;
 	}
+	
 	public String getBodyText(){
 		return bodyText;
 	}
@@ -125,6 +124,6 @@ public class ContactMessage {
 	 * @return
 	 */
 	public List<ContactList> getEmailToContactLists() {
-		return new ArrayList<ContactList>(contactLists.values());
+		return new ArrayList<>(contactLists.values());
 	}
 }

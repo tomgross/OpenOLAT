@@ -36,7 +36,7 @@ import org.olat.core.gui.UserRequest;
 import org.olat.core.gui.components.Component;
 import org.olat.core.gui.components.form.flexible.FormBaseComponentIdProvider;
 import org.olat.core.gui.components.form.flexible.FormItem;
-import org.olat.core.gui.components.form.flexible.FormLayouter;
+import org.olat.core.gui.components.form.flexible.FormItemContainer;
 import org.olat.core.gui.components.form.flexible.elements.InlineElement;
 import org.olat.core.gui.components.form.flexible.impl.components.SimpleExampleText;
 import org.olat.core.gui.components.form.flexible.impl.components.SimpleFormErrorText;
@@ -151,7 +151,8 @@ public abstract class FormItemImpl implements FormItem, InlineElement {
 		this.i18nKey4EmptyText = i18nKey4Text;
 		return this;
 	}
-	
+
+	@Override
 	public String getEmptyDisplayText(){
 		if(getTranslator()==null) throw new AssertException("getEmptyDisplayText called to early, no translator available");
 		return translate(i18nKey4EmptyText, null);
@@ -180,6 +181,7 @@ public abstract class FormItemImpl implements FormItem, InlineElement {
 	/**
 	 * @see org.olat.core.gui.components.form.flexible.FormComponent#getAsComponent()
 	 */
+	@Override
 	public Component getComponent(){
 		//
 		return isInlineEditingElement ? getInlineEditingComponent() : getFormItemComponent();
@@ -190,11 +192,13 @@ public abstract class FormItemImpl implements FormItem, InlineElement {
 	/**
 	 * @see org.olat.core.gui.components.form.flexible.FormComponent#getRootForm()
 	 */
+	@Override
 	public Form getRootForm() {
 		return rootForm;
 	}
-	
-	public void setRootForm(@UnknownInitialization(FormItemImpl.class) FormItemImpl this, Form rootForm){
+
+	@Override
+	public void setRootForm(Form rootForm){
 		this.rootForm = rootForm;
 		rootFormAvailable();
 	}
@@ -205,6 +209,7 @@ public abstract class FormItemImpl implements FormItem, InlineElement {
 		return translateLabel;
 	}
 
+	@Override
 	public void setTranslator(Translator translator) {
 		/**
 		 * TODO sev26
@@ -248,22 +253,27 @@ public abstract class FormItemImpl implements FormItem, InlineElement {
 		}
 	}
 
+	@Override
 	public Translator getTranslator() {
 		return translator;
 	}
 
+	@Override
 	public Component getLabelC() {
 		return labelPanel;
 	}
 
+	@Override
 	public String getLabelText() {
 		return translateLabel() ? translate(labelKey, labelParams) : labelKey;
 	}
 
-	public void setLabel(@UnderInitialization(FormItemImpl.class) FormItemImpl this, String label, String[] params) {
+	@Override
+	public void setLabel(String label, String[] params) {
 		setLabel(label, params,  true); 
 	}
-	
+
+	@Override
 	public void setLabel(String label, String[] params, boolean translate) {
 		hasLabel = (label != null);
 		translateLabel = translate;
@@ -279,19 +289,23 @@ public abstract class FormItemImpl implements FormItem, InlineElement {
 			labelPanel.setContent(labelC);
 		}
 	}
-	
+
+	@Override
 	public void setFocus(boolean hasFocus){
 		this.hasFocus  = hasFocus;
 	}
-	
+
+	@Override
 	public boolean isMandatory() {
 		return componentIsMandatory;
 	}
-	
+
+	@Override
 	public boolean hasFocus(){
 		return hasFocus;
 	}
 
+	@Override
 	public void setMandatory(boolean isMandatory) {
 		componentIsMandatory = isMandatory;
 	}
@@ -299,6 +313,7 @@ public abstract class FormItemImpl implements FormItem, InlineElement {
 	/**
 	 * @see org.olat.core.gui.components.form.flexible.FormComponent#getExample()
 	 */
+	@Override
 	public Component getExampleC() {
 		return examplePanel;
 	}
@@ -306,6 +321,7 @@ public abstract class FormItemImpl implements FormItem, InlineElement {
 	/**
 	 * @see org.olat.core.gui.components.form.flexible.FormComponent#getExampleText()
 	 */
+	@Override
 	public String getExampleText() {
 		return translate(exampleKey, exampleParams);
 	}
@@ -313,6 +329,7 @@ public abstract class FormItemImpl implements FormItem, InlineElement {
 	/**
 	 * @see org.olat.core.gui.components.form.flexible.FormComponent#getHelpText()
 	 */
+	@Override
 	public String getHelpText() {
 		// always translated
 		return helpText;		
@@ -321,6 +338,7 @@ public abstract class FormItemImpl implements FormItem, InlineElement {
 	/**
 	 * @see org.olat.core.gui.components.form.flexible.FormComponent#getHelpUrl()
 	 */
+	@Override
 	public String getHelpUrl() {
 		return helpUrl;
 	}
@@ -329,6 +347,7 @@ public abstract class FormItemImpl implements FormItem, InlineElement {
 	 * @see org.olat.core.gui.components.form.flexible.FormComponent#setExampleKey(java.lang.String,
 	 *      java.lang.String[])
 	 */
+	@Override
 	public void setExampleKey(String exampleKey, String[] params) {
 		hasExample = true;
 		this.exampleKey = exampleKey;
@@ -346,6 +365,7 @@ public abstract class FormItemImpl implements FormItem, InlineElement {
 	 * @see org.olat.core.gui.components.form.flexible.FormComponent#setHelpTextKey(java.lang.String,
 	 *      java.lang.String[])
 	 */
+	@Override
 	public void setHelpTextKey(String helpKey, String[] params) {
 		this.helpKey = helpKey;
 		this.helpParams = params;
@@ -357,6 +377,7 @@ public abstract class FormItemImpl implements FormItem, InlineElement {
 	/**
 	 * @see org.olat.core.gui.components.form.flexible.FormComponent#setHelpText(java.lang.String)
 	 */
+	@Override
 	public void setHelpText(String helpText) {
 		this.helpKey = null;
 		this.helpParams = null;
@@ -366,6 +387,7 @@ public abstract class FormItemImpl implements FormItem, InlineElement {
 	/**
 	 * @see org.olat.core.gui.components.form.flexible.FormComponent#setHelpUrl(java.lang.String)
 	 */
+	@Override
 	public void setHelpUrl(String helpUrl) {
 		this.helpUrl = helpUrl;
 	}
@@ -373,6 +395,7 @@ public abstract class FormItemImpl implements FormItem, InlineElement {
 	/**
 	 * @see org.olat.core.gui.components.form.flexible.FormComponent#setHelpUrlForManualPage(java.lang.String)
 	 */
+	@Override
 	public void setHelpUrlForManualPage(String manualAliasName) {
 		HelpModule helpModule = CoreSpringFactory.getImpl(HelpModule.class);
 		Locale locale = getTranslator().getLocale();
@@ -383,6 +406,7 @@ public abstract class FormItemImpl implements FormItem, InlineElement {
 	 * @see org.olat.core.gui.components.form.flexible.FormComponent#setErrorKey(java.lang.String,
 	 *      java.lang.String[])
 	 */
+	@Override
 	public void setErrorKey(String errorKey, String[] params) {
 		this.hasError = true;
 		this.errorKey = errorKey;
@@ -415,7 +439,8 @@ public abstract class FormItemImpl implements FormItem, InlineElement {
 	/**
 	 * @see org.olat.core.gui.components.form.flexible.FormComponent#setErrorController(org.olat.core.gui.control.Controller)
 	 */
-	public void setErrorComponent(FormItem errorFormItem, FormLayouter container) {
+	@Override
+	public void setErrorComponent(FormItem errorFormItem, FormItemContainer container) {
 		if(errorFormItem == null){
 			throw new AssertException("do not clear error by setting null, instead use showError(false).");
 		}
@@ -431,10 +456,12 @@ public abstract class FormItemImpl implements FormItem, InlineElement {
 	/**
 	 * @see org.olat.core.gui.components.form.flexible.FormComponent#getErrorController()
 	 */
+	@Override
 	public Component getErrorC() {
 		return errorPanel;
 	}
 
+	@Override
 	public void setEnabled(boolean isEnabled) {
 		getErrorC().setEnabled(isEnabled);
 		if(errorComponent != null) {
@@ -452,38 +479,44 @@ public abstract class FormItemImpl implements FormItem, InlineElement {
 		if(getComponent()==null) return;
 		getComponent().setEnabled(isEnabled);
 	}
-	
+
+	@Override
 	public boolean isEnabled(){
 		return formItemIsEnabled;
 	}
 
+	@Override
 	public void setVisible(boolean isVisible) {
-		//FIXME:pb: getComponent can be null in the case of FormLink for example
 		if(getComponent()==null) return;
 		getComponent().setVisible(isVisible);
 		showError(isVisible && hasError);
 		showExample(isVisible && hasExample);
 		showLabel(isVisible && hasLabel);
 	}
-	
+
+	@Override
 	public boolean isVisible() {
 		if(getComponent() == null) return false;
 		return getComponent().isVisible();
 	}
-	
+
+	@Override
 	public boolean hasError(){
 		return hasError;
 	}
-	
+
+	@Override
 	public boolean hasLabel(){
 		return hasLabel;
 	}
-	
+
+	@Override
 	public boolean hasExample(){
 		return hasExample;
 	}
-	
-	public void showLabel(@UnderInitialization(FormItemImpl.class) FormItemImpl this, boolean show){
+
+	@Override
+	public void showLabel(boolean show){
 		if(show) {
 			labelPanel.setContent(labelC);
 		}else{
@@ -492,6 +525,8 @@ public abstract class FormItemImpl implements FormItem, InlineElement {
 		labelPanel.setVisible(show);
 		labelPanel.setEnabled(show);
 	}
+	
+	@Override
 	public void showError(boolean show){
 		if (show) {
 			errorPanel.setContent(errorComponent);
@@ -501,12 +536,14 @@ public abstract class FormItemImpl implements FormItem, InlineElement {
 		errorPanel.setVisible(show);
 		errorPanel.setEnabled(show);
 	}
-	
+
+	@Override
 	public void clearError(){
 		showError(false);
 		hasError = false;
 	}
-	
+
+	@Override
 	public void showExample(boolean show){
 		if(show) {
 			examplePanel.setContent(exampleC);
@@ -529,15 +566,6 @@ public abstract class FormItemImpl implements FormItem, InlineElement {
 	public int getAction() {
 		return action;
 	}
-	
-	/**
-	 * gets called if the implementing component is part of a form which gets
-	 * partly submitted -> extract data for you and store it temporarly for
-	 * redisplay without a validation
-	 * 
-	 * @param ureq
-	 */
-	public abstract void evalFormRequest(UserRequest ureq);
 
 	/**
 	 * gets called if the implementing component was clicked.
@@ -545,6 +573,7 @@ public abstract class FormItemImpl implements FormItem, InlineElement {
 	 * @param ureq
 	 * @param formId
 	 */
+	@Override
 	public void doDispatchFormRequest(UserRequest ureq){
 		//first let implementor do its job
 		dispatchFormRequest(ureq);
@@ -572,6 +601,7 @@ public abstract class FormItemImpl implements FormItem, InlineElement {
 	/**
 	 * @see org.olat.core.gui.components.form.flexible.api.FormItem#getUserObject()
 	 */
+	@Override
 	public Object getUserObject() {
 		return userObject;
 	}
@@ -579,18 +609,14 @@ public abstract class FormItemImpl implements FormItem, InlineElement {
 	/**
 	 * @see org.olat.core.gui.components.form.flexible.api.FormItem#setUserObject(java.lang.Object)
 	 */
+	@Override
 	public void setUserObject(Object userObject) {
 		this.userObject = userObject;
 	}
-	
-	
-	/**
-	 * 
-	 */
+
+	@Override
 	public String getFormDispatchId() {	
-
 		Component comp = getComponent();
-
 		if(comp instanceof FormBaseComponentIdProvider){
 			return ((FormBaseComponentIdProvider)comp).getFormDispatchId();
 		} else {
@@ -609,16 +635,12 @@ public abstract class FormItemImpl implements FormItem, InlineElement {
 	}
 	
 	/**
-	 * @see org.olat.core.gui.components.form.flexible.FormComponent#validate(java.util.List)
+	 * @see org.olat.core.gui.components.form.flexible.FormComponent#validate(java.util.List, Identity)
 	 */
+	@Override
 	public void validate(List<ValidationStatus> validationResults) {
-		
+		//
 	}
-
-	/**
-	 * @see org.olat.core.gui.components.form.flexible.FormItem#reset()
-	 */
-	public abstract void reset();
 	
 	@Override
 	public String toString(){

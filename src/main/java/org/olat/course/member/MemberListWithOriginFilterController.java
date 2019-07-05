@@ -32,8 +32,10 @@ import org.olat.core.util.StringHelper;
 import org.olat.course.assessment.ui.tool.AssessmentIdentityCourseController;
 import org.olat.course.run.userview.UserCourseEnvironment;
 import org.olat.group.ui.main.AbstractMemberListController;
-import org.olat.group.ui.main.MemberView;
+import org.olat.group.ui.main.MemberListSecurityCallback;
+import org.olat.group.ui.main.MemberRow;
 import org.olat.group.ui.main.SearchMembersParams;
+import org.olat.group.ui.main.SearchMembersParams.Origin;
 import org.olat.repository.RepositoryEntry;
 
 /**
@@ -42,7 +44,7 @@ import org.olat.repository.RepositoryEntry;
  */
 public class MemberListWithOriginFilterController extends AbstractMemberListController {
 	
-	private static final  String[] originKeys = new String[]{"all", "repo", "group"};
+	private static final  String[] originKeys = new String[]{ Origin.all.name(), Origin.repositoryEntry.name(), Origin.businessGroup.name(), Origin.curriculum.name()};
 	
 	private SingleSelection originEl;
 	
@@ -52,8 +54,8 @@ public class MemberListWithOriginFilterController extends AbstractMemberListCont
 	private final UserCourseEnvironment coachCourseEnv;
 	
 	public MemberListWithOriginFilterController(UserRequest ureq, WindowControl wControl, TooledStackedPanel toolbarPanel,
-			RepositoryEntry repoEntry, UserCourseEnvironment coachCourseEnv, SearchMembersParams searchParams, String infos) {
-		super(ureq, wControl, repoEntry, "member_list_origin_filter", coachCourseEnv.isCourseReadOnly(), toolbarPanel);
+			RepositoryEntry repoEntry, UserCourseEnvironment coachCourseEnv, MemberListSecurityCallback secCallback, SearchMembersParams searchParams, String infos) {
+		super(ureq, wControl, repoEntry, "member_list_origin_filter", secCallback, toolbarPanel);
 		this.searchParams = searchParams;
 		this.coachCourseEnv = coachCourseEnv;
 		
@@ -78,15 +80,10 @@ public class MemberListWithOriginFilterController extends AbstractMemberListCont
 	@Override
 	protected void formInnerEvent(UserRequest ureq, FormItem source, FormEvent event) {
 		if(originEl == source) {
-			if(!originEl.isOneSelected() || originEl.isSelected(0)) {
-				searchParams.setRepoOrigin(true);
-				searchParams.setGroupOrigin(true);
-			} else if(originEl.isSelected(1)) {
-				searchParams.setRepoOrigin(true);
-				searchParams.setGroupOrigin(false);
-			} else if(originEl.isSelected(2)) {
-				searchParams.setRepoOrigin(false);
-				searchParams.setGroupOrigin(true);
+			if(!originEl.isOneSelected()) {
+				searchParams.setOrigin(Origin.all);
+			} else {
+				searchParams.setOrigin(Origin.valueOf(originEl.getSelectedKey()));
 			}
 			membersTable.deselectAll();
 			reloadModel();
@@ -96,12 +93,12 @@ public class MemberListWithOriginFilterController extends AbstractMemberListCont
 	}
 	
 	@Override
-	protected void doOpenAssessmentTool(UserRequest ureq, MemberView member) {
+	protected void doOpenAssessmentTool(UserRequest ureq, MemberRow member) {
 		removeAsListenerAndDispose(identityAssessmentController);
 		
 		Identity assessedIdentity = securityManager.loadIdentityByKey(member.getIdentityKey());
 		identityAssessmentController = new AssessmentIdentityCourseController(ureq, getWindowControl(), toolbarPanel,
-				repoEntry, coachCourseEnv, assessedIdentity);
+				repoEntry, coachCourseEnv, assessedIdentity, true);
 		listenTo(identityAssessmentController);
 		
 		String displayName = userManager.getUserDisplayName(assessedIdentity);

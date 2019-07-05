@@ -1,5 +1,6 @@
 <fieldset>
-	<legend>Admin.</legend>
+	<legend>$r.translate("infomsg.token.title")</legend>
+	<p class="o_info">$admintokenusage</p>
 	<p><i>Message Admin-Token: $!admintoken</i></p>
 </fieldset>
 <div class="o_block_large">
@@ -67,5 +68,13 @@
 		$r.render("maintenancemsgEditCluster") $r.render("maintenancemsgClearCluster")
 	</div>
 	</fieldset>
+</div>
+#end
+
+#if($r.available("staticFolder"))
+<div class="o_block_large">
+	<legend>$r.translate("staticFolder")</legend>
+	<div class="o_copy_code o_nowrap"><input type="text" value="$extlink" onclick="this.select()"/></div>
+	$r.render("staticFolder")
 </div>
 #end

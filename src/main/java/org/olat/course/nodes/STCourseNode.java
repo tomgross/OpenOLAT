@@ -27,14 +27,17 @@ package org.olat.course.nodes;
 
 import java.io.File;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
+import org.apache.logging.log4j.Logger;
 import org.olat.core.commons.controllers.linkchooser.CustomLinkTreeModel;
 import org.olat.core.commons.fullWebApp.LayoutMain3ColsController;
 import org.olat.core.commons.fullWebApp.popup.BaseFullWebappPopupLayoutFactory;
 import org.olat.core.commons.modules.singlepage.SinglePageController;
 import org.olat.core.gui.UserRequest;
 import org.olat.core.gui.components.stack.BreadcrumbPanel;
+import org.olat.core.gui.components.stack.TooledStackedPanel;
 import org.olat.core.gui.control.Controller;
 import org.olat.core.gui.control.WindowControl;
 import org.olat.core.gui.control.creator.ControllerCreator;
@@ -47,7 +50,6 @@ import org.olat.core.id.Identity;
 import org.olat.core.id.OLATResourceable;
 import org.olat.core.logging.AssertException;
 import org.olat.core.logging.OLATRuntimeException;
-import org.olat.core.logging.OLog;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.StringHelper;
 import org.olat.core.util.Util;
@@ -55,6 +57,7 @@ import org.olat.core.util.resource.OresHelper;
 import org.olat.course.CourseFactory;
 import org.olat.course.CourseModule;
 import org.olat.course.ICourse;
+import org.olat.course.assessment.ui.tool.AssessmentCourseNodeController;
 import org.olat.course.condition.Condition;
 import org.olat.course.condition.KeyAndNameConverter;
 import org.olat.course.condition.interpreter.ConditionExpression;
@@ -69,6 +72,7 @@ import org.olat.course.nodes.sp.SPEditController;
 import org.olat.course.nodes.sp.SPPeekviewController;
 import org.olat.course.nodes.st.STCourseNodeEditController;
 import org.olat.course.nodes.st.STCourseNodeRunController;
+import org.olat.course.nodes.st.STIdentityListCourseNodeController;
 import org.olat.course.nodes.st.STPeekViewController;
 import org.olat.course.run.navigation.NodeRunConstructionResult;
 import org.olat.course.run.scoring.AssessmentEvaluation;
@@ -78,8 +82,13 @@ import org.olat.course.run.scoring.ScoreEvaluation;
 import org.olat.course.run.userview.NodeEvaluation;
 import org.olat.course.run.userview.UserCourseEnvironment;
 import org.olat.course.tree.CourseInternalLinkTreeModel;
+import org.olat.group.BusinessGroup;
 import org.olat.modules.ModuleConfiguration;
 import org.olat.modules.assessment.AssessmentEntry;
+import org.olat.modules.assessment.Role;
+import org.olat.modules.assessment.model.AssessmentRunStatus;
+import org.olat.modules.assessment.ui.AssessmentToolContainer;
+import org.olat.modules.assessment.ui.AssessmentToolSecurityCallback;
 import org.olat.repository.RepositoryEntry;
 import org.olat.util.logging.activity.LoggingResourceable;
 
@@ -99,6 +108,8 @@ import org.olat.util.logging.activity.LoggingResourceable;
  * @author BPS (<a href="http://www.bps-system.de/">BPS Bildungsportal Sachsen GmbH</a>)
  */
 public class STCourseNode extends AbstractAccessableCourseNode implements CalculatedAssessableCourseNode {
+	
+	private static final Logger log = Tracing.createLoggerFor(STCourseNode.class);
 
 	private static final long serialVersionUID = -7460670977531082040L;
 	private static final String TYPE = "st";
@@ -126,8 +137,7 @@ public class STCourseNode extends AbstractAccessableCourseNode implements Calcul
 	public TabbableController createEditController(UserRequest ureq, WindowControl wControl, BreadcrumbPanel stackPanel, ICourse course, UserCourseEnvironment euce) {
 		updateModuleConfigDefaults(false);
 		// only the precondition "access" can be configured till now
-		STCourseNodeEditController childTabCntrllr = new STCourseNodeEditController(ureq, wControl, this, course.getCourseFolderContainer(),
-				course.getEditorTreeModel(), euce);
+		STCourseNodeEditController childTabCntrllr = new STCourseNodeEditController(ureq, wControl, this, course, euce);
 		CourseNode chosenNode = course.getEditorTreeModel().getCourseNode(euce.getCourseEditorEnv().getCurrentCourseNodeId());
 		NodeEditController nodeEditController = new NodeEditController(ureq, wControl, course.getEditorTreeModel(), course, chosenNode, euce, childTabCntrllr);
 		// special case: listen to st edit controller, must be informed when the short title is being modified
@@ -136,12 +146,6 @@ public class STCourseNode extends AbstractAccessableCourseNode implements Calcul
 
 	}
 
-	/**
-	 * @see org.olat.course.nodes.CourseNode#createNodeRunConstructionResult(org.olat.core.gui.UserRequest,
-	 *      org.olat.core.gui.control.WindowControl,
-	 *      org.olat.course.run.userview.UserCourseEnvironment,
-	 *      org.olat.course.run.userview.NodeEvaluation)
-	 */
 	@Override
 	public NodeRunConstructionResult createNodeRunConstructionResult(UserRequest ureq, WindowControl wControl,
 			final UserCourseEnvironment userCourseEnv, NodeEvaluation ne, String nodecmd) {
@@ -162,14 +166,14 @@ public class STCourseNode extends AbstractAccessableCourseNode implements Calcul
 			}
 			DeliveryOptions deliveryOptions = (DeliveryOptions)getModuleConfiguration().get(SPEditController.CONFIG_KEY_DELIVERYOPTIONS);
 			OLATResourceable ores = OresHelper.createOLATResourceableInstance(CourseModule.class, userCourseEnv.getCourseEnvironment().getCourseResourceableId());
+			Long courseRepoKey = userCourseEnv.getCourseEnvironment().getCourseGroupManager().getCourseEntry().getKey();
 			SinglePageController spCtr = new SinglePageController(ureq, wControl, userCourseEnv.getCourseEnvironment().getCourseFolderContainer(),
 					relPath, allowRelativeLinks.booleanValue(), null, ores, deliveryOptions,
-					userCourseEnv.getCourseEnvironment().isPreview());
+					userCourseEnv.getCourseEnvironment().isPreview(), courseRepoKey);
 			// check if user is allowed to edit the page in the run view
 			CourseGroupManager cgm = userCourseEnv.getCourseEnvironment().getCourseGroupManager();
-			boolean hasEditRights = (cgm.isIdentityCourseAdministrator(ureq.getIdentity()) 
-					|| cgm.hasRight(ureq.getIdentity(),CourseRights.RIGHT_COURSEEDITOR))
-					|| (getModuleConfiguration().getBooleanSafe(SPEditController.CONFIG_KEY_ALLOW_COACH_EDIT, false) && cgm.isIdentityCourseCoach(ureq.getIdentity()));
+			boolean hasEditRights = userCourseEnv.isAdmin() || cgm.hasRight(ureq.getIdentity(),CourseRights.RIGHT_COURSEEDITOR)
+					|| (getModuleConfiguration().getBooleanSafe(SPEditController.CONFIG_KEY_ALLOW_COACH_EDIT, false) && userCourseEnv.isCoach());
 			
 			if (hasEditRights) {
 				spCtr.allowPageEditing();
@@ -471,12 +475,22 @@ public class STCourseNode extends AbstractAccessableCourseNode implements Calcul
 		throw new OLATRuntimeException(STCourseNode.class, "No comments available in ST nodes", null);
 	}
 
+	@Override
+	public List<File> getIndividualAssessmentDocuments(UserCourseEnvironment userCourseEnvironment) {
+		return Collections.emptyList();
+	}
+
 	/**
 	 * @see org.olat.course.nodes.AssessableCourseNode#hasCommentConfigured()
 	 */
 	@Override
 	public boolean hasCommentConfigured() {
 		// never has comments
+		return false;
+	}
+
+	@Override
+	public boolean hasIndividualAsssessmentDocuments() {
 		return false;
 	}
 
@@ -535,7 +549,7 @@ public class STCourseNode extends AbstractAccessableCourseNode implements Calcul
 	 */
 	@Override
 	public void updateUserScoreEvaluation(ScoreEvaluation scoreEvaluation, UserCourseEnvironment userCourseEnvironment,
-			Identity coachingIdentity, boolean incrementAttempts) {
+			Identity coachingIdentity, boolean incrementAttempts, Role by) {
 		throw new OLATRuntimeException(STCourseNode.class, "Score variable can't be updated in ST nodes", null);
 	}
 
@@ -549,6 +563,16 @@ public class STCourseNode extends AbstractAccessableCourseNode implements Calcul
 		throw new OLATRuntimeException(STCourseNode.class, "Comment variable can't be updated in ST nodes", null);
 	}
 
+	@Override
+	public void addIndividualAssessmentDocument(File document, String filename, UserCourseEnvironment userCourseEnvironment, Identity coachingIdentity) {
+		throw new OLATRuntimeException(STCourseNode.class, "Document can't be uploaded in ST nodes", null);
+	}
+
+	@Override
+	public void removeIndividualAssessmentDocument(File document, UserCourseEnvironment userCourseEnvironment, Identity coachingIdentity) {
+		throw new OLATRuntimeException(STCourseNode.class, "Document can't be removed in ST nodes", null);
+	}
+
 	/**
 	 * @see org.olat.course.nodes.AssessableCourseNode#getUserAttempts(org.olat.course.run.userview.UserCourseEnvironment)
 	 */
@@ -556,6 +580,22 @@ public class STCourseNode extends AbstractAccessableCourseNode implements Calcul
 	public Integer getUserAttempts(UserCourseEnvironment userCourseEnvironment) {
 		throw new OLATRuntimeException(STCourseNode.class, "No attempts available in ST nodes", null);
 
+	}
+
+	@Override
+	public boolean hasCompletion() {
+		return false;
+	}
+
+	@Override
+	public Double getUserCurrentRunCompletion(UserCourseEnvironment userCourseEnvironment) {
+		throw new OLATRuntimeException(STCourseNode.class, "No completion available in ST nodes", null);
+	}
+	
+	@Override
+	public void updateCurrentCompletion(UserCourseEnvironment userCourseEnvironment, Identity identity,
+			Double currentCompletion, AssessmentRunStatus status, Role doneBy) {
+		throw new OLATRuntimeException(STCourseNode.class, "Completion variable can't be updated in ST nodes", null);
 	}
 
 	/**
@@ -572,7 +612,7 @@ public class STCourseNode extends AbstractAccessableCourseNode implements Calcul
 	 *      org.olat.core.id.Identity)
 	 */
 	@Override
-	public void updateUserAttempts(Integer userAttempts, UserCourseEnvironment userCourseEnvironment, Identity coachingIdentity) {
+	public void updateUserAttempts(Integer userAttempts, UserCourseEnvironment userCourseEnvironment, Identity coachingIdentity, Role by) {
 		throw new OLATRuntimeException(STCourseNode.class, "Attempts variable can't be updated in ST nodes", null);
 	}
 
@@ -580,15 +620,15 @@ public class STCourseNode extends AbstractAccessableCourseNode implements Calcul
 	 * @see org.olat.course.nodes.AssessableCourseNode#incrementUserAttempts(org.olat.course.run.userview.UserCourseEnvironment)
 	 */
 	@Override
-	public void incrementUserAttempts(UserCourseEnvironment userCourseEnvironment) {
+	public void incrementUserAttempts(UserCourseEnvironment userCourseEnvironment, Role by) {
 		throw new OLATRuntimeException(STCourseNode.class, "Attempts variable can't be updated in ST nodes", null);
 	}
 
-	/**
-	 * @see org.olat.course.nodes.AssessableCourseNode#getDetailsEditController(org.olat.core.gui.UserRequest,
-	 *      org.olat.core.gui.control.WindowControl,
-	 *      org.olat.course.run.userview.UserCourseEnvironment)
-	 */
+	@Override
+	public void updateLastModifications(UserCourseEnvironment userCourseEnvironment, Identity identity, Role doneBy) {
+		//do nothing
+	}
+
 	@Override
 	public Controller getDetailsEditController(UserRequest ureq, WindowControl wControl, BreadcrumbPanel stackPanel,
 			UserCourseEnvironment coachCourseEnv, UserCourseEnvironment assessedUserCourseEnv) {
@@ -596,16 +636,32 @@ public class STCourseNode extends AbstractAccessableCourseNode implements Calcul
 	}
 
 	@Override
+	public boolean hasResultsDetails() {
+		return false;
+	}
+
+	@Override
+	public Controller getResultDetailsController(UserRequest ureq, WindowControl wControl,
+			UserCourseEnvironment assessedUserCourseEnv) {
+		return null;
+	}
+
+	@Override
 	public String getDetailsListView(UserCourseEnvironment userCourseEnvironment) {
 		return null;
 	}
 
-	/**
-	 * @see org.olat.course.nodes.AssessableCourseNode#getDetailsListViewHeaderKey()
-	 */
 	@Override
 	public String getDetailsListViewHeaderKey() {
 		throw new OLATRuntimeException(STCourseNode.class, "Details not available in ST nodes", null);
+	}
+	
+	@Override
+	public AssessmentCourseNodeController getIdentityListController(UserRequest ureq, WindowControl wControl, TooledStackedPanel stackPanel,
+			RepositoryEntry courseEntry, BusinessGroup group, UserCourseEnvironment coachCourseEnv,
+			AssessmentToolContainer toolContainer, AssessmentToolSecurityCallback assessmentCallback) {
+		return new STIdentityListCourseNodeController(ureq, wControl, stackPanel,
+				courseEntry, group, this, coachCourseEnv, toolContainer, assessmentCallback);
 	}
 
 	/**
@@ -757,9 +813,9 @@ public class STCourseNode extends AbstractAccessableCourseNode implements Calcul
 		List<ConditionExpression> retVal;
 		List<ConditionExpression> parentsConditions = super.getConditionExpressions();
 		if (parentsConditions.size() > 0) {
-			retVal = new ArrayList<ConditionExpression>(parentsConditions);
+			retVal = new ArrayList<>(parentsConditions);
 		} else {
-			retVal = new ArrayList<ConditionExpression>();
+			retVal = new ArrayList<>();
 		}
 		// init passedExpression and scoreExpression
 		getScoreCalculator();
@@ -800,21 +856,15 @@ public class STCourseNode extends AbstractAccessableCourseNode implements Calcul
 	public String getDisplayOption() {
 		// if nothing other defined, view content only, when a structure node
 		// contains an html-file.
-		OLog logger = Tracing.createLoggerFor(this.getClass());
 		ModuleConfiguration config = getModuleConfiguration();
 		String thisConf = super.getDisplayOption(false);
 		if (thisConf == null
 				&& config.get(STCourseNodeEditController.CONFIG_KEY_DISPLAY_TYPE).equals(STCourseNodeEditController.CONFIG_VALUE_DISPLAY_FILE)) {
-			if (logger.isDebug()) {
-				logger.debug("no displayOption set, use default (content)", thisConf);
-			}
+			log.debug("no displayOption set, use default (content) {}",  thisConf);
+
 			return CourseNode.DISPLAY_OPTS_CONTENT;
 		}
-		if (logger.isDebug()) {
-			logger.debug("there is a config set, use it: " + thisConf);
-		}
+		log.debug("there is a config set, use it: {}",  thisConf);
 		return super.getDisplayOption();
 	}
-
-	
 }

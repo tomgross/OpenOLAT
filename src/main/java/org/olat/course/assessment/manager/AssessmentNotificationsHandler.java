@@ -33,9 +33,10 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 
-import org.olat.basesecurity.BaseSecurity;
-import org.olat.basesecurity.Constants;
+import org.apache.logging.log4j.Logger;
 import org.olat.basesecurity.GroupRoles;
+import org.olat.basesecurity.OrganisationRoles;
+import org.olat.basesecurity.OrganisationService;
 import org.olat.core.commons.services.notifications.NotificationHelper;
 import org.olat.core.commons.services.notifications.NotificationsHandler;
 import org.olat.core.commons.services.notifications.NotificationsManager;
@@ -51,7 +52,6 @@ import org.olat.core.gui.translator.Translator;
 import org.olat.core.id.Identity;
 import org.olat.core.id.context.BusinessControlFactory;
 import org.olat.core.logging.AssertException;
-import org.olat.core.logging.OLog;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.Util;
 import org.olat.core.util.nodes.INode;
@@ -88,12 +88,12 @@ import org.springframework.stereotype.Service;
  */
 @Service
 public class AssessmentNotificationsHandler implements NotificationsHandler {
-	private static final OLog log = Tracing.createLoggerFor(AssessmentNotificationsHandler.class);
+	private static final Logger log = Tracing.createLoggerFor(AssessmentNotificationsHandler.class);
 	
 	private static final String CSS_CLASS_USER_ICON = "o_icon_user";
 
 	@Autowired
-	private BaseSecurity securityManager;
+	private OrganisationService organisationService;
 	@Autowired
 	private RepositoryManager repositoryManager;
 	@Autowired
@@ -124,14 +124,11 @@ public class AssessmentNotificationsHandler implements NotificationsHandler {
 	public SubscriptionContext getAssessmentSubscriptionContext(Identity ident, ICourse course) {
 		SubscriptionContext sctx = null;
 		if (ident == null || canSubscribeForAssessmentNotification(ident, course)) {
-			// Creates a new SubscriptionContext only if not found into cache
-			if (sctx == null) {
-				// a subscription context showing to the root node (the course's root
-				// node is started when clicking such a notification)
-				CourseNode cn = course.getRunStructure().getRootNode();
-				Long resourceableId = course.getResourceableId();
-				sctx = new SubscriptionContext(CourseModule.ORES_COURSE_ASSESSMENT, resourceableId, cn.getIdent());
-			}
+			// a subscription context showing to the root node (the course's root
+			// node is started when clicking such a notification)
+			CourseNode cn = course.getRunStructure().getRootNode();
+			Long resourceableId = course.getResourceableId();
+			sctx = new SubscriptionContext(CourseModule.ORES_COURSE_ASSESSMENT, resourceableId, cn.getIdent());
 		}
 		return sctx;
 	}
@@ -222,9 +219,8 @@ public class AssessmentNotificationsHandler implements NotificationsHandler {
 		if (ident == null) return false;
 
 		CourseGroupManager grpMan = course.getCourseEnvironment().getCourseGroupManager();
-		
-		boolean isInstitutionalResourceManager = securityManager.isIdentityInSecurityGroup(ident, securityManager.findSecurityGroupByName(Constants.GROUP_INST_ORES_MANAGER));
-		return isInstitutionalResourceManager || grpMan.isIdentityCourseAdministrator(ident) || grpMan.isIdentityCourseCoach(ident) || grpMan.hasRight(ident, CourseRights.RIGHT_ASSESSMENT);
+		boolean isLearnResourceManager = organisationService.hasRole(ident, OrganisationRoles.learnresourcemanager);
+		return isLearnResourceManager || grpMan.isIdentityCourseAdministrator(ident) || grpMan.isIdentityCourseCoach(ident) || grpMan.hasRight(ident, CourseRights.RIGHT_ASSESSMENT);
 	}
 
 	/**
@@ -255,7 +251,7 @@ public class AssessmentNotificationsHandler implements NotificationsHandler {
 	 * </ul>
 	 */
 	private List<AssessableCourseNode> getCourseTestNodes(ICourse course) {
-		List<AssessableCourseNode> assessableNodes = new ArrayList<AssessableCourseNode>();
+		List<AssessableCourseNode> assessableNodes = new ArrayList<>();
 
 		Structure courseStruct = course.getRunStructure();
 		CourseNode rootNode = courseStruct.getRootNode();
@@ -290,14 +286,10 @@ public class AssessmentNotificationsHandler implements NotificationsHandler {
 	
 	private boolean courseStatus(ICourse course) {
 		return course != null
-				&& !course.getCourseEnvironment().getCourseGroupManager().getCourseEntry().getRepositoryEntryStatus().isUnpublished()
-				&& !course.getCourseEnvironment().getCourseGroupManager().getCourseEntry().getRepositoryEntryStatus().isClosed();
+				&& course.getCourseEnvironment().getCourseGroupManager().isNotificationsAllowed();
 	}
 
-	/**
-	 * @see org.olat.core.commons.services.notifications.NotificationsHandler#createSubscriptionInfo(org.olat.core.commons.services.notifications.Subscriber,
-	 *      java.util.Locale, java.util.Date)
-	 */
+	@Override
 	public SubscriptionInfo createSubscriptionInfo(final Subscriber subscriber, Locale locale, Date compareDate) {
 		SubscriptionInfo si = null;
 		Publisher p = subscriber.getPublisher();
@@ -315,15 +307,14 @@ public class AssessmentNotificationsHandler implements NotificationsHandler {
 			// exceptions, course
 			// can't be loaded when already deleted
 			if (notificationsManager.isPublisherValid(p) && compareDate.before(latestNews)) {
-				Long courseId = new Long(p.getData());
+				Long courseId = Long.valueOf(p.getData());
 				final ICourse course = loadCourseFromId(courseId);
 				if (courseStatus(course)) {
 					// course admins or users with the course right to have full access to
 					// the assessment tool will have full access to user tests
 					CourseGroupManager cgm = course.getCourseEnvironment().getCourseGroupManager();
-					final boolean hasFullAccess = (cgm.isIdentityCourseAdministrator(identity) ? true : cgm.hasRight(identity,
-							CourseRights.RIGHT_ASSESSMENT));
-					final Set<Identity> coachedUsers = new HashSet<Identity>();
+					final boolean hasFullAccess = cgm.isIdentityCourseAdministrator(identity) || cgm.hasRight(identity, CourseRights.RIGHT_ASSESSMENT);
+					final Set<Identity> coachedUsers = new HashSet<>();
 					if (!hasFullAccess) {
 						// initialize list of users, only when user has not full access
 						List<BusinessGroup> coachedGroups = cgm.getOwnedBusinessGroups(identity);
@@ -393,7 +384,7 @@ public class AssessmentNotificationsHandler implements NotificationsHandler {
 	private void checkPublisher(Publisher p) {
 		try {
 			if(!NotificationsUpgradeHelper.checkCourse(p)) {
-				log.info("deactivating publisher with key; " + p.getKey(), null);
+				log.info("deactivating publisher with key; " + p.getKey());
 				notificationsManager.deactivate(p);
 			}
 		} catch (Exception e) {

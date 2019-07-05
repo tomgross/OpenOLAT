@@ -26,20 +26,23 @@ import java.util.Iterator;
 import java.util.List;
 
 import org.apache.lucene.document.Document;
-import org.olat.core.commons.modules.bc.vfs.OlatRootFolderImpl;
 import org.olat.core.commons.modules.glossary.GlossaryItemManager;
 import org.olat.core.gui.media.CleanupAfterDeliveryFileMediaResource;
 import org.olat.core.gui.media.MediaResource;
 import org.olat.core.id.OLATResourceable;
+import org.apache.logging.log4j.Logger;
+import org.olat.core.logging.Tracing;
 import org.olat.core.util.StringHelper;
 import org.olat.core.util.WebappHelper;
 import org.olat.core.util.ZipUtil;
 import org.olat.core.util.filter.Filter;
 import org.olat.core.util.filter.FilterFactory;
 import org.olat.core.util.vfs.LocalFileImpl;
+import org.olat.core.util.vfs.LocalFolderImpl;
 import org.olat.core.util.vfs.VFSContainer;
 import org.olat.core.util.vfs.VFSItem;
 import org.olat.core.util.vfs.VFSLeaf;
+import org.olat.core.util.vfs.filters.VFSSystemItemFilter;
 import org.olat.course.CourseFactory;
 import org.olat.course.ICourse;
 import org.olat.course.config.CourseConfig;
@@ -54,6 +57,8 @@ import org.olat.resource.references.Reference;
 import org.olat.resource.references.ReferenceManager;
 import org.olat.search.model.OlatDocument;
 import org.olat.search.service.SearchResourceContext;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
 
 
 /**
@@ -65,18 +70,17 @@ import org.olat.search.service.SearchResourceContext;
  * Initial Date:  15.01.2009 <br>
  * @author Roman Haag, frentix GmbH, roman.haag@frentix.com
  */
-public class GlossaryManagerImpl extends GlossaryManager {
+@Service("glossaryManager")
+public class GlossaryManagerImpl implements GlossaryManager {
+	
+	private static final Logger log = Tracing.createLoggerFor(GlossaryManagerImpl.class);
 	
 	private static final String EXPORT_FOLDER_NAME = "glossary";
-	private ReferenceManager referenceManager;
 	
-	/**
-	 * [used by spring]
-	 */
-	private GlossaryManagerImpl(ReferenceManager referenceManager){
-		INSTANCE = this;
-		this.referenceManager = referenceManager;
-	}
+	@Autowired
+	private ReferenceManager referenceManager;
+	@Autowired
+	private GlossaryItemManager glossaryItemManager;
 	
 	/**
 	 * Returns the internal glossary folder.
@@ -85,8 +89,8 @@ public class GlossaryManagerImpl extends GlossaryManager {
 	 * @return
 	 */
 	@Override
-	public OlatRootFolderImpl getGlossaryRootFolder(OLATResourceable res) {
-		OlatRootFolderImpl resRoot = FileResourceManager.getInstance().getFileResourceRootImpl(res);
+	public LocalFolderImpl getGlossaryRootFolder(OLATResourceable res) {
+		LocalFolderImpl resRoot = FileResourceManager.getInstance().getFileResourceRootImpl(res);
 		if (resRoot == null) return null;
 		VFSItem glossaryRoot = resRoot.resolve(INTERNAL_FOLDER_NAME);
 		if (glossaryRoot == null) {
@@ -105,7 +109,7 @@ public class GlossaryManagerImpl extends GlossaryManager {
 			}
 			glossaryRoot = resRoot.resolve(INTERNAL_FOLDER_NAME);
 		}
-		return (OlatRootFolderImpl) glossaryRoot;
+		return (LocalFolderImpl) glossaryRoot;
 	}
 	
 	/**
@@ -117,11 +121,10 @@ public class GlossaryManagerImpl extends GlossaryManager {
 	 */
 	@Override
 	public Document getIndexerDocument(RepositoryEntry repositoryEntry, SearchResourceContext searchResourceContext) {
-		GlossaryItemManager gIMgr = GlossaryItemManager.getInstance();
 		VFSContainer glossaryFolder = getGlossaryRootFolder(repositoryEntry.getOlatResource());
-		VFSLeaf glossaryFile = gIMgr.getGlossaryFile(glossaryFolder);
+		VFSLeaf glossaryFile = glossaryItemManager.getGlossaryFile(glossaryFolder);
 		if (glossaryFile == null) { return null; }
-		String glossaryContent = gIMgr.getGlossaryContent(glossaryFolder);
+		String glossaryContent = glossaryItemManager.getGlossaryContent(glossaryFolder);
 		// strip all html tags
 		Filter htmlTagsFilter = FilterFactory.getHtmlTagsFilter();
 		glossaryContent = htmlTagsFilter.filter(glossaryContent);
@@ -183,10 +186,10 @@ public class GlossaryManagerImpl extends GlossaryManager {
 			File tmpDir = new File(WebappHelper.getTmpDir());
 			File fExportZIP = File.createTempFile(exportFileName, ".zip", tmpDir);
 			VFSContainer glossaryRoot = getGlossaryRootFolder(res);
-			ZipUtil.zip(glossaryRoot.getItems(), new LocalFileImpl(fExportZIP), false);
+			ZipUtil.zip(glossaryRoot.getItems(new VFSSystemItemFilter()), new LocalFileImpl(fExportZIP), false);
 			return new CleanupAfterDeliveryFileMediaResource(fExportZIP);
 		} catch (IOException e) {
-			logError("Cannot export glossar: " + res, e);
+			log.error("Cannot export glossar: " + res, e);
 			return null;
 		}
 	}
@@ -239,7 +242,6 @@ public class GlossaryManagerImpl extends GlossaryManager {
 				// event so that the course can take care of this rather than having it
 				// here hardcoded
 				OLATResource courseResource = ref.getSource();
-				//ICourse course = CourseFactory.loadCourse(courseResource);
 				ICourse course = CourseFactory.openCourseEditSession(courseResource.getResourceableId());
 				CourseConfig cc = course.getCourseEnvironment().getCourseConfig();
 				cc.setGlossarySoftKey(null);

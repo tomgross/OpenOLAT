@@ -25,10 +25,7 @@
 
 package org.olat.course.statistic;
 
-import java.text.DateFormat;
 import java.util.ArrayList;
-import java.util.Calendar;
-import java.util.Date;
 import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
@@ -50,7 +47,7 @@ import org.olat.core.gui.control.WindowControl;
 import org.olat.core.gui.control.controller.BasicController;
 import org.olat.core.gui.translator.Translator;
 import org.olat.core.id.OLATResourceable;
-import org.olat.core.logging.OLog;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
 import org.olat.core.logging.activity.StringResourceableType;
 import org.olat.core.logging.activity.ThreadLocalUserActivityLogger;
@@ -91,11 +88,11 @@ public class StatisticDisplayController extends BasicController {
 	}
 	
 	/** the logging object used in this class **/
-	private static final OLog log_ = Tracing.createLoggerFor(StatisticDisplayController.class);
+	private static final Logger log_ = Tracing.createLoggerFor(StatisticDisplayController.class);
 
-	private final static String CLICK_NODE_ACTION = "clicknodeaction";
+	private static final String CLICK_NODE_ACTION = "clicknodeaction";
 	
-	public final static String CLICK_TOTAL_ACTION = "clicktotalaction";
+	public static final String CLICK_TOTAL_ACTION = "clicktotalaction";
 
 	/** a possible value of statisticType in the user activity logging **/
 	private static final String STATISTIC_TYPE_VIEW_NODE_STATISTIC = "VIEW_NODE_STATISTIC";
@@ -112,13 +109,12 @@ public class StatisticDisplayController extends BasicController {
 	private final ICourse course;
 	private final IStatisticManager statisticManager;
 
-	private TableController tableCtr_;
+	private TableController tableCtr;
 	private TableController tableController;
 
-	private VelocityContainer statisticVc_;
+	private VelocityContainer statisticVc;
 
-	private Translator headerTranslator_;
-	
+	private Translator headerTranslator;
 	
 	public StatisticDisplayController(UserRequest ureq, WindowControl windowControl, ICourse course, IStatisticManager statisticManager) {
 		super(ureq, windowControl);
@@ -131,7 +127,7 @@ public class StatisticDisplayController extends BasicController {
 		}
 		this.course = course;
 		this.statisticManager = statisticManager;
-		this.headerTranslator_ = Util.createPackageTranslator(statisticManager.getClass(), ureq.getLocale());
+		this.headerTranslator = Util.createPackageTranslator(statisticManager.getClass(), ureq.getLocale());
 
 		// statistic.html is under org.olat.course.statistic - no matter who subclasses BaseStatisticDisplayController
 		setVelocityRoot(Util.getPackageVelocityRoot(StatisticDisplayController.class));
@@ -141,20 +137,18 @@ public class StatisticDisplayController extends BasicController {
 	}
 	
 	protected Component createInitialComponent(UserRequest ureq) {
-		statisticVc_ = createVelocityContainer("statistic");
-		statisticVc_.contextPut("statsSince", getStatsSinceStr(ureq));
+		statisticVc = createVelocityContainer("statistic");
 		recreateTableController(ureq);
-		
-		return statisticVc_;
+		return statisticVc;
 	}
 
 	protected void recreateTableController(UserRequest ureq) {
 		StatisticResult result = recalculateStatisticResult(ureq);
-		tableCtr_ = createTableController(ureq, result);
-		statisticVc_.put("statisticResult", tableCtr_.getInitialComponent());
-		statisticVc_.contextPut("hasChart", Boolean.FALSE);
+		tableCtr = createTableController(ureq, result);
+		statisticVc.put("statisticResult", tableCtr.getInitialComponent());
+		statisticVc.contextPut("hasChart", Boolean.FALSE);
 
-		Graph graph = calculateNodeGraph(ureq, result.getRowCount()-1);
+		Graph graph = calculateNodeGraph(result.getRowCount()-1);
 		generateCharts(graph);
 	}
 
@@ -174,7 +168,6 @@ public class StatisticDisplayController extends BasicController {
 		tableController = new TableController(tableConfig, ureq, getWindowControl(), getTranslator());
 		listenTo(tableController);
 		
-		//		tableCtr.addColumnDescriptor(statisticManager.createColumnDescriptor(ureq, 0, null));
 		IndentedStatisticNodeRenderer indentedNodeRenderer = new IndentedStatisticNodeRenderer(Util.createPackageTranslator(statisticManager.getClass(), ureq.getLocale()));
 		indentedNodeRenderer.setSimpleRenderingOnExport(true);
 		CustomRenderColumnDescriptor nodeCD = new CustomRenderColumnDescriptor("stat.table.header.node", 0, 
@@ -182,7 +175,7 @@ public class StatisticDisplayController extends BasicController {
 			@Override
 			public int compareTo(int rowa, int rowb) {
 				// order by original row order
-				return new Integer(rowa).compareTo(rowb);
+				return Integer.valueOf(rowa).compareTo(rowb);
 			}
 		};
 		tableController.addColumnDescriptor(nodeCD);
@@ -195,18 +188,20 @@ public class StatisticDisplayController extends BasicController {
 			tableController.addColumnDescriptor(statisticManager.createColumnDescriptor(ureq, aColumnId, aHeader));
 		}
 		
-		tableController.addColumnDescriptor(new CustomRenderColumnDescriptor("stat.table.header.total", column, 
-				StatisticDisplayController.CLICK_TOTAL_ACTION+column, ureq.getLocale(), ColumnDescriptor.ALIGNMENT_RIGHT, new TotalColumnRenderer()) {
+		CustomRenderColumnDescriptor columnDescriptor = new CustomRenderColumnDescriptor("stat.table.header.total",
+				column, StatisticDisplayController.CLICK_TOTAL_ACTION + column, ureq.getLocale(),
+				ColumnDescriptor.ALIGNMENT_RIGHT, new TotalColumnRenderer()) {
 			@Override
 			public String getAction(int row) {
-				if (row==table.getTableDataModel().getRowCount()-1) {
+				if (row == table.getTableDataModel().getRowCount() - 1) {
 					return super.getAction(row);
-				} else {
-					return null;
 				}
+				return null;
 			}
-			
-		});
+
+		};
+		columnDescriptor.setHeaderAlignment(ColumnDescriptor.ALIGNMENT_RIGHT);
+		tableController.addColumnDescriptor(columnDescriptor);
 		
 		tableController.setTableDataModel(result);
 		
@@ -246,31 +241,27 @@ public class StatisticDisplayController extends BasicController {
 
 	@Override
 	protected void event(UserRequest ureq, Controller source, Event event) {
-		if (source==tableCtr_ && event instanceof TableEvent) {
+		if (source==tableCtr && event instanceof TableEvent) {
 			TableEvent tableEvent = (TableEvent)event;
 			if (CLICK_NODE_ACTION.equals(tableEvent.getActionId())) {
-
 				int rowId = tableEvent.getRowId();
-				Graph graph = calculateNodeGraph(ureq, rowId);
+				Graph graph = calculateNodeGraph(rowId);
 				generateCharts(graph);
 			} else if (tableEvent.getActionId().startsWith(CLICK_TOTAL_ACTION)) {
-				
 				try{
 					int columnId = Integer.parseInt(tableEvent.getActionId().substring(CLICK_TOTAL_ACTION.length()));
-					Graph graph = calculateTotalGraph(ureq, columnId);
+					Graph graph = calculateTotalGraph(columnId);
 					generateCharts(graph);
 				} catch(NumberFormatException e) {
 					log_.warn("event: Could not convert event into columnId for rendering graph: "+tableEvent.getActionId());
-					return;
 				}
-				
 			}
 		}
 	}
 	
-	private Graph calculateNodeGraph(UserRequest ureq, int rowId) {
+	private Graph calculateNodeGraph(int rowId) {
 		
-		Object o = tableCtr_.getTableDataModel().getValueAt(rowId, 0);
+		Object o = tableCtr.getTableDataModel().getValueAt(rowId, 0);
 		String selectionInfo = "";
 		if (o instanceof Map) {
 			Map map = (Map)o;
@@ -285,16 +276,16 @@ public class StatisticDisplayController extends BasicController {
 					LoggingResourceable.wrapNonOlatResource(StringResourceableType.statisticType, "", STATISTIC_TYPE_VIEW_TOTAL_OF_NODES_STATISTIC));
 			selectionInfo = getTranslator().translate("statistic.chart.selectioninfo.total");
 		}
-		String chartIntroStr = headerTranslator_.translate("statistic.chart.intro", new String[] { selectionInfo, getStatsSinceStr(ureq) });
+		String chartIntroStr = headerTranslator.translate("statistic.chart.intro", new String[] { selectionInfo });
 		
-		StringBuffer chd = new StringBuffer();
-		List<Integer> values = new ArrayList<Integer>();
+		StringBuilder chd = new StringBuilder(4096);
+		List<Integer> values = new ArrayList<>();
 
 		int max = 10;
-		int columnCnt = tableCtr_.getTableDataModel().getColumnCount();
-		List<String> labelList = new LinkedList<String>();
+		int columnCnt = tableCtr.getTableDataModel().getColumnCount();
+		List<String> labelList = new LinkedList<>();
 		for(int column=1/*we ignore the node itself*/; column<columnCnt-1/*we ignore the total*/; column++) {
-			Object cellValue = tableCtr_.getTableDataModel().getValueAt(rowId, column);
+			Object cellValue = tableCtr.getTableDataModel().getValueAt(rowId, column);
 			Integer v = 0;
 			if (cellValue instanceof Integer) {
 				v = (Integer)cellValue;
@@ -306,10 +297,10 @@ public class StatisticDisplayController extends BasicController {
 			chd.append(v);
 			values.add(v);
 			
-			ColumnDescriptor cd = tableCtr_.getColumnDescriptor(column);
+			ColumnDescriptor cd = tableCtr.getColumnDescriptor(column);
 			String headerKey = cd.getHeaderKey();
 			if (cd.translateHeaderKey()) {
-				headerKey = headerTranslator_.translate(headerKey);
+				headerKey = headerTranslator.translate(headerKey);
 			}
 			labelList.add(headerKey);
 		}
@@ -321,32 +312,32 @@ public class StatisticDisplayController extends BasicController {
 		return result;
 	}
 
-	private Graph calculateTotalGraph(UserRequest ureq, int columnId) {
-		ColumnDescriptor cd = tableCtr_.getColumnDescriptor(columnId);
+	private Graph calculateTotalGraph(int columnId) {
+		ColumnDescriptor cd = tableCtr.getColumnDescriptor(columnId);
 		String headerKey = cd.getHeaderKey();
 		if (cd.translateHeaderKey()) {
-			headerKey = headerTranslator_.translate(headerKey);
+			headerKey = headerTranslator.translate(headerKey);
 		}
 		String selectionInfo = headerKey;
 		String chartIntroStr;
-		if (columnId==tableCtr_.getTableDataModel().getColumnCount()-1) {
+		if (columnId==tableCtr.getTableDataModel().getColumnCount()-1) {
 			ThreadLocalUserActivityLogger.log(StatisticLoggingAction.VIEW_TOTAL_TOTAL_STATISTIC, getClass(), 
 					LoggingResourceable.wrapNonOlatResource(StringResourceableType.statisticType, "", STATISTIC_TYPE_VIEW_TOTAL_TOTAL_STATISTIC));
-			chartIntroStr = headerTranslator_.translate("statistic.chart.pernode.total.intro", new String[] {getStatsSinceStr(ureq)});
+			chartIntroStr = headerTranslator.translate("statistic.chart.pernode.total.intro");
 		} else {
 			ThreadLocalUserActivityLogger.log(StatisticLoggingAction.VIEW_TOTAL_BY_VALUE_STATISTIC, getClass(), 
 					LoggingResourceable.wrapNonOlatResource(StringResourceableType.statisticType, "", STATISTIC_TYPE_VIEW_TOTAL_BY_VALUE_STATISTIC),
 					LoggingResourceable.wrapNonOlatResource(StringResourceableType.statisticColumn, "", selectionInfo));
-			chartIntroStr = headerTranslator_.translate("statistic.chart.pernode.intro", new String[] { selectionInfo });
+			chartIntroStr = headerTranslator.translate("statistic.chart.pernode.intro", new String[] { selectionInfo });
 		}
 		
-		StringBuffer chd = new StringBuffer();
+		StringBuilder chd = new StringBuilder(4096);
 
 		int max = 10;
 		
-		List<String> labelList = new LinkedList<String>();
-		for(int row=0; row<tableCtr_.getTableDataModel().getRowCount()-1; row++) {
-			Object cellValue = tableCtr_.getTableDataModel().getValueAt(row, columnId);
+		List<String> labelList = new LinkedList<>();
+		for(int row=0; row<tableCtr.getTableDataModel().getRowCount()-1; row++) {
+			Object cellValue = tableCtr.getTableDataModel().getValueAt(row, columnId);
 			Integer v = 0;
 			if (cellValue instanceof Integer) {
 				v = (Integer)cellValue;
@@ -357,7 +348,7 @@ public class StatisticDisplayController extends BasicController {
 			}
 			chd.append(v);
 			
-			Map m = (Map)tableCtr_.getTableDataModel().getValueAt(row, 0);
+			Map m = (Map)tableCtr.getTableDataModel().getValueAt(row, 0);
 			headerKey = "n/a";
 			if (m!=null) {
 				headerKey = (String) m.get(AssessmentHelper.KEY_TITLE_SHORT);
@@ -368,12 +359,12 @@ public class StatisticDisplayController extends BasicController {
 		Graph result = new Graph();
 		result.labelList = labelList;
 		result.chartIntroStr = chartIntroStr;
-		result.numElements = tableCtr_.getTableDataModel().getRowCount()-1;
+		result.numElements = tableCtr.getTableDataModel().getRowCount()-1;
 		return result;
 	}
 	private void generateCharts(Graph graph) {
-		statisticVc_.contextPut("hasChart", Boolean.FALSE);
-		statisticVc_.contextPut("hasChartError", Boolean.FALSE);
+		statisticVc.contextPut("hasChart", Boolean.FALSE);
+		statisticVc.contextPut("hasChartError", Boolean.FALSE);
 		if (graph==null || graph.numElements==0) {
 			Component ic = getInitialComponent();
 			if (ic!=null) {
@@ -382,10 +373,10 @@ public class StatisticDisplayController extends BasicController {
 			return;
 		}
 		try{
-			statisticVc_.contextPut("chartAlt", getTranslator().translate("chart.alt"));
-			statisticVc_.contextPut("chartIntro", graph.chartIntroStr);
-			statisticVc_.contextPut("hasChart", Boolean.TRUE);
-			statisticVc_.contextPut("hasChartError", Boolean.FALSE);
+			statisticVc.contextPut("chartAlt", getTranslator().translate("chart.alt"));
+			statisticVc.contextPut("chartIntro", graph.chartIntroStr);
+			statisticVc.contextPut("hasChart", Boolean.TRUE);
+			statisticVc.contextPut("hasChartError", Boolean.FALSE);
 			
 			BarChartComponent chartCmp = new BarChartComponent("stats");
 			List<String> labels = graph.getLabels();
@@ -397,7 +388,7 @@ public class StatisticDisplayController extends BasicController {
 				serie.add(value, category);
 			}
 			chartCmp.addSeries(serie);
-			statisticVc_.put("chart", chartCmp);
+			statisticVc.put("chart", chartCmp);
 			
 		} catch(RuntimeException re) {
 			log_.warn("generateCharts: RuntimeException during chart generation: "+re, re);
@@ -406,17 +397,6 @@ public class StatisticDisplayController extends BasicController {
 		if (ic!=null) {
 			ic.setDirty(true);
 		}
-	}
-
-	protected String getStatsSinceStr(UserRequest ureq) {
-		Date d = SimpleStatisticInfoHelper.getFirstLoggingTableCreationDate();
-		if (d==null) {
-			return "n/a";
-		}
-		Calendar c = Calendar.getInstance(ureq.getLocale());
-		c.setTime(d);
-		DateFormat df = DateFormat.getDateInstance(DateFormat.SHORT, ureq.getLocale());
-		return df.format(c.getTime());
 	}
 	
 	@Override

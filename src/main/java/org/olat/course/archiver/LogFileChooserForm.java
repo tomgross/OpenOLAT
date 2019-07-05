@@ -56,16 +56,16 @@ public class LogFileChooserForm extends FormBasicController {
      * 
      * @param ureq
      * @param wControl
-     * @param isOLATAdmin
+     * @param isAdministrator
      * @param a adminLogVisibility
      * @param u userLogVisibility
      * @param s statisticLogVisibility
      */
     
-    public LogFileChooserForm(UserRequest ureq, WindowControl wControl, boolean isOLATAdmin, boolean a, boolean u, boolean s) {
+    public LogFileChooserForm(UserRequest ureq, WindowControl wControl, boolean isAdministrator, boolean a, boolean u, boolean s) {
         super(ureq, wControl);
         
-        this.admin = isOLATAdmin;
+        this.admin = isAdministrator;
         
         this.u = u;
         this.a = a; 
@@ -74,46 +74,40 @@ public class LogFileChooserForm extends FormBasicController {
         initForm (ureq);
     }
     
+    @Override
+    public boolean validateFormLogic(UserRequest ureq) {
+    	boolean logChecked = false;
+    	boolean beginLessThanEndOk = true;
+    	
+    	aE.clearError();
+    	uE.clearError();
+    	sE.clearError();
+      if(aE.isSelected(0) || uE.isSelected(0) || sE.isSelected(0)){
+      	logChecked = true;
+      }else{
+      	if (sE.isVisible()) {
+      		sE.setErrorKey("course.logs.error", null);
+      	} else if (uE.isVisible()) {
+      		uE.setErrorKey("course.logs.error", null);
+      	} else {
+      		aE.setErrorKey("course.logs.error", null);
+      	}
+      }
+      
+      // note: we're no longer restricting to have both a begin and an end
+      //       - there is no underlying reason for limiting this
+      beginDate.clearError();
+      if((beginDate.getDate() != null)&&(endDate.getDate() != null)){
+      	if (beginDate.getDate().after(endDate.getDate())){
+      		beginLessThanEndOk= false;
+      		beginDate.setErrorKey("logfilechooserform.endlessthanbegin", null);
+      	}
+      }
+      
+      return logChecked && beginLessThanEndOk;
+    }
+    
     /**
-     * @see org.olat.core.gui.components.Form#validate(org.olat.core.gui.UserRequest)
-     */
-	public boolean validateFormLogic(UserRequest ureq) {
-		boolean logChecked = false;
-		boolean beginLessThanEndOk = true;
-
-		if (createStatisticLogWithoutCheckboxSelection) {
-			logChecked = true;
-		} else {
-			aE.clearError();
-			uE.clearError();
-			sE.clearError();
-			if (aE.isSelected(0) || uE.isSelected(0) || sE.isSelected(0)) {
-				logChecked = true;
-			} else {
-				if (sE.isVisible()) {
-					sE.setErrorKey("course.logs.error", null);
-				} else if (uE.isVisible()) {
-					uE.setErrorKey("course.logs.error", null);
-				} else {
-					aE.setErrorKey("course.logs.error", null);
-				}
-			}
-		}
-
-		// note: we're no longer restricting to have both a begin and an end
-		//       - there is no underlying reason for limiting this
-		beginDate.clearError();
-		if ((beginDate.getDate() != null) && (endDate.getDate() != null)) {
-			if (beginDate.getDate().after(endDate.getDate())) {
-				beginLessThanEndOk = false;
-				beginDate.setErrorKey("logfilechooserform.endlessthanbegin", null);
-			}
-		}
-
-		return logChecked && beginLessThanEndOk;
-	}
-
-	/**
      * @return true if logAdmin is checked
      */
     public boolean logAdminChecked() {

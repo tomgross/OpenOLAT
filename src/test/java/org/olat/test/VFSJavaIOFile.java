@@ -24,12 +24,15 @@ import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.nio.file.Path;
 
+import org.olat.core.commons.modules.bc.FolderConfig;
+import org.olat.core.commons.services.vfs.VFSMetadata;
+import org.olat.core.util.vfs.JavaIOItem;
 import org.olat.core.util.vfs.VFSConstants;
 import org.olat.core.util.vfs.VFSContainer;
 import org.olat.core.util.vfs.VFSItem;
 import org.olat.core.util.vfs.VFSLeaf;
-import org.olat.core.util.vfs.JavaIOItem;
 import org.olat.core.util.vfs.VFSStatus;
 import org.olat.core.util.vfs.callbacks.VFSSecurityCallback;
 
@@ -60,6 +63,11 @@ public class VFSJavaIOFile implements VFSLeaf, JavaIOItem {
 	}
 
 	@Override
+	public boolean isHidden() {
+		return file != null && file.isHidden();
+	}
+
+	@Override
 	public File getBasefile() {
 		return file;
 	}
@@ -77,6 +85,17 @@ public class VFSJavaIOFile implements VFSLeaf, JavaIOItem {
 	@Override
 	public void setParentContainer(VFSContainer parentContainer) {
 		//
+	}
+	
+	@Override
+	public String getRelPath() {
+		Path bFile = getBasefile().toPath();
+		Path bcRoot = FolderConfig.getCanonicalRootPath();
+		if(bFile.startsWith(bcRoot)) {
+			String relPath = bcRoot.relativize(bFile).toString();
+			return "/" + relPath;
+		}
+		return null;
 	}
 
 	@Override
@@ -132,6 +151,21 @@ public class VFSJavaIOFile implements VFSLeaf, JavaIOItem {
 	@Override
 	public void setLocalSecurityCallback(VFSSecurityCallback secCallback) {
 		//
+	}
+
+	@Override
+	public VFSStatus canMeta() {
+		return VFSConstants.NO;
+	}
+
+	@Override
+	public VFSStatus canVersion() {
+		return VFSConstants.NO;
+	}
+
+	@Override
+	public VFSMetadata getMetaInfo() {
+		return null;
 	}
 
 	@Override

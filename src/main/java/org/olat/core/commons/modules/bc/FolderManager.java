@@ -31,23 +31,25 @@ import java.util.Date;
 import java.util.List;
 
 import org.olat.core.CoreSpringFactory;
-import org.olat.core.commons.modules.bc.meta.MetaInfo;
-import org.olat.core.commons.modules.bc.meta.MetaInfoFactory;
-import org.olat.core.commons.modules.bc.vfs.OlatRootFolderImpl;
+import org.olat.core.commons.services.vfs.VFSMetadata;
 import org.olat.core.helpers.Settings;
-import org.olat.core.manager.BasicManager;
 import org.olat.core.util.WebappHelper;
-import org.olat.core.util.vfs.OlatRelPathImpl;
+import org.olat.core.util.vfs.LocalFolderImpl;
+import org.olat.core.util.vfs.VFSConstants;
+import org.olat.core.util.vfs.VFSContainer;
 import org.olat.core.util.vfs.VFSItem;
 import org.olat.core.util.vfs.VFSLeaf;
-import org.olat.core.util.vfs.filters.SystemItemFilter;
+import org.olat.core.util.vfs.VFSManager;
+import org.olat.core.util.vfs.filters.VFSSystemItemFilter;
 
 /**
  * Initial Date:  18.12.2002
  *
  * @author Mike Stock
  */
-public class FolderManager  extends BasicManager {
+public class FolderManager {
+	
+	private static FolderModule folderModule;
 
 	/**
 	 * Get this path as a full WebDAV link
@@ -76,28 +78,62 @@ public class FolderManager  extends BasicManager {
 		
 		final List<FileInfo> fileInfos = new ArrayList<>();
 		final long newerThanLong = newerThan.getTime();
-		OlatRootFolderImpl rootFolder = new OlatRootFolderImpl(olatRelPath, null);
+		LocalFolderImpl rootFolder = VFSManager.olatRootContainer(olatRelPath, null);
 		getFileInfosRecursively(rootFolder, fileInfos, newerThanLong, olatRelPath.length());
 		return fileInfos;
 	}
 
-	private static void getFileInfosRecursively(OlatRelPathImpl relPath, List<FileInfo> fileInfos, long newerThan, int basePathlen) {
+	private static void getFileInfosRecursively(VFSItem relPath, List<FileInfo> fileInfos, long newerThan, int basePathlen) {
 		if (relPath instanceof VFSLeaf) {
 			// is a file
-			long lastModified = ((VFSLeaf)relPath).getLastModified();
-			if (lastModified > newerThan) {
-				MetaInfo meta = CoreSpringFactory.getImpl(MetaInfoFactory.class).createMetaInfoFor(relPath);
-				String bcrootPath = relPath.getRelPath();
-				String bcRelPath = bcrootPath.substring(basePathlen);
-				fileInfos.add(new FileInfo(bcRelPath, meta, new Date(lastModified)));
+			VFSLeaf leaf = (VFSLeaf)relPath;
+			if(leaf.canMeta() == VFSConstants.YES) {
+				long lastModified = leaf.getLastModified();
+				if (lastModified > newerThan) {
+					VFSMetadata meta = leaf.getMetaInfo();
+					String bcrootPath = relPath.getRelPath();
+					String bcRelPath = bcrootPath.substring(basePathlen);
+					fileInfos.add(new FileInfo(bcRelPath, meta, new Date(lastModified)));
+				}
 			}
-		} else {
+		} else if(relPath instanceof VFSContainer) {
 			// is a folder
-			OlatRootFolderImpl container = (OlatRootFolderImpl)relPath;
-			for (VFSItem item : container.getItems(new SystemItemFilter())) {
-				getFileInfosRecursively((OlatRelPathImpl)item, fileInfos, newerThan, basePathlen);
+			VFSContainer container = (VFSContainer)relPath;
+			for (VFSItem item : container.getItems(new VFSSystemItemFilter())) {
+				getFileInfosRecursively(item, fileInfos, newerThan, basePathlen);
 			}
 		}
+	}
+	
+	/**
+	 * Check if a file is offered as a download or as inline rendered. If
+	 * security is enabled in the module, this will return true for all file
+	 * types. If disabled it will depend on the mime type.
+	 * 
+	 * @param name the File name (including mime type extension, e.g. "index.html"
+	 * @return true: force file download; false: open in new browser window
+	 */
+	public static boolean isDownloadForcedFileType(String name) {
+		if (folderModule == null) {
+			// Load only once and keep. Not best practice, in the long run the
+			// folder manager needs a full spring bean refactoring, but for now
+			// this is good enough. The not synchronized nature of the
+			// assignment is not a problem here.
+			folderModule = CoreSpringFactory.getImpl(FolderModule.class);
+		}
+		// If enabled in module, no further checks necessary. 
+		boolean download = folderModule.isForceDownload();
+		if (!download) {
+			// Additional check if not an html or txt page. Only HTML pages are
+			// displayed in browser, all other should be downloaded.
+			// Excel, Word and PowerPoint not allowed to open inline, they will show
+			// an unsupported WebDAV loginpromt!
+			String mimeType = WebappHelper.getMimeType(name);
+			if (mimeType != null && !"text/html".equals(mimeType) && !"application/xhtml+xml".equals(mimeType)) {
+				download = true;
+			}					
+		}
+		return download;
 	}
 	
 }

@@ -22,15 +22,16 @@ package org.olat.admin.setup;
 import java.util.ArrayList;
 
 import org.olat.basesecurity.BaseSecurity;
-import org.olat.basesecurity.Constants;
-import org.olat.basesecurity.SecurityGroup;
+import org.olat.basesecurity.OrganisationRoles;
+import org.olat.basesecurity.OrganisationService;
 import org.olat.core.commons.persistence.DB;
 import org.olat.core.commons.persistence.DBFactory;
 import org.olat.core.configuration.AbstractSpringModule;
 import org.olat.core.id.Identity;
 import org.olat.core.logging.OLATRuntimeException;
-import org.olat.core.logging.OLog;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
+import org.olat.core.util.StringHelper;
 import org.olat.core.util.coordinate.CoordinatorManager;
 import org.olat.core.util.event.FrameworkStartupEventChannel;
 import org.olat.user.DefaultUser;
@@ -39,7 +40,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
-import org.springframework.util.StringUtils;
 
 /**
  * 
@@ -50,7 +50,7 @@ import org.springframework.util.StringUtils;
 @Service
 public class SetupModule extends AbstractSpringModule {
 	
-	private static final OLog log = Tracing.createLoggerFor(SetupModule.class);
+	private static final Logger log = Tracing.createLoggerFor(SetupModule.class);
 
 	@Value("${user.generateTestUsers}")
 	private boolean hasTestUsers;
@@ -66,6 +66,8 @@ public class SetupModule extends AbstractSpringModule {
 	protected DB dbInstance;
 	@Autowired
 	private BaseSecurity securityManager;
+	@Autowired
+	private OrganisationService organisationService;
 	
 
 	@Autowired
@@ -86,7 +88,6 @@ public class SetupModule extends AbstractSpringModule {
 
 	/**
 	 * Courses are deployed after the startup has completed.
-	 * 
 	 */
 	@Override
 	public void event(org.olat.core.gui.control.Event event) {
@@ -105,12 +106,10 @@ public class SetupModule extends AbstractSpringModule {
 				createUser(user);
 			}
 		}
-		if (hasTestUsers) {
+		if (hasTestUsers && testUsers != null) {
 			// read user editable fields configuration
-			if (testUsers != null) {
-				for (DefaultUser user :testUsers) {
-					createUser(user);
-				}
+			for (DefaultUser user :testUsers) {
+				createUser(user);
 			}
 		}
 		// Cleanup, otherwhise this subjects will have problems in normal OLAT
@@ -123,7 +122,7 @@ public class SetupModule extends AbstractSpringModule {
 	 * 
 	 * @return Identity or null
 	 */
-	protected Identity createUser(DefaultUser user) {
+	private Identity createUser(DefaultUser user) {
 		Identity identity;
 		identity = securityManager.findIdentityByName(user.getUserName());
 		if (identity == null) {
@@ -132,53 +131,45 @@ public class SetupModule extends AbstractSpringModule {
 			newUser.setFirstName(user.getFirstName());
 			newUser.setLastName(user.getLastName());
 			newUser.setEmail(user.getEmail());
-			
 			newUser.getPreferences().setLanguage(user.getLanguage());
 			newUser.getPreferences().setInformSessionTimeout(true);
 
-			if (!StringUtils.hasText(authenticationProviderConstant)){
+			if (!StringHelper.containsNonWhitespace(authenticationProviderConstant)){
 				throw new OLATRuntimeException(this.getClass(), "Auth token not set! Please fix! " + authenticationProviderConstant, null);
 			}
 
 			// Now finally create that user thing on the database with all
-			// credentials, person etc. in one transation context!
+			// credentials, person etc. in one transaction context!
 			identity = securityManager.createAndPersistIdentityAndUser(user.getUserName(), null, newUser, authenticationProviderConstant,
 					user.getUserName(), user.getPassword());
+
 			if (identity == null) {
 				throw new OLATRuntimeException(this.getClass(), "Error, could not create  user and subject with name " + user.getUserName(), null);
+			} else if (user.isGuest()) {
+				organisationService.addMember(identity, OrganisationRoles.guest);
+				log .info("Created anonymous user " + user.getUserName());
 			} else {
-				
-				if (user.isGuest()) {
-					SecurityGroup anonymousGroup = securityManager.findSecurityGroupByName(Constants.GROUP_ANONYMOUS);
-					securityManager.addIdentityToSecurityGroup(identity, anonymousGroup);
-					log .info("Created anonymous user " + user.getUserName());
-				} else {
-					SecurityGroup olatuserGroup = securityManager.findSecurityGroupByName(Constants.GROUP_OLATUSERS);
-					
-					if (user.isAdmin()) {
-						SecurityGroup adminGroup = securityManager.findSecurityGroupByName(Constants.GROUP_ADMIN);
-						securityManager.addIdentityToSecurityGroup(identity, adminGroup);
-						securityManager.addIdentityToSecurityGroup(identity, olatuserGroup);
-						log .info("Created admin user " + user.getUserName());
-					}  else if (user.isAuthor()) {
-						SecurityGroup authorGroup = securityManager.findSecurityGroupByName(Constants.GROUP_AUTHORS);
-						securityManager.addIdentityToSecurityGroup(identity, authorGroup);
-						securityManager.addIdentityToSecurityGroup(identity, olatuserGroup);
-						log.info("Created author user " + user.getUserName());
-					} else if (user.isUserManager()) {
-						SecurityGroup usermanagerGroup = securityManager.findSecurityGroupByName(Constants.GROUP_USERMANAGERS);
-						securityManager.addIdentityToSecurityGroup(identity, usermanagerGroup);
-						securityManager.addIdentityToSecurityGroup(identity, olatuserGroup);
-						log .info("Created userManager user " + user.getUserName());
-					} else if (user.isGroupManager()) {
-						SecurityGroup groupmanagerGroup = securityManager.findSecurityGroupByName(Constants.GROUP_GROUPMANAGERS);
-						securityManager.addIdentityToSecurityGroup(identity, groupmanagerGroup);
-						securityManager.addIdentityToSecurityGroup(identity, olatuserGroup);
-						log .info("Created groupManager user " + user.getUserName());
-					} else {
-						securityManager.addIdentityToSecurityGroup(identity, olatuserGroup);
-						log .info("Created user " + user.getUserName());
-					}
+				organisationService.addMember(identity, OrganisationRoles.user);
+				log .info("Created user " + user.getUserName());
+				if (user.isAdmin()) {
+					organisationService.addMember(identity, OrganisationRoles.administrator);
+					log .info("Created administrator user " + user.getUserName());
+				}
+				if (user.isSysAdmin()) {
+					organisationService.addMember(identity, OrganisationRoles.sysadmin);
+					log .info("Created admin user " + user.getUserName());
+				}
+				if (user.isAuthor()) {
+					organisationService.addMember(identity, OrganisationRoles.author);
+					log.info("Created author user " + user.getUserName());
+				}
+				if (user.isUserManager()) {
+					organisationService.addMember(identity, OrganisationRoles.usermanager);
+					log .info("Created userManager user " + user.getUserName());
+				}
+				if (user.isGroupManager()) {
+					organisationService.addMember(identity, OrganisationRoles.groupmanager);
+					log .info("Created groupManager user " + user.getUserName());
 				}
 			}
 		}

@@ -41,7 +41,7 @@ import org.olat.core.commons.persistence.DBFactory;
 import org.olat.core.commons.persistence.PersistenceHelper;
 import org.olat.core.id.Identity;
 import org.olat.core.id.OLATResourceable;
-import org.olat.core.logging.OLog;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
 import org.olat.core.logging.activity.StringResourceableType;
 import org.olat.core.logging.activity.ThreadLocalUserActivityLogger;
@@ -61,6 +61,7 @@ import org.olat.course.assessment.manager.EfficiencyStatementManager;
 import org.olat.course.auditing.UserNodeAuditManager;
 import org.olat.course.certificate.CertificateTemplate;
 import org.olat.course.certificate.CertificatesManager;
+import org.olat.course.certificate.model.CertificateConfig;
 import org.olat.course.certificate.model.CertificateInfos;
 import org.olat.course.nodes.AssessableCourseNode;
 import org.olat.course.nodes.CourseNode;
@@ -110,7 +111,7 @@ import org.olat.util.logging.activity.LoggingResourceable;
  */
 public class NewCachePersistingAssessmentManager {
 	
-	private static final OLog log = Tracing.createLoggerFor(NewCachePersistingAssessmentManager.class);
+	private static final Logger log = Tracing.createLoggerFor(NewCachePersistingAssessmentManager.class);
 	
 	public static final String SCORE = "SCORE";
 	public static final String PASSED = "PASSED";
@@ -426,6 +427,7 @@ public class NewCachePersistingAssessmentManager {
 		ICourse course = CourseFactory.loadCourse(ores);
 		final CoursePropertyManager cpm = course.getCourseEnvironment().getCoursePropertyManager();
 		CoordinatorManager.getInstance().getCoordinator().getSyncer().doInSync(createOLATResourceableForLocking(assessedIdentity), new SyncerExecutor(){
+			@Override
 			public void execute() {
 				Property attemptsProperty = cpm.findCourseNodeProperty(courseNode, assessedIdentity, null, ATTEMPTS);
 				if (attemptsProperty == null) {
@@ -443,7 +445,7 @@ public class NewCachePersistingAssessmentManager {
 
 		// node log
 		UserNodeAuditManager am = course.getCourseEnvironment().getAuditManager();
-		am.appendToUserNodeLog(courseNode, identity, assessedIdentity, ATTEMPTS + " set to: " + String.valueOf(attempts));
+		am.appendToUserNodeLog(courseNode, identity, assessedIdentity, ATTEMPTS + " set to: " + String.valueOf(attempts), null);
 
 		// notify about changes
 		AssessmentChangedEvent ace = new AssessmentChangedEvent(AssessmentChangedEvent.TYPE_ATTEMPTS_CHANGED, assessedIdentity);
@@ -497,6 +499,7 @@ public class NewCachePersistingAssessmentManager {
 		ICourse course = CourseFactory.loadCourse(ores);
 		final CoursePropertyManager cpm = course.getCourseEnvironment().getCoursePropertyManager();
 		CoordinatorManager.getInstance().getCoordinator().getSyncer().doInSync(createOLATResourceableForLocking(assessedIdentity), new SyncerExecutor(){
+			@Override
 			public void execute() {
 				Property commentProperty = cpm.findCourseNodeProperty(courseNode, assessedIdentity, null, COMMENT);
 				if (commentProperty == null) {
@@ -512,7 +515,7 @@ public class NewCachePersistingAssessmentManager {
 		});
 		// node log
 		UserNodeAuditManager am = course.getCourseEnvironment().getAuditManager();
-		am.appendToUserNodeLog(courseNode, identity, assessedIdentity, COMMENT + " set to: " + comment);
+		am.appendToUserNodeLog(courseNode, identity, assessedIdentity, COMMENT + " set to: " + comment, null);
 
 		// notify about changes
 		AssessmentChangedEvent ace = new AssessmentChangedEvent(AssessmentChangedEvent.TYPE_USER_COMMENT_CHANGED, assessedIdentity);
@@ -533,6 +536,7 @@ public class NewCachePersistingAssessmentManager {
 		ICourse course = CourseFactory.loadCourse(ores);
 		final CoursePropertyManager cpm = course.getCourseEnvironment().getCoursePropertyManager();
 		CoordinatorManager.getInstance().getCoordinator().getSyncer().doInSync(createOLATResourceableForLocking(assessedIdentity), new SyncerExecutor(){
+			@Override
 			public void execute() {
 				Property commentProperty = cpm.findCourseNodeProperty(courseNode, assessedIdentity, null, COACH_COMMENT);
 				if (commentProperty == null) {
@@ -579,6 +583,7 @@ public class NewCachePersistingAssessmentManager {
 		ICourse course = CourseFactory.loadCourse(ores);
 		final CoursePropertyManager cpm = course.getCourseEnvironment().getCoursePropertyManager();
 		long attempts = CoordinatorManager.getInstance().getCoordinator().getSyncer().doInSync(createOLATResourceableForLocking(identity), new SyncerCallback<Long>(){
+			@Override
 			public Long execute() {
 				long attempts = incrementNodeAttemptsProperty(courseNode, identity, cpm);
 				if(courseNode instanceof AssessableCourseNode) {
@@ -864,6 +869,7 @@ public class NewCachePersistingAssessmentManager {
 		// we could also sync on the assessedIdentity.
 		
 		Long attempts = CoordinatorManager.getInstance().getCoordinator().getSyncer().doInSync(createOLATResourceableForLocking(assessedIdentity), new SyncerCallback<Long>(){
+			@Override
 			public Long execute() {
 				Long attempts = null;
 				Float score = scoreEvaluation.getScore();
@@ -891,7 +897,15 @@ public class NewCachePersistingAssessmentManager {
 							template = certificatesManager.getTemplateById(templateId);
 						}
 						CertificateInfos certificateInfos = new CertificateInfos(assessedIdentity, score, passed);
-						certificatesManager.generateCertificate(certificateInfos, courseEntry, template, true);
+						CertificateConfig config = CertificateConfig.builder()
+								.withCustom1(course.getCourseConfig().getCertificateCustom1())
+								.withCustom2(course.getCourseConfig().getCertificateCustom2())
+								.withCustom3(course.getCourseConfig().getCertificateCustom3())
+								.withSendEmailBcc(false)
+								.withSendEmailLinemanager(false)
+								.withSendEmailIdentityRelations(false)
+								.build();
+						certificatesManager.generateCertificate(certificateInfos, courseEntry, template, config);
 					}
 				}
 				
@@ -901,14 +915,14 @@ public class NewCachePersistingAssessmentManager {
 		
 		// node log
 		UserNodeAuditManager am = course.getCourseEnvironment().getAuditManager();
-		am.appendToUserNodeLog(courseNode, identity, assessedIdentity, SCORE + " set to: " + String.valueOf(scoreEvaluation.getScore()));
+		am.appendToUserNodeLog(courseNode, identity, assessedIdentity, SCORE + " set to: " + String.valueOf(scoreEvaluation.getScore()), null);
 		if(scoreEvaluation.getPassed()!=null) {
-		  am.appendToUserNodeLog(courseNode, identity, assessedIdentity, PASSED + " set to: " + scoreEvaluation.getPassed().toString());
+		  am.appendToUserNodeLog(courseNode, identity, assessedIdentity, PASSED + " set to: " + scoreEvaluation.getPassed().toString(), null);
 		} else {
-			 am.appendToUserNodeLog(courseNode, identity, assessedIdentity, PASSED + " set to \"undefined\"");
+			 am.appendToUserNodeLog(courseNode, identity, assessedIdentity, PASSED + " set to \"undefined\"", null);
 		}
 		if(scoreEvaluation.getAssessmentID()!=null) {
-			am.appendToUserNodeLog(courseNode, assessedIdentity, assessedIdentity, ASSESSMENT_ID + " set to: " + scoreEvaluation.getAssessmentID().toString());
+			am.appendToUserNodeLog(courseNode, assessedIdentity, assessedIdentity, ASSESSMENT_ID + " set to: " + scoreEvaluation.getAssessmentID().toString(), null);
 		}		
 
 		// notify about changes

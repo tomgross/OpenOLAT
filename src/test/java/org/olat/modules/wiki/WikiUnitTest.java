@@ -31,6 +31,7 @@ import static org.junit.Assert.assertNotNull;
 
 import java.util.List;
 
+import org.junit.Assert;
 import org.junit.Test;
 import org.olat.core.id.OLATResourceable;
 import org.olat.modules.wiki.versioning.ChangeInfo;
@@ -46,6 +47,15 @@ import org.olat.test.OlatTestCase;
  */
 public class WikiUnitTest extends OlatTestCase {
 	private static final String WIKI_CONTENT = "==heading==\n'''bold'''\n[[Image:test.jpg|bla]]";
+	
+	@Test
+	public void alternativeId() {
+		String alternativeId = "SW5kZXg_.wp";
+		String convertedId = WikiManager.convertAlternativeFilename(alternativeId);
+		
+		String indexId = WikiManager.generatePageId(WikiPage.WIKI_INDEX_PAGE) + WikiManager.WIKI_DOT_FILE_SUFFIX;
+		Assert.assertEquals(indexId, convertedId);
+	}
 
 	@Test
 	public void testWikiStuff() {
@@ -60,8 +70,8 @@ public class WikiUnitTest extends OlatTestCase {
 		page1.setContent(WIKI_CONTENT);
 		wiki.addPage(page1);
 		wiki.addPage(page2);
-		wikiMgr.saveWikiPage(ores, page1, true, wiki);
-		wikiMgr.saveWikiPage(ores, page2, true, wiki);
+		wikiMgr.saveWikiPage(ores, page1, true, wiki, true);
+		wikiMgr.saveWikiPage(ores, page2, true, wiki, true);
 		
 		// reset wiki and load again from filesysetm
 		wiki = null;
@@ -77,7 +87,7 @@ public class WikiUnitTest extends OlatTestCase {
 		assertEquals("Content of loaded wiki page is not the same after loading from filesystem", WIKI_CONTENT, page1.getContent());
 		
 		page1.setContent(WIKI_CONTENT+"\nThis is a new line");
-		wikiMgr.saveWikiPage(ores, page1, true, wiki);
+		wikiMgr.saveWikiPage(ores, page1, true, wiki, true);
 		List<ChangeInfo> diffs = wiki.getDiff(page1, page1.getVersion() -1, page1.getVersion());
 		ChangeInfo change = diffs.get(0);
 		

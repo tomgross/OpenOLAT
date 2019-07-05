@@ -20,7 +20,6 @@
 package org.olat.modules.fo.ui;
 
 import java.io.File;
-import java.io.IOException;
 import java.text.Collator;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -32,7 +31,6 @@ import javax.persistence.PersistenceException;
 import org.olat.basesecurity.BaseSecurity;
 import org.olat.basesecurity.IdentityShort;
 import org.olat.core.commons.modules.bc.FolderConfig;
-import org.olat.core.commons.modules.bc.vfs.OlatRootFolderImpl;
 import org.olat.core.commons.persistence.DBFactory;
 import org.olat.core.commons.services.notifications.NotificationsManager;
 import org.olat.core.gui.UserRequest;
@@ -57,7 +55,6 @@ import org.olat.core.logging.AssertException;
 import org.olat.core.logging.DBRuntimeException;
 import org.olat.core.logging.activity.ThreadLocalUserActivityLogger;
 import org.olat.core.util.CodeHelper;
-import org.olat.core.util.FileUtils;
 import org.olat.core.util.StringHelper;
 import org.olat.core.util.Util;
 import org.olat.core.util.WebappHelper;
@@ -66,6 +63,7 @@ import org.olat.core.util.vfs.LocalFolderImpl;
 import org.olat.core.util.vfs.VFSContainer;
 import org.olat.core.util.vfs.VFSItem;
 import org.olat.core.util.vfs.VFSLeaf;
+import org.olat.core.util.vfs.VFSManager;
 import org.olat.core.util.vfs.filters.VFSItemMetaFilter;
 import org.olat.modules.fo.Forum;
 import org.olat.modules.fo.ForumCallback;
@@ -175,10 +173,12 @@ public class MessageEditController extends FormBasicController {
 		titleEl.setNotEmptyCheck("error.field.not.empty");
 		bodyEl = uifactory.addRichTextElementForStringData("msgBody", "msg.body", message.getBody(), 15, -1, true, null, null,
 				formLayout, ureq.getUserSession(), getWindowControl());
+		bodyEl.setElementCssClass("o_sel_forum_message_body");
 		bodyEl.setMandatory(true);
 		bodyEl.setNotEmptyCheck("error.field.not.empty");
 		bodyEl.setMaxLength(MAX_BODY_LENGTH);
 		bodyEl.setNotLongerThanCheck(MAX_BODY_LENGTH, "input.toolong");
+		bodyEl.getEditorConfiguration().enableCharCount();
 		
 		setEditPermissions(message);
 		// list existing attachments. init attachment layout now, to place it in
@@ -206,6 +206,7 @@ public class MessageEditController extends FormBasicController {
 			passwordEl = uifactory.addPasswordElement("password", "password", 128, "", formLayout);
 			passwordEl.setElementCssClass("o_sel_forum_message_alias_pass");
 			passwordEl.setPlaceholderKey("password.placeholder", null);
+			passwordEl.setAutocomplete("new-password");
 
 			if(guestOnly) {
 				usePseudonymEl.setVisible(false);
@@ -493,7 +494,7 @@ public class MessageEditController extends FormBasicController {
 		if(editMode == EditMode.newThread) {
 			if(foCallback.mayOpenNewThread()) {
 				// save a new thread
-				fm.addTopMessage(message);
+				message = fm.addTopMessage(message);
 				fm.markNewMessageAsRead(getIdentity(), forum, message);
 				persistTempUploadedFiles(message);
 				// if notification is enabled -> notify the publisher about news
@@ -526,7 +527,7 @@ public class MessageEditController extends FormBasicController {
 				showWarning("may.not.save.msg.as.author");
 			}
 		} else if(editMode == EditMode.reply) { 
-			fm.replyToMessage(message, parentMessage);
+			message = fm.replyToMessage(message, parentMessage);
 			fm.markNewMessageAsRead(getIdentity(), forum, message);
 			persistTempUploadedFiles(message);
 			notifiySubscription();
@@ -625,7 +626,7 @@ public class MessageEditController extends FormBasicController {
 
 	private List<VFSItem> getTempFolderFileList() {
 		if (tempUploadFolder == null) {
-			tempUploadFolder = new OlatRootFolderImpl(File.separator + "tmp/" + CodeHelper.getGlobalForeverUniqueID() + "/", null);
+			tempUploadFolder = VFSManager.olatRootContainer(File.separator + "tmp/" + CodeHelper.getGlobalForeverUniqueID() + "/", null);
 		}		
 		return tempUploadFolder.getItems(exclFilter);
 	}
@@ -656,11 +657,7 @@ public class MessageEditController extends FormBasicController {
 	 * @return the edited message
 	 */
 	public Message getMessage() {
-		if (!StringHelper.containsNonWhitespace(message.getTitle()) && message == null) {
-			throw new AssertException("Getting back the edited message failed! You first have to edit one and intialize properly!");
-		} else {
-			return message;
-		}
+		return message;
 	}
 
 	/**
@@ -688,12 +685,9 @@ public class MessageEditController extends FormBasicController {
 			for (VFSItem file : tmpFList) {
 				VFSLeaf leaf = (VFSLeaf) file;
 				try {
-					FileUtils.bcopy(
-							leaf.getInputStream(),
-							msgContainer.createChildLeaf(leaf.getName()).getOutputStream(false),
-							"forumSaveUploadedFile"
-					);
-				} catch (IOException e) {
+					VFSLeaf targetFile = msgContainer.createChildLeaf(leaf.getName());
+					VFSManager.copyContent(leaf, targetFile, false);
+				} catch (Exception e) {
 					removeTempUploadedFiles();
 					throw new RuntimeException ("I/O error saving uploaded file:" + msgContainer + "/" + leaf.getName());
 				}

@@ -1,0 +1,826 @@
+/**
+ * <a href="http://www.openolat.org">
+ * OpenOLAT - Online Learning and Training</a><br>
+ * <p>
+ * Licensed under the Apache License, Version 2.0 (the "License"); <br>
+ * you may not use this file except in compliance with the License.<br>
+ * You may obtain a copy of the License at the
+ * <a href="http://www.apache.org/licenses/LICENSE-2.0">Apache homepage</a>
+ * <p>
+ * Unless required by applicable law or agreed to in writing,<br>
+ * software distributed under the License is distributed on an "AS IS" BASIS, <br>
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. <br>
+ * See the License for the specific language governing permissions and <br>
+ * limitations under the License.
+ * <p>
+ * Initial code contributed and copyrighted by<br>
+ * frentix GmbH, http://www.frentix.com
+ * <p>
+ */
+package org.olat.course.nodes.members.ui.group;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.stream.Collectors;
+
+import org.olat.core.gui.UserRequest;
+import org.olat.core.gui.components.form.flexible.FormItem;
+import org.olat.core.gui.components.form.flexible.FormItemContainer;
+import org.olat.core.gui.components.form.flexible.elements.FormLink;
+import org.olat.core.gui.components.form.flexible.elements.SelectionElement;
+import org.olat.core.gui.components.form.flexible.elements.SingleSelection;
+import org.olat.core.gui.components.form.flexible.elements.StaticTextElement;
+import org.olat.core.gui.components.form.flexible.impl.FormBasicController;
+import org.olat.core.gui.components.form.flexible.impl.FormEvent;
+import org.olat.core.gui.control.Controller;
+import org.olat.core.gui.control.Event;
+import org.olat.core.gui.control.WindowControl;
+import org.olat.core.gui.control.generic.closablewrapper.CloseableModalController;
+import org.olat.core.util.StringHelper;
+import org.olat.core.util.Util;
+import org.olat.course.condition.AreaSelectionController;
+import org.olat.course.condition.CurriculumElementSelectionController;
+import org.olat.course.condition.GroupSelectionController;
+import org.olat.course.editor.CourseEditorEnv;
+import org.olat.group.BusinessGroupService;
+import org.olat.group.BusinessGroupShort;
+import org.olat.group.area.BGArea;
+import org.olat.group.area.BGAreaManager;
+import org.olat.modules.ModuleConfiguration;
+import org.olat.modules.curriculum.CurriculumElement;
+import org.olat.modules.curriculum.CurriculumElementRef;
+import org.olat.modules.curriculum.CurriculumModule;
+import org.olat.modules.curriculum.CurriculumService;
+import org.olat.modules.curriculum.model.CurriculumElementRefImpl;
+import org.springframework.beans.factory.annotation.Autowired;
+
+/**
+ * Reusable Form Fragment for dealing with course membership selection 
+ * 
+ * <p>Initial date: May 6, 2016<br>
+ * @author lmihalkovic, http://www.frentix.com
+ */
+public abstract class MembersSelectorFormFragment extends FormBasicController {
+	
+	private static final String[] onKeys = new String[]{ "xx" };
+	private static final String[] memberWithoutCurriculumKeys = new String[]{"all", "course", "group" };
+	private static final String[] memberWithCurriculumKeys = new String[]{"all", "course", "group", "curriculumElement" };
+
+	// Coaches
+	private SelectionElement wantCoaches;
+	private SingleSelection coachesChoice;
+
+	private FormLink chooseGroupCoachesLink;
+	private GroupSelectionController groupChooseCoaches;
+	private StaticTextElement easyGroupCoachSelectionList;
+	
+	private FormLink chooseAreasCoachesLink;
+	private AreaSelectionController areaChooseCoaches;
+	private StaticTextElement easyAreaCoachSelectionList;
+	
+	private FormLink chooseCurriculumElementsCoachesLink;
+	private CurriculumElementSelectionController curriculumElementsChooseCoaches;
+	private StaticTextElement easyCurriculumElementCoachesSelectionList;
+	
+	// Participants
+	private SelectionElement wantParticipants;
+	private SingleSelection participantsChoice;
+	
+	private FormLink chooseGroupParticipantsLink;	
+	private GroupSelectionController groupChooseParticipants;
+	private StaticTextElement easyGroupParticipantsSelectionList;
+
+	private FormLink chooseAreasParticipantsLink;
+	private AreaSelectionController areaChooseParticipants;
+	private StaticTextElement easyAreaParticipantsSelectionList;
+	
+	private FormLink chooseCurriculumElementsParticipantsLink;
+	private CurriculumElementSelectionController curriculumElementsChooseParticipants;
+	private StaticTextElement easyCurriculumElementParticipantsSelectionList;
+	
+
+	// Popup form
+	private CloseableModalController cmc;
+	
+	@Autowired
+	private BGAreaManager areaManager;
+	@Autowired
+	private CurriculumModule curriculumModule;
+	@Autowired
+	private CurriculumService curriculumService;
+	@Autowired
+	private BusinessGroupService businessGroupService;
+
+	private final boolean withCurriculum;
+	private final String[] membersKeys;
+	private final String[] membersCoachesValues;
+	private final String[] membersParticipantsValues;
+	
+	private final CourseEditorEnv cev;
+	protected final ModuleConfiguration config;
+	
+	public MembersSelectorFormFragment(UserRequest ureq, WindowControl wControl,
+			CourseEditorEnv cev, ModuleConfiguration config, boolean withCurriculum) {
+		super(ureq, wControl, Util.createPackageTranslator(MembersSelectorFormFragment.class, ureq.getLocale()));
+		this.cev = cev;
+		this.config = config;
+		this.withCurriculum = withCurriculum && curriculumModule.isEnabled()
+				&& !cev.getCourseGroupManager().getAllCurriculumElements().isEmpty();
+		
+		if(this.withCurriculum) {
+			membersKeys = memberWithCurriculumKeys;
+			membersCoachesValues = new String[] {
+					translate("form.message.coaches.all"), translate("form.message.coaches.course"),
+					translate("form.message.coaches.group"), translate("form.message.coaches.curriculum.element")
+				};
+			membersParticipantsValues = new String[]{
+					translate("form.message.participants.all"), translate("form.message.participants.course"),
+					translate("form.message.participants.group"), translate("form.message.participants.curriculum.element")
+				};
+		} else {
+			membersKeys = memberWithoutCurriculumKeys;
+			membersCoachesValues = new String[] {
+					translate("form.message.coaches.all"), translate("form.message.coaches.course"),
+					translate("form.message.coaches.group")
+				};
+			membersParticipantsValues = new String[]{
+					translate("form.message.participants.all"), translate("form.message.participants.course"),
+					translate("form.message.participants.group")
+				};
+		}
+		
+		initForm(ureq);
+		validateFormLogic(ureq);
+	}
+
+	@Override
+	protected void initForm(FormItemContainer formLayout, Controller listener, UserRequest ureq) {
+
+		Boolean coacheSelection = config.getBooleanSafe(getConfigKeyCoachesAll())
+				|| config.getBooleanSafe(getConfigKeyCoachesCourse())
+				|| config.get(getConfigKeyCoachesGroup()) != null
+				|| config.get(getConfigKeyCoachesArea()) != null
+				|| config.get(getConfigKeyCoachesCurriculumElement()) != null;
+
+		// COACHES: from course or groups
+		wantCoaches = uifactory.addCheckboxesHorizontal("coaches", "message.want.coaches", formLayout, onKeys, new String[]{ "" });
+		wantCoaches.setElementCssClass("o_sel_config_want_coaches");
+		if(coacheSelection != null && coacheSelection) {
+			wantCoaches.select("xx", true);
+		}
+		wantCoaches.addActionListener(FormEvent.ONCLICK);
+		
+		coachesChoice = uifactory.addRadiosVertical("coachesChoice", null, formLayout, membersKeys, membersCoachesValues);
+		coachesChoice.setElementCssClass("o_sel_config_coaches");
+		if(config.getBooleanSafe(getConfigKeyCoachesAll())) {
+			coachesChoice.select("all", true);
+		}
+		if(config.getBooleanSafe(getConfigKeyCoachesCourse())) {
+			coachesChoice.select("course", true);
+		}
+		if(config.get(getConfigKeyCoachesGroup()) != null || config.get(getConfigKeyCoachesArea()) != null) {
+			coachesChoice.select("group", true);
+		}
+		if(config.get(getConfigKeyCoachesCurriculumElement()) != null) {
+			coachesChoice.select("curriculumElement", true);
+		}
+		coachesChoice.addActionListener(FormEvent.ONCLICK);
+		coachesChoice.setVisible(false);
+		
+		
+		chooseGroupCoachesLink = uifactory.addFormLink("groupCoachesChoose", formLayout, "btn btn-default o_xsmall o_form_groupchooser");
+		chooseGroupCoachesLink.setIconLeftCSS("o_icon o_icon-fw o_icon_group");
+		chooseGroupCoachesLink.setVisible(false);
+		chooseGroupCoachesLink.setLabel("form.message.group", null);
+		if(!cev.getCourseGroupManager().hasBusinessGroups()){
+			chooseGroupCoachesLink.setI18nKey("groupCreate");
+		}
+		
+		chooseGroupCoachesLink.setElementCssClass("o_omit_margin");
+
+		String groupCoachesInitVal;
+		List<Long> groupCoachesKeys = config.getList(getConfigKeyCoachesGroupIds(), Long.class);
+		if(groupCoachesKeys == null) {
+			groupCoachesInitVal = config.getStringValue(getConfigKeyCoachesGroup());
+			groupCoachesKeys = businessGroupService.toGroupKeys(groupCoachesInitVal, cev.getCourseGroupManager().getCourseEntry());
+		}
+		groupCoachesInitVal = getGroupNames(groupCoachesKeys);
+
+		easyGroupCoachSelectionList = uifactory.addStaticTextElement("groupCoaches", null, groupCoachesInitVal, formLayout);
+		easyGroupCoachSelectionList.setUserObject(groupCoachesKeys);		
+		easyGroupCoachSelectionList.setVisible(false);
+		easyGroupCoachSelectionList.setElementCssClass("text-muted");
+		
+				
+		chooseAreasCoachesLink = uifactory.addFormLink("areaCoachesChoose", formLayout, "btn btn-default o_xsmall o_form_areachooser");
+		chooseAreasCoachesLink.setIconLeftCSS("o_icon o_icon-fw o_icon_courseareas");
+		chooseAreasCoachesLink.setLabel("form.message.area", null);
+		chooseAreasCoachesLink.setElementCssClass("o_omit_margin");
+		if(!cev.getCourseGroupManager().hasAreas()){
+			chooseAreasCoachesLink.setI18nKey("areaCreate");
+		}
+		
+		String areaCoachesInitVal;
+		List<Long> areaCoachesKeys = config.getList(getConfigKeyCoachesAreaIds(), Long.class);
+		if(areaCoachesKeys == null) {
+			areaCoachesInitVal = (String)config.get(getConfigKeyCoachesArea());
+			areaCoachesKeys = areaManager.toAreaKeys(areaCoachesInitVal, cev.getCourseGroupManager().getCourseResource());
+		}
+		areaCoachesInitVal = getAreaNames(areaCoachesKeys);
+
+		easyAreaCoachSelectionList = uifactory.addStaticTextElement("areaCoaches", null, areaCoachesInitVal, formLayout);
+		easyAreaCoachSelectionList.setUserObject(areaCoachesKeys);
+		easyAreaCoachSelectionList.setVisible(false);
+		easyAreaCoachSelectionList.setElementCssClass("text-muted");
+		
+		
+		chooseCurriculumElementsCoachesLink = uifactory.addFormLink("curriculumElementsCoachesChoose", formLayout, "btn btn-default o_xsmall o_form_areachooser");
+		chooseCurriculumElementsCoachesLink.setIconLeftCSS("o_icon o_icon-fw o_icon_curriculum_element");
+		chooseCurriculumElementsCoachesLink.setVisible(false);
+		chooseCurriculumElementsCoachesLink.setLabel("form.message.curriculum.element", null);
+		chooseCurriculumElementsCoachesLink.setElementCssClass("o_omit_margin");
+		
+		List<Long> curriculumElementsCoachesKeys = config.getList(getConfigKeyCoachesCurriculumElementIds(), Long.class);
+		String curriculumElementsCoachesInitVal = getCurriculumElementNames(curriculumElementsCoachesKeys);
+
+		easyCurriculumElementCoachesSelectionList = uifactory.addStaticTextElement("curriculumElementsCoaches", null, curriculumElementsCoachesInitVal, formLayout);
+		easyCurriculumElementCoachesSelectionList.setUserObject(curriculumElementsCoachesKeys);
+		easyCurriculumElementCoachesSelectionList.setVisible(false);
+		easyCurriculumElementCoachesSelectionList.setElementCssClass("text-muted");
+				
+		
+		// PARTICIPANTS: from course or groups
+		Boolean particiapntSelection = config.getBooleanSafe(getConfigKeyParticipantsAll())
+				|| config.getBooleanSafe(getConfigKeyParticipantsCourse())
+				|| config.get(getConfigKeyParticipantsGroup()) != null
+				|| config.get(getConfigKeyParticipantsArea()) != null
+				|| config.get(getConfigKeyParticipantsCurriculumElement()) != null;
+		
+		wantParticipants = uifactory.addCheckboxesHorizontal("participants", "message.want.participants", formLayout, onKeys,new String[]{null});
+		wantParticipants.setElementCssClass("o_sel_config_want_participants");
+		if(particiapntSelection != null && particiapntSelection) wantParticipants.select("xx", true);
+		wantParticipants.addActionListener(FormEvent.ONCLICK);
+		
+		participantsChoice = uifactory.addRadiosVertical("participantsChoice", null, formLayout, membersKeys, membersParticipantsValues);
+		participantsChoice.setElementCssClass("o_sel_config_participants");
+		if(config.getBooleanSafe(getConfigKeyParticipantsAll())) {
+			participantsChoice.select("all", true);
+		}
+		if(config.getBooleanSafe(getConfigKeyParticipantsCourse())) {
+			participantsChoice.select("course", true);
+		}
+		if(config.get(getConfigKeyParticipantsGroup()) != null || config.get(getConfigKeyParticipantsArea()) != null) {
+			participantsChoice.select("group", true);
+		}
+		if(config.get(getConfigKeyParticipantsCurriculumElement()) != null) {
+			participantsChoice.select("curriculumElement", true);
+		}
+		
+		participantsChoice.addActionListener(FormEvent.ONCLICK);
+		participantsChoice.setVisible(false); 
+		
+		chooseGroupParticipantsLink = uifactory.addFormLink("groupParticipantsChoose", formLayout, "btn btn-default o_xsmall o_form_groupchooser");
+		chooseGroupParticipantsLink.setIconLeftCSS("o_icon o_icon-fw o_icon_group");
+		chooseGroupParticipantsLink.setVisible(false);
+		chooseGroupParticipantsLink.setLabel("form.message.group", null);
+		chooseGroupParticipantsLink.setElementCssClass("o_omit_margin");
+
+		if(cev.getCourseGroupManager().getAllBusinessGroups().isEmpty()){
+			chooseGroupParticipantsLink.setI18nKey("groupCreate");
+		}
+		
+		String groupParticipantsInitVal;
+		List<Long> groupParticipantsKeys = config.getList(getConfigKeyParticipantsGroupIds(), Long.class);
+		if(groupParticipantsKeys == null) {// fallback for backwards compatibility
+			groupParticipantsInitVal = (String)config.get(getConfigKeyParticipantsGroup());
+			groupParticipantsKeys = businessGroupService.toGroupKeys(groupParticipantsInitVal, cev.getCourseGroupManager().getCourseEntry());
+		}
+		groupParticipantsInitVal = getGroupNames(groupParticipantsKeys);
+
+		easyGroupParticipantsSelectionList = uifactory.addStaticTextElement("groupParticipants", null, groupParticipantsInitVal, formLayout);
+		easyGroupParticipantsSelectionList.setUserObject(groupParticipantsKeys);
+		easyGroupParticipantsSelectionList.setVisible(false);
+		easyGroupParticipantsSelectionList.setElementCssClass("text-muted");
+		
+		
+		chooseAreasParticipantsLink = uifactory.addFormLink("areaParticipantsChoose", formLayout, "btn btn-default o_xsmall o_form_areachooser");
+		chooseAreasParticipantsLink.setIconLeftCSS("o_icon o_icon-fw o_icon_courseareas");
+		chooseAreasParticipantsLink.setVisible(false);
+		chooseAreasParticipantsLink.setLabel("form.message.area", null);
+		chooseAreasParticipantsLink.setElementCssClass("o_omit_margin");
+
+		if(cev.getCourseGroupManager().getAllAreas().isEmpty()){
+			chooseAreasParticipantsLink.setI18nKey("areaCreate");
+		}
+		
+		String areaParticipantsInitVal;
+		List<Long> areaParticipantsKeys = config.getList(getConfigKeyParticipantsAreaIds(), Long.class);
+		if(areaParticipantsKeys == null) {// fallback for backwards compatibility
+			areaParticipantsInitVal = (String)config.get(getConfigKeyParticipantsArea());
+			areaParticipantsKeys = areaManager.toAreaKeys(areaParticipantsInitVal, cev.getCourseGroupManager().getCourseResource());
+		}
+		areaParticipantsInitVal = getAreaNames(areaParticipantsKeys);
+
+		easyAreaParticipantsSelectionList = uifactory.addStaticTextElement("areaParticipants", null, areaParticipantsInitVal, formLayout);
+		easyAreaParticipantsSelectionList.setUserObject(areaParticipantsKeys);
+		easyAreaParticipantsSelectionList.setVisible(false);
+		easyAreaParticipantsSelectionList.setElementCssClass("text-muted");
+		
+		chooseCurriculumElementsParticipantsLink = uifactory.addFormLink("curriculumElementsParticipantsChoose", formLayout, "btn btn-default o_xsmall o_form_areachooser");
+		chooseCurriculumElementsParticipantsLink.setIconLeftCSS("o_icon o_icon-fw o_icon_curriculum_element");
+		chooseCurriculumElementsParticipantsLink.setVisible(false);
+		chooseCurriculumElementsParticipantsLink.setLabel("form.message.curriculum.element", null);
+		chooseCurriculumElementsParticipantsLink.setElementCssClass("o_omit_margin");
+		
+		List<Long> curriculumElementsParticipantsKeys = config.getList(getConfigKeyParticipantsCurriculumElementIds(), Long.class);
+		String curriculumElementsParticipantsInitVal = getCurriculumElementNames(curriculumElementsParticipantsKeys);
+
+		easyCurriculumElementParticipantsSelectionList = uifactory.addStaticTextElement("curriculumElementsParticipants", null, curriculumElementsParticipantsInitVal, formLayout);
+		easyCurriculumElementParticipantsSelectionList.setUserObject(curriculumElementsParticipantsKeys);
+		easyCurriculumElementParticipantsSelectionList.setVisible(false);
+		easyCurriculumElementParticipantsSelectionList.setElementCssClass("text-muted");
+		
+	
+		uifactory.addSpacerElement("s4", formLayout, false);		
+	}
+	
+	protected void update() {
+		// coaches
+		coachesChoice.setVisible(wantCoaches.isSelected(0));
+		chooseGroupCoachesLink.setVisible(coachesChoice.isSelected(2) && wantCoaches.isSelected(0));
+		chooseAreasCoachesLink.setVisible(coachesChoice.isSelected(2) && wantCoaches.isSelected(0));
+		chooseCurriculumElementsCoachesLink.setVisible(coachesChoice.isSelected(3) && wantCoaches.isSelected(0));
+		easyGroupCoachSelectionList.setVisible(coachesChoice.isSelected(2) && wantCoaches.isSelected(0));
+		easyAreaCoachSelectionList.setVisible(coachesChoice.isSelected(2) && wantCoaches.isSelected(0));
+		easyCurriculumElementCoachesSelectionList.setVisible(coachesChoice.isSelected(3) && wantCoaches.isSelected(0));
+
+		// participants
+		participantsChoice.setVisible(wantParticipants.isSelected(0));
+		chooseGroupParticipantsLink.setVisible(participantsChoice.isSelected(2) && wantParticipants.isSelected(0));
+		chooseAreasParticipantsLink.setVisible(participantsChoice.isSelected(2) && wantParticipants.isSelected(0));
+		chooseCurriculumElementsParticipantsLink.setVisible(participantsChoice.isSelected(3) && wantParticipants.isSelected(0));
+		easyGroupParticipantsSelectionList.setVisible(participantsChoice.isSelected(2) && wantParticipants.isSelected(0));
+		easyAreaParticipantsSelectionList.setVisible(participantsChoice.isSelected(2) && wantParticipants.isSelected(0));
+		easyCurriculumElementParticipantsSelectionList.setVisible(participantsChoice.isSelected(3) && wantParticipants.isSelected(0));
+		
+		easyGroupParticipantsSelectionList.clearError();
+		easyAreaParticipantsSelectionList.clearError();
+		easyGroupCoachSelectionList.clearError();
+		easyAreaCoachSelectionList.clearError();
+		
+		coachesChoice.clearError();
+		participantsChoice.clearError();
+		
+		setNeedsLayout();
+	}
+	
+	@Override
+	protected boolean validateFormLogic(UserRequest ureq) {
+		boolean isOK = super.validateFormLogic(ureq);
+
+		coachesChoice.clearError();
+		easyAreaCoachSelectionList.clearError();
+		easyGroupCoachSelectionList.clearError();
+		easyCurriculumElementCoachesSelectionList.clearError();
+		if(sendToCoaches()) {
+			if(!coachesChoice.isOneSelected()){
+				coachesChoice.setErrorKey("error.no.choice.specified", null);
+				isOK &= false;
+			} else if(coachesChoice.isSelected(2) && isEmpty(easyAreaCoachSelectionList) && isEmpty(easyGroupCoachSelectionList)) {
+				easyAreaCoachSelectionList.setErrorKey("error.no.group.specified", null);
+				easyGroupCoachSelectionList.setErrorKey("error.no.group.specified", null);
+				isOK &= false;
+			} else if(coachesChoice.isSelected(3) && isEmpty(easyCurriculumElementCoachesSelectionList)) {
+				easyCurriculumElementCoachesSelectionList.setErrorKey("error.no.curriculum.element.specified", null);
+				isOK &= false;
+			}
+		}
+
+		participantsChoice.clearError();
+		easyGroupParticipantsSelectionList.clearError();
+		easyAreaParticipantsSelectionList.clearError();
+		easyCurriculumElementParticipantsSelectionList.clearError();
+		if(sendToPartips()) {
+			if(!participantsChoice.isOneSelected()) {
+				participantsChoice.setErrorKey("error.no.choice.specified", null);
+				isOK &= false;
+			} else if(participantsChoice.isSelected(2) && isEmpty(easyAreaParticipantsSelectionList) &&  isEmpty(easyGroupParticipantsSelectionList)) {
+				easyAreaParticipantsSelectionList.setErrorKey("error.no.group.specified", null);
+				easyGroupParticipantsSelectionList.setErrorKey("error.no.group.specified", null);
+				isOK &= false;
+			} else if(participantsChoice.isSelected(3) && isEmpty(easyCurriculumElementParticipantsSelectionList)) {
+				easyCurriculumElementParticipantsSelectionList.setErrorKey("error.no.curriculum.element.specified", null);
+				isOK &= false;
+			}
+		}
+
+		return isOK;
+	}
+
+	@Override
+	protected final void formOK(UserRequest ureq) {
+		storeConfiguration(config);
+		fireEvent(ureq, Event.DONE_EVENT);
+	}
+
+	private String getGroupNames(List<Long> keys) {
+		StringBuilder sb = new StringBuilder(128);
+		List<BusinessGroupShort> groups = businessGroupService.loadShortBusinessGroups(keys);
+		for(BusinessGroupShort group:groups) {
+			if(sb.length() > 0) sb.append("&nbsp;&nbsp;");
+			sb.append("<i class='o_icon o_icon-fw o_icon_group'>&nbsp;</i> ")
+			  .append(StringHelper.escapeHtml(group.getName()));
+		}
+		return sb.toString();
+	}
+	
+	private String getAreaNames(List<Long> keys) {
+		StringBuilder sb = new StringBuilder(128);
+		List<BGArea> areas = areaManager.loadAreas(keys);
+		for(BGArea area:areas) {
+			if(sb.length() > 0) sb.append("&nbsp;&nbsp;");
+			sb.append("<i class='o_icon o_icon-fw o_icon_courseareas'>&nbsp;</i> ")
+			  .append(StringHelper.escapeHtml(area.getName()));
+		}
+		return sb.toString();
+	}
+	
+	private String getCurriculumElementNames(List<Long> keys) {
+		StringBuilder sb = new StringBuilder(128);
+		List<CurriculumElementRef> elementRefs = keys.stream()
+				.map(CurriculumElementRefImpl::new).collect(Collectors.toList());
+		List<CurriculumElement> curriculumElements = curriculumService.getCurriculumElements(elementRefs);
+		for(CurriculumElement curriculumElement:curriculumElements) {
+			if(sb.length() > 0) sb.append("&nbsp;&nbsp;");
+			sb.append("<i class='o_icon o_icon-fw o_icon_curriculum_element'>&nbsp;</i> ")
+			  .append(StringHelper.escapeHtml(curriculumElement.getDisplayName()));
+		}
+		return sb.toString();
+	}
+
+	@Override
+	protected void doDispose() {
+		// nothing at the moment
+	}
+
+	@Override
+	protected void formInnerEvent(UserRequest ureq, FormItem source, FormEvent event) {
+		if (source == chooseGroupCoachesLink) {
+			doChooseGroupCoaches(ureq);
+			setFormCanSubmit(false);
+		} else if(source == chooseGroupParticipantsLink){
+			doChooseGroupParticipants(ureq);
+			setFormCanSubmit(false);
+		} else if (source == chooseAreasCoachesLink) {
+			doChooseAreasCoaches(ureq);
+			setFormCanSubmit(false);
+		} else if (source == chooseAreasParticipantsLink){
+			doChooseAreasParticipants(ureq);
+			setFormCanSubmit(false);
+		} else if(chooseCurriculumElementsCoachesLink == source) {
+			doChooseCurriculumElementParticipants(ureq);
+			setFormCanSubmit(false);
+		} else if(chooseCurriculumElementsParticipantsLink == source) {
+			doChooseCurriculumElementsParticipants(ureq);
+			setFormCanSubmit(false);
+		}
+	}
+	
+	protected abstract void setFormCanSubmit(boolean enable);
+
+	protected void cleanUp() {
+		removeAsListenerAndDispose(cmc);
+		removeAsListenerAndDispose(areaChooseParticipants);
+		removeAsListenerAndDispose(areaChooseCoaches);
+		removeAsListenerAndDispose(groupChooseCoaches);			
+	}
+
+	@Override
+	protected void event(UserRequest ureq, Controller source, Event event) {
+		setFormCanSubmit(true);
+
+		if (source == groupChooseCoaches) {
+			if (event == Event.DONE_EVENT) {
+				easyGroupCoachSelectionList.setValue(getGroupNames(groupChooseCoaches.getSelectedKeys()));
+				easyGroupCoachSelectionList.setUserObject(groupChooseCoaches.getSelectedKeys());
+				chooseGroupCoachesLink.setI18nKey("groupCoachesChoose");
+				setNeedsLayout();
+			}
+			cmc.deactivate();
+			cleanUp();
+		} else if (source == areaChooseCoaches) {
+			if (event == Event.DONE_EVENT) {
+				easyAreaCoachSelectionList.setValue(getAreaNames(areaChooseCoaches.getSelectedKeys()));
+				easyAreaCoachSelectionList.setUserObject(areaChooseCoaches.getSelectedKeys());
+				chooseAreasCoachesLink.setI18nKey("areaCoachesChoose");
+				setNeedsLayout();
+			}
+			cmc.deactivate();
+			cleanUp();
+		} else if (source == groupChooseParticipants) {
+			if (event == Event.DONE_EVENT) {
+				easyGroupParticipantsSelectionList.setValue(getGroupNames(groupChooseParticipants.getSelectedKeys()));
+				easyGroupParticipantsSelectionList.setUserObject(groupChooseParticipants.getSelectedKeys());
+				chooseGroupParticipantsLink.setI18nKey("groupParticipantsChoose");
+				setNeedsLayout();
+			}
+			cmc.deactivate();
+			cleanUp();
+		} else if (source == areaChooseParticipants) {
+			if (event == Event.DONE_EVENT) {
+				easyAreaParticipantsSelectionList.setValue(getAreaNames(areaChooseParticipants.getSelectedKeys()));
+				easyAreaParticipantsSelectionList.setUserObject(areaChooseParticipants.getSelectedKeys());
+				chooseAreasParticipantsLink.setI18nKey("areaParticipantsChoose");
+				setNeedsLayout();
+			}
+			cmc.deactivate();
+			cleanUp();
+		} else if(source == curriculumElementsChooseCoaches) {
+			if (event == Event.DONE_EVENT) {
+				easyCurriculumElementCoachesSelectionList.setValue(getCurriculumElementNames(curriculumElementsChooseCoaches.getSelectedKeys()));
+				easyCurriculumElementCoachesSelectionList.setUserObject(curriculumElementsChooseCoaches.getSelectedKeys());
+				chooseCurriculumElementsCoachesLink.setI18nKey("curriculumElementsCoachesChoose");
+				setNeedsLayout();
+			}
+			cmc.deactivate();
+			cleanUp();
+		} else if(source == curriculumElementsChooseParticipants) {
+			if (event == Event.DONE_EVENT) {
+				easyCurriculumElementParticipantsSelectionList.setValue(getCurriculumElementNames(curriculumElementsChooseParticipants.getSelectedKeys()));
+				easyCurriculumElementParticipantsSelectionList.setUserObject(curriculumElementsChooseParticipants.getSelectedKeys());
+				chooseCurriculumElementsParticipantsLink.setI18nKey("curriculumElementsParticipantsChoose");
+				setNeedsLayout();
+			}
+			cmc.deactivate();
+			cleanUp();
+		} else if(cmc == source) {
+			cleanUp();
+		}
+	}
+	
+	private void doChooseGroupCoaches(UserRequest ureq) {
+		removeAsListenerAndDispose(cmc);
+		removeAsListenerAndDispose(groupChooseCoaches);
+
+		groupChooseCoaches = new GroupSelectionController(ureq, getWindowControl(), true,
+				cev.getCourseGroupManager(), getKeys(easyGroupCoachSelectionList));
+		listenTo(groupChooseCoaches);
+		
+		String title = chooseGroupCoachesLink.getLinkTitleText();
+		cmc = new CloseableModalController(getWindowControl(), "close", groupChooseCoaches.getInitialComponent(), true, title);
+		listenTo(cmc);
+		cmc.activate();
+	}
+	
+	private void doChooseGroupParticipants(UserRequest ureq) {
+		removeAsListenerAndDispose(cmc);
+		removeAsListenerAndDispose(groupChooseParticipants);
+		
+		groupChooseParticipants = new GroupSelectionController(ureq, getWindowControl(), true,
+				cev.getCourseGroupManager(), getKeys(easyGroupParticipantsSelectionList));
+		listenTo(groupChooseParticipants);
+		
+		String title = chooseGroupParticipantsLink.getLabelText();
+		cmc = new CloseableModalController(getWindowControl(), "close", groupChooseParticipants.getInitialComponent(), true, title);
+		listenTo(cmc);
+		cmc.activate();
+	}
+	
+	private void doChooseAreasCoaches(UserRequest ureq) {
+		// already areas -> choose areas
+		removeAsListenerAndDispose(cmc);
+		removeAsListenerAndDispose(areaChooseCoaches);
+		
+		areaChooseCoaches = new AreaSelectionController (ureq, getWindowControl(), true,
+				cev.getCourseGroupManager(), getKeys(easyAreaCoachSelectionList));
+		listenTo(areaChooseCoaches);
+
+		String title = chooseAreasCoachesLink.getLinkTitleText();
+		cmc = new CloseableModalController(getWindowControl(), "close", areaChooseCoaches.getInitialComponent(), true, title);
+		listenTo(cmc);
+		cmc.activate();
+	}
+	
+	private void doChooseAreasParticipants(UserRequest ureq) {
+		// already areas -> choose areas
+		removeAsListenerAndDispose(cmc);
+		removeAsListenerAndDispose(areaChooseParticipants);
+		
+		areaChooseParticipants = new AreaSelectionController (ureq, getWindowControl(), true,
+				cev.getCourseGroupManager(), getKeys(easyAreaParticipantsSelectionList));
+		listenTo(areaChooseParticipants);
+
+		String title = chooseAreasParticipantsLink.getLabelText();
+		cmc = new CloseableModalController(getWindowControl(), "close", areaChooseParticipants.getInitialComponent(), true, title);
+		listenTo(cmc);
+		cmc.activate();
+	}
+	
+	private void doChooseCurriculumElementParticipants(UserRequest ureq) {
+		removeAsListenerAndDispose(cmc);
+		removeAsListenerAndDispose(curriculumElementsChooseCoaches);
+		
+		curriculumElementsChooseCoaches = new CurriculumElementSelectionController(ureq, getWindowControl(),
+				cev.getCourseGroupManager(), getKeys(easyCurriculumElementCoachesSelectionList));
+		listenTo(curriculumElementsChooseCoaches);
+		
+		String title = chooseCurriculumElementsCoachesLink.getLabelText();
+		cmc = new CloseableModalController(getWindowControl(), "close", curriculumElementsChooseCoaches.getInitialComponent(), true, title);
+		listenTo(cmc);
+		cmc.activate();
+	}
+	
+	private void doChooseCurriculumElementsParticipants(UserRequest ureq) {
+		// already areas -> choose areas
+		removeAsListenerAndDispose(cmc);
+		removeAsListenerAndDispose(curriculumElementsChooseParticipants);
+		
+		curriculumElementsChooseParticipants = new CurriculumElementSelectionController(ureq, getWindowControl(),
+				cev.getCourseGroupManager(), getKeys(easyCurriculumElementParticipantsSelectionList));
+		listenTo(curriculumElementsChooseParticipants);
+
+		String title = chooseCurriculumElementsParticipantsLink.getLabelText();
+		cmc = new CloseableModalController(getWindowControl(), "close", curriculumElementsChooseParticipants.getInitialComponent(), true, title);
+		listenTo(cmc);
+		cmc.activate();
+	}
+	
+	private List<Long> getKeys(StaticTextElement element) {
+		@SuppressWarnings("unchecked")
+		List<Long> keys = (List<Long>)element.getUserObject();
+		if(keys == null) {
+			keys = new ArrayList<>();
+			element.setUserObject(keys);
+		}
+		return keys;
+	}
+
+	// ----------------
+	
+	public boolean sendToCoaches() {
+		return wantCoaches.isSelected(0);
+	}
+	
+	protected String getGroupCoaches() {
+		if (!isEmpty(easyGroupCoachSelectionList) && wantCoaches.isSelected(0) && coachesChoice.isSelected(2)) {
+			return easyGroupCoachSelectionList.getValue();
+		}
+		return null;
+	}
+	
+	protected List<Long> getGroupCoachesIds() {
+		if (!isEmpty(easyGroupCoachSelectionList) && wantCoaches.isSelected(0) && coachesChoice.isSelected(2)) {
+			return getKeys(easyGroupCoachSelectionList);
+		}
+		return null;
+	}
+	
+	protected String getGroupParticipants() {
+		if (!isEmpty(easyGroupParticipantsSelectionList) && wantParticipants.isSelected(0) && participantsChoice.isSelected(2)) {
+			return easyGroupParticipantsSelectionList.getValue();
+		}
+		return null;
+	}
+	
+	protected List<Long> getGroupParticipantsIds() {
+		if (!isEmpty(easyGroupParticipantsSelectionList) && wantParticipants.isSelected(0) && participantsChoice.isSelected(2)) {
+			return getKeys(easyGroupParticipantsSelectionList);
+		}
+		return null;
+	}
+
+	/**
+	 * returns the chosen learning areas, or null if no ares were chosen.
+	 */
+	protected String getCoachesAreas() {
+		if(!isEmpty(easyAreaCoachSelectionList) && wantCoaches.isSelected(0) && coachesChoice.isSelected(2)) {
+			return easyAreaCoachSelectionList.getValue();
+		}
+		return null;
+	}
+	
+	protected List<Long> getCoachesAreaIds() {
+		if(!isEmpty(easyAreaCoachSelectionList) && wantCoaches.isSelected(0) && coachesChoice.isSelected(2)) {
+			return getKeys(easyAreaCoachSelectionList);
+		}
+		return null;
+	}
+
+	protected String getParticipantsAreas() {
+		if(!isEmpty(easyAreaParticipantsSelectionList) && wantParticipants.isSelected(0) && participantsChoice.isSelected(2)) {
+			return easyAreaParticipantsSelectionList.getValue();
+		}
+		return null;
+	}
+	
+	protected String getCoachesCurriculumElements() {
+		if (!isEmpty(easyCurriculumElementCoachesSelectionList) && wantCoaches.isSelected(0) && coachesChoice.isSelected(3)) {
+			return easyCurriculumElementCoachesSelectionList.getValue();
+		}
+		return null;
+	}
+	
+	protected List<Long> getCoachesCurriculumElementIds() {
+		if (!isEmpty(easyCurriculumElementCoachesSelectionList) && wantCoaches.isSelected(0) && coachesChoice.isSelected(3)) {
+			return getKeys(easyCurriculumElementCoachesSelectionList);
+		}
+		return null;
+	}
+	
+	protected String getParticipantsCurriculumElements() {
+		if (!isEmpty(easyCurriculumElementParticipantsSelectionList) && wantParticipants.isSelected(0) && participantsChoice.isSelected(3)) {
+			return easyCurriculumElementParticipantsSelectionList.getValue();
+		}
+		return null;
+	}
+	
+	protected List<Long> getCurriculumElementParticipantsIds() {
+		if (!isEmpty(easyCurriculumElementParticipantsSelectionList) && wantParticipants.isSelected(0) && participantsChoice.isSelected(3)) {
+			return getKeys(easyCurriculumElementParticipantsSelectionList);
+		}
+		return null;
+	}
+	
+	public boolean sendToPartips() {
+		return wantParticipants.isSelected(0);
+	}
+	
+	public boolean sendToCoachesCourse(){
+		return coachesChoice.isSelected(1) && wantCoaches.isSelected(0);
+	}
+	
+	protected boolean sendToCoachesAll(){
+		return coachesChoice.isSelected(0) && wantCoaches.isSelected(0);
+	}
+	
+	protected boolean sendToCoachesGroup(){
+		return coachesChoice.isSelected(2) && wantCoaches.isSelected(0);
+	}
+	
+	protected boolean sendToParticipantsCourse(){
+		return participantsChoice.isSelected(1) && wantParticipants.isSelected(0);
+	}
+	
+	protected boolean sendToParticipantsAll(){
+		return participantsChoice.isSelected(0) && wantParticipants.isSelected(0);
+	}
+	
+	protected boolean sendToParticipantsGroup(){
+		return participantsChoice.isSelected(2) && wantParticipants.isSelected(0);
+	}
+	
+	protected List<Long> getParticipantsAreaIds() {
+		if(!isEmpty(easyAreaParticipantsSelectionList) && wantParticipants.isSelected(0) && participantsChoice.isSelected(2)) {
+			return getKeys(easyAreaParticipantsSelectionList);
+		}
+		return null;
+	}
+	
+	private boolean isEmpty(StaticTextElement element) {
+		return getKeys(element).isEmpty();
+	}
+	
+	protected void storeConfiguration(ModuleConfiguration configToStore) {
+		configToStore.set(getConfigKeyCoachesGroup(), getGroupCoaches());
+		configToStore.set(getConfigKeyCoachesGroupIds(), getGroupCoachesIds());
+		configToStore.set(getConfigKeyCoachesArea(), getCoachesAreas());
+		configToStore.set(getConfigKeyCoachesAreaIds(), getCoachesAreaIds());
+		configToStore.set(getConfigKeyCoachesCurriculumElement(), getCoachesCurriculumElements());
+		configToStore.set(getConfigKeyCoachesCurriculumElementIds(), getCoachesCurriculumElementIds());
+		configToStore.setBooleanEntry(getConfigKeyCoachesAll(), sendToCoachesAll());
+		configToStore.setBooleanEntry(getConfigKeyCoachesCourse(), sendToCoachesCourse());
+		
+		configToStore.set(getConfigKeyParticipantsGroup(), getGroupParticipants());
+		configToStore.set(getConfigKeyParticipantsGroupIds(), getGroupParticipantsIds());
+		configToStore.set(getConfigKeyParticipantsArea(), getParticipantsAreas());
+		configToStore.set(getConfigKeyParticipantsAreaIds(), getParticipantsAreaIds());
+		configToStore.set(getConfigKeyParticipantsCurriculumElement(), getParticipantsCurriculumElements());
+		configToStore.set(getConfigKeyParticipantsCurriculumElementIds(), getCurriculumElementParticipantsIds());
+		configToStore.setBooleanEntry(getConfigKeyParticipantsAll(), sendToParticipantsAll());
+		configToStore.setBooleanEntry(getConfigKeyParticipantsCourse(), sendToParticipantsCourse());
+	}
+	
+	protected abstract String getConfigKeyCoachesGroup();
+	protected abstract String getConfigKeyCoachesGroupIds();
+	
+	protected abstract String getConfigKeyCoachesArea();
+	protected abstract String getConfigKeyCoachesAreaIds();
+
+	protected abstract String getConfigKeyCoachesCurriculumElement();
+	protected abstract String getConfigKeyCoachesCurriculumElementIds();
+	
+	protected abstract String getConfigKeyCoachesCourse();
+	protected abstract String getConfigKeyCoachesAll();
+
+	protected abstract String getConfigKeyParticipantsGroup();
+	protected abstract String getConfigKeyParticipantsArea();
+	
+	protected abstract String getConfigKeyParticipantsGroupIds();
+	protected abstract String getConfigKeyParticipantsAreaIds();
+	
+	protected abstract String getConfigKeyParticipantsCurriculumElement();
+	protected abstract String getConfigKeyParticipantsCurriculumElementIds();
+	
+	protected abstract String getConfigKeyParticipantsCourse();
+	protected abstract String getConfigKeyParticipantsAll();
+}

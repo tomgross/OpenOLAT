@@ -19,9 +19,11 @@
  */
 package org.olat.modules.qpool;
 
+import org.olat.core.commons.services.license.LicenseService;
 import org.olat.modules.qpool.model.QEducationalContext;
 import org.olat.modules.qpool.model.QItemType;
 import org.olat.modules.qpool.model.QLicense;
+import org.olat.modules.taxonomy.TaxonomyLevel;
 
 /**
  * 
@@ -40,11 +42,8 @@ public interface QuestionItem extends QuestionItemShort {
 	public String getAdditionalInformations();
 		
 	//classification
-	/**
-	 * Field can be lazy loaded
-	 * @return
-	 */
-	public String getTaxonomicPath();
+	
+	public TaxonomyLevel getTaxonomyLevel();
 	
 	//educational
 	public QEducationalContext getEducationalContext();
@@ -58,7 +57,17 @@ public interface QuestionItem extends QuestionItemShort {
 	public String getItemVersion();
 	
 	//rights
+	/**
+	 * @deprecated Use @see {@link LicenseService}
+	 */
+	@Deprecated
 	public QLicense getLicense();
+	
+	/**
+	 * @deprecated Use @see {@link LicenseService}
+	 */
+	@Deprecated
+	public String getCreator();
 
 	//technics
 	public String getEditor();

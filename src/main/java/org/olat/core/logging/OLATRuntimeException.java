@@ -32,11 +32,11 @@ import org.olat.core.util.filter.FilterFactory;
 public class OLATRuntimeException extends RuntimeException {
 
 	private static final long serialVersionUID = -1627846608356883591L;
-	private String logMsg;
-	private String usrMsgKey;
-	private String usrMsgPackage;
-	private String[] usrMsgArgs;
-	private Class<?> throwingClazz;
+	private final String logMsg;
+	private final String usrMsgKey;
+	private final String usrMsgPackage;
+	private final String[] usrMsgArgs;
+	private final Class<?> throwingClazz;
 
 	/**
 	 * @param throwing class
@@ -97,36 +97,37 @@ public class OLATRuntimeException extends RuntimeException {
 	 * @return HTML fragment.
 	 */
 	public static String throwableToHtml(Throwable th) {
-		StringBuilder sb = new StringBuilder("<br />");
+		StringBuilder sb = new StringBuilder(10000);
+		sb.append("<br>");
 		if (th == null) {
 			sb.append("n/a");
 		}
 		else {	
-			sb.append("Throwable: "+th.getClass().getName()+"<br /><br />");
+			sb.append("Throwable: ").append(th.getClass().getName()).append("<br><br>");
 			toHtml(sb, th);
 			// 1st cause:
 			Throwable ca = th.getCause();
 			int i=1;
 			while (ca != null) {
-				sb.append("<hr /><br />"+i+". cause:<br /><br />");
+				sb.append("<hr /><br>").append(i).append(". cause:<br><br>");
 				toHtml(sb,ca);
 				i++;
 				ca = ca.getCause();	
 			}
 		}
-		return FilterFactory.getXSSFilter(10000).filter(sb.toString());
+		return FilterFactory.getXSSFilter().filter(sb.toString());
 	}
 
 	private static void toHtml(StringBuilder sb, Throwable th) {
 		if (th instanceof OLATRuntimeException) {
-			sb.append("logmsg:").append(((OLATRuntimeException)th).getLogMsg()).append("<br />");
+			sb.append("logmsg:").append(((OLATRuntimeException)th).getLogMsg()).append("<br>");
 		}
-		sb.append("message:" + th.getMessage() + "," +th.getClass().getName() + "<br /><br />");
+		sb.append("message:" + th.getMessage() + "," +th.getClass().getName() + "<br><br>");
 		StackTraceElement[] ste = th.getStackTrace();	
 		int nr = ste.length < 10? ste.length: 10;	
 		for (int i = 0; i < nr; i++) {
 			StackTraceElement st = ste[i];
-			sb.append("at "+ st.toString() + "<br />");
+			sb.append("at ").append(st.toString()).append("<br>");
 		}
 	}
 

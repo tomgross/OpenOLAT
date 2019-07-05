@@ -22,12 +22,10 @@ package org.olat.restapi;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
-import java.io.File;
 import java.io.IOException;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.URL;
-import java.util.UUID;
 
 import javax.ws.rs.core.MediaType;
 import javax.ws.rs.core.UriBuilder;
@@ -47,7 +45,8 @@ import org.olat.course.ICourse;
 import org.olat.course.nodes.CourseNode;
 import org.olat.repository.RepositoryEntry;
 import org.olat.restapi.support.vo.CourseVO;
-import org.olat.test.OlatJerseyTestCase;
+import org.olat.test.JunitTestHelper;
+import org.olat.test.OlatRestTestCase;
 import org.springframework.beans.factory.annotation.Autowired;
 
 /**
@@ -57,7 +56,7 @@ import org.springframework.beans.factory.annotation.Autowired;
  * @author srosse, stephane.rosse@frentix.com, http://www.frentix.com
  *
  */
-public class CoursePublishTest extends OlatJerseyTestCase {	
+public class CoursePublishTest extends OlatRestTestCase {	
 	
 	@Autowired
 	private DB dbInstance;
@@ -68,11 +67,8 @@ public class CoursePublishTest extends OlatJerseyTestCase {
 		assertTrue(conn.login("administrator", "openolat"));
 		
 		//deploy a test course
-		URL courseWithForumsUrl = CoursePublishTest.class.getResource("myCourseWS.zip");
-		Assert.assertNotNull(courseWithForumsUrl);
-		File courseWithForums = new File(courseWithForumsUrl.toURI());
-		String softKey = UUID.randomUUID().toString().replace("-", "").substring(0, 30);
-		RepositoryEntry re = CourseFactory.deployCourseFromZIP(courseWithForums, softKey, 4);	
+		URL courseUrl = CoursePublishTest.class.getResource("myCourseWS.zip");
+		RepositoryEntry re = JunitTestHelper.deployCourse(null, "My WS course", courseUrl); // 4);	
 		Assert.assertNotNull(re);
 		ICourse course = CourseFactory.loadCourse(re.getOlatResource().getResourceableId());
 		CourseNode rootNode = course.getRunStructure().getRootNode();

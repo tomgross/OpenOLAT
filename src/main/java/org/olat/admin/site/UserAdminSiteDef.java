@@ -31,14 +31,13 @@ import org.olat.core.gui.control.navigation.AbstractSiteDefinition;
 import org.olat.core.gui.control.navigation.SiteConfiguration;
 import org.olat.core.gui.control.navigation.SiteDefinition;
 import org.olat.core.gui.control.navigation.SiteInstance;
+import org.olat.core.id.Roles;
 import org.olat.core.util.StringHelper;
+import org.olat.core.util.UserSession;
 
 /**
  * Initial Date:  Jan 16, 2006
- * @author Florian Gnaegi
- * 
- * Comment:  TODO
- * </pre>
+ * @author Florian Gnaegi d
  */
 public class UserAdminSiteDef extends AbstractSiteDefinition implements SiteDefinition {
 
@@ -48,9 +47,17 @@ public class UserAdminSiteDef extends AbstractSiteDefinition implements SiteDefi
 
 	@Override
 	public SiteInstance createSite(UserRequest ureq, WindowControl wControl, SiteConfiguration config) {
+		UserSession usess = ureq.getUserSession();
+		if(usess == null || usess.getRoles() == null || usess.getRoles().isInvitee() || usess.getRoles().isGuestOnly()) {
+			return null;
+		}
+		
 		if(StringHelper.containsNonWhitespace(config.getSecurityCallbackBeanId())) {
 			return new UserAdminSite(this, ureq.getLocale());
-		} else if (ureq.getUserSession().getRoles().isUserManager()) {
+		} 
+		
+		Roles roles = usess.getRoles();
+		if (roles.isAdministrator() || roles.isSystemAdmin() || roles.isPrincipal() || roles.isUserManager() || roles.isRolesManager()) {
 			// only open for olat-usermanagers
 			return new UserAdminSite(this, ureq.getLocale());
 		} 

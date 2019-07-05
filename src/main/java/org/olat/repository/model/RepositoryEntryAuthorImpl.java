@@ -25,6 +25,7 @@ import org.olat.core.util.resource.OresHelper;
 import org.olat.repository.RepositoryEntry;
 import org.olat.repository.RepositoryEntryAuthorView;
 import org.olat.repository.RepositoryEntryManagedFlag;
+import org.olat.repository.RepositoryEntryStatusEnum;
 import org.olat.resource.OLATResource;
 
 /**
@@ -50,11 +51,17 @@ public class RepositoryEntryAuthorImpl implements RepositoryEntryAuthorView {
 	private final String externalRef;
 	private final RepositoryEntryManagedFlag[] managedFlags;
 	
-	private final boolean membersOnly;
-	private final int access;
-	private final int statusCode;
+	private final RepositoryEntryStatusEnum status;
+	private final boolean allUsers;
+	private final boolean guests;
+	private final boolean bookable;
 	
 	private final Date lastUsage;
+	
+	public final int numOfReferences;
+	
+	private final boolean lectureEnabled;
+	private final boolean rollCallEnabled;
 	
 	private final Date deletionDate;
 	private final String deletedByFullName;
@@ -66,7 +73,8 @@ public class RepositoryEntryAuthorImpl implements RepositoryEntryAuthorView {
 	
 	private final long offers;
 	
-	public RepositoryEntryAuthorImpl(RepositoryEntry re, boolean marked, long offers, String deletedByFullName) {
+	public RepositoryEntryAuthorImpl(RepositoryEntry re, boolean marked, long offers, int numOfReferences, String deletedByFullName,
+			boolean lectureEnabled, boolean rollCallEnabled) {
 		key = re.getKey();
 		creationDate = re.getCreationDate();
 		
@@ -81,11 +89,17 @@ public class RepositoryEntryAuthorImpl implements RepositoryEntryAuthorView {
 		externalRef = re.getExternalRef();
 		managedFlags = re.getManagedFlags();
 		
-		membersOnly = re.isMembersOnly();
-		access = re.getAccess();
-		statusCode = re.getStatusCode();
+		status = re.getEntryStatus();
+		allUsers = re.isAllUsers();
+		guests = re.isGuests();
+		bookable = re.isBookable();
 		
 		lastUsage = re.getStatistics().getLastUsage();
+		
+		this.numOfReferences = numOfReferences;
+		
+		this.lectureEnabled = lectureEnabled;
+		this.rollCallEnabled = rollCallEnabled;
 		
 		deletionDate = re.getDeletionDate();
 		this.deletedByFullName = deletedByFullName;
@@ -112,13 +126,8 @@ public class RepositoryEntryAuthorImpl implements RepositoryEntryAuthorView {
 	}
 
 	@Override
-	public int getStatusCode() {
-		return statusCode;
-	}
-
-	@Override
 	public Long getResourceableId() {
-		return key;
+		return getKey();
 	}
 
 	@Override
@@ -171,13 +180,23 @@ public class RepositoryEntryAuthorImpl implements RepositoryEntryAuthorView {
 	}
 
 	@Override
-	public boolean isMembersOnly() {
-		return membersOnly;
+	public RepositoryEntryStatusEnum getEntryStatus() {
+		return status;
 	}
 
 	@Override
-	public int getAccess() {
-		return access;
+	public boolean isAllUsers() {
+		return allUsers;
+	}
+
+	@Override
+	public boolean isGuests() {
+		return guests;
+	}
+
+	@Override
+	public boolean isBookable() {
+		return bookable;
 	}
 
 	@Override
@@ -188,6 +207,21 @@ public class RepositoryEntryAuthorImpl implements RepositoryEntryAuthorView {
 	@Override
 	public RepositoryEntryLifecycle getLifecycle() {
 		return lifecycle;
+	}
+
+	@Override
+	public int getNumOfReferences() {
+		return numOfReferences;
+	}
+
+	@Override
+	public boolean isLectureEnabled() {
+		return lectureEnabled;
+	}
+
+	@Override
+	public boolean isRollCallEnabled() {
+		return rollCallEnabled;
 	}
 
 	@Override

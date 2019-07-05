@@ -21,9 +21,8 @@ package org.olat.restapi.repository;
 
 import static org.olat.repository.ui.catalog.CatalogNodeManagerController.LOCK_TOKEN;
 import static org.olat.repository.ui.catalog.CatalogNodeManagerController.lockRes;
+import static org.olat.restapi.security.RestSecurityHelper.getRoles;
 import static org.olat.restapi.security.RestSecurityHelper.getUserRequest;
-import static org.olat.restapi.security.RestSecurityHelper.isAdmin;
-import static org.olat.restapi.security.RestSecurityHelper.isAuthor;
 import static org.olat.restapi.support.CatalogVOFactory.get;
 import static org.olat.restapi.support.CatalogVOFactory.link;
 
@@ -52,13 +51,11 @@ import javax.ws.rs.core.Response.Status;
 import javax.ws.rs.core.UriInfo;
 
 import org.olat.basesecurity.BaseSecurity;
-import org.olat.basesecurity.BaseSecurityManager;
-import org.olat.basesecurity.SecurityGroup;
-import org.olat.core.CoreSpringFactory;
-import org.olat.core.commons.persistence.DBFactory;
+import org.olat.basesecurity.manager.SecurityGroupDAO;
 import org.olat.core.gui.UserRequest;
 import org.olat.core.gui.translator.Translator;
 import org.olat.core.id.Identity;
+import org.olat.core.id.Roles;
 import org.olat.core.util.StringHelper;
 import org.olat.core.util.Util;
 import org.olat.core.util.coordinate.CoordinatorManager;
@@ -77,6 +74,8 @@ import org.olat.restapi.support.vo.ErrorVO;
 import org.olat.user.UserManager;
 import org.olat.user.restapi.UserVO;
 import org.olat.user.restapi.UserVOFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Component;
 
 /**
  * Description:<br>
@@ -86,22 +85,29 @@ import org.olat.user.restapi.UserVOFactory;
  * Initial Date:  5 may 2010 <br>
  * @author srosse, stephane.rosse@frentix.com
  */
+@Component
 @Path("catalog")
 public class CatalogWebService {
 	
 	private static final String VERSION = "1.0";
 	
-	private final CatalogManager catalogManager;
-	
-	public CatalogWebService() {
-		catalogManager = CoreSpringFactory.getImpl(CatalogManager.class);
-	}
+	@Autowired
+	private UserManager userManager;
+	@Autowired
+	private BaseSecurity securityManager;
+	@Autowired
+	private CatalogManager catalogManager;
+	@Autowired
+	private SecurityGroupDAO securityGroupDao;
+	@Autowired
+	private RepositoryManager repositoryManager;
+
 	
 	/**
 	 * Retrieves the version of the Catalog Web Service.
-   * @response.representation.200.mediaType text/plain
-   * @response.representation.200.doc The version of this specific Web Service
-   * @response.representation.200.example 1.0
+	 * @response.representation.200.mediaType text/plain
+	 * @response.representation.200.doc The version of this specific Web Service
+	 * @response.representation.200.example 1.0
 	 * @return
 	 */
 	@GET
@@ -114,9 +120,9 @@ public class CatalogWebService {
 	/**
 	 * Returns the list of root catalog entries.
 	 * @response.representation.200.qname {http://www.example.com}catalogEntryVO
-   * @response.representation.200.mediaType application/xml, application/json
-   * @response.representation.200.doc The list of roots catalog entries
-   * @response.representation.200.example {@link org.olat.restapi.support.vo.Examples#SAMPLE_CATALOGENTRYVOes}
+	 * @response.representation.200.mediaType application/xml, application/json
+	 * @response.representation.200.doc The list of roots catalog entries
+	 * @response.representation.200.example {@link org.olat.restapi.support.vo.Examples#SAMPLE_CATALOGENTRYVOes}
 	 * @return The response
 	 */
 	@GET
@@ -137,14 +143,14 @@ public class CatalogWebService {
 	/**
 	 * Returns the metadata of the catalog entry.
 	 * @response.representation.200.qname {http://www.example.com}catalogEntryVO
-   * @response.representation.200.mediaType application/xml, application/json
-   * @response.representation.200.doc The catalog entry
-   * @response.representation.200.example {@link org.olat.restapi.support.vo.Examples#SAMPLE_CATALOGENTRYVO}
-   * @response.representation.401.doc The path could not be resolved to a valid catalog entry
-   * @param path The path
-   * @param uriInfo The URI informations
-   * @param httpRequest The HTTP request
-   * @param request The REST request
+	 * @response.representation.200.mediaType application/xml, application/json
+	 * @response.representation.200.doc The catalog entry
+	 * @response.representation.200.example {@link org.olat.restapi.support.vo.Examples#SAMPLE_CATALOGENTRYVO}
+	 * @response.representation.401.doc The path could not be resolved to a valid catalog entry
+	 * @param path The path
+	 * @param uriInfo The URI informations
+	 * @param httpRequest The HTTP request
+	 * @param request The REST request
 	 * @return The response
 	 */
 	@GET
@@ -173,15 +179,15 @@ public class CatalogWebService {
 	/**
 	 * Returns a list of catalog entries.
 	 * @response.representation.200.qname {http://www.example.com}catalogEntryVO
-   * @response.representation.200.mediaType application/xml, application/json
-   * @response.representation.200.doc The list of catalog entries
-   * @response.representation.200.example {@link org.olat.restapi.support.vo.Examples#SAMPLE_CATALOGENTRYVOes}
-   * @response.representation.404.doc The path could not be resolved to a valid catalog entry
-   * @param path The path
-   * @param start
-   * @param limit
-   * @param httpRequest The HTTP request
-   * @param request The REST request
+	 * @response.representation.200.mediaType application/xml, application/json
+	 * @response.representation.200.doc The list of catalog entries
+	 * @response.representation.200.example {@link org.olat.restapi.support.vo.Examples#SAMPLE_CATALOGENTRYVOes}
+	 * @response.representation.404.doc The path could not be resolved to a valid catalog entry
+	 * @param path The path
+	 * @param start
+	 * @param limit
+	 * @param httpRequest The HTTP request
+	 * @param request The REST request
 	 * @return The response
 	 */
 	@GET
@@ -230,22 +236,23 @@ public class CatalogWebService {
 	/**
 	 * Adds a catalog entry under the path specified in the URL.
 	 * @response.representation.200.qname {http://www.example.com}catalogEntryVO
-   * @response.representation.200.mediaType application/xml, application/json
-   * @response.representation.200.doc The catalog entry
-   * @response.representation.200.example {@link org.olat.restapi.support.vo.Examples#SAMPLE_CATALOGENTRYVO}
-   * @response.representation.401.doc Not authorized
-   * @response.representation.404.doc The path could not be resolved to a valid catalog entry
-   * @param path The path
-   * @param name The name
-   * @param description The description
-   * @param type The type (leaf or node)
-   * @param repoEntryKey The id of the repository entry
-   * @param httpRquest The HTTP request
-   * @param uriInfo The URI informations
+	 * @response.representation.200.mediaType application/xml, application/json
+	 * @response.representation.200.doc The catalog entry
+	 * @response.representation.200.example {@link org.olat.restapi.support.vo.Examples#SAMPLE_CATALOGENTRYVO}
+	 * @response.representation.401.doc Not authorized
+	 * @response.representation.404.doc The path could not be resolved to a valid catalog entry
+	 * @param path The path
+	 * @param name The name
+	 * @param description The description
+	 * @param type The type (leaf or node)
+	 * @param repoEntryKey The id of the repository entry
+	 * @param httpRquest The HTTP request
+	 * @param uriInfo The URI informations
 	 * @return The response
 	 */
 	@PUT
 	@Path("{path:.*}")
+	@Consumes(MediaType.APPLICATION_FORM_URLENCODED)
 	@Produces({MediaType.APPLICATION_XML, MediaType.APPLICATION_JSON})
 	public Response addCatalogEntry(@PathParam("path") List<PathSegment> path,
 			@QueryParam("name") String name, @QueryParam("description") String description,
@@ -257,7 +264,7 @@ public class CatalogWebService {
 		entryVo.setName(name);
 		entryVo.setDescription(description);
 		if(type != null) {
-			entryVo.setType(type.intValue());
+			entryVo.setType(type);
 		}
 		entryVo.setRepositoryEntryKey(repoEntryKey);
 		return addCatalogEntry(path, entryVo, httpRequest, uriInfo);
@@ -266,19 +273,19 @@ public class CatalogWebService {
 	/**
 	 * Adds a catalog entry under the path specified in the URL.
 	 * @response.representation.qname {http://www.example.com}catalogEntryVO
-   * @response.representation.mediaType application/xml, application/json
-   * @response.representation.doc The catalog entry
-   * @response.representation.example {@link org.olat.restapi.support.vo.Examples#SAMPLE_CATALOGENTRYVO}
+	 * @response.representation.mediaType application/xml, application/json
+	 * @response.representation.doc The catalog entry
+	 * @response.representation.example {@link org.olat.restapi.support.vo.Examples#SAMPLE_CATALOGENTRYVO}
 	 * @response.representation.200.qname {http://www.example.com}catalogEntryVO
-   * @response.representation.200.mediaType application/xml, application/json
-   * @response.representation.200.doc The list of catalog entry
-   * @response.representation.200.example {@link org.olat.restapi.support.vo.Examples#SAMPLE_CATALOGENTRYVO}
-   * @response.representation.401.doc Not authorized
-   * @response.representation.404.doc The path could not be resolved to a valid catalog entry
-   * @param path The path
-   * @param entryVo The catalog entry
-   * @param httpRquest The HTTP request
-   * @param uriInfo The URI informations
+	 * @response.representation.200.mediaType application/xml, application/json
+	 * @response.representation.200.doc The list of catalog entry
+	 * @response.representation.200.example {@link org.olat.restapi.support.vo.Examples#SAMPLE_CATALOGENTRYVO}
+	 * @response.representation.401.doc Not authorized
+	 * @response.representation.404.doc The path could not be resolved to a valid catalog entry
+	 * @param path The path
+	 * @param entryVo The catalog entry
+	 * @param httpRquest The HTTP request
+	 * @param uriInfo The URI informations
 	 * @return The response
 	 */
 	@PUT
@@ -287,7 +294,7 @@ public class CatalogWebService {
 	@Produces({MediaType.APPLICATION_XML, MediaType.APPLICATION_JSON})
 	public Response addCatalogEntry(@PathParam("path") List<PathSegment> path, CatalogEntryVO entryVo,
 			@Context HttpServletRequest httpRequest, @Context UriInfo uriInfo) {
-		if(!isAuthor(httpRequest)) {
+		if(!isCatalogManager(httpRequest)) {
 			return Response.serverError().status(Status.UNAUTHORIZED).build();
 		}
 
@@ -308,7 +315,7 @@ public class CatalogWebService {
 		
 		RepositoryEntry re = null;
 		if(entryVo.getRepositoryEntryKey() != null) {
-			re = RepositoryManager.getInstance().lookupRepositoryEntry(entryVo.getRepositoryEntryKey());
+			re = repositoryManager.lookupRepositoryEntry(entryVo.getRepositoryEntryKey());
 			if(re == null) {
 				return Response.serverError().status(Status.NOT_FOUND).build();
 			}
@@ -326,7 +333,6 @@ public class CatalogWebService {
 			ce.setType(guessType(entryVo));
 			ce.setName(entryVo.getName());
 			ce.setDescription(entryVo.getDescription());
-			ce.setOwnerGroup(BaseSecurityManager.getInstance().createAndPersistSecurityGroup());
 			if(re != null) {
 				ce.setRepositoryEntry(re);
 			}
@@ -344,17 +350,17 @@ public class CatalogWebService {
 	/**
 	 * Updates the catalog entry under the path specified in the URL.
 	 * @response.representation.200.qname {http://www.example.com}catalogEntryVO
-   * @response.representation.200.mediaType application/xml, application/json
-   * @response.representation.200.doc The catalog entry
-   * @response.representation.200.example {@link org.olat.restapi.support.vo.Examples#SAMPLE_CATALOGENTRYVO}
-   * @response.representation.401.doc Not authorized
-   * @response.representation.404.doc The path could not be resolved to a valid catalog entry
-   * @param path The path
-   * @param name The name
-   * @param description The description
-   * @param newParentKey The parent key to move the entry (optional)
-   * @param httpRquest The HTTP request
-   * @param uriInfo The URI informations
+	 * @response.representation.200.mediaType application/xml, application/json
+	 * @response.representation.200.doc The catalog entry
+	 * @response.representation.200.example {@link org.olat.restapi.support.vo.Examples#SAMPLE_CATALOGENTRYVO}
+	 * @response.representation.401.doc Not authorized
+	 * @response.representation.404.doc The path could not be resolved to a valid catalog entry
+	 * @param path The path
+	 * @param name The name
+	 * @param description The description
+	 * @param newParentKey The parent key to move the entry (optional)
+	 * @param httpRquest The HTTP request
+	 * @param uriInfo The URI informations
 	 * @return The response
 	 */
 	@POST
@@ -375,18 +381,18 @@ public class CatalogWebService {
 	/**
 	 * Updates the catalog entry with the path specified in the URL.
 	 * @response.representation.200.qname {http://www.example.com}catalogEntryVO
-   * @response.representation.200.mediaType application/xml, application/json
-   * @response.representation.200.doc The catalog entry
-   * @response.representation.200.example {@link org.olat.restapi.support.vo.Examples#SAMPLE_CATALOGENTRYVO}
-   * @response.representation.401.doc Not authorized
-   * @response.representation.404.doc The path could not be resolved to a valid catalog entry
-   * @param path The path
-   * @param id The id of the catalog entry
-   * @param name The name
-   * @param description The description
-   * @param newParentKey The parent key to move the entry (optional)
-   * @param httpRquest The HTTP request
-   * @param uriInfo The URI informations
+	 * @response.representation.200.mediaType application/xml, application/json
+	 * @response.representation.200.doc The catalog entry
+	 * @response.representation.200.example {@link org.olat.restapi.support.vo.Examples#SAMPLE_CATALOGENTRYVO}
+	 * @response.representation.401.doc Not authorized
+	 * @response.representation.404.doc The path could not be resolved to a valid catalog entry
+	 * @param path The path
+	 * @param id The id of the catalog entry
+	 * @param name The name
+	 * @param description The description
+	 * @param newParentKey The parent key to move the entry (optional)
+	 * @param httpRquest The HTTP request
+	 * @param uriInfo The URI informations
 	 * @return The response
 	 */
 	@POST
@@ -406,16 +412,16 @@ public class CatalogWebService {
 	/**
 	 * Updates the catalog entry with the path specified in the URL.
 	 * @response.representation.200.qname {http://www.example.com}catalogEntryVO
-   * @response.representation.200.mediaType application/xml, application/json
-   * @response.representation.200.doc The catalog entry
-   * @response.representation.200.example {@link org.olat.restapi.support.vo.Examples#SAMPLE_CATALOGENTRYVO}
-   * @response.representation.401.doc Not authorized
-   * @response.representation.404.doc The path could not be resolved to a valid catalog entry
-   * @param path The path
-   * @param entryVo The catalog entry
-   * @param newParentKey The parent key to move the entry (optional)
-   * @param httpRquest The HTTP request
-   * @param uriInfo The URI informations
+	 * @response.representation.200.mediaType application/xml, application/json
+	 * @response.representation.200.doc The catalog entry
+	 * @response.representation.200.example {@link org.olat.restapi.support.vo.Examples#SAMPLE_CATALOGENTRYVO}
+	 * @response.representation.401.doc Not authorized
+	 * @response.representation.404.doc The path could not be resolved to a valid catalog entry
+	 * @param path The path
+	 * @param entryVo The catalog entry
+	 * @param newParentKey The parent key to move the entry (optional)
+	 * @param httpRquest The HTTP request
+	 * @param uriInfo The URI informations
 	 * @return The response
 	 */
 	@POST
@@ -425,7 +431,7 @@ public class CatalogWebService {
 	public Response updateCatalogEntry(@PathParam("path") List<PathSegment> path,
 			CatalogEntryVO entryVo, @QueryParam("newParentKey") Long newParentKey, @Context HttpServletRequest httpRequest, @Context UriInfo uriInfo) {
 		
-		if(!isAuthor(httpRequest)) {
+		if(!isCatalogManager(httpRequest)) {
 			return Response.serverError().status(Status.UNAUTHORIZED).build();
 		}
 		
@@ -435,21 +441,17 @@ public class CatalogWebService {
 		}
 		
 		CatalogEntry ce = catalogManager.loadCatalogEntry(key);
-		if(ce.getType() == CatalogEntry.TYPE_NODE) {
-			//check if can admin category
-			if(!canAdminSubTree(ce, httpRequest)) {
-				return Response.serverError().status(Status.UNAUTHORIZED).build();
-			}
+		if(ce.getType() == CatalogEntry.TYPE_NODE
+				&& !canAdminSubTree(ce, httpRequest)) {
+			return Response.serverError().status(Status.UNAUTHORIZED).build();
 		}
-		//fxdiff FXOLAT-122: course management
+		
 		CatalogEntry newParent = null;
 		if(newParentKey != null) {
 			newParent = catalogManager.loadCatalogEntry(newParentKey);
-			if(newParent.getType() == CatalogEntry.TYPE_NODE) {
-				//check if can admin category
-				if(!canAdminSubTree(newParent, httpRequest)) {
-					return Response.serverError().status(Status.UNAUTHORIZED).build();
-				}
+			if(newParent.getType() == CatalogEntry.TYPE_NODE
+					&& !canAdminSubTree(newParent, httpRequest)) {
+				return Response.serverError().status(Status.UNAUTHORIZED).build();
 			}
 		}
 		
@@ -538,13 +540,13 @@ public class CatalogWebService {
 	/**
 	 * Get the owners of the local sub tree
 	 * @response.representation.200.qname {http://www.example.com}userVO
-   * @response.representation.200.mediaType application/xml, application/json
-   * @response.representation.200.doc The catalog entry
-   * @response.representation.200.example {@link org.olat.user.restapi.Examples#SAMPLE_USERVOes}
-   * @response.representation.401.doc Not authorized
-   * @response.representation.404.doc The path could not be resolved to a valid catalog entry
-   * @param path The path
-   * @param httpRquest The HTTP request
+	 * @response.representation.200.mediaType application/xml, application/json
+	 * @response.representation.200.doc The catalog entry
+	 * @response.representation.200.example {@link org.olat.user.restapi.Examples#SAMPLE_USERVOes}
+	 * @response.representation.401.doc Not authorized
+	 * @response.representation.404.doc The path could not be resolved to a valid catalog entry
+	 * @param path The path
+	 * @param httpRquest The HTTP request
 	 * @return The response
 	 */
 	@GET
@@ -561,16 +563,11 @@ public class CatalogWebService {
 			return Response.serverError().status(Status.NOT_FOUND).build();
 		}
 
-		if(!isAuthor(httpRequest) && !canAdminSubTree(ce, httpRequest)) {
+		if(!isCatalogManager(httpRequest) && !canAdminSubTree(ce, httpRequest)) {
 			return Response.serverError().status(Status.UNAUTHORIZED).build();
 		}
-		
-		SecurityGroup sg = ce.getOwnerGroup();
-		if(sg == null) {
-			return Response.ok(new UserVO[0]).build();
-		}
-		
-		List<Identity> ids = BaseSecurityManager.getInstance().getIdentitiesOfSecurityGroup(sg);
+
+		List<Identity> ids = catalogManager.getOwners(ce);
 		int count = 0;
 		UserVO[] voes = new UserVO[ids.size()];
 		for(Identity id:ids) {
@@ -582,14 +579,14 @@ public class CatalogWebService {
 	/**
 	 * Retrieves data of an owner of the local sub tree
 	 * @response.representation.200.qname {http://www.example.com}userVO
-   * @response.representation.200.mediaType application/xml, application/json
-   * @response.representation.200.doc The catalog entry
-   * @response.representation.200.example {@link org.olat.user.restapi.Examples#SAMPLE_USERVOes}
-   * @response.representation.401.doc Not authorized
-   * @response.representation.404.doc The path could not be resolved to a valid catalog entry
-   * @param path The path
-   * @Param identityKey The id of the user 
-   * @param httpRquest The HTTP request
+	 * @response.representation.200.mediaType application/xml, application/json
+	 * @response.representation.200.doc The catalog entry
+	 * @response.representation.200.example {@link org.olat.user.restapi.Examples#SAMPLE_USERVOes}
+	 * @response.representation.401.doc Not authorized
+	 * @response.representation.404.doc The path could not be resolved to a valid catalog entry
+	 * @param path The path
+	 * @Param identityKey The id of the user 
+	 * @param httpRquest The HTTP request
 	 * @return The response
 	 */
 	@GET
@@ -606,16 +603,11 @@ public class CatalogWebService {
 			return Response.serverError().status(Status.NOT_FOUND).build();
 		}
 
-		if(!isAuthor(httpRequest) && !canAdminSubTree(ce, httpRequest)) {
+		if(!isCatalogManager(httpRequest) && !canAdminSubTree(ce, httpRequest)) {
 			return Response.serverError().status(Status.UNAUTHORIZED).build();
 		}
-		
-		SecurityGroup sg = ce.getOwnerGroup();
-		if(sg == null) {
-			return Response.serverError().status(Status.NOT_FOUND).build();
-		}
-		
-		List<Identity> ids = BaseSecurityManager.getInstance().getIdentitiesOfSecurityGroup(sg);
+
+		List<Identity> ids = catalogManager.getOwners(ce);
 		UserVO vo = null;
 		for(Identity id:ids) {
 			if(id.getKey().equals(identityKey)) {
@@ -632,36 +624,33 @@ public class CatalogWebService {
 	/**
 	 * Add an owner of the local sub tree
 	 * @response.representation.200.qname {http://www.example.com}userVO
-   * @response.representation.200.mediaType application/xml, application/json
-   * @response.representation.200.doc The catalog entry
-   * @response.representation.200.example {@link org.olat.user.restapi.Examples#SAMPLE_USERVOes}
-   * @response.representation.401.doc Not authorized
-   * @response.representation.404.doc The path could not be resolved to a valid catalog entry
-   * @param path The path
-   * @param identityKey The id of the user
-   * @param httpRquest The HTTP request
+	 * @response.representation.200.mediaType application/xml, application/json
+	 * @response.representation.200.doc The catalog entry
+	 * @response.representation.200.example {@link org.olat.user.restapi.Examples#SAMPLE_USERVOes}
+	 * @response.representation.401.doc Not authorized
+	 * @response.representation.404.doc The path could not be resolved to a valid catalog entry
+	 * @param path The path
+	 * @param identityKey The id of the user
+	 * @param httpRquest The HTTP request
 	 * @return The response
 	 */
 	@PUT
 	@Path("{path:.*}/owners/{identityKey}")
 	public Response addOwner(@PathParam("path") List<PathSegment> path, @PathParam("identityKey") Long identityKey,
 			@Context HttpServletRequest httpRequest) {
-		
 		Long key = getCatalogEntryKeyFromPath(path);
 		if(key == null) {
 			return Response.serverError().status(Status.NOT_ACCEPTABLE).build();
 		}
-		
 		CatalogEntry ce = catalogManager.loadCatalogEntry(key);
 		if(ce == null) {
 			return Response.serverError().status(Status.NOT_FOUND).build();
 		}
 
-		if(!isAuthor(httpRequest) && !canAdminSubTree(ce, httpRequest)) {
+		if(!isCatalogManager(httpRequest) && !canAdminSubTree(ce, httpRequest)) {
 			return Response.serverError().status(Status.UNAUTHORIZED).build();
 		}
 		
-		BaseSecurity securityManager = BaseSecurityManager.getInstance();
 		Identity identity = securityManager.loadIdentityByKey(identityKey, false);
 		if(identity == null) {
 			return Response.serverError().status(Status.NOT_FOUND).build();
@@ -674,12 +663,7 @@ public class CatalogWebService {
 		}
 		
 		try {
-			SecurityGroup sg = ce.getOwnerGroup();
-			if(sg == null) {
-				ce.setOwnerGroup(securityManager.createAndPersistSecurityGroup());
-				DBFactory.getInstance().intermediateCommit();
-			}
-			securityManager.addIdentityToSecurityGroup(identity, ce.getOwnerGroup());
+			securityGroupDao.addIdentityToSecurityGroup(identity, ce.getOwnerGroup());
 		} catch(Exception e) {
 			throw new WebApplicationException(e);
 		} finally {
@@ -691,14 +675,14 @@ public class CatalogWebService {
 	/**
 	 * Remove an owner of the local sub tree
 	 * @response.representation.200.qname {http://www.example.com}userVO
-   * @response.representation.200.mediaType application/xml, application/json
-   * @response.representation.200.doc The catalog entry
-   * @response.representation.200.example {@link org.olat.user.restapi.Examples#SAMPLE_USERVOes}
-   * @response.representation.401.doc Not authorized
-   * @response.representation.404.doc The path could not be resolved to a valid catalog entry
-   * @param path The path
-   * @param identityKey The id of the user
-   * @param httpRquest The HTTP request
+	 * @response.representation.200.mediaType application/xml, application/json
+	 * @response.representation.200.doc The catalog entry
+	 * @response.representation.200.example {@link org.olat.user.restapi.Examples#SAMPLE_USERVOes}
+	 * @response.representation.401.doc Not authorized
+	 * @response.representation.404.doc The path could not be resolved to a valid catalog entry
+	 * @param path The path
+	 * @param identityKey The id of the user
+	 * @param httpRquest The HTTP request
 	 * @return The response
 	 */
 	@DELETE
@@ -715,18 +699,12 @@ public class CatalogWebService {
 			return Response.serverError().status(Status.NOT_FOUND).build();
 		}
 
-		if(!isAuthor(httpRequest) && !canAdminSubTree(ce, httpRequest)) {
+		if(!isCatalogManager(httpRequest) && !canAdminSubTree(ce, httpRequest)) {
 			return Response.serverError().status(Status.UNAUTHORIZED).build();
 		}
 		
-		BaseSecurity securityManager = BaseSecurityManager.getInstance();
 		Identity identity = securityManager.loadIdentityByKey(identityKey, false);
 		if(identity == null) {
-			return Response.ok().build();
-		}
-		
-		SecurityGroup sg = ce.getOwnerGroup();
-		if(sg == null) {
 			return Response.ok().build();
 		}
 		
@@ -737,7 +715,7 @@ public class CatalogWebService {
 		}
 		
 		try {
-			securityManager.removeIdentityFromSecurityGroup(identity, ce.getOwnerGroup());
+			catalogManager.removeOwner(ce, identity);
 		} catch(Exception e) {
 			throw new WebApplicationException(e);
 		} finally {
@@ -758,7 +736,7 @@ public class CatalogWebService {
 		
 		Translator translator = Util.createPackageTranslator(CatalogNodeManagerController.class, locale);
 
-		String ownerName = CoreSpringFactory.getImpl(UserManager.class).getUserDisplayName(lock.getOwner());
+		String ownerName = userManager.getUserDisplayName(lock.getOwner());
 		String translation = translator.translate("catalog.locked.by", new String[]{ ownerName });
 		ErrorVO vo = new ErrorVO("org.olat.catalog.ui","catalog.locked.by",translation);
 		ErrorVO[] voes = new ErrorVO[]{vo};
@@ -769,7 +747,7 @@ public class CatalogWebService {
 		PathSegment lastPath = path.get(path.size() - 1);
 		Long key = null;
 		try {
-			key = new Long(lastPath.getPath());
+			key = Long.valueOf(lastPath.getPath());
 		} catch (NumberFormatException e) {
 			key = null;
 		}
@@ -777,13 +755,12 @@ public class CatalogWebService {
 	}
 	
 	private boolean canAdminSubTree(CatalogEntry ce, HttpServletRequest httpRequest) {
-		if(isAdmin(httpRequest)) return true;
-		Identity identity = getUserRequest(httpRequest).getIdentity();
-		SecurityGroup owners = ce.getOwnerGroup();
-		if (owners != null && BaseSecurityManager.getInstance().isIdentityInSecurityGroup(identity, owners)) {
+		if(isCatalogManager(httpRequest)) {
 			return true;
 		}
-		return false;
+		
+		Identity identity = getUserRequest(httpRequest).getIdentity();
+		return catalogManager.isOwner(ce, identity);
 	}
 	
 	private int guessType(CatalogEntryVO vo) {
@@ -795,6 +772,14 @@ public class CatalogWebService {
 			return CatalogEntry.TYPE_LEAF;
 		}
 		return type.intValue();
-		
+	}
+	
+	private boolean isCatalogManager(HttpServletRequest request) {
+		try {
+			Roles roles = getRoles(request);
+			return roles.isAdministrator() || roles.isLearnResourceManager();
+		} catch (Exception e) {
+			return false;
+		}
 	}
 }

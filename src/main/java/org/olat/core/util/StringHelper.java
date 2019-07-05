@@ -35,6 +35,7 @@ import java.text.DecimalFormat;
 import java.text.DecimalFormatSymbols;
 import java.text.NumberFormat;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.Date;
 import java.util.HashMap;
@@ -42,19 +43,16 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-import org.apache.commons.lang3.StringEscapeUtils;
-import org.apache.commons.lang3.text.translate.*;
 import org.olat.core.id.Identity;
-import org.olat.core.id.UserConstants;
 import org.olat.core.logging.AssertException;
-import org.olat.core.logging.OLog;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
-import org.olat.core.util.filter.impl.NekoHTMLScanner;
+import org.olat.core.util.filter.impl.HtmlScanner;
 import org.olat.core.util.filter.impl.OWASPAntiSamyXSSFilter;
+import org.olat.user.UserManager;
 
 import com.thoughtworks.xstream.core.util.Base64Encoder;
 
@@ -66,7 +64,7 @@ import com.thoughtworks.xstream.core.util.Base64Encoder;
  */
 public class StringHelper {
 	
-	private static final OLog log = Tracing.createLoggerFor(StringHelper.class);
+	private static final Logger log = Tracing.createLoggerFor(StringHelper.class);
 
 	private static final NumberFormat numFormatter;
 	private static final String WHITESPACE_REGEXP = "^\\s*$";
@@ -113,7 +111,7 @@ public class StringHelper {
 	 * @return List
 	 */
 	public static List<String> getParts(String in, String delim) {
-		List<String> li = new ArrayList<String>();
+		List<String> li = new ArrayList<>();
 		String part;
 		int delimlen = delim.length();
 		int oldpos = 0;
@@ -231,7 +229,7 @@ public class StringHelper {
 	 * @return The encoded string
 	 */
 	public static String encodeBase64(String unencoded) {
-		return new Base64Encoder().encode(unencoded.getBytes());
+		return new Base64Encoder(true).encode(unencoded.getBytes());
 	}
 	
 	/**
@@ -241,7 +239,7 @@ public class StringHelper {
 	 * @return The encoded string
 	 */
 	public static String encodeBase64(byte[] unencoded) {
-		return new Base64Encoder().encode(unencoded);
+		return new Base64Encoder(true).encode(unencoded);
 	}
 	
 	/**
@@ -251,7 +249,7 @@ public class StringHelper {
 	 * @return The decoded string
 	 */
 	public static String decodeBase64(String encoded) {
-		byte[] decoded = new Base64Encoder().decode(encoded);
+		byte[] decoded = new Base64Encoder(true).decode(encoded);
 		return new String(decoded);
 	}
 
@@ -309,6 +307,23 @@ public class StringHelper {
 		return !matcher.find();
 	}
 	
+	public static String blankIfNull(String s) {
+		return s != null? s: "";
+	}
+	
+	public static int count(String s, char character) {
+		int count = 0;
+		
+		char[] chars = s.toCharArray();
+		for(int i=chars.length; i-->0; ) {
+			if(chars[i] == character) {
+				count++;
+			}
+		}
+		
+		return count;
+	}
+	
 	public static boolean isSame(String s1, String s2) {
 		if(s1 == null && s2 == null) {
 			return true;
@@ -340,9 +355,7 @@ public class StringHelper {
 	 */
 	public static boolean isHtml(String s) {
 		if (s == null) return false;
-		
-		boolean containsHtml = new NekoHTMLScanner().scan(s);
-		return containsHtml;
+		return new HtmlScanner().scan(s);
 	}
 
 	/**
@@ -355,15 +368,17 @@ public class StringHelper {
 	 * </ul>
 	 * 
 	 * @param emailRecipientIdentities
+	 * @param locale
 	 * @return "email1, email2, email3," or null if emailRecipientIdentites was
 	 *         null
 	 */
-	public static String formatIdentitesAsEmailToString(final Identity[] emailRecipientIdentities) {
+	public static String formatIdentitesAsEmailToString(final Identity[] emailRecipientIdentities, Locale locale) {
 		int elCnt = emailRecipientIdentities.length;
 		//2..n recipients
 		StringBuilder tmpDET = new StringBuilder();
 		for (int i = 0; i < elCnt; i++) {
-			tmpDET.append(emailRecipientIdentities[i].getUser().getProperty(UserConstants.EMAIL, null));
+			String email = UserManager.getInstance().getUserDisplayEmail(emailRecipientIdentities[i], locale);
+			tmpDET.append(email);
 			if (i < elCnt - 1) {
 				tmpDET.append(", ");
 			}
@@ -399,15 +414,23 @@ public class StringHelper {
 	}
 	
 	public static final String escapeHtml(String str) {
-		return StringEscapeUtils.ESCAPE_HTML4.translate(str);
+		return org.apache.commons.text.StringEscapeUtils.escapeHtml4(str);
+	}
+	
+	public static final String unescapeHtml(String str) {
+		return org.apache.commons.text.StringEscapeUtils.unescapeHtml4(str);
 	}
 	
 	public static final void escapeHtml(Writer writer, String str) {
 		try {
-			StringEscapeUtils.ESCAPE_HTML4.translate(str, writer);
+			org.apache.commons.text.StringEscapeUtils.ESCAPE_HTML4.translate(str, writer);
 		} catch (IOException e) {
 			log.error("Error escaping HTML", e);
 		}
+	}
+	
+	public static final String escapeXml(String str) {
+		return org.apache.commons.text.StringEscapeUtils.escapeXml11(str);
 	}
 	
 	public static final String xssScan(String str) {
@@ -421,18 +444,20 @@ public class StringHelper {
 	}
 	
 	public static final boolean xssScanForErrors(String str) {
-		OWASPAntiSamyXSSFilter filter = new OWASPAntiSamyXSSFilter();
-		filter.filter(str);
-		return filter.getNumOfErrors() > 0;
+		return new OWASPAntiSamyXSSFilter().errors(str);
+	}
+	
+	public static final String escapeJava(String str) {
+		return org.apache.commons.text.StringEscapeUtils.escapeJava(str);
 	}
 	
 	public static final String escapeJavaScript(String str) {
-		return OLAT_ESCAPE_ECMASCRIPT.translate(str);
+		return org.apache.commons.text.StringEscapeUtils.escapeEcmaScript(str);
 	}
 	
 	public static final void escapeJavaScript(Writer writer, String str) {
 		try {
-			OLAT_ESCAPE_ECMASCRIPT.translate(str, writer);
+			org.apache.commons.text.StringEscapeUtils.ESCAPE_ECMASCRIPT.translate(str, writer);
 		} catch (IOException e) {
 			log.error("Error escaping JavaScript", e);
 		}
@@ -489,25 +514,26 @@ public class StringHelper {
 	
 	public static String cleanUTF8ForXml(String string) {
 		if(string == null) return null;
-		if(string.length() == 0) return string;
-		
-		StringBuilder sb = new StringBuilder();
-		char[] charArr = string.toCharArray();
-		int numOfCharacters = charArr.length;
-		for(int i=0; i<numOfCharacters; i++) {
-			char ch = charArr[i];
+
+		int length = string.length();
+		if(length == 0) return string;
+
+		StringBuilder sb = new StringBuilder(length);
+		for(int i=0; i<length; i++) {
+			int ch = string.codePointAt(i);
 			if(ch < 32) {
 				switch(ch) {
-					case '\n': sb.append(ch); break;//0x000A
-					case '\t': sb.append(ch); break;//0x0009
-					case '\r': sb.append(ch); break;//0x000D
+					case '\n': //0x000A
+					case '\t': //0x0009
+					case '\r': sb.appendCodePoint(ch); break;//0x000D
+					default: // dump them
 				}
 			} else if(ch >= 0x0020 && ch <= 0xD7FF) {
-				sb.append(ch);
+				sb.appendCodePoint(ch);
 			} else if(ch >= 0xE000 && ch <= 0xFFFD) {
-				sb.append(ch);
+				sb.appendCodePoint(ch);
 			} else if(ch >= 0x10000 && ch <= 0x10FFFF) {
-				sb.append(ch);
+				sb.appendCodePoint(ch);
 			}
 		}
 		return sb.toString();
@@ -562,45 +588,44 @@ public class StringHelper {
 	}
 	
 	/**
-	 * set of strings to one string comma separated.<br>
+	 * Collection of strings to one string comma separated. This method doesn't do any escaping
+	 * and will never do escaping to be backwards compatible.<br>
 	 * e.g. ["a","b","c","s"] -> "a,b,c,s" 
 	 * @param selection
 	 * @return
 	 */
-	public static String formatAsCSVString(Set<String> entries) {
-		boolean isFirst = true;
-		String csvStr = null;
-		for (Iterator<String> iter = entries.iterator(); iter.hasNext();) {
-			String group = iter.next();
-			if (isFirst) {
-				csvStr = group;
-				isFirst = false;
-			} else {
-				csvStr += ", " + group;
+	public static String formatAsCSVString(Collection<String> entries) {
+		StringBuilder csv = new StringBuilder(256);
+		for (String group:entries) {
+			if (csv.length() > 0) {
+				csv.append(",");
 			}
+			csv.append(group);
 		}
-		return csvStr;
+		return csv.toString();
 	}
 	
 	/**
-	 * list of strings to one string comma separated.<br>
-	 * e.g. ["a","b","c","s"] -> "a,b,c,s" 
+	 * Collection of strings to one string comma separated. The method escaped
+	 * " and ,<br>
+	 * e.g. ["a","b,1","c","s"] -> "a,"b,1",c,s" 
 	 * @param selection
 	 * @return
 	 */
-	public static String formatAsCSVString(List<String> entries) {
-		boolean isFirst = true;
-		String csvStr = null;
-		for (Iterator<String> iter = entries.iterator(); iter.hasNext();) {
-			String group = iter.next();
-			if (isFirst) {
-				csvStr = group;
-				isFirst = false;
-			} else {
-				csvStr += ", " + group;
+	public static String formatAsEscapedCSVString(Collection<String> entries) {
+		StringBuilder csv = new StringBuilder(256);
+		for (String entry:entries) {
+			entry = entry.replace("\"", "\"\"");
+			if (entry.contains(",")) {
+				entry = "\"" + entry + "\"";  
 			}
+			
+			if (csv.length() > 0) {
+				csv.append(",");
+			}
+			csv.append(entry);
 		}
-		return csvStr;
+		return csv.toString();
 	}
 	
 	/**
@@ -610,40 +635,17 @@ public class StringHelper {
 	 * @param selection
 	 * @return
 	 */
-	public static String formatAsSortUniqCSVString(List<String> s) {
-		
-		Map <String,String>u = new HashMap<String,String>();
-		for (Iterator <String> si = s.iterator(); si.hasNext();) {
+	public static String formatAsSortUniqCSVString(Collection<String> s) {
+		Map<String,String> u = new HashMap<>();
+		for (Iterator<String> si = s.iterator(); si.hasNext();) {
 			u.put(si.next().trim(), null);
 		}
 		
-		List <String>rv = new ArrayList<String>();
+		List <String>rv = new ArrayList<>(u.size());
 		rv.addAll(u.keySet());
 		rv.remove("");
 		Collections.sort(rv);
 		
-		return formatAsCSVString (rv);
-	}
-	
-	/**
-	 * list of strings to one string comma separated.<br>
-	 * e.g. ["z","a","b","c","s","a"] -> "a, b, c, s, z"
-	 * No duplicates, alphabetically sorted
-	 * @param selection
-	 * @return
-	 */
-	public static String formatAsSortUniqCSVString(Set<String> s) {
-		
-		Map <String,String>u = new HashMap<String,String>();
-		for (Iterator <String> si = s.iterator(); si.hasNext();) {
-			u.put(si.next().trim(), null);
-		}
-		
-		List <String>rv = new ArrayList<String>();
-		rv.addAll(u.keySet());
-		rv.remove("");
-		Collections.sort(rv);
-		
-		return formatAsCSVString (rv);
+		return formatAsCSVString(rv);
 	}
 }

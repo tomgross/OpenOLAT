@@ -45,9 +45,9 @@ import org.olat.core.util.WebappHelper;
 import org.olat.core.util.vfs.LocalFileImpl;
 import org.olat.core.util.vfs.Quota;
 import org.olat.core.util.vfs.VFSLeaf;
-import org.olat.modules.webFeed.managers.FeedManager;
-import org.olat.modules.webFeed.managers.ValidatedURL;
-import org.olat.modules.webFeed.models.Feed;
+import org.olat.modules.webFeed.Feed;
+import org.olat.modules.webFeed.manager.FeedManager;
+import org.olat.modules.webFeed.manager.ValidatedURL;
 
 /**
  * This controller is responsible for editing feed information. <br />
@@ -84,7 +84,7 @@ class FeedFormController extends FormBasicController {
 	public FeedFormController(UserRequest ureq, WindowControl wControl, Feed feed, FeedUIFactory uiFactory) {
 		super(ureq, wControl);
 		this.feed = feed;
-		this.feedQuota = FeedManager.getInstance().getQuota(feed.getResource());
+		this.feedQuota = FeedManager.getInstance().getQuota(feed);
 		setTranslator(uiFactory.getTranslator());
 		initForm(ureq);
 	}
@@ -127,7 +127,7 @@ class FeedFormController extends FormBasicController {
 				} else {
 					file.clearError();
 				}
-				deleteImage.setVisible(true);	
+				deleteImage.setVisible(true);
 			}
 		} else if(source == deleteImage) {
 			VFSLeaf img = FeedManager.getInstance().createFeedMediaFile(feed, feed.getImageName(), null);
@@ -215,10 +215,6 @@ class FeedFormController extends FormBasicController {
 		return validUrl;
 	}
 
-	/**
-	 * @see org.olat.core.gui.components.form.flexible.impl.FormBasicController#initForm(org.olat.core.gui.components.form.flexible.FormItemContainer,
-	 *      org.olat.core.gui.control.Controller, org.olat.core.gui.UserRequest)
-	 */
 	@Override
 	protected void initForm(FormItemContainer formLayout, Controller listener, UserRequest ureq) {
 		// title might be longer from external source
@@ -230,9 +226,7 @@ class FeedFormController extends FormBasicController {
 
 		description = uifactory.addRichTextElementForStringDataMinimalistic("description", "feed.form.description", feed
 				.getDescription(), 5, -1, formLayout, getWindowControl());
-		description.setMandatory(true);
 		description.setMaxLength(4000);
-		description.setNotEmptyCheck("feed.form.field.is_mandatory");
 		RichTextConfiguration richTextConfig = description.getEditorConfiguration();
 		// set upload dir to the media dir
 		richTextConfig.setFileBrowserUploadRelPath("media");
@@ -253,7 +247,7 @@ class FeedFormController extends FormBasicController {
 			}
 		}
 
-		Set<String> mimeTypes = new HashSet<String>();
+		Set<String> mimeTypes = new HashSet<>();
 		mimeTypes.add("image/jpeg");
 		mimeTypes.add("image/jpg");
 		mimeTypes.add("image/png");
@@ -262,7 +256,7 @@ class FeedFormController extends FormBasicController {
 		
 		int maxFileSizeKB = feedQuota.getUlLimitKB().intValue();
 		String supportAddr = WebappHelper.getMailConfig("mailQuota");
-		file.setMaxUploadSizeKB(maxFileSizeKB, "ULLimitExceeded", new String[]{ new Long(maxFileSizeKB / 1024).toString(), supportAddr });
+		file.setMaxUploadSizeKB(maxFileSizeKB, "ULLimitExceeded", new String[]{ Integer.toString(maxFileSizeKB / 1024), supportAddr });
 
 		// if external feed, display feed-url text-element:
 		if(feed.isExternal()){

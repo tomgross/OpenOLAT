@@ -24,7 +24,7 @@ import java.util.Locale;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-import org.apache.commons.lang.StringEscapeUtils;
+import org.olat.core.CoreSpringFactory;
 import org.olat.core.gui.UserRequest;
 import org.olat.core.gui.components.Component;
 import org.olat.core.gui.components.ComponentRenderer;
@@ -48,6 +48,7 @@ import org.olat.core.util.i18n.I18nItem;
 import org.olat.core.util.i18n.I18nManager;
 import org.olat.core.util.i18n.I18nModule;
 import org.olat.core.util.prefs.Preferences;
+import org.springframework.beans.factory.annotation.Autowired;
 
 /**
  * Description:<br>
@@ -86,6 +87,11 @@ public class InlineTranslationInterceptHandlerController extends BasicController
 	private static final Pattern patternInput = Pattern.compile("<input[^>]*?" + decoratedTranslatedPattern + ".*?>");
 	private static final Pattern patAttribute = Pattern.compile("<[^>]*?" + decoratedTranslatedPattern + "[^>]*?>");
 
+	@Autowired
+	private I18nManager i18nMgr;
+	@Autowired
+	private I18nModule i18nModule;
+	
 	/**
 	 * Constructor
 	 * 
@@ -195,21 +201,19 @@ public class InlineTranslationInterceptHandlerController extends BasicController
 			String key = ureq.getParameter(ARG_KEY);
 			// The argument ARG_IDENT is not used for dispatching right now
 			if (isLogDebugEnabled()) {
-				logDebug("Got event to launch inline translation tool for bundle::" + bundle + " and key::" + key, null);
+				logDebug("Got event to launch inline translation tool for bundle::" + bundle + " and key::" + key);
 			}
 			if (StringHelper.containsNonWhitespace(bundle) && StringHelper.containsNonWhitespace(key)) {
 				// Get userconfigured reference locale
 				Preferences guiPrefs = ureq.getUserSession().getGuiPreferences();
-				List<String> referenceLangs = I18nModule.getTransToolReferenceLanguages();
-				String referencePrefs = (String) guiPrefs.get(I18nModule.class, I18nModule.GUI_PREFS_PREFERRED_REFERENCE_LANG, referenceLangs
-						.get(0));
-				I18nManager i18nMgr = I18nManager.getInstance();
+				List<String> referenceLangs = i18nModule.getTransToolReferenceLanguages();
+				String referencePrefs = (String) guiPrefs.get(I18nModule.class, I18nModule.GUI_PREFS_PREFERRED_REFERENCE_LANG, referenceLangs.get(0));
 				Locale referenceLocale = i18nMgr.getLocaleOrNull(referencePrefs);
 				// Set target local to current user language
 				Locale targetLocale = i18nMgr.getLocaleOrNull(ureq.getLocale().toString());
-				if (I18nModule.isOverlayEnabled() && !I18nModule.isTransToolEnabled()) {
+				if (i18nModule.isOverlayEnabled() && !i18nModule.isTransToolEnabled()) {
 					// use overlay locale when in customizing mode
-					targetLocale = I18nModule.getOverlayLocales().get(targetLocale);	
+					targetLocale = i18nModule.getOverlayLocales().get(targetLocale);	
 				}
 				List<I18nItem> i18nItems = i18nMgr.findExistingAndMissingI18nItems(referenceLocale, targetLocale, bundle, false);
 				if(i18nItems.isEmpty()) {
@@ -222,7 +226,7 @@ public class InlineTranslationInterceptHandlerController extends BasicController
 					// running -
 					// must be done before instantiating the translation controller
 					i18nMgr.setMarkLocalizedStringsEnabled(ureq.getUserSession(), false);
-					i18nItemEditCtr = new TranslationToolI18nItemEditCrumbController(ureq, getWindowControl(), i18nItems, referenceLocale, !I18nModule.isTransToolEnabled());
+					i18nItemEditCtr = new TranslationToolI18nItemEditCrumbController(ureq, getWindowControl(), i18nItems, referenceLocale, !i18nModule.isTransToolEnabled());
 					listenTo(i18nItemEditCtr);
 					// set current key from the package as current translation item
 					for (I18nItem item : i18nItems) {
@@ -251,7 +255,7 @@ public class InlineTranslationInterceptHandlerController extends BasicController
 	protected void event(UserRequest ureq, Controller source, Event event) {
 		if (source == cmc) {
 			// user closed dialog, go back to inline translation mode
-			I18nManager.getInstance().setMarkLocalizedStringsEnabled(ureq.getUserSession(), true);
+			i18nMgr.setMarkLocalizedStringsEnabled(ureq.getUserSession(), true);
 		}
 	}
 
@@ -385,7 +389,7 @@ public class InlineTranslationInterceptHandlerController extends BasicController
 
 			// Case 4: default case: normal translation, surround with inline
 			// translation link
-			StringBuffer tmp = new StringBuffer();
+			StringBuilder tmp = new StringBuilder();
 			tmp.append(stringWithMarkup.substring(0, startSPos));
 			tmp.append(SPAN_TRANSLATION_I18NITEM_OPEN);
 			tmp.append(link);
@@ -412,7 +416,7 @@ public class InlineTranslationInterceptHandlerController extends BasicController
 	 */
 	private static String replaceItemWithHTMLMarkupSurrounded(String stringWithMarkup, StringOutput link, int startSPos, int startEPos,
 			int endSPos, int endEPos, int wrapperOpen, int wrapperClose) {
-		StringBuffer tmp = new StringBuffer();
+		StringBuilder tmp = new StringBuilder();
 		tmp.append(stringWithMarkup.substring(0, wrapperOpen));
 		tmp.append(SPAN_TRANSLATION_I18NITEM_OPEN);
 		tmp.append(link);
@@ -436,7 +440,7 @@ public class InlineTranslationInterceptHandlerController extends BasicController
 	 * @return
 	 */
 	private static String replaceItemWithoutHTMLMarkup(String stringWithMarkup, int startSPos, int startEPos, int endSPos, int endEPos) {
-		StringBuffer tmp = new StringBuffer();
+		StringBuilder tmp = new StringBuilder();
 		tmp.append(stringWithMarkup.substring(0, startSPos));
 		tmp.append(stringWithMarkup.substring(startEPos, endSPos));
 		tmp.append(stringWithMarkup.substring(endEPos));
@@ -459,10 +463,10 @@ public class InlineTranslationInterceptHandlerController extends BasicController
 			inlineTranslationURLBuilder.buildURI(link, new String[] { ARG_BUNDLE, ARG_KEY, ARG_IDENT }, arguments);
 			link.append("\" title=\"");
 			String combinedKey = arguments[0] + ":" + arguments[1];
-			if (I18nModule.isTransToolEnabled()) {
-				link.append(StringEscapeUtils.escapeHtml(inlineTrans.translate("inline.translate", new String[] { combinedKey })));
+			if (CoreSpringFactory.getImpl(I18nModule.class).isTransToolEnabled()) {
+				link.appendHtmlEscaped(inlineTrans.translate("inline.translate", new String[] { combinedKey }));
 			} else {
-				link.append(StringEscapeUtils.escapeHtml(inlineTrans.translate("inline.customize.translate", new String[] { combinedKey })));			
+				link.appendHtmlEscaped(inlineTrans.translate("inline.customize.translate", new String[] { combinedKey }));			
 			}
 			link.append("\"><i class='o_icon o_icon_translation_item'> </i></a>");			
 	}

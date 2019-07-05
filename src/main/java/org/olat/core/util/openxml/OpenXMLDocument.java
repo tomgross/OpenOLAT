@@ -43,10 +43,9 @@ import javax.xml.parsers.DocumentBuilder;
 import javax.xml.parsers.DocumentBuilderFactory;
 
 import org.apache.commons.io.IOUtils;
-import org.cyberneko.html.parsers.SAXParser;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.commons.services.image.ImageUtils;
 import org.olat.core.commons.services.image.Size;
-import org.olat.core.logging.OLog;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.StringHelper;
 import org.olat.core.util.io.ShieldInputStream;
@@ -63,6 +62,7 @@ import org.xml.sax.SAXException;
 
 import fmath.conversion.ConvertFromLatexToMathML;
 import fmath.conversion.ConvertFromMathMLToWord;
+import nu.validator.htmlparser.sax.HtmlParser;
 
 /**
  * The page are A4 format, with 2.54cm margins on top, bottom, left and right.
@@ -73,9 +73,9 @@ import fmath.conversion.ConvertFromMathMLToWord;
  *
  */
 public class OpenXMLDocument {
-
-	private static final OLog log = Tracing.createLoggerFor(OpenXMLDocument.class);
-
+	
+	private static final Logger log = Tracing.createLoggerFor(OpenXMLDocument.class);
+	
 	private final int DPI = 72;
 
 	private final Document document;
@@ -267,7 +267,7 @@ public class OpenXMLDocument {
 
 		if(StringHelper.containsNonWhitespace(documentHeader)) {
 			try(InputStream headerIn = OpenXMLDocument.class.getResourceAsStream("_resources/header.xml")) {
-				String headerTemplate = IOUtils.toString(headerIn);
+				String headerTemplate = IOUtils.toString(headerIn, "UTF-8");
 				String header = headerTemplate.replace("[oodocumentitlte]", documentHeader);
 
 				String headerId = generateId();
@@ -418,12 +418,10 @@ public class OpenXMLDocument {
 		if(!StringHelper.containsNonWhitespace(html)) return;
 		try {
 			html = cleanUpHTML(html);
-			SAXParser parser = new SAXParser();
+			HtmlParser parser = new HtmlParser();
 			parser.setContentHandler(new HTMLToOpenXMLHandler(this, spacing));
 			parser.parse(new InputSource(new StringReader(html)));
-		} catch (SAXException e) {
-			log.error("", e);
-		} catch (IOException e) {
+		} catch (SAXException | IOException e) {
 			log.error("", e);
 		}
 	}
@@ -432,13 +430,11 @@ public class OpenXMLDocument {
 		if(!StringHelper.containsNonWhitespace(html)) return;
 		try {
 			html = cleanUpHTML(html);
-			SAXParser parser = new SAXParser();
+			HtmlParser parser = new HtmlParser();
 			Element paragraphEl = getParagraphToAppendTo(newParagraph);
-			parser.setContentHandler(new HTMLToOpenXMLHandler(this, paragraphEl, true));
+			parser.setContentHandler(new HTMLToOpenXMLHandler(this, null, paragraphEl, true));
 			parser.parse(new InputSource(new StringReader(html)));
-		} catch (SAXException e) {
-			log.error("", e);
-		} catch (IOException e) {
+		} catch (SAXException | IOException e) {
 			log.error("", e);
 		}
 	}
@@ -447,30 +443,34 @@ public class OpenXMLDocument {
 		if(!StringHelper.containsNonWhitespace(html)) return;
 		try {
 			html = cleanUpHTML(html);
-			SAXParser parser = new SAXParser();
+			HtmlParser parser = new HtmlParser();
 			Element paragraphEl = getParagraphToAppendTo(newParagraph);
 			handler.setInitialParagraph(paragraphEl);
 			parser.setContentHandler(handler);
 			parser.parse(new InputSource(new StringReader(html)));
-		} catch (SAXException e) {
-			log.error("", e);
-		} catch (IOException e) {
+		} catch (SAXException | IOException e) {
 			log.error("", e);
 		}
 	}
 
 	/**
-	 * The Neko HTMl parser has some issues with <p/>.
-	 *
+	 * The HTMl parser has / had some issues with <p/>.
+	 * 
 	 * @param html The HTML to clean up
 	 * @return HTML code which Neko understands
 	 */
 	private String cleanUpHTML(String html) {
 		return html.replace("<p/>", "<p></p>");
 	}
-
-	public Node appendTable(Integer... width) {
-		Element tableEl = createTable(width);
+	
+	/**
+	 * 
+	 * @param tableWidth The table width in pct.
+	 * @param columns Width of the columns
+	 * @return
+	 */
+	public Node appendTable(int tableWidth, Columns columns) {
+		Element tableEl = createTable(tableWidth, columns);
 		return getCursor().appendChild(tableEl);
 	}
 
@@ -699,13 +699,18 @@ public class OpenXMLDocument {
 		breakEl.setAttribute("w:type", "page");
 		return paragraphEl;
 	}
-
-	public Element createTable() {
+	
+	/**
+	 * 
+	 * @param widthPct The width of the table in pct (percent of the width (100% = 5000pct))
+	 * @return The table element (w:tbl)
+	 */
+	public Element createTable(int widthPct) {
 		Element tableEl = document.createElement("w:tbl");
 
 		//preferences table
 		Element tablePrEl = (Element)tableEl.appendChild(document.createElement("w:tblPr"));
-		createWidthEl("w:tblW", 5000, Unit.pct, tablePrEl);
+		createWidthEl("w:tblW", widthPct, Unit.pct, tablePrEl);
 		createWidthEl("w:tblCellSpacing", 22, Unit.dxa, tablePrEl);
 		Node tableCellMarEl = tablePrEl.appendChild(document.createElement("w:tblCellMar"));
 		createWidthEl("w:top", 45, Unit.dxa, tableCellMarEl);
@@ -744,46 +749,58 @@ public class OpenXMLDocument {
 		<w:gridCol w:w="10178" /><w:gridCol w:w="1116" />
 	</w:tblGrid>
 	 */
-	public Element createTable(Integer... width) {
-		Element tableEl = createTable();
-
+	public Element createTable(int tableWidth, Columns columns) {
+		Element tableEl = createTable(tableWidth);
+		
 		NodeList gridPrefs = tableEl.getElementsByTagName("w:tblGrid");
 		Element tableGridEl = (Element)gridPrefs.item(0);
 		//table grid
-		for(Integer w:width) {
-			createGridCol(w, tableGridEl);
+		if(columns != null && columns.getWidth() != null && columns.getWidth().length > 0) {
+			for(Integer w:columns.getWidth()) {
+				createGridCol(w, tableGridEl);
+			}
 		}
 
 		return tableEl;
 	}
-	/*
-    <w:tr>
-        <w:trPr>
-            <w:tblCellSpacing w:w="22" w:type="dxa" />
-        </w:trPr>
-     */
+/*
+ * For the moment, only w:tr
+<w:tr>
+	<w:trPr>
+		<w:tblCellSpacing w:w="22" w:type="dxa" />
+	</w:trPr>
+ */
 	public Element createTableRow() {
 		Element rowEl = document.createElement("w:tr");
 		//trPr
 		return rowEl;
 	}
-	/*
-    <w:tc>
-        <w:tcPr>
-            <w:tcW w:w="0" w:type="auto" />
-            <w:tcBorders>
-                <w:top w:val="single" w:sz="6" w:space="0" w:color="E9EAF2" /><w:left w:val="single" w:sz="6" w:space="0" w:color="E9EAF2" /><w:bottom w:val="single" w:sz="6" w:space="0" w:color="E9EAF2" /><w:right w:val="single" w:sz="6" w:space="0" w:color="E9EAF2" />
-            </w:tcBorders>
-            <w:shd w:val="solid" w:color="E9EAF2" w:fill="auto" />
-        </w:tcPr>
-     */
+/*
+<w:tc>
+	<w:tcPr>
+		<w:tcW w:w="0" w:type="auto" />
+		<w:tcBorders>
+			<w:top w:val="single" w:sz="6" w:space="0" w:color="E9EAF2" /><w:left w:val="single" w:sz="6" w:space="0" w:color="E9EAF2" /><w:bottom w:val="single" w:sz="6" w:space="0" w:color="E9EAF2" /><w:right w:val="single" w:sz="6" w:space="0" w:color="E9EAF2" />
+		</w:tcBorders>
+		<w:shd w:val="solid" w:color="E9EAF2" w:fill="auto" />
+	</w:tcPr>
+ */
+
+	/**
+	 * The border are the same color as the background.
+	 * 
+	 * @param background
+	 * @param width
+	 * @param unit
+	 * @return
+	 */
 	public Element createTableCell(String background, Integer width, Unit unit) {
 		Element cellEl = document.createElement("w:tc");
 
 		Node prefEl = null;
 		if(unit != null) {
 			prefEl = cellEl.appendChild(document.createElement("w:tcPr"));
-			createWidthEl("w:tcW", width, unit, cellEl);
+			createWidthEl("w:tcW", width, unit, prefEl);
 		}
 		if(StringHelper.containsNonWhitespace(background)) {
 			if(prefEl == null) {
@@ -800,7 +817,39 @@ public class OpenXMLDocument {
 
 		return cellEl;
 	}
+	
+	
+	public Element createTableCell(String background, Border border, Integer width, Unit unit) {
+		Element cellEl = document.createElement("w:tc");
 
+		Node prefEl = null;
+		if(unit != null) {
+			prefEl = cellEl.appendChild(document.createElement("w:tcPr"));
+			createWidthEl("w:tcW", width, unit, prefEl);
+		}
+
+		if(StringHelper.containsNonWhitespace(background)) {
+			if(prefEl == null) {
+				prefEl = cellEl.appendChild(document.createElement("w:tcPr"));
+			}
+			createShadow(background, prefEl);
+		}
+			
+		if(border != null) {
+			if(prefEl == null) {
+				prefEl = cellEl.appendChild(document.createElement("w:tcPr"));
+			}
+			
+			Node borderEl = prefEl.appendChild(document.createElement("w:tcBorders"));
+			createBorder("w:top", border, borderEl);
+			createBorder("w:left", border, borderEl);
+			createBorder("w:bottom", border, borderEl);
+			createBorder("w:right", border, borderEl);
+		}
+
+		return cellEl;	
+	}
+	
 	public ListParagraph createListParagraph() {
 		int abstractNumberingId = currentNumberingId++;
 		int numberingId = currentNumberingId++;
@@ -921,7 +970,16 @@ public class OpenXMLDocument {
 		borderEl.setAttribute("w:color", color);
 		return borderEl;
 	}
-
+	
+	private Element createBorder(String name, Border border, Node parent) {
+		Element borderEl = (Element)parent.appendChild(document.createElement(name));
+		borderEl.setAttribute("w:val", border.getVal());
+		borderEl.setAttribute("w:sz", Integer.toString(border.getSize()));
+		borderEl.setAttribute("w:space", Integer.toString(border.getSpace()));
+		borderEl.setAttribute("w:color", border.getColor());
+		return borderEl;
+	}
+	
 	private Element createGridCol(Integer width, Node parent) {
 		Element colEl = (Element)parent.appendChild(document.createElement("w:gridCol"));
 		colEl.setAttribute("w:w", width.toString());
@@ -1001,18 +1059,13 @@ public class OpenXMLDocument {
 		}
 	}
 
-	public Element createImageEl(String path) {
+	public Element createImageEl(String path, double maxWidthCm) {
 		if(mediaContainer == null) return null;
 
 		VFSItem media = mediaContainer.resolve(path);
 		if(media instanceof LocalFileImpl) {
 			LocalFileImpl file = (LocalFileImpl)media;
-			try {
-				return createImageEl(file.getBasefile().toURI().toURL());
-			} catch (MalformedURLException e) {
-				log.error("",e);
-				return null;
-			}
+			return createImageEl(file.getBasefile(), maxWidthCm);
 		}
 		return null;
 	}
@@ -1069,13 +1122,17 @@ public class OpenXMLDocument {
 		</wp:inline>
 	</w:drawing>
  */
-	/**
-	 * <a:blip r:embed="rId6">
-	 * @param imageUrl
-	 * @return
-	 */
-	public Element createImageEl(URL imageUrl) {
-		DocReference ref = registerImage(imageUrl);
+/**
+ * <a:blip r:embed="rId6">
+ * @param image
+ * @return
+ */
+	public Element createImageEl(File image) {
+		return createImageEl(image, OpenXMLConstants.PAGE_FULL_WIDTH_CM/* cm */);
+	}
+	
+	public Element createImageEl(File image, double widthCm) {
+		DocReference ref = registerImage(image, widthCm);
 		String id = ref.getId();
 		OpenXMLSize emuSize = ref.getEmuSize();
 		String filename = ref.getFilename();
@@ -1166,18 +1223,18 @@ public class OpenXMLDocument {
 
 		return drawingEl;
 	}
-
-	private DocReference registerImage(URL url) {
+	
+	private DocReference registerImage(File image, double widthCm) {
 		DocReference ref;
 		if(urlToImagesMap.containsKey(url)) {
 			ref = urlToImagesMap.get(url);
 		} else {
 			String id = generateId();
-			Size size = ImageUtils.getImageSize(url);
-			OpenXMLSize emuSize = OpenXMLUtils.convertPixelToEMUs(size, DPI, 15.9/* cm */);
-			String filename = getUniqueFilename(url);
-			ref = new DocReference(id, filename, emuSize, url);
-			urlToImagesMap.put(url, ref);
+			Size size = ImageUtils.getImageSize(image);
+			OpenXMLSize emuSize = OpenXMLUtils.convertPixelToEMUs(size, DPI, widthCm/* cm */);
+			String filename = getUniqueFilename(image);
+			ref = new DocReference(id, filename, emuSize, image);
+			fileToImagesMap.put(image, ref);
 		}
 		return ref;
 	}
@@ -1240,55 +1297,55 @@ public class OpenXMLDocument {
 		Node lnEl = spPrEl.appendChild(document.createElement("a:ln"));
 		lnEl.appendChild(document.createElement("a:noFill"));
 	}
-
-
-	/*
-    <w:drawing>
-        <wp:anchor distT="0" distB="0" distL="114300" distR="114300"
-            simplePos="0" relativeHeight="251663360" behindDoc="0" locked="0"
-            layoutInCell="1" allowOverlap="1" wp14:anchorId="0DC40B5E"
-            wp14:editId="2CD7359E">
-            <wp:simplePos x="0" y="0" />
-            <wp:positionH relativeFrom="column">
-                <wp:posOffset>0</wp:posOffset>
-            </wp:positionH>
-            <wp:positionV relativeFrom="paragraph">
-                <wp:posOffset>179070</wp:posOffset>
-            </wp:positionV>
-            <wp:extent cx="5756910" cy="2282190" />
-            <wp:effectExtent l="0" t="0" r="8890" b="3810" />
-            <wp:wrapThrough wrapText="bothSides">
-                <wp:wrapPolygon edited="0">
-                    <wp:start x="0" y="0" />
-                    <wp:lineTo x="0" y="21396" />
-                    <wp:lineTo x="21538" y="21396" />
-                    <wp:lineTo x="21538" y="0" />
-                    <wp:lineTo x="0" y="0" />
-                </wp:wrapPolygon>
-            </wp:wrapThrough>
-            <wp:docPr id="5" name="Gruppierung 5" />
-            <wp:cNvGraphicFramePr />
-            <a:graphic xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
-                <a:graphicData
-                    uri="http://schemas.microsoft.com/office/word/2010/wordprocessingGroup">
-                    <wpg:wgp>
-                        <wpg:cNvGrpSpPr />
-                        <wpg:grpSpPr>
-                            <a:xfrm>
-                                <a:off x="0" y="0" />
-                                <a:ext cx="5756910" cy="2282190" />
-                                <a:chOff x="0" y="0" />
-                                <a:chExt cx="5756910" cy="2282190" />
-                            </a:xfrm>
-                        </wpg:grpSpPr>
-                    </wpg:wgp>
-                </a:graphicData>
-            </a:graphic>
-        </wp:anchor>
-    </w:drawing>
-    */
-	public Element createGraphicEl(URL backgroundImageUrl, List<OpenXMLGraphic> elements) {
-		DocReference backgroundImageRef = registerImage(backgroundImageUrl);
+	
+	
+/*
+<w:drawing>
+	<wp:anchor distT="0" distB="0" distL="114300" distR="114300"
+		simplePos="0" relativeHeight="251663360" behindDoc="0" locked="0"
+		layoutInCell="1" allowOverlap="1" wp14:anchorId="0DC40B5E"
+		wp14:editId="2CD7359E">
+		<wp:simplePos x="0" y="0" />
+		<wp:positionH relativeFrom="column">
+			<wp:posOffset>0</wp:posOffset>
+		</wp:positionH>
+		<wp:positionV relativeFrom="paragraph">
+			<wp:posOffset>179070</wp:posOffset>
+		</wp:positionV>
+		<wp:extent cx="5756910" cy="2282190" />
+		<wp:effectExtent l="0" t="0" r="8890" b="3810" />
+		<wp:wrapThrough wrapText="bothSides">
+			<wp:wrapPolygon edited="0">
+				<wp:start x="0" y="0" />
+				<wp:lineTo x="0" y="21396" />
+				<wp:lineTo x="21538" y="21396" />
+				<wp:lineTo x="21538" y="0" />
+				<wp:lineTo x="0" y="0" />
+			</wp:wrapPolygon>
+		</wp:wrapThrough>
+		<wp:docPr id="5" name="Gruppierung 5" />
+		<wp:cNvGraphicFramePr />
+		<a:graphic xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+			<a:graphicData
+				uri="http://schemas.microsoft.com/office/word/2010/wordprocessingGroup">
+				<wpg:wgp>
+					<wpg:cNvGrpSpPr />
+					<wpg:grpSpPr>
+						<a:xfrm>
+							<a:off x="0" y="0" />
+							<a:ext cx="5756910" cy="2282190" />
+							<a:chOff x="0" y="0" />
+							<a:chExt cx="5756910" cy="2282190" />
+						</a:xfrm>
+					</wpg:grpSpPr>
+				</wpg:wgp>
+			</a:graphicData>
+		</a:graphic>
+	</wp:anchor>
+</w:drawing>
+*/
+	public Element createGraphicEl(File backgroundImage, List<OpenXMLGraphic> elements) {
+		DocReference backgroundImageRef = registerImage(backgroundImage, OpenXMLConstants.PAGE_FULL_WIDTH_CM/**/);
 		OpenXMLSize emuSize = backgroundImageRef.getEmuSize();
 
 		Element alternateContentEl = document.createElement("mc:AlternateContent");
@@ -1738,7 +1795,41 @@ public class OpenXMLDocument {
 			return runStyleId;
 		}
 	}
+	
+	/**
+	 * These are width in twentieths of a point.
+	 */
+	public static class Columns {
+		
+		private Integer[] width;
+		
+		private Columns(Integer[] width) {
+			this.width = width;
+		}
+		
+		public Integer[] getWidth() {
+			return width;
+		}
+		
+		/**
+		 * Return the width in twentieths of a point.
+		 * 
+		 * @param col The column
+		 * @return An integer or null
+		 */
+		public Integer getColumnWidth(int col) {
+			if(width == null || width.length <= col) return null;
+			return width[col];
+		}
 
+		public static Columns valueOf(Integer... width) {
+			if(width == null || width.length == 0 || width[0] == null) {
+				return new Columns(new Integer[0]);
+			}
+			return new Columns(width);
+		}
+	}
+	
 	public static class HeaderReference {
 
 		private final String id;

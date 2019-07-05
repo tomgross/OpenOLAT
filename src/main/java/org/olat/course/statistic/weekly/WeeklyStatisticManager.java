@@ -31,13 +31,13 @@ import java.util.Date;
 import java.util.List;
 import java.util.StringTokenizer;
 
+import javax.persistence.TypedQuery;
+
 import org.olat.core.commons.persistence.DBFactory;
-import org.olat.core.commons.persistence.DBQuery;
 import org.olat.core.gui.UserRequest;
 import org.olat.core.gui.components.table.ColumnDescriptor;
-import org.olat.core.logging.OLog;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
-import org.olat.core.manager.BasicManager;
 import org.olat.course.ICourse;
 import org.olat.course.statistic.IStatisticManager;
 import org.olat.course.statistic.StatisticDisplayController;
@@ -55,19 +55,20 @@ import org.olat.course.statistic.TotalAwareColumnDescriptor;
  * Initial Date:  12.02.2010 <br>
  * @author Stefan
  */
-public class WeeklyStatisticManager extends BasicManager implements IStatisticManager {
+public class WeeklyStatisticManager implements IStatisticManager {
 
 	/** the logging object used in this class **/
-	private static final OLog log_ = Tracing.createLoggerFor(WeeklyStatisticManager.class);
-	private SimpleDateFormat sdf_ = new SimpleDateFormat("yyyy-ww");
+	private static final Logger log = Tracing.createLoggerFor(WeeklyStatisticManager.class);
+	private SimpleDateFormat sdf = new SimpleDateFormat("yyyy-ww");
 	
 	@Override
 	public StatisticResult generateStatisticResult(UserRequest ureq, ICourse course, long courseRepositoryEntryKey) {
-		DBQuery dbQuery = DBFactory.getInstance().createQuery("select businessPath,week,value from org.olat.course.statistic.weekly.WeeklyStat sv "
-				+ "where sv.resId=:resId");
-		dbQuery.setLong("resId", courseRepositoryEntryKey);
-
-		return new StatisticResult(course, dbQuery.list());
+		String q = "select businessPath,week,value from weeklystat sv where sv.resId=:resId";
+		List<Object[]> raw = DBFactory.getInstance().getCurrentEntityManager()
+				.createQuery(q, Object[].class)
+				.setParameter("resId", courseRepositoryEntryKey)
+				.getResultList();
+		return new StatisticResult(course, raw);
 	}
 	
 	@Override
@@ -82,6 +83,7 @@ public class WeeklyStatisticManager extends BasicManager implements IStatisticMa
 		return cd;
 	}
 
+	@Override
 	public StatisticResult generateStatisticResult(UserRequest ureq, ICourse course, long courseRepositoryEntryKey, Date fromDate, Date toDate) {
 		if (fromDate==null && toDate==null) {
 			// no restrictions, return the defaults
@@ -90,50 +92,50 @@ public class WeeklyStatisticManager extends BasicManager implements IStatisticMa
 			return statisticResult;
 		}
 		
-		StringBuffer dateClause = new StringBuffer();
+		StringBuilder sb = new StringBuilder();
+		sb.append("select businessPath, week, value from org.olat.course.statistic.weekly.WeeklyStat sv where sv.resId=:resId");
 		//concat(year(creationdate),'-',week(creationdate)) week
-		if (fromDate!=null) {
-			dateClause.append(" and (week=:fromDate or week>=:fromDate) ");
+		if (fromDate != null) {
+			sb.append(" and (week=:fromDate or week>=:fromDate) ");
 		}
 		if (toDate!=null) {
-			dateClause.append(" and (week=:toDate or week<=:toDate) ");
+			sb.append(" and (week=:toDate or week<=:toDate) ");
 		}
-		DBQuery dbQuery = DBFactory.getInstance().createQuery("select businessPath,week,value from org.olat.course.statistic.weekly.WeeklyStat sv "
-				+ "where sv.resId=:resId "
-				+ dateClause);
-		dbQuery.setLong("resId", courseRepositoryEntryKey);
-		StringBuffer infoMsg = new StringBuffer();
+		TypedQuery<Object[]> dbQuery = DBFactory.getInstance().getCurrentEntityManager()
+				.createQuery(sb.toString(), Object[].class)
+				.setParameter("resId", courseRepositoryEntryKey);
+		StringBuilder infoMsg = new StringBuilder(256);
 		if (fromDate!=null) {
-			String fromDateStr = getYear(fromDate)+"-"+getWeek(fromDate);
+			String fromDateStr = getYear(fromDate) + "-" + getWeek(fromDate);
 			infoMsg.append("from date: "+fromDateStr);
-			dbQuery.setString("fromDate", fromDateStr);
+			dbQuery.setParameter("fromDate", fromDateStr);
 		}
 		if (toDate!=null) {
-			String toDateStr = getYear(toDate)+"-"+getWeek(toDate);
+			String toDateStr = getYear(toDate) + "-" + getWeek(toDate);
 			if (infoMsg!=null) {
 				infoMsg.append(", ");
 			}
 			infoMsg.append("to date: "+toDateStr);
-			dbQuery.setString("toDate", toDateStr);
+			dbQuery.setParameter("toDate", toDateStr);
 		}
 		
-		log_.info("generateStatisticResult: Searching with params "+infoMsg.toString());
+		log.info("generateStatisticResult: Searching with params "+infoMsg.toString());
 		
-		StatisticResult statisticResult = new StatisticResult(course, dbQuery.list());
+		StatisticResult statisticResult = new StatisticResult(course, dbQuery.getResultList());
 		fillGapsInColumnHeaders(statisticResult);
 		return statisticResult;
 	}
 
 	private String getWeek(Date date) {
-		SimpleDateFormat sdf = new SimpleDateFormat(); 
-		sdf.applyPattern("ww");
-		return sdf.format(date);
+		SimpleDateFormat df = new SimpleDateFormat(); 
+		df.applyPattern("ww");
+		return df.format(date);
 	}
 
 	private String getYear(Date date) {
-		SimpleDateFormat sdf = new SimpleDateFormat(); 
-		sdf.applyPattern("yyyy");
-		return sdf.format(date);
+		SimpleDateFormat df = new SimpleDateFormat(); 
+		df.applyPattern("yyyy");
+		return df.format(date);
 	}
 
 	/** fill any gaps in the column headers between the first and the last days **/
@@ -160,20 +162,20 @@ public class WeeklyStatisticManager extends BasicManager implements IStatisticMa
 		try{
 			String firstWeek = columnHeaders.get(0);
 			String previousWeek = firstWeek;
-			log_.debug("fillGapsInColumnHeaders: starting...");
-			log_.debug("fillGapsInColumnHeaders: columnHeaders.size()="+columnHeaders.size());
-			log_.debug("fillGapsInColumnHeaders: columnHeaders="+columnHeaders);
+			log.debug("fillGapsInColumnHeaders: starting...");
+			log.debug("fillGapsInColumnHeaders: columnHeaders.size()="+columnHeaders.size());
+			log.debug("fillGapsInColumnHeaders: columnHeaders="+columnHeaders);
 			if (columnHeaders.size()>1) {
-				Date previousWeekDate = sdf_.parse(previousWeek);
+				Date previousWeekDate = sdf.parse(previousWeek);
 				String lastWeek = columnHeaders.get(columnHeaders.size()-1);
-				Date lastWeekDate = sdf_.parse(lastWeek);
+				Date lastWeekDate = sdf.parse(lastWeek);
 				if (previousWeekDate==null || lastWeekDate==null) {
-					log_.warn("fillGapsInColumnHeaders: can't get date from weeks: "+previousWeek+"/"+lastWeek);
+					log.warn("fillGapsInColumnHeaders: can't get date from weeks: "+previousWeek+"/"+lastWeek);
 					return null;
 				}
 				if (previousWeekDate.compareTo(lastWeekDate)>=1) {
 					// that means that we got wrong input params!
-					log_.warn("fillGapsInColumnHeaders: got a wrongly ordered input, skipping sorting. columnHeaders: "+columnHeaders);
+					log.warn("fillGapsInColumnHeaders: got a wrongly ordered input, skipping sorting. columnHeaders: "+columnHeaders);
 					return null;
 				}
 			}
@@ -181,45 +183,45 @@ public class WeeklyStatisticManager extends BasicManager implements IStatisticMa
 				if (i>255) {
 					// that's probably a bug in the loop - although it is unlikely to occur again (OLAT-5161)
 					// we do an emergency stop here
-					log_.warn("fillGapsInColumnHeaders: stopped at i="+i+", skipped sorting. columnHeaders grew to: "+columnHeaders);
+					log.warn("fillGapsInColumnHeaders: stopped at i="+i+", skipped sorting. columnHeaders grew to: "+columnHeaders);
 					return null;
 				}
 				String currWeek = columnHeaders.get(i);
-				log_.debug("fillGapsInColumnHeaders: columnHeaders["+i+"]: "+currWeek);
+				log.debug("fillGapsInColumnHeaders: columnHeaders["+i+"]: "+currWeek);
 				
 				if (!isNextWeek(previousWeek, currWeek)) {
-					log_.debug("fillGapsInColumnHeaders: isNextweek("+previousWeek+","+currWeek+"): false");
+					log.debug("fillGapsInColumnHeaders: isNextweek("+previousWeek+","+currWeek+"): false");
 					String additionalWeek = nextWeek(previousWeek);
 					if (columnHeaders.contains(additionalWeek)) {
 						// oups, then we have a bug in our algorithm or what?
-						log_.warn("fillGapsInColumnHeaders: throwing a ParseException, can't add "+additionalWeek+" to "+columnHeaders);
+						log.warn("fillGapsInColumnHeaders: throwing a ParseException, can't add "+additionalWeek+" to "+columnHeaders);
 						throw new ParseException("Can't add "+additionalWeek+" to the list of weeks - it is already there", 0);
 					}
-					if (sdf_.parse(additionalWeek).compareTo(sdf_.parse(currWeek))>0) {
+					if (sdf.parse(additionalWeek).compareTo(sdf.parse(currWeek))>0) {
 						// then we're overshooting
 						continue;
 					}
 					columnHeaders.add(i, additionalWeek);
 					previousWeek = additionalWeek;
 				} else {
-					log_.debug("fillGapsInColumnHeaders: isNextweek("+previousWeek+","+currWeek+"): true");
+					log.debug("fillGapsInColumnHeaders: isNextweek("+previousWeek+","+currWeek+"): true");
 					previousWeek = currWeek;
 				}
 			}
-			log_.debug("fillGapsInColumnHeaders: columnHeaders.size()="+columnHeaders.size());
-			log_.debug("fillGapsInColumnHeaders: columnHeaders="+columnHeaders);
-			log_.debug("fillGapsInColumnHeaders: done.");
+			log.debug("fillGapsInColumnHeaders: columnHeaders.size()="+columnHeaders.size());
+			log.debug("fillGapsInColumnHeaders: columnHeaders="+columnHeaders);
+			log.debug("fillGapsInColumnHeaders: done.");
 			return columnHeaders;
 		} catch(ParseException e) {
-			log_.warn("fillGapsInColumnHeaders: Got a ParseException while trying to fill gaps. Giving up. ",e);
+			log.warn("fillGapsInColumnHeaders: Got a ParseException while trying to fill gaps. Giving up. ",e);
 			return null;
 		}
 	}
 
 	private String nextWeek(String week) throws ParseException {
-		Date d = sdf_.parse(week);
+		Date d = sdf.parse(week);
 		d = new Date(d.getTime() + 7*24*60*60*1000);
-		String result = sdf_.format(d);
+		String result = sdf.format(d);
 		
 		// bug with SimpleDateFormat:
 		//   Mon Dec 29 00:00:00 CET 2008
@@ -247,13 +249,13 @@ public class WeeklyStatisticManager extends BasicManager implements IStatisticMa
 					return (year+1)+"-"+0;
 				}
 			} catch(NumberFormatException nfe) {
-				log_.warn("nextWeek: Got a NumberFormatException: "+nfe, nfe);
+				log.warn("nextWeek: Got a NumberFormatException: "+nfe, nfe);
 				throw new ParseException("Got a NumberFormatException, rethrowing", 0);
 			}
 		} else if (result.equals(week)) {
 			// daylight saving
 			d = new Date(d.getTime() + 1*60*60*1000);
-			result = sdf_.format(d);
+			result = sdf.format(d);
 		}
 		
 		return result;

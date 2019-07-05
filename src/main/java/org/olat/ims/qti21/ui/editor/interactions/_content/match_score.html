@@ -1,24 +1,34 @@
 <table class="table matchInteraction score">
 	<thead>
 		<tr>
-			<th></th>
+			#if($r.isTrue($sourceLeft)) <th></th> #end
 			#foreach($targetChoice in $targetChoices)
-				<th>${targetChoice.getSummary()}
+				<th>${r.render($targetChoice.getSummaryEl())}
 			#end
+			#if($r.isFalse($sourceLeft)) <th></th> #end
 		</tr>
 	</thead>
 	<tbody>
 	#foreach($sourceChoice in $sourceChoices)
 		<tr>
-			<th>${sourceChoice.getSummary()}</th>
+			#if($r.isTrue($sourceLeft)) 
+				<th>${r.render($sourceChoice.getSummaryEl())}</th>
+			#end
+			#set($sourceIndex = ${foreach.index})
 			#foreach($targetChoice in $targetChoices)
-				<td>
+				<td class="o_sel_match_${sourceIndex}_${foreach.index}">
 				#set($scoreWrapper = $r.get("${sourceChoice.getChoiceIdentifier().toString()}-${targetChoice.getChoiceIdentifier().toString()}"))
 				$r.render("${sourceChoice.getChoiceIdentifier().toString()}-${targetChoice.getChoiceIdentifier().toString()}")
 				#if(${scoreWrapper.isCorrect()})
 					<i class=" o_icon o_icon-lg o_icon_accept"> </i>
 				#end
+				#if($f.hasError("${sourceChoice.getChoiceIdentifier().toString()}-${targetChoice.getChoiceIdentifier().toString()}"))
+					<div>$r.render("${sourceChoice.getChoiceIdentifier().toString()}-${targetChoice.getChoiceIdentifier().toString()}_ERROR")</div>
+				#end
 				</td>
+			#end
+			#if($r.isFalse($sourceLeft)) 
+				<td>${r.render($sourceChoice.getSummaryEl())}</td>
 			#end
 		</tr>
 	#end

@@ -20,16 +20,19 @@
 package org.olat.course.archiver;
 
 import java.io.InputStream;
+import java.util.Collections;
 import java.util.Date;
+import java.util.HashSet;
+import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 import java.util.zip.ZipOutputStream;
 
 import javax.servlet.http.HttpServletResponse;
 
-import org.apache.commons.io.IOUtils;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.gui.media.MediaResource;
 import org.olat.core.id.OLATResourceable;
-import org.olat.core.logging.OLog;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.Formatter;
 import org.olat.core.util.StringHelper;
@@ -45,22 +48,35 @@ import org.olat.course.nodes.CourseNode;
  */
 public class ArchiveResource implements MediaResource {
 	
-	private static final OLog log = Tracing.createLoggerFor(ArchiveResource.class);
+	private static final Logger log = Tracing.createLoggerFor(ArchiveResource.class);
 	
+	private static final String encoding = "UTF-8";
 	private final Locale locale;
-	private final String encoding = "UTF-8";
 	private final ArchiveOptions options;
-	private final CourseNode courseNode;
+	private final List<CourseNode> courseNodes;
 	private final OLATResourceable courseOres;
 	
 	public ArchiveResource(CourseNode courseNode, OLATResourceable courseOres,
 			ArchiveOptions options, Locale locale) {
 		this.options = options;
 		this.locale = locale;
-		this.courseNode = courseNode;
+		this.courseNodes = Collections.singletonList(courseNode);
 		this.courseOres = courseOres;
 	}
 	
+	public ArchiveResource(List<CourseNode> courseNodes, OLATResourceable courseOres,
+			ArchiveOptions options, Locale locale) {
+		this.options = options;
+		this.locale = locale;
+		this.courseNodes = courseNodes;
+		this.courseOres = courseOres;
+	}
+	
+	@Override
+	public long getCacheControlDuration() {
+		return 0;
+	}
+
 	@Override
 	public boolean acceptRanges() {
 		return false;
@@ -94,22 +110,36 @@ public class ArchiveResource implements MediaResource {
 			log.error("", e);
 		}
 		
-		String label = StringHelper.transformDisplayNameToFileSystemName(courseNode.getShortName())
+		String courseNodeName = StringHelper.transformDisplayNameToFileSystemName(courseNodes.get(0).getShortName());
+		if(courseNodes.size() > 1) {
+			courseNodeName += "_and_more";
+		}
+		String label = courseNodeName
 				+ "_" + Formatter.formatDatetimeWithMinutes(new Date()) + ".zip";
 		String urlEncodedLabel = StringHelper.urlEncodeUTF8(label);
 		hres.setHeader("Content-Disposition","attachment; filename*=UTF-8''" + urlEncodedLabel);			
 		hres.setHeader("Content-Description", urlEncodedLabel);
 		
-		ZipOutputStream zout = null;
-		try {
-			zout = new ZipOutputStream(hres.getOutputStream());
+		Set<String> usedPath = new HashSet<>();
+		try(ZipOutputStream zout = new ZipOutputStream(hres.getOutputStream())) {
 			zout.setLevel(9);
 			ICourse course = CourseFactory.loadCourse(courseOres);
-			courseNode.archiveNodeData(locale, course, options, zout, encoding);
+			for(CourseNode courseNode:courseNodes) {
+				String nodePath = "";
+				if(courseNodes.size() > 1) {
+					nodePath = StringHelper.transformDisplayNameToFileSystemName(courseNode.getShortName());
+					if(!StringHelper.containsNonWhitespace(nodePath)) {
+						nodePath = courseNode.getType() + "_" + courseNode.getIdent();
+					}
+					if(usedPath.contains(nodePath)) {
+						nodePath += "_" + courseNode.getIdent();
+					}
+					usedPath.add(nodePath);
+				}
+				courseNode.archiveNodeData(locale, course, options, zout, nodePath, encoding);
+			}
 		} catch (Exception e) {
 			log.error("", e);
-		} finally {
-			IOUtils.closeQuietly(zout);
 		}
 	}
 

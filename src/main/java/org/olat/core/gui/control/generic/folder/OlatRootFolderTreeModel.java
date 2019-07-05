@@ -28,13 +28,11 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 
-import org.olat.core.CoreSpringFactory;
-import org.olat.core.commons.modules.bc.meta.MetaInfo;
-import org.olat.core.commons.modules.bc.meta.MetaInfoFactory;
-import org.olat.core.commons.modules.bc.vfs.OlatRootFolderImpl;
+import org.olat.core.commons.services.vfs.VFSMetadata;
 import org.olat.core.gui.components.tree.GenericTreeModel;
 import org.olat.core.util.StringHelper;
-import org.olat.core.util.vfs.OlatRelPathImpl;
+import org.olat.core.util.vfs.LocalFolderImpl;
+import org.olat.core.util.vfs.VFSContainer;
 import org.olat.core.util.vfs.VFSItem;
 import org.olat.core.util.vfs.filters.VFSItemFilter;
 
@@ -62,26 +60,22 @@ public class OlatRootFolderTreeModel extends GenericTreeModel {
 
 	private VFSItemFilter filter;
 	private Comparator<VFSItem> comparator;
-	private final MetaInfoFactory metaInfoFactory;
 
-	public OlatRootFolderTreeModel(OlatRootFolderImpl root) {
-		metaInfoFactory = CoreSpringFactory.getImpl(MetaInfoFactory.class);
+	public OlatRootFolderTreeModel(VFSContainer root) {
 		setRootNode(createNode(root));
 		getRootNode().getChildCount();
 	}
 
-	public OlatRootFolderTreeModel(OlatRootFolderImpl root, VFSItemFilter filter) {
+	public OlatRootFolderTreeModel(VFSContainer root, VFSItemFilter filter) {
 		this.filter = filter;
-		metaInfoFactory = CoreSpringFactory.getImpl(MetaInfoFactory.class);
 		setRootNode(createNode(root));
 		getRootNode().getChildCount();
 	}
 
-	public OlatRootFolderTreeModel(OlatRootFolderImpl root,
+	public OlatRootFolderTreeModel(VFSContainer root,
 			VFSItemFilter filter, Comparator<VFSItem> comparator) {
 		this.filter = filter;
 		this.comparator = comparator;
-		metaInfoFactory = CoreSpringFactory.getImpl(MetaInfoFactory.class);
 		setRootNode(createNode(root));
 		getRootNode().getChildCount();
 	}
@@ -92,20 +86,18 @@ public class OlatRootFolderTreeModel extends GenericTreeModel {
 	 * @param node
 	 * @param root
 	 */
-	protected void makeChildren(OlatRootFolderTreeNode node, OlatRootFolderImpl root) {
+	protected void makeChildren(OlatRootFolderTreeNode node, LocalFolderImpl root) {
 		List<VFSItem> children = root.getItems(filter);
 		if (comparator != null) {
 			Collections.sort(children, comparator);
 		}
 		for (VFSItem child : children) {
 			// create a node for each child and add it
-			if(child instanceof OlatRelPathImpl) {
-				OlatRootFolderTreeNode childNode = createNode((OlatRelPathImpl)child);
-				node.addChild(childNode);
-				if (child instanceof OlatRootFolderImpl) {
-					// add the child's children recursively
-					makeChildren(childNode, (OlatRootFolderImpl) child);
-				}
+			OlatRootFolderTreeNode childNode = createNode(child);
+			node.addChild(childNode);
+			if (child instanceof LocalFolderImpl) {
+				// add the child's children recursively
+				makeChildren(childNode, (LocalFolderImpl) child);
 			}
 		}
 	}
@@ -116,31 +108,23 @@ public class OlatRootFolderTreeModel extends GenericTreeModel {
 	 * 
 	 * @param item
 	 */
-	private OlatRootFolderTreeNode createNode(OlatRelPathImpl item) {
+	private OlatRootFolderTreeNode createNode(VFSItem item) {
 		OlatRootFolderTreeNode node = new OlatRootFolderTreeNode(item, this);
-		MetaInfo meta = metaInfoFactory.createMetaInfoFor(item);
+		VFSMetadata meta = item.getMetaInfo();
 		if (meta != null) {
 			String title = meta.getTitle();
 			if (StringHelper.containsNonWhitespace(title)) {
 				node.setTitle(title);
 			} else {
-				node.setTitle(meta.getName());
+				node.setTitle(meta.getFilename());
 			}
-		} else {
-			// TODO:GW log warning that
-			// "metadate couldn't be loaded for folder relpath: " +
-			// folder.getRelPath();
 		}
 		node.setUserObject(item.getRelPath());
 		return node;
 	}
 
-	/**
-	 * @see org.olat.core.gui.components.tree.GenericTreeModel#getRootNode()
-	 */
 	@Override
 	public OlatRootFolderTreeNode getRootNode() {
 		return (OlatRootFolderTreeNode) super.getRootNode();
 	}
-
 }

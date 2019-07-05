@@ -32,6 +32,7 @@ import java.util.Locale;
 import org.jamwiki.parser.ParserDocument;
 import org.jamwiki.parser.ParserInput;
 import org.jamwiki.parser.jflex.JFlexParser;
+import org.olat.core.CoreSpringFactory;
 import org.olat.core.gui.components.Component;
 import org.olat.core.gui.components.DefaultComponentRenderer;
 import org.olat.core.gui.control.winmgr.AJAXFlags;
@@ -43,6 +44,8 @@ import org.olat.core.gui.translator.Translator;
 import org.olat.core.helpers.Settings;
 import org.olat.core.logging.OLATRuntimeException;
 import org.olat.core.util.Formatter;
+import org.olat.core.util.filter.FilterFactory;
+import org.olat.modules.wiki.WikiModule;
 
 /**
  * Description:<br>
@@ -55,14 +58,6 @@ import org.olat.core.util.Formatter;
  */
 public class WikiMarkupRenderer extends DefaultComponentRenderer {
 
-	/**
-	 * @see org.olat.core.gui.components.ComponentRenderer#render(org.olat.core.gui.render.Renderer,
-	 *      org.olat.core.gui.render.StringOutput,
-	 *      org.olat.core.gui.components.Component,
-	 *      org.olat.core.gui.render.URLBuilder,
-	 *      org.olat.core.gui.translator.Translator,
-	 *      org.olat.core.gui.render.RenderResult, java.lang.String[])
-	 */
 	@Override
 	public void render(Renderer renderer, StringOutput sb, Component source, URLBuilder ubu, Translator translator,
 			RenderResult renderResult, String[] args) {
@@ -75,10 +70,8 @@ public class WikiMarkupRenderer extends DefaultComponentRenderer {
 		input.setWikiUser(null);
 		input.setAllowSectionEdit(false);
 		input.setDepth(10);
-		input.setContext("");
-		//input.setTableOfContents(null);
+		input.setContext(Settings.createServerURI());
 		input.setLocale(new Locale("en"));
-		//input.setVirtualWiki(Long.toString(wikiComp.getOres().getResourceableId()));
 		input.setTopicName("dummy");
 		input.setUserIpAddress("0.0.0.0");
 		OlatWikiDataHandler dataHandler = new OlatWikiDataHandler(wikiComp.getOres(), wikiComp.getImageBaseUri());
@@ -92,14 +85,15 @@ public class WikiMarkupRenderer extends DefaultComponentRenderer {
 		String uniqueId = "o_wiki".concat(wikiComp.getDispatchID());
 		try {
 			uri = URLDecoder.decode(uri, "utf-8");
-			input.setVirtualWiki(uri.substring(1, uri.length()-1));
+			uri = uri.substring(1, uri.length() - 1);
+			input.setVirtualWiki(uri);
 			if (iframePostEnabled) {
-				String targetUrl = " onclick=\"o_XHREvent(jQuery(this).attr('href'),false,true); return false;\"";
+				String targetUrl = " onclick=\"o_XHRWikiEvent(this);return(false);\"";
 				input.setURLTarget(targetUrl);
 			}
-			sb.append("<div style=\"min-height:"+ wikiComp.getMinHeight() +"px\" id=\"");
-			sb.append(uniqueId);
-			sb.append("\">");
+			sb.append("<div style=\"min-height:").append(wikiComp.getMinHeight()).append("px\" id=\"")
+			  .append(uniqueId)
+			  .append("\">");
 		
 			JFlexParser parser = new JFlexParser(input);
 			parsedDoc = parser.parseHTML(wikiComp.getWikiContent());
@@ -108,13 +102,21 @@ public class WikiMarkupRenderer extends DefaultComponentRenderer {
 		} catch (Exception e) {
 			throw new OLATRuntimeException(this.getClass(), "error while rendering wiki page with content:"+ wikiComp.getWikiContent(), e);
 		}
-		// Use global js math formatter for latex formulas
-		sb.append(Formatter.formatLatexFormulas(parsedDoc.getContent()));
+		if(parsedDoc != null) {
+			// Use global js math formatter for latex formulas
+			String content = parsedDoc.getContent();
+			
+			boolean xssScan = CoreSpringFactory.getImpl(WikiModule.class).isXSScanEnabled();
+			if(xssScan) {
+				content = FilterFactory.getXSSFilter().filter(content);
+			}
+			sb.append(Formatter.formatLatexFormulas(content));
+		}
+		
 		sb.append("</div>");
 		//set targets of media, image and external links to target "_blank" 
-		sb.append("<script type=\"text/javascript\">/* <![CDATA[ */ ");
-		String instanceUrl = Settings.getServerContextPathURI();
-		sb.append("changeAnchorTargets('").append(uniqueId).append("','").append(instanceUrl).append("');");
-		sb.append("/* ]]> */</script>");
+		sb.append("<script type=\"text/javascript\">/* <![CDATA[ */ ")
+		  .append("changeAnchorTargets('").append(uniqueId).append("','").append(Settings.getServerContextPathURI()).append("');")
+		  .append("/* ]]> */</script>");
 	}
 }

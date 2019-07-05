@@ -32,7 +32,6 @@ import javax.ws.rs.core.Response;
 import org.olat.admin.sysinfo.manager.SessionStatsManager;
 import org.olat.admin.sysinfo.model.SessionsStats;
 import org.olat.basesecurity.BaseSecurity;
-import org.olat.basesecurity.Constants;
 import org.olat.core.CoreSpringFactory;
 import org.olat.core.id.Identity;
 import org.olat.core.util.SessionInfo;
@@ -42,7 +41,6 @@ import org.olat.core.util.session.UserSessionManager;
 import org.olat.course.CourseModule;
 import org.olat.group.BusinessGroupService;
 import org.olat.portfolio.manager.InvitationDAO;
-import org.olat.repository.RepositoryEntry;
 import org.olat.repository.RepositoryManager;
 import org.olat.restapi.system.vo.OpenOLATStatisticsVO;
 import org.olat.restapi.system.vo.RepositoryStatisticsVO;
@@ -171,7 +169,7 @@ public class OpenOLATStatisticsWebService implements Sampler {
 		BaseSecurity securityManager = CoreSpringFactory.getImpl(BaseSecurity.class);
 
 		// activeUserCount="88" // registered and activated identities, same as in GUI
-		long countActiveUsers = securityManager.countIdentitiesByPowerSearch(null, null, false, null, null, null, null, null, null, null, Constants.USERSTATUS_ACTIVE);
+		long countActiveUsers = securityManager.countIdentitiesByPowerSearch(null, null, false, null, null, null, null, null, null, Identity.STATUS_ACTIV);
 		stats.setActiveUserCount(countActiveUsers);
 
 		// active last day
@@ -203,14 +201,14 @@ public class OpenOLATStatisticsWebService implements Sampler {
 		stats.setExternalUserCount(invitationsCount);
 
 		// blockedUserCount="0" // identities in login blocked state
-		long blockedUserCount = securityManager.countIdentitiesByPowerSearch(null, null, true, null, null, null, null, null, null, null, Identity.STATUS_LOGIN_DENIED);	
+		long blockedUserCount = securityManager.countIdentitiesByPowerSearch(null, null, true, null, null, null, null, null, null, Identity.STATUS_LOGIN_DENIED);	
 		stats.setBlockedUserCount(blockedUserCount);
 		// deletedUserCount="943" // deleted identities
-		long deletedUserCount = securityManager.countIdentitiesByPowerSearch(null, null, true, null, null, null, null, null, null, null, Identity.STATUS_DELETED);	
+		long deletedUserCount = securityManager.countIdentitiesByPowerSearch(null, null, true, null, null, null, null, null, null, Identity.STATUS_DELETED);	
 		stats.setDeletedUserCount(deletedUserCount);
 
 		// totalUserCount="1043" // Sum of all above
-		long countUsers = securityManager.countIdentitiesByPowerSearch(null, null, false, null, null, null, null, null, null, null, null);
+		long countUsers = securityManager.countIdentitiesByPowerSearch(null, null, false, null, null, null, null, null, null, null);
 		stats.setTotalUserCount(countUsers);
 
 		BusinessGroupService bgs = CoreSpringFactory.getImpl(BusinessGroupService.class);
@@ -222,8 +220,8 @@ public class OpenOLATStatisticsWebService implements Sampler {
 	private RepositoryStatisticsVO getRepositoryStatisticsVO() {
 		RepositoryStatisticsVO stats = new RepositoryStatisticsVO();
 		RepositoryManager repoMgr = CoreSpringFactory.getImpl(RepositoryManager.class);
-		int allCourses = repoMgr.countByTypeLimitAccess(CourseModule.ORES_TYPE_COURSE, RepositoryEntry.ACC_OWNERS);
-		int publishedCourses = repoMgr.countByTypeLimitAccess(CourseModule.ORES_TYPE_COURSE, RepositoryEntry.ACC_USERS);
+		int allCourses = repoMgr.countByType(CourseModule.ORES_TYPE_COURSE);
+		int publishedCourses = repoMgr.countPublished(CourseModule.ORES_TYPE_COURSE);
 		stats.setCoursesCount(allCourses);
 		stats.setPublishedCoursesCount(publishedCourses);
 		return stats;

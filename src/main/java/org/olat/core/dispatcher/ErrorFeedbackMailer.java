@@ -35,7 +35,7 @@ import javax.servlet.http.HttpServletResponse;
 import org.olat.basesecurity.BaseSecurity;
 import org.olat.core.id.Identity;
 import org.olat.core.logging.LogFileParser;
-import org.olat.core.logging.OLog;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.StringHelper;
 import org.olat.core.util.WebappHelper;
@@ -52,7 +52,7 @@ import org.olat.core.util.mail.MailManager;
  */
 public class ErrorFeedbackMailer implements Dispatcher {
 	
-	private static final OLog log = Tracing.createLoggerFor(ErrorFeedbackMailer.class);
+	private static final Logger log = Tracing.createLoggerFor(ErrorFeedbackMailer.class);
 	
 	private MailManager mailManager;
 	private BaseSecurity securityManager;
@@ -74,7 +74,7 @@ public class ErrorFeedbackMailer implements Dispatcher {
 	}
 
 	/**
-	 * send email to olat support with user submitted error informaition
+	 * send email to support with user submitted error information
 	 * 
 	 * @param request
 	 */
@@ -106,7 +106,6 @@ public class ErrorFeedbackMailer implements Dispatcher {
 			}
 		} catch (Exception e) {
 			handleException(request, e);
-			return;
 		}
 	}
 
@@ -117,10 +116,6 @@ public class ErrorFeedbackMailer implements Dispatcher {
 				+ username + " with content: " + feedback, e);
 	}
 
-	/**
-	 * @see org.olat.core.dispatcher.Dispatcher#execute(javax.servlet.http.HttpServletRequest,
-	 *      javax.servlet.http.HttpServletResponse, java.lang.String)
-	 */
 	@Override
 	public void execute(HttpServletRequest request, HttpServletResponse response) {
 		sendMail(request);

@@ -26,16 +26,9 @@
 
 package org.olat.core.logging.activity;
 
-import java.io.PrintWriter;
-import java.io.StringWriter;
-import java.io.UnsupportedEncodingException;
-import java.io.Writer;
-import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
-import java.util.Locale;
-import java.util.Set;
 
 import javax.servlet.http.HttpServletRequest;
 
@@ -47,10 +40,9 @@ import org.olat.core.gui.control.WindowControl;
 import org.olat.core.id.Identity;
 import org.olat.core.id.context.ContextEntry;
 import org.olat.core.id.context.StackedBusinessControl;
-import org.olat.core.logging.OLog;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.UserSession;
-import org.olat.core.util.i18n.I18nManager;
 import org.olat.core.util.session.UserSessionManager;
 
 /**
@@ -89,7 +81,7 @@ import org.olat.core.util.session.UserSessionManager;
 public class UserActivityLoggerImpl implements IUserActivityLogger {
 
 	/** the logging object used in this class **/
-	private static final OLog log_ = Tracing.createLoggerFor(UserActivityLoggerImpl.class);
+	private static final Logger log_ = Tracing.createLoggerFor(UserActivityLoggerImpl.class);
 	
 	/** the key with which the last LoggingObject is stored in the session - used for simpleDuration calculation only **/
 	public static final String USESS_KEY_USER_ACTIVITY_LOGGING_LAST_LOG = "USER_ACTIVITY_LOGGING_LAST_LOG";
@@ -102,9 +94,6 @@ public class UserActivityLoggerImpl implements IUserActivityLogger {
 	
 	/** if not null this stickyActionType_ overwrites whatever comes as the ActionType in the ILoggingAction in log() **/
 	private ActionType stickyActionType_ = null;
-	
-	/** set user properties which needed for logging**/
-	private Set<String> userProperties_ = LogModule.getUserProperties();
 	
 	/** the identity - which this UserActivityLoggerImpl should later log into the database **/
 	private Identity identity_;
@@ -244,7 +233,7 @@ public class UserActivityLoggerImpl implements IUserActivityLogger {
 		session_ = bluePrint.session_;
 		identity_ = bluePrint.identity_;
 		stickyActionType_ = bluePrint.stickyActionType_;
-		resourceableList_ = bluePrint.resourceableList_==null ? null : new LinkedList<ILoggingResourceable>(bluePrint.resourceableList_);
+		resourceableList_ = bluePrint.resourceableList_==null ? null : new LinkedList<>(bluePrint.resourceableList_);
 		
 		// get the businessPath from the windowControl if possible
 		String businessPath = null;
@@ -252,7 +241,7 @@ public class UserActivityLoggerImpl implements IUserActivityLogger {
 			if (wControl.getBusinessControl() instanceof StackedBusinessControl) {
 				StackedBusinessControl sbc = (StackedBusinessControl)wControl.getBusinessControl();
 				final List<ContextEntry> ces = sbc.getContextEntryStack();
-				bcContextEntries_ = ces!=null ? new LinkedList<ContextEntry>(ces) : null;
+				bcContextEntries_ = ces!=null ? new LinkedList<>(ces) : null;
 			}
 			
 			businessPath = wControl.getBusinessControl().getAsString();
@@ -344,8 +333,6 @@ public class UserActivityLoggerImpl implements IUserActivityLogger {
 		// don't set runtimeParent !
 	}
 	
-	
-	
 	@Override
 	public Identity getLoggedIdentity() {
 		if(identity_ == null && session_ != null) {
@@ -354,6 +341,7 @@ public class UserActivityLoggerImpl implements IUserActivityLogger {
 		return identity_;
 	}
 
+	@Override
 	public void frameworkSetSession(UserSession session) {
 		if (session_==session) {
 			return;
@@ -374,11 +362,12 @@ public class UserActivityLoggerImpl implements IUserActivityLogger {
 	 */
 	private List<ILoggingResourceable> getLoggingResourceableList() {
 		if (resourceableList_==null) {
-			resourceableList_ = new LinkedList<ILoggingResourceable>();
+			resourceableList_ = new LinkedList<>();
 		}
 		return resourceableList_;
 	}
 	
+	@Override
 	public void addLoggingResourceInfo(ILoggingResourceable loggingResourceable) {
 		if (loggingResourceable==null) {
 			throw new IllegalArgumentException("resourceInfo must not be null");
@@ -421,7 +410,8 @@ public class UserActivityLoggerImpl implements IUserActivityLogger {
 			threadLocalUserActivityLogger.addLoggingResourceInfo(loggingResourceable);
 		}
 	}
-	
+
+	@Override
 	public void frameworkSetBusinessPath(String businessPath) {
 		if (businessPath==businessPath_ || businessPath==null || businessPath.length()==0 || (businessPath_!=null && businessPath.length()<businessPath_.length())) {
 			return;
@@ -438,8 +428,9 @@ public class UserActivityLoggerImpl implements IUserActivityLogger {
 		}
 	}
 	
+	@Override
 	public void frameworkSetBCContextEntries(List<ContextEntry> bcEntries) {
-		if (bcContextEntries_==bcEntries || bcEntries==null || bcEntries.size()==0 || (bcContextEntries_!=null && bcEntries.size()<bcContextEntries_.size())) {
+		if (bcContextEntries_==bcEntries || bcEntries==null || bcEntries.isEmpty() || (bcContextEntries_!=null && bcEntries.size()<bcContextEntries_.size())) {
 			return;
 		}
 		if (bcEntries!=null) {
@@ -453,7 +444,8 @@ public class UserActivityLoggerImpl implements IUserActivityLogger {
 			threadLocalUserActivityLogger.frameworkSetBCContextEntries(bcEntries);
 		}
 	}
-	
+
+	@Override
 	public void frameworkSetBusinessPathFromWindowControl(WindowControl wControl) {
 		if (wControl!=null && wControl.getBusinessControl()!=null) {
 			if (wControl.getBusinessControl() instanceof StackedBusinessControl) {
@@ -484,8 +476,8 @@ public class UserActivityLoggerImpl implements IUserActivityLogger {
 	 * in the corresponding fields
 	 */
 	private List<ILoggingResourceable> getCombinedOrderedLoggingResourceables(ILoggingResourceable... additionalLoggingResourceables) {
-		List<ILoggingResourceable> result = new LinkedList<ILoggingResourceable>();
-		List<ILoggingResourceable> inputCopy = new LinkedList<ILoggingResourceable>(getLoggingResourceableList());
+		List<ILoggingResourceable> result = new LinkedList<>();
+		List<ILoggingResourceable> inputCopy = new LinkedList<>(getLoggingResourceableList());
 		if (additionalLoggingResourceables!=null) {
 			for (int i = 0; i < additionalLoggingResourceables.length; i++) {
 				ILoggingResourceable additionalLoggingResourceable = additionalLoggingResourceables[i];
@@ -511,7 +503,7 @@ public class UserActivityLoggerImpl implements IUserActivityLogger {
 			}
 		}
 		if (bcContextEntries_!=null) {
-			LinkedList<ContextEntry> bcContextEntriesCopy = new LinkedList<ContextEntry>();
+			LinkedList<ContextEntry> bcContextEntriesCopy = new LinkedList<>();
 			for (Iterator<ContextEntry> it = bcContextEntries_.iterator(); it.hasNext();) {
 				ContextEntry ce = it.next();
 				if (!bcContextEntriesCopy.contains(ce)) {
@@ -590,9 +582,10 @@ public class UserActivityLoggerImpl implements IUserActivityLogger {
 		return stickyActionType_;
 	}
 
+	@Override
 	public void log(ILoggingAction loggingAction, Class<?> callingClass, ILoggingResourceable... lriOrNull) {
 		Long logStart = null;
-		if (log_.isDebug()) {
+		if (log_.isDebugEnabled()) {
 			logStart = System.currentTimeMillis();
 		}
 		final ActionType actionType = stickyActionType_!=null ? stickyActionType_ : loggingAction.getResourceActionType();
@@ -624,21 +617,18 @@ public class UserActivityLoggerImpl implements IUserActivityLogger {
 		}
 		
 		final String sessionId;
-		if (session_.getSessionInfo() !=null &&
-				session_.getSessionInfo().getSession()==null) {
+		if (session_.getSessionInfo() != null &&
+				session_.getSessionInfo().getSession() == null) {
 			//background taks
 			sessionId = Thread.currentThread().getName();
-		} else if (session_.getSessionInfo()==null ||
-				session_.getSessionInfo().getSession()==null ||
-				session_.getSessionInfo().getSession().getId()==null ||
-				session_.getSessionInfo().getSession().getId().length()==0) {
+		} else if (session_.getSessionInfo() == null) {
 			// no session Id available - odd
 			log_.error("No session information available to UserActivityLogger. Cannot write log entry: "+
 					crudAction.name()+":"+actionVerb.name()+", "+actionObject+", "+
 					convertLoggingResourceableListToString(resourceInfos), new Exception());
 			return;
 		} else {
-			sessionId = session_.getSessionInfo().getSession().getId();
+			sessionId = Long.toString(session_.getSessionInfo().getCreationTime());
 		}
 
 		Identity identity = session_.getIdentity();
@@ -655,21 +645,18 @@ public class UserActivityLoggerImpl implements IUserActivityLogger {
 			final String identityKeyStr = String.valueOf(identityKey);
 			for (Iterator<ILoggingResourceable> it = resourceInfos.iterator(); it.hasNext();) {
 				ILoggingResourceable lr = it.next();
-				// fxdiff: we want this info as too much actionTypes are non-admin and log-entry will then be without value not containing targetIdent!, see FXOLAT-104
+				// we want this info as too much actionTypes are non-admin and log-entry will then be without value not containing targetIdent!, see FXOLAT-104
 				if (lr.getResourceableType()==StringResourceableType.targetIdentity && lr.getId().equals(identityKeyStr)) {
-					if (log_.isDebug()) {
+					if (log_.isDebugEnabled()) {
 						// complain
-						final Writer strackTraceAsStringWriter = new StringWriter();
-						final PrintWriter printWriter = new PrintWriter(strackTraceAsStringWriter);
-						(new Exception("OLAT-4955 debug stacktrac")).printStackTrace(printWriter);
-						log_.debug("OLAT-4955: Not storing targetIdentity for non-admin logging actions. A non-admin logging action wanted to store a user other than the one from the session: action="+loggingAction+", fieldId="+loggingAction.getJavaFieldIdForDebug(), strackTraceAsStringWriter.toString());
+						log_.debug("OLAT-4955: Not storing targetIdentity for non-admin logging actions. A non-admin logging action wanted to store a user other than the one from the session: action="+loggingAction+", fieldId="+loggingAction.getJavaFieldIdForDebug(), new Exception("OLAT-4955 debug stacktrac"));
 					}
-					// OLAT-4955: remove targetIdentity (fxdiff: only if same as executing identity!)
+					// remove targetIdentity (fxdiff: only if same as executing identity!)
 					it.remove();
 				}
 			}
 		}
-		// fxdiff: end of moved code
+		// end of moved code
 		if(resourceInfos != null) {
 			//remove all ignorable resources
 			for(Iterator<ILoggingResourceable> riIterator=resourceInfos.iterator(); riIterator.hasNext(); ) {
@@ -682,7 +669,7 @@ public class UserActivityLoggerImpl implements IUserActivityLogger {
 		if (loggingAction.getTypeListDefinition()==null) {
 			// this is a foul!
 			log_.warn("LoggingAction has no ResourceableTypeList defined: action="+loggingAction+", fieldId="+loggingAction.getJavaFieldIdForDebug());
-		} else {
+		} else if(log_.isDebugEnabled()) {
 			// good boy
 			String errorMsg = loggingAction.getTypeListDefinition().executeCheckAndGetErrorMessage(resourceInfos);
 			if (errorMsg!=null) {
@@ -693,83 +680,11 @@ public class UserActivityLoggerImpl implements IUserActivityLogger {
 						", actual: "+convertLoggingResourceableListToString(resourceInfos), new Exception("OLAT-4653"));
 			}
 		}
-
-		
-		String identityName;
-		if(isLogAnonymous_ && (actionType != ActionType.admin)) {
-			identityName = "";
-		} else {
-			identityName = identity.getName();
-		}
 		
 		// start creating the LoggingObject 
-		final LoggingObject logObj = new LoggingObject(sessionId, identityKey, identityName, crudAction.name().substring(0,1), actionVerb.name(), actionObject);
-		
-		// do simpleDuration calculation & storing
-//		fxdiff: FXOLAT-94 don't do duration calculation, as its quite senseless (duration = timestamp of click 2 - click 1)
-// 		if still needed once, dont update the lastLogObj, but save duration with current one, 50x faster!		
-		
-//		LoggingObject lastLogObj = (LoggingObject) session_.getEntry(USESS_KEY_USER_ACTIVITY_LOGGING_LAST_LOG);
-//		if (lastLogObj!=null) {
-			//lastLogObj = (LoggingObject) DBFactory.getInstance().loadObject(lastLogObj);
-			//			DBFactory.getInstance().updateObject(lastLogObj);
-			// Implementation Note:
-			//   we used to do loadObject(), updateObject() here - which is the preferred best practice hibernate way 
-			//   for changing an existing object in the database.
-			//   in the setup @UZH we'll use BLACKHOLE as the storage engine for the o_loggingtable (this is to have
-			//   minimal work load on the Main OLAT DB and not have duplicate data on the Main OLAT DB and the Logging DB).
-			//   Using BLACKHOLE results in the 'lastLogObj' here, not to exist in the database anymore.
-			//   Hence we can't do a loadObject() nor an updateObject(). The latter does not work due to the fact
-			//   that Hibernate checks the number of updated rows and expect that to equal 1 - which is not the case
-			//   when using BLACKHOLE.
-			
-			// Workaround: - also compare with LoggingObject.hbm.xml docu
-			//
-			//   We use the sql-update's feature check="none", which disables the above mentioned check.
-			//   Using this in combination with manual SQL code below seems to be the only feasible way
-			//   to have Hibernate not do any row-number-checks.
-			
-			// Implications of the workaround:
-			//
-			//  * Manual SQL: It shouldn't be a big deal to have this manual SQL code as it is very standard.
-			//  * CANT USE updateObject(LoggingObject) EVER:
-			//@TODO    We might have to add a check which verifies that no one calls updateObject(LoggingObject)
-			//         if that would be called it would simply fail in the BLACKHOLE@UZH setup
-			
-			// calculate the duration - take the simple diff of the two creationDate fields
-//			Date currentTime = logObj.getCreationDate();
-//			Date lastTime = lastLogObj.getCreationDate();
-//			long duration;
-//			if (lastTime==null) {
-//				duration = -1;
-//			} else if (currentTime==null) {
-//				duration = System.currentTimeMillis() - lastTime.getTime();
-//			} else {
-//				duration = currentTime.getTime() - lastTime.getTime();
-//			}
-//			
-//			DB db = DBFactory.getInstanceForClosing();
-//			if (db!=null && db.isError()) {
-//				// then we would run into an ERROR when we'd do more with this DB
-//				// hence we just issue a log.info here with the details
-//				//@TODO: lower to log_.info once we checked that it doesn't occur very often (best for 6.4)
-//				log_.warn("log: DB is in Error state therefore the UserActivityLoggerImpl cannot update the simpleDuration of log_id "+lastLogObj.getKey()+" with value "+duration+", loggingObject: "+lastLogObj);
-//			} else {
-//				DBQuery update = DBFactory.getInstance().createQuery(
-//						"update org.olat.core.logging.activity.LoggingObject set simpleDuration = :duration where log_id = :logid");
-//				update.setLong("duration", duration);
-//				update.setLong("logid", lastLogObj.getKey());
-//				// we have to do FlushMode.AUTO (which is the default anyway)
-//				update.executeUpdate(FlushMode.AUTO);
-//			}
-//		}
-		
-		// store the current logging object in the session - for duration calculation at next log
-//		session_.putEntry(USESS_KEY_USER_ACTIVITY_LOGGING_LAST_LOG, logObj);
-		
-		
+		final LoggingObject logObj = new LoggingObject(sessionId, identityKey, crudAction.name().substring(0,1), actionVerb.name(), actionObject);
 
-		if (resourceInfos!=null && resourceInfos.size()!=0) {
+		if (resourceInfos != null && !resourceInfos.isEmpty()) {
 			// this should be the normal case - we do have LoggingResourceables which we can log
 			// alongside the log message
 
@@ -807,30 +722,7 @@ public class UserActivityLoggerImpl implements IUserActivityLogger {
 		// fill the remaining fields
 		logObj.setBusinessPath(businessPath_);
 		logObj.setSourceClass(callingClass.getCanonicalName());
-//		logObj.setSimpleDuration(duration);
 		logObj.setResourceAdminAction(actionType.equals(ActionType.admin)?true:false);
-		Locale locale = I18nManager.getInstance().getLocaleOrDefault(identity.getUser().getPreferences().getLanguage());
-		
-		//prepare the user properties, set them at once
-		List<String> tmpUserProperties = new ArrayList<String>(12);
-		for(Iterator<String> iterator = userProperties_.iterator(); iterator.hasNext();) {
-			String userPropString = identity.getUser().getPropertyOrIdentityEnvAttribute(iterator.next(), locale);
-			boolean shorten = false;
-			try {
-				if (userPropString != null && userPropString.getBytes("UTF-8").length > 254) {
-					shorten = true;
-				}
-			} catch (UnsupportedEncodingException uee) {
-				log_.error("error while calculating real string length: unsupported encoding: ", uee);
-				shorten = true;
-			}
-			if (shorten){
-				log_.error("Userproperty was too long for logging-table (shortened automatically). check that nothing valueable is lost! value before cut: " + userPropString);
-				userPropString = userPropString.substring(0, 255);
-			}
-			tmpUserProperties.add(userPropString);
-		}
-		logObj.setUserProperties(tmpUserProperties);
 		
 		// and store it
 		DB db = DBFactory.getInstance();
@@ -842,7 +734,7 @@ public class UserActivityLoggerImpl implements IUserActivityLogger {
 		} else {
 			DBFactory.getInstance().saveObject(logObj);
 		}
-		if (log_.isDebug()) {
+		if (log_.isDebugEnabled()) {
 			Long logEnd = System.currentTimeMillis();
 			log_.debug("log duration = " + (logEnd - logStart));
 		}

@@ -19,11 +19,14 @@
  */
 package org.olat.core.commons.editor.htmleditor;
 
+import java.io.IOException;
 import java.io.InputStream;
+import java.io.OutputStream;
 import java.util.Date;
 
 import org.olat.core.commons.controllers.linkchooser.CustomLinkTreeModel;
 import org.olat.core.commons.modules.bc.FolderConfig;
+import org.olat.core.commons.services.vfs.VFSRepositoryService;
 import org.olat.core.gui.UserRequest;
 import org.olat.core.gui.components.form.flexible.FormItem;
 import org.olat.core.gui.components.form.flexible.FormItemContainer;
@@ -50,11 +53,14 @@ import org.olat.core.util.coordinate.CoordinatorManager;
 import org.olat.core.util.coordinate.LockResult;
 import org.olat.core.util.resource.OresHelper;
 import org.olat.core.util.vfs.LocalFileImpl;
+import org.olat.core.util.vfs.VFSConstants;
 import org.olat.core.util.vfs.VFSContainer;
 import org.olat.core.util.vfs.VFSItem;
 import org.olat.core.util.vfs.VFSLeaf;
-import org.olat.core.util.vfs.version.Versionable;
+import org.olat.modules.edusharing.EdusharingFilter;
+import org.olat.modules.edusharing.VFSEdusharingProvider;
 import org.olat.user.UserManager;
+import org.springframework.beans.factory.annotation.Autowired;
 
 /**
  * Description:<br>
@@ -114,7 +120,13 @@ public class HTMLEditorController extends FormBasicController {
 	private boolean versionsEnabled = true;
 	private boolean buttonsEnabled = true;
 	private String fileToLargeError = null;
+	private VFSEdusharingProvider edusharingProvider;
 	private Object userObject;
+	
+	@Autowired
+	private UserManager userManager;
+	@Autowired
+	private VFSRepositoryService vfsRepositoryService;
 
 	/**
 	 * Factory method to create a file based HTML editor instance that uses
@@ -135,27 +147,30 @@ public class HTMLEditorController extends FormBasicController {
 	 *            true: check if file has been created with another tool and
 	 *            warn user about potential data loss; false: ignore other
 	 *            authoring tools
+	 * @param edusharingProvider 
 	 * @return Controller with internal-link selector
 	 */
-	public HTMLEditorController(UserRequest ureq, WindowControl wControl, VFSContainer baseContainer, String relFilePath,
-			CustomLinkTreeModel customLinkTreeModel, String mediaPath, boolean editorCheckEnabled, boolean versions) {
+	public HTMLEditorController(UserRequest ureq, WindowControl wControl, VFSContainer baseContainer,
+			String relFilePath, CustomLinkTreeModel customLinkTreeModel, String mediaPath, boolean editorCheckEnabled,
+			boolean versions, VFSEdusharingProvider edusharingProvider) {
 		super(ureq, wControl, "htmleditor");
-		initEditorForm(baseContainer, relFilePath, customLinkTreeModel, mediaPath, editorCheckEnabled, versions, true);
+		initEditorForm(baseContainer, relFilePath, customLinkTreeModel, mediaPath, editorCheckEnabled, versions, true, edusharingProvider);
 		initForm(ureq);
 	}
 	
 	
-	public HTMLEditorController(UserRequest ureq, WindowControl wControl, VFSContainer baseContainer, String relFilePath,
-			CustomLinkTreeModel customLinkTreeModel, String mediaPath, boolean editorCheckEnabled, boolean versions, boolean withButtons, Form rootForm) {
+	public HTMLEditorController(UserRequest ureq, WindowControl wControl, VFSContainer baseContainer,
+			String relFilePath, CustomLinkTreeModel customLinkTreeModel, String mediaPath, boolean editorCheckEnabled,
+			boolean versions, boolean withButtons, VFSEdusharingProvider edusharingProvider, Form rootForm) {
 		super(ureq, wControl, LAYOUT_CUSTOM, "htmleditor", rootForm);
 		// set some basic variables
-		initEditorForm(baseContainer, relFilePath, customLinkTreeModel, mediaPath, editorCheckEnabled, versions, withButtons);
+		initEditorForm(baseContainer, relFilePath, customLinkTreeModel, mediaPath, editorCheckEnabled, versions, withButtons, edusharingProvider);
 		initForm(ureq);
 	}
 	
-	private void initEditorForm(VFSContainer bContainer, String relFilePath,
-			CustomLinkTreeModel linkTreeModel, String mPath,
-			boolean editorCheck, boolean versions, boolean withButtons) {
+	private void initEditorForm(VFSContainer bContainer, String relFilePath, CustomLinkTreeModel linkTreeModel,
+			String mPath, boolean editorCheck, boolean versions, boolean withButtons,
+			VFSEdusharingProvider edusharingProvider) {
 		
 		this.baseContainer = bContainer;
 		this.fileRelPath = relFilePath;
@@ -191,7 +206,7 @@ public class HTMLEditorController extends FormBasicController {
 			VelocityContainer vc = (VelocityContainer) flc.getComponent();
 			if (!lock.isSuccess()) {
 				vc.contextPut("locked", Boolean.TRUE);
-				String fullname = UserManager.getInstance().getUserDisplayName(lock.getOwner());
+				String fullname = userManager.getUserDisplayName(lock.getOwner());
 				vc.contextPut("lockOwner", fullname);
 				editable = false;
 				return;
@@ -201,6 +216,10 @@ public class HTMLEditorController extends FormBasicController {
 		}
 		// Parse the content of the page
 		this.body = parsePage(fileLeaf);
+		if (edusharingProvider != null) {
+			this.edusharingProvider = edusharingProvider;
+			this.edusharingProvider.setSubPath(fileLeaf);
+		}
 	}
 	
 	public Object getUserObject() {
@@ -283,6 +302,7 @@ public class HTMLEditorController extends FormBasicController {
 			if(StringHelper.containsNonWhitespace(mediaPath)) {
 				editorConfiguration.setFileBrowserUploadRelPath(mediaPath);
 			}
+			editorConfiguration.enableEdusharing(getIdentity(), edusharingProvider);
 
 			// The buttons
 			if(buttonsEnabled) {
@@ -377,11 +397,15 @@ public class HTMLEditorController extends FormBasicController {
 	 */
 	private String parsePage(VFSLeaf vfsLeaf) {
 		// Load data with given encoding
-		InputStream is = vfsLeaf.getInputStream();
-		if (is == null) { throw new AssertException("Could not open input stream for file::"
-				+ getFileDebuggingPath(this.baseContainer, this.fileRelPath)); }
-		this.charSet = SimpleHtmlParser.extractHTMLCharset(vfsLeaf);
-		String leafData = FileUtils.load(is, charSet);
+		String leafData = null;
+		try(InputStream is = vfsLeaf.getInputStream()) {
+			if (is == null) { throw new AssertException("Could not open input stream for file::"
+					+ getFileDebuggingPath(this.baseContainer, this.fileRelPath)); }
+			this.charSet = SimpleHtmlParser.extractHTMLCharset(vfsLeaf);
+			leafData = FileUtils.load(is, charSet);
+		} catch(IOException e) {
+			logError("", e);
+		}
 		if (leafData == null || leafData.length() == 0) {
 			leafData = "";
 		}
@@ -423,6 +447,11 @@ public class HTMLEditorController extends FormBasicController {
 		// No XSS checks, are done in the HTML editor - users can upload illegal
 		// stuff, JS needs to be enabled for users
 		String content = htmlElement.getRawValue();
+		// Filter here because it is raw value
+		EdusharingFilter edusharingFilter = htmlElement.getEditorConfiguration().getEdusharingFilter();
+		if (edusharingFilter != null) {
+			content = edusharingFilter.filter(content);
+		}
 		// If preface was null -> append own head and save it in utf-8. Preface
 		// is the header that was in the file when we opened the file
 		StringBuilder fileContent = new StringBuilder();
@@ -453,11 +482,18 @@ public class HTMLEditorController extends FormBasicController {
 		}
 		
 		// save the file
-		if(versionsEnabled && fileLeaf instanceof Versionable && ((Versionable)fileLeaf).getVersions().isVersioned()) {
-			InputStream inStream = FileUtils.getInputStream(fileContent.toString(), charSet);
-			((Versionable)fileLeaf).getVersions().addVersion(getIdentity(), "", inStream);
+		if(versionsEnabled && fileLeaf.canVersion() == VFSConstants.YES) {
+			try(InputStream inStream = FileUtils.getInputStream(fileContent.toString(), charSet)) {
+				vfsRepositoryService.addVersion(fileLeaf, getIdentity(), "", inStream);
+			} catch(IOException e) {
+				logError("", e);
+			}
 		} else {
-			FileUtils.save(fileLeaf.getOutputStream(false), fileContent.toString(), charSet);
+			try(OutputStream out=fileLeaf.getOutputStream(false)) {
+				FileUtils.save(out, fileContent.toString(), charSet);
+			} catch(IOException e) {
+				logError("", e);
+			}
 		}
 		
 		// Update last modified date in view

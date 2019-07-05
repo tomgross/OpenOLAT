@@ -22,7 +22,6 @@ package org.olat.modules.fo.ui;
 import java.util.Iterator;
 import java.util.List;
 
-import org.olat.basesecurity.BaseSecurityModule;
 import org.olat.core.CoreSpringFactory;
 import org.olat.core.commons.persistence.DBFactory;
 import org.olat.core.commons.persistence.SortKey;
@@ -62,6 +61,7 @@ import org.olat.modules.fo.ui.MessageEditController.EditMode;
 import org.olat.modules.fo.ui.ThreadListDataModel.ThreadListCols;
 import org.olat.modules.fo.ui.events.SelectMessageEvent;
 import org.olat.modules.fo.ui.events.SelectUserListEvent;
+import org.olat.search.SearchModule;
 import org.olat.search.SearchServiceUIFactory;
 import org.olat.search.SearchServiceUIFactory.DisplayOption;
 import org.olat.search.ui.SearchInputController;
@@ -88,9 +88,9 @@ public class ThreadListController extends FormBasicController {
 	private final ForumCallback foCallback;
 
 	@Autowired
-	private ForumManager forumManager;
+	private SearchModule searchModule;
 	@Autowired
-	private BaseSecurityModule securityModule;
+	private ForumManager forumManager;
 	
 	public ThreadListController(UserRequest ureq, WindowControl wControl, Forum forum, ForumCallback foCallback) {
 		super(ureq, wControl, "threads");
@@ -115,7 +115,7 @@ public class ThreadListController extends FormBasicController {
 			archiveForumButton.setIconLeftCSS("o_icon o_icon-fw o_icon_archive_tool");
 			archiveForumButton.setElementCssClass("o_sel_forum_archive");
 		}
-		if(securityModule.isUserAllowedAutoComplete(ureq.getUserSession().getRoles()) && foCallback.mayFilterForUser() ) {
+		if(foCallback.mayFilterForUser() ) {
 			userListButton = uifactory.addFormLink("filter", formLayout, Link.BUTTON_SMALL);
 			userListButton.setIconLeftCSS("o_icon o_icon-fw o_icon_user");
 			userListButton.setElementCssClass("o_sel_forum_filter");
@@ -124,6 +124,10 @@ public class ThreadListController extends FormBasicController {
 		if(formLayout instanceof FormLayoutContainer) {
 			SearchServiceUIFactory searchServiceUIFactory = (SearchServiceUIFactory)CoreSpringFactory.getBean(SearchServiceUIFactory.class);
 			searchController = searchServiceUIFactory.createInputController(ureq, getWindowControl(), DisplayOption.STANDARD, mainForm);
+			if(guestOnly && !searchModule.isGuestEnabled()) {
+				searchController.setResourceContextEnable(false);
+			}
+			
 			listenTo(searchController);
 			((FormLayoutContainer)formLayout).add("search_input", searchController.getFormItem());
 		}

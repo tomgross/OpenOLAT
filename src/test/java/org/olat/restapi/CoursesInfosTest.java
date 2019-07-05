@@ -38,13 +38,17 @@ import org.apache.http.HttpResponse;
 import org.apache.http.client.methods.HttpGet;
 import org.junit.Assert;
 import org.junit.Test;
-import org.olat.basesecurity.BaseSecurityManager;
+import org.olat.basesecurity.BaseSecurity;
 import org.olat.core.id.Identity;
+import org.olat.course.CourseFactory;
 import org.olat.course.ICourse;
-import org.olat.restapi.repository.course.CoursesWebService;
+import org.olat.repository.RepositoryEntry;
+import org.olat.repository.RepositoryEntryStatusEnum;
 import org.olat.restapi.support.vo.CourseInfoVO;
 import org.olat.restapi.support.vo.CourseInfoVOes;
-import org.olat.test.OlatJerseyTestCase;
+import org.olat.test.JunitTestHelper;
+import org.olat.test.OlatRestTestCase;
+import org.springframework.beans.factory.annotation.Autowired;
 
 /**
  * 
@@ -52,7 +56,10 @@ import org.olat.test.OlatJerseyTestCase;
  * @author srosse, stephane.rosse@frentix.com, http://www.frentix.com
  *
  */
-public class CoursesInfosTest extends OlatJerseyTestCase {
+public class CoursesInfosTest extends OlatRestTestCase {
+	
+	@Autowired
+	private BaseSecurity securityManager;
 	
 	@Test
 	public void testGetCourseInfos() throws IOException, URISyntaxException {
@@ -72,8 +79,10 @@ public class CoursesInfosTest extends OlatJerseyTestCase {
 	
 	@Test
 	public void testGetCourseInfos_byId() throws IOException, URISyntaxException {
-		Identity admin = BaseSecurityManager.getInstance().findIdentityByName("administrator");
-		ICourse course = CoursesWebService.createEmptyCourse(admin, "course-info 1", "course long name", null);
+		Identity admin = securityManager.findIdentityByName("administrator");
+		RepositoryEntry courseEntry = JunitTestHelper.deployBasicCourse(admin, "course-info 1",
+				RepositoryEntryStatusEnum.preparation, false, false);
+		ICourse course = CourseFactory.loadCourse(courseEntry);
 
 		RestConnection conn = new RestConnection();
 		assertTrue(conn.login("administrator", "openolat"));

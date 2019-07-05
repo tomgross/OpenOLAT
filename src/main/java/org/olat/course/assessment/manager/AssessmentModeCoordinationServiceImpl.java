@@ -27,13 +27,14 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
+import org.apache.logging.log4j.Logger;
 import org.olat.basesecurity.model.IdentityRefImpl;
 import org.olat.core.commons.persistence.DB;
 import org.olat.core.gui.control.Event;
-import org.olat.core.logging.OLog;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.coordinate.CoordinatorManager;
 import org.olat.core.util.event.GenericEventListener;
+import org.olat.core.util.resource.OresHelper;
 import org.olat.course.CourseFactory;
 import org.olat.course.assessment.AssessmentMode;
 import org.olat.course.assessment.AssessmentMode.Status;
@@ -45,7 +46,10 @@ import org.olat.course.assessment.model.CoordinatedAssessmentMode;
 import org.olat.course.assessment.model.TransientAssessmentMode;
 import org.olat.group.ui.edit.BusinessGroupModifiedEvent;
 import org.olat.repository.RepositoryEntry;
-import org.olat.repository.RepositoryService;
+import org.olat.repository.RepositoryEntryStatusEnum;
+import org.olat.repository.manager.RepositoryEntryDAO;
+import org.olat.repository.model.RepositoryEntryStatusChangedEvent;
+import org.springframework.beans.factory.InitializingBean;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
@@ -56,16 +60,16 @@ import org.springframework.stereotype.Service;
  *
  */
 @Service
-public class AssessmentModeCoordinationServiceImpl implements AssessmentModeCoordinationService, GenericEventListener {
+public class AssessmentModeCoordinationServiceImpl implements AssessmentModeCoordinationService, GenericEventListener, InitializingBean {
 	
-	private static final OLog log = Tracing.createLoggerFor(AssessmentModeCoordinationServiceImpl.class);
+	private static final Logger log = Tracing.createLoggerFor(AssessmentModeCoordinationServiceImpl.class);
 	
 	@Autowired
 	private DB dbInstance;
 	@Autowired
 	private AssessmentModule assessmentModule;
 	@Autowired
-	private RepositoryService repositoryService;
+	private RepositoryEntryDAO repositoryEntryDao;
 	@Autowired
 	private CoordinatorManager coordinatorManager;
 	@Autowired
@@ -146,6 +150,14 @@ public class AssessmentModeCoordinationServiceImpl implements AssessmentModeCoor
 		}
 	}
 	
+	
+	
+	@Override
+	public void afterPropertiesSet() throws Exception {
+		coordinatorManager.getCoordinator().getEventBus()
+			.registerFor(this, null, OresHelper.lookupType(RepositoryEntry.class));
+	}
+
 	@Override
 	public void event(Event event) {
 		if(event instanceof BusinessGroupModifiedEvent) {
@@ -157,6 +169,29 @@ public class AssessmentModeCoordinationServiceImpl implements AssessmentModeCoor
 				}
 			} catch (Exception e) {
 				log.error("", e);
+			}
+		} else if(event instanceof RepositoryEntryStatusChangedEvent) {
+			RepositoryEntryStatusChangedEvent changedEvent = (RepositoryEntryStatusChangedEvent)event;
+			RepositoryEntry entry = repositoryEntryDao.loadByKey(changedEvent.getRepositoryEntryKey());
+			processRepositoryEntryChangedStatus(entry);
+		}
+	}
+	
+	@Override
+	public void processRepositoryEntryChangedStatus(RepositoryEntry entry) {
+		if(entry != null && (entry.getEntryStatus() == RepositoryEntryStatusEnum.closed
+				|| entry.getEntryStatus() == RepositoryEntryStatusEnum.trash
+				|| entry.getEntryStatus() == RepositoryEntryStatusEnum.deleted)) {
+			try {
+				List<AssessmentMode> modes = assessmentModeManager.getAssessmentModeFor(entry);
+				for(AssessmentMode mode:modes) {
+					if(mode.getStatus() == Status.assessment || mode.getStatus() == Status.followup) {
+						endAssessment(mode);
+					}
+				}
+			} catch (Exception e) {
+				log.error("", e);
+				dbInstance.rollbackAndCloseSession();
 			}
 		}
 	}
@@ -214,6 +249,13 @@ public class AssessmentModeCoordinationServiceImpl implements AssessmentModeCoor
 				mode = ensureStatusOfMode(mode, Status.none);
 				sendEvent(AssessmentModeNotificationEvent.BEFORE, mode,
 						assessmentModeManager.getAssessedIdentityKeys(mode));
+			} else if(mode.getStatus() == Status.followup && mode.isManualBeginEnd() && !forceStatus) {
+				// close manual assessment mode in the follow-up time but started before the begin date
+				if(mode.getEndWithFollowupTime().compareTo(now) < 0) {
+					mode = ensureStatusOfMode(mode, Status.end);
+					sendEvent(AssessmentModeNotificationEvent.END, mode,
+							assessmentModeManager.getAssessedIdentityKeys(mode));
+				}
 			}
 		} else if(mode.getBeginWithLeadTime().compareTo(now) <= 0 && mode.getBegin().compareTo(now) > 0
 				&& mode.getBeginWithLeadTime().compareTo(mode.getBegin()) != 0) {
@@ -341,8 +383,19 @@ public class AssessmentModeCoordinationServiceImpl implements AssessmentModeCoor
 		return mode;
 	}
 	
+	private AssessmentMode endAssessment(AssessmentMode mode) {
+		mode = assessmentModeManager.getAssessmentModeById(mode.getKey());
+		Set<Long> assessedIdentityKeys = assessmentModeManager.getAssessedIdentityKeys(mode);
+		mode = ensureStatusOfMode(mode, Status.end);
+		Date now = new Date();
+		((AssessmentModeImpl)mode).setEnd(now);
+		((AssessmentModeImpl)mode).setEndWithFollowupTime(now);
+		sendEvent(AssessmentModeNotificationEvent.END, mode, assessedIdentityKeys);
+		return mode;
+	}
+	
 	private void warmUpAssessment(AssessmentMode mode) {
-		RepositoryEntry entry = repositoryService.loadByKey(mode.getRepositoryEntry().getKey());
+		RepositoryEntry entry = repositoryEntryDao.loadByKey(mode.getRepositoryEntry().getKey());
 		CourseFactory.loadCourse(entry);
 	}
 }

@@ -26,6 +26,7 @@ import java.util.List;
 import java.util.Map;
 
 import org.olat.core.gui.UserRequest;
+import org.olat.core.gui.components.form.flexible.FormItem;
 import org.olat.core.gui.components.form.flexible.FormItemContainer;
 import org.olat.core.gui.components.form.flexible.elements.FileElement;
 import org.olat.core.gui.components.form.flexible.elements.RichTextElement;
@@ -43,15 +44,15 @@ import org.olat.core.util.StringHelper;
 import org.olat.core.util.Util;
 import org.olat.core.util.vfs.JavaIOItem;
 import org.olat.core.util.vfs.VFSItem;
+import org.olat.modules.ceditor.PageElement;
+import org.olat.modules.ceditor.PageElementAddController;
+import org.olat.modules.ceditor.ui.AddElementInfos;
 import org.olat.modules.portfolio.Category;
 import org.olat.modules.portfolio.Media;
 import org.olat.modules.portfolio.PortfolioService;
 import org.olat.modules.portfolio.handler.VideoHandler;
 import org.olat.modules.portfolio.model.MediaPart;
 import org.olat.modules.portfolio.ui.PortfolioHomeController;
-import org.olat.modules.portfolio.ui.editor.AddElementInfos;
-import org.olat.modules.portfolio.ui.editor.PageElement;
-import org.olat.modules.portfolio.ui.editor.PageElementAddController;
 import org.springframework.beans.factory.annotation.Autowired;
 
 /**
@@ -171,15 +172,32 @@ public class CollectVideoMediaController extends FormBasicController implements 
 	
 	@Override
 	protected boolean validateFormLogic(UserRequest ureq) {
-		boolean allOk = true;
+		boolean allOk = super.validateFormLogic(ureq);
 		
 		fileEl.clearError();
 		if(fileEl.getInitialFile() == null && (fileEl.getUploadFile() == null || fileEl.getUploadSize() < 1)) {
 			fileEl.setErrorKey("form.legende.mandatory", null);
 			allOk &= false;
 		}
+		
+		titleEl.clearError();
+		if (titleEl.isEmpty()) {
+			titleEl.setErrorKey("form.legende.mandatory", null);
+			allOk &= false;
+		}
 
-		return allOk & super.validateFormLogic(ureq);
+		return allOk;
+	}
+	
+	@Override
+	protected void formInnerEvent(UserRequest ureq, FormItem source, FormEvent event) {
+		if(fileEl == source) {
+			if (this.titleEl.isEmpty()) {
+				this.titleEl.setValue(fileEl.getUploadFileName());
+				this.titleEl.getComponent().setDirty(true);
+			}
+		}
+		super.formInnerEvent(ureq, source, event);
 	}
 
 	@Override

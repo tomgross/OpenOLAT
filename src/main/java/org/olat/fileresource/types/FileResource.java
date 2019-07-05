@@ -27,6 +27,8 @@ package org.olat.fileresource.types;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.charset.Charset;
+import java.nio.file.FileSystem;
 import java.nio.file.FileSystems;
 import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
@@ -34,11 +36,17 @@ import java.nio.file.Path;
 import java.nio.file.PathMatcher;
 import java.nio.file.SimpleFileVisitor;
 import java.nio.file.attribute.BasicFileAttributes;
+import java.nio.file.spi.FileSystemProvider;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipFile;
 
 import org.olat.core.id.OLATResourceable;
-import org.olat.core.logging.OLog;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.CodeHelper;
+import org.olat.core.util.PathUtils;
 import org.olat.core.util.PathUtils.CopyVisitor;
 import org.olat.core.util.PathUtils.YesMatcher;
 import org.olat.core.util.StringHelper;
@@ -50,7 +58,7 @@ import org.olat.core.util.StringHelper;
  */
 public class FileResource implements OLATResourceable {
 	
-	private static final OLog log = Tracing.createLoggerFor(FileResource.class);
+	private static final Logger log = Tracing.createLoggerFor(FileResource.class);
 
 	/**
 	 * Generic file resource type identifier.
@@ -94,7 +102,9 @@ public class FileResource implements OLATResourceable {
 
 	
 	/**
-	 * This method open a new FileSystem for zip
+	 * This method open a new FileSystem for zip, please close
+	 * it with PathUtils.closeSubsequentFS()
+	 * 
 	 * @param file
 	 * @param filename
 	 * @return
@@ -123,6 +133,63 @@ public class FileResource implements OLATResourceable {
 		return fPath;
 	}
 	
+	public static Path getResource(File file, String filename, String fallbackEncoding)
+	throws IOException {
+		if(!StringHelper.containsNonWhitespace(filename)) {
+			filename = file.getName();
+		}
+		
+		if(!StringHelper.containsNonWhitespace(fallbackEncoding)) {
+			return getResource(file, filename);
+		}
+		
+		Path fPath = null;
+		if(file.isDirectory()) {
+			fPath = file.toPath();
+		} else if(filename != null && filename.toLowerCase().endsWith(".zip")) {
+			//perhaps find root folder and return it
+			Map<String,String> env = new HashMap<>();
+			if(isEncodingOk(file, "UTF-8")) {
+				env.put("encoding", "UTF-8");
+			} else if(isEncodingOk(file, fallbackEncoding)) {
+				env.put("encoding", fallbackEncoding);
+			}
+			
+			fPath = newFileSystem(file.toPath(), env).getPath("/");
+			RootSearcher rootSearcher = searchRootDirectory(fPath);
+			if(rootSearcher.foundRoot()) {
+				Path rootPath = rootSearcher.getRoot();
+				fPath = fPath.resolve(rootPath);
+			}
+		} else {
+			fPath = file.toPath();
+		}
+		return fPath;
+	}
+	
+	private static FileSystem newFileSystem(Path path, Map<String,String> env) throws IOException {
+		for (FileSystemProvider provider: FileSystemProvider.installedProviders()) {
+            try {
+                return provider.newFileSystem(path, env);
+            } catch (UnsupportedOperationException uoe) {
+            	//
+            }
+        }
+		return null;
+	}
+	
+	private static boolean isEncodingOk(File file, String encoding) {
+		boolean ok = false;
+		try(ZipFile zFile = new ZipFile(file, Charset.forName(encoding))) {
+			zFile.stream().forEach(ZipEntry::toString);
+			ok = true;
+		} catch (IOException | IllegalArgumentException e) {
+			//this is what we check
+		}
+		
+		return ok;
+	}
+	
 	protected static  RootSearcher searchRootDirectory(Path fPath)
 	throws IOException {
 		RootSearcher rootSearcher = new RootSearcher();
@@ -143,10 +210,7 @@ public class FileResource implements OLATResourceable {
 			
 			Path destDir = targetDirectory.toPath();
 			Files.walkFileTree(path, new CopyVisitor(path, destDir, filter));
-			try {
-				path.getFileSystem().close(); // LMSUZH-45 make sure that ZipFileSystem is closed, so that resource is really freed.
-			} catch (UnsupportedOperationException e) {
-			}
+			PathUtils.closeSubsequentFS(path);
 			return true;
 		} catch (IOException e) {
 			log.error("", e);

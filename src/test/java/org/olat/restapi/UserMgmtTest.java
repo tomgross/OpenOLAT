@@ -50,6 +50,7 @@ import javax.ws.rs.core.UriBuilder;
 import org.apache.commons.codec.binary.Base64;
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.IOUtils;
+import org.apache.http.HttpEntity;
 import org.apache.http.HttpResponse;
 import org.apache.http.client.methods.HttpDelete;
 import org.apache.http.client.methods.HttpGet;
@@ -57,32 +58,36 @@ import org.apache.http.client.methods.HttpHead;
 import org.apache.http.client.methods.HttpPost;
 import org.apache.http.client.methods.HttpPut;
 import org.apache.http.util.EntityUtils;
-import org.codehaus.jackson.map.ObjectMapper;
-import org.codehaus.jackson.type.TypeReference;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 import org.olat.basesecurity.BaseSecurity;
-import org.olat.basesecurity.BaseSecurityManager;
 import org.olat.basesecurity.GroupRoles;
+import org.olat.basesecurity.OrganisationRoles;
+import org.olat.basesecurity.OrganisationService;
 import org.olat.collaboration.CollaborationTools;
 import org.olat.collaboration.CollaborationToolsFactory;
 import org.olat.core.commons.modules.bc.FolderConfig;
-import org.olat.core.commons.modules.bc.vfs.OlatNamedContainerImpl;
-import org.olat.core.commons.modules.bc.vfs.OlatRootFolderImpl;
 import org.olat.core.commons.persistence.DB;
 import org.olat.core.id.Identity;
 import org.olat.core.id.OLATResourceable;
+import org.olat.core.id.Organisation;
 import org.olat.core.id.Roles;
+import org.olat.core.id.User;
 import org.olat.core.id.UserConstants;
+import org.apache.logging.log4j.Logger;
+import org.olat.core.logging.Tracing;
+import org.olat.core.util.CodeHelper;
 import org.olat.core.util.nodes.INode;
 import org.olat.core.util.resource.OresHelper;
 import org.olat.core.util.tree.TreeVisitor;
 import org.olat.core.util.tree.Visitor;
+import org.olat.core.util.vfs.LocalFolderImpl;
 import org.olat.core.util.vfs.LocalImpl;
 import org.olat.core.util.vfs.VFSContainer;
 import org.olat.core.util.vfs.VFSItem;
 import org.olat.core.util.vfs.VFSLeaf;
+import org.olat.core.util.vfs.VFSManager;
 import org.olat.course.CourseFactory;
 import org.olat.course.ICourse;
 import org.olat.course.nodes.BCCourseNode;
@@ -108,7 +113,7 @@ import org.olat.restapi.support.vo.GroupInfoVOes;
 import org.olat.restapi.support.vo.GroupVO;
 import org.olat.restapi.support.vo.GroupVOes;
 import org.olat.test.JunitTestHelper;
-import org.olat.test.OlatJerseyTestCase;
+import org.olat.test.OlatRestTestCase;
 import org.olat.user.DisplayPortraitManager;
 import org.olat.user.UserManager;
 import org.olat.user.restapi.ManagedUserVO;
@@ -117,6 +122,9 @@ import org.olat.user.restapi.RolesVO;
 import org.olat.user.restapi.StatusVO;
 import org.olat.user.restapi.UserVO;
 import org.springframework.beans.factory.annotation.Autowired;
+
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 /**
  * 
@@ -127,7 +135,9 @@ import org.springframework.beans.factory.annotation.Autowired;
  * Initial Date:  15 apr. 2010 <br>
  * @author srosse, stephane.rosse@frentix.com
  */
-public class UserMgmtTest extends OlatJerseyTestCase {
+public class UserMgmtTest extends OlatRestTestCase {
+	
+	private static final Logger log = Tracing.createLoggerFor(UserMgmtTest.class);
 	
 	private static Identity owner1, id1, id2, id3;
 	private static BusinessGroup g1, g2, g3, g4;
@@ -143,6 +153,8 @@ public class UserMgmtTest extends OlatJerseyTestCase {
 	@Autowired
 	private DB dbInstance;
 	@Autowired
+	private ForumManager forumManager;
+	@Autowired
 	private BusinessGroupRelationDAO businessGroupRelationDao;
 	@Autowired
 	private BusinessGroupService businessGroupService;
@@ -151,12 +163,14 @@ public class UserMgmtTest extends OlatJerseyTestCase {
 	@Autowired
 	private RepositoryService repositoryService;
 	@Autowired
+	private OrganisationService organisationService;
+	@Autowired
 	private UserManager userManager;
+	@Autowired
+	private DisplayPortraitManager portraitManager;
 	
 	@Before
-	@Override
 	public void setUp() throws Exception {
-		super.setUp();
 		if(setuped) return;
 		
 		//create identities
@@ -172,7 +186,7 @@ public class UserMgmtTest extends OlatJerseyTestCase {
 		dbInstance.intermediateCommit();
 		
 		id3 = JunitTestHelper.createAndPersistIdentityAsUser("user-rest-three");
-		OlatRootFolderImpl id3HomeFolder = new OlatRootFolderImpl(FolderConfig.getUserHome(id3.getName()), null);
+		VFSContainer id3HomeFolder = VFSManager.olatRootContainer(FolderConfig.getUserHome(id3.getName()), null);
 		VFSContainer id3PublicFolder = (VFSContainer)id3HomeFolder.resolve("public");
 		if(id3PublicFolder == null) {
 			id3PublicFolder = id3HomeFolder.createChildContainer("public");
@@ -220,17 +234,17 @@ public class UserMgmtTest extends OlatJerseyTestCase {
 		CollaborationTools g1CTSMngr = CollaborationToolsFactory.getInstance().getOrCreateCollaborationTools(g1);
 		g1CTSMngr.setToolEnabled(CollaborationTools.TOOL_FORUM, true);
 		Forum g1Forum = g1CTSMngr.getForum();//create the forum
-		Message m1 = ForumManager.getInstance().createMessage(g1Forum, id1, false);
+		Message m1 = forumManager.createMessage(g1Forum, id1, false);
 		m1.setTitle("Thread-1");
 		m1.setBody("Body of Thread-1");
-		ForumManager.getInstance().addTopMessage(m1);
+		forumManager.addTopMessage(m1);
 		
 		dbInstance.commitAndCloseSession();
 		
 		//add some folder tool
 		CollaborationTools g2CTSMngr = CollaborationToolsFactory.getInstance().getOrCreateCollaborationTools(g2);
 		g2CTSMngr.setToolEnabled(CollaborationTools.TOOL_FOLDER, true);
-		OlatRootFolderImpl g2Folder = new OlatRootFolderImpl(g2CTSMngr.getFolderRelPath(), null);
+		LocalFolderImpl g2Folder = VFSManager.olatRootContainer(g2CTSMngr.getFolderRelPath(), null);
 		g2Folder.getBasefile().mkdirs();
 		VFSItem groupPortrait = g2Folder.resolve("portrait.jpg");
 		if(groupPortrait == null) {
@@ -256,23 +270,22 @@ public class UserMgmtTest extends OlatJerseyTestCase {
 					if(demoForumNode == null) {
 						demoForumNode = (FOCourseNode)node;
 						Forum courseForum = demoForumNode.loadOrCreateForum(demoCourse.getCourseEnvironment());
-						Message message1 = ForumManager.getInstance().createMessage(courseForum, id1, false);
+						Message message1 = forumManager.createMessage(courseForum, id1, false);
 						message1.setTitle("Thread-1");
 						message1.setBody("Body of Thread-1");
-						ForumManager.getInstance().addTopMessage(message1);
+						forumManager.addTopMessage(message1);
 					}	
 				} else if (node instanceof BCCourseNode) {
 					if(demoBCCourseNode == null) {
 						demoBCCourseNode = (BCCourseNode)node;
-						OlatNamedContainerImpl container = BCCourseNode.getNodeFolderContainer(demoBCCourseNode, demoCourse.getCourseEnvironment());
+						VFSContainer container = BCCourseNode.getNodeFolderContainer(demoBCCourseNode, demoCourse.getCourseEnvironment());
 						VFSItem example = container.resolve("singlepage.html");
 						if(example == null) {
-							try {
-								InputStream htmlUrl = UserMgmtTest.class.getResourceAsStream("singlepage.html");
+							try(InputStream htmlUrl = UserMgmtTest.class.getResourceAsStream("singlepage.html")) {
 								VFSLeaf htmlLeaf = container.createChildLeaf("singlepage.html");
 								IOUtils.copy(htmlUrl, htmlLeaf.getOutputStream(false));
 							} catch (IOException e) {
-								e.printStackTrace();
+								log.error("", e);
 							}
 						}
 					}
@@ -294,14 +307,14 @@ public class UserMgmtTest extends OlatJerseyTestCase {
 		HttpGet method = conn.createGet(request, MediaType.APPLICATION_JSON, true);
 		HttpResponse response = conn.execute(method);
 		assertEquals(200, response.getStatusLine().getStatusCode());
-		InputStream body = response.getEntity().getContent();
-		List<UserVO> vos = parseUserArray(body);
+		List<UserVO> vos = parseUserArray(response.getEntity());
 		assertNotNull(vos);
 		assertFalse(vos.isEmpty());
 		int voSize = vos.size();
 		vos = null;
 		
-		List<Identity> identities = BaseSecurityManager.getInstance().getIdentitiesByPowerSearch(null, null, true, null, null, null, null, null, null, null, Identity.STATUS_VISIBLE_LIMIT);
+		List<Identity> identities = securityManager
+				.getIdentitiesByPowerSearch(null, null, true, null, null, null, null, null, null, Identity.STATUS_VISIBLE_LIMIT);
 		assertEquals(voSize, identities.size());
 
 		conn.shutdown();
@@ -318,11 +331,11 @@ public class UserMgmtTest extends OlatJerseyTestCase {
 		HttpGet method = conn.createGet(request, MediaType.APPLICATION_JSON, true);
 		HttpResponse response = conn.execute(method);
 		assertEquals(200, response.getStatusLine().getStatusCode());
-		InputStream body = response.getEntity().getContent();
-		List<UserVO> vos = parseUserArray(body);
+		List<UserVO> vos = parseUserArray(response.getEntity());
 		
 		String[] authProviders = new String[]{"OLAT"};
-		List<Identity> identities = BaseSecurityManager.getInstance().getIdentitiesByPowerSearch("administrator", null, true, null, null, authProviders, null, null, null, null, Identity.STATUS_VISIBLE_LIMIT);
+		List<Identity> identities = securityManager
+				.getIdentitiesByPowerSearch("administrator", null, true, null, authProviders, null, null, null, null, Identity.STATUS_VISIBLE_LIMIT);
 
 		assertNotNull(vos);
 		assertFalse(vos.isEmpty());
@@ -351,7 +364,7 @@ public class UserMgmtTest extends OlatJerseyTestCase {
 		HttpGet method = conn.createGet(request, MediaType.APPLICATION_JSON, true);
 		HttpResponse response = conn.execute(method);
 		assertEquals(200, response.getStatusLine().getStatusCode());
-		List<UserVO> vos = parseUserArray(response.getEntity().getContent());
+		List<UserVO> vos = parseUserArray(response.getEntity());
 
 		assertNotNull(vos);
 		assertEquals(1, vos.size());
@@ -372,8 +385,7 @@ public class UserMgmtTest extends OlatJerseyTestCase {
 		method.addHeader("Accept-Language", "en");
 		HttpResponse response = conn.execute(method);
 		assertEquals(200, response.getStatusLine().getStatusCode());
-		InputStream body = response.getEntity().getContent();
-		List<UserVO> vos = parseUserArray(body);
+		List<UserVO> vos = parseUserArray(response.getEntity());
 	
 		assertNotNull(vos);
 		assertFalse(vos.isEmpty());
@@ -391,9 +403,7 @@ public class UserMgmtTest extends OlatJerseyTestCase {
 		HttpGet method = conn.createGet(request, MediaType.APPLICATION_JSON, true);
 		HttpResponse response = conn.execute(method);
 		assertEquals(200, response.getStatusLine().getStatusCode());
-		InputStream body = response.getEntity().getContent();
-		
-		List<UserVO> vos = parseUserArray(body);
+		List<UserVO> vos = parseUserArray(response.getEntity());
 	
 		assertNotNull(vos);
 		assertFalse(vos.isEmpty());
@@ -455,7 +465,7 @@ public class UserMgmtTest extends OlatJerseyTestCase {
 		HttpGet method = conn.createGet(request, MediaType.APPLICATION_JSON, true);
 		HttpResponse response = conn.execute(method);
 		assertEquals(200, response.getStatusLine().getStatusCode());
-		List<ManagedUserVO> managedUsers = parseManagedUserArray(response.getEntity().getContent());
+		List<ManagedUserVO> managedUsers = parseManagedUserArray(response.getEntity());
 
 		boolean found = false;
 		for(ManagedUserVO managedUser:managedUsers) {
@@ -555,7 +565,7 @@ public class UserMgmtTest extends OlatJerseyTestCase {
 		HttpResponse response = conn.execute(method);
 		assertTrue(response.getStatusLine().getStatusCode() == 200 || response.getStatusLine().getStatusCode() == 201);
 		UserVO savedVo = conn.parse(response, UserVO.class);
-		Identity savedIdent = BaseSecurityManager.getInstance().findIdentityByName(username);
+		Identity savedIdent = securityManager.findIdentityByName(username);
 
 		assertNotNull(savedVo);
 		assertNotNull(savedIdent);
@@ -565,6 +575,60 @@ public class UserMgmtTest extends OlatJerseyTestCase {
 		assertEquals("39847592", savedIdent.getUser().getProperty("telPrivate", Locale.ENGLISH));
 		assertEquals("12/12/2009", savedIdent.getUser().getProperty("birthDay", Locale.ENGLISH));
 		conn.shutdown();
+	}
+	
+	@Test
+	public void testCreateUser_emptyLogin() throws IOException, URISyntaxException {
+		RestConnection conn = new RestConnection();
+		assertTrue(conn.login("administrator", "openolat"));
+		
+		UserVO vo = new UserVO();
+		vo.setLogin("");
+		vo.setFirstName("John");
+		vo.setLastName("Smith");
+		vo.setEmail(UUID.randomUUID() + "@frentix.com");
+		vo.putProperty("telOffice", "39847592");
+		vo.putProperty("telPrivate", "39847592");
+		vo.putProperty("telMobile", "39847592");
+		vo.putProperty("gender", "Female");//male or female
+		vo.putProperty("birthDay", "12/12/2009");
+		
+		URI request = UriBuilder.fromUri(getContextURI()).path("users").build();
+		HttpPut method = conn.createPut(request, MediaType.APPLICATION_JSON, true);
+		conn.addJsonEntity(method, vo);
+		method.addHeader("Accept-Language", "en");
+		
+		HttpResponse response = conn.execute(method);
+		int statusCode = response.getStatusLine().getStatusCode();
+		EntityUtils.consume(response.getEntity());
+		Assert.assertEquals(406, statusCode);
+	}
+	
+	@Test
+	public void testCreateUser_special() throws IOException, URISyntaxException {
+		RestConnection conn = new RestConnection();
+		assertTrue(conn.login("administrator", "openolat"));
+		
+		UserVO vo = new UserVO();
+		vo.setLogin("tes @-()_" + CodeHelper.getForeverUniqueID());
+		vo.setFirstName("John");
+		vo.setLastName("Smith");
+		vo.setEmail(UUID.randomUUID() + "@frentix.com");
+		vo.putProperty("telOffice", "39847592");
+		vo.putProperty("telPrivate", "39847592");
+		vo.putProperty("telMobile", "39847592");
+		vo.putProperty("gender", "Female");//male or female
+		vo.putProperty("birthDay", "12/12/2009");
+		
+		URI request = UriBuilder.fromUri(getContextURI()).path("users").build();
+		HttpPut method = conn.createPut(request, MediaType.APPLICATION_JSON, true);
+		conn.addJsonEntity(method, vo);
+		method.addHeader("Accept-Language", "en");
+		
+		HttpResponse response = conn.execute(method);
+		int statusCode = response.getStatusLine().getStatusCode();
+		EntityUtils.consume(response.getEntity());
+		Assert.assertEquals(200, statusCode);
 	}
 	
 	/**
@@ -595,7 +659,7 @@ public class UserMgmtTest extends OlatJerseyTestCase {
 		HttpResponse response = conn.execute(method);
 		assertTrue(response.getStatusLine().getStatusCode() == 200 || response.getStatusLine().getStatusCode() == 201);
 		UserVO savedVo = conn.parse(response, UserVO.class);
-		Identity savedIdent = BaseSecurityManager.getInstance().findIdentityByName(username);
+		Identity savedIdent = securityManager.findIdentityByName(username);
 
 		assertNotNull(savedVo);
 		assertNotNull(savedIdent);
@@ -632,7 +696,7 @@ public class UserMgmtTest extends OlatJerseyTestCase {
 		HttpResponse response = conn.execute(method);
 		assertTrue(response.getStatusLine().getStatusCode() == 200 || response.getStatusLine().getStatusCode() == 201);
 		UserVO savedVo = conn.parse(response, UserVO.class);
-		Identity savedIdent = BaseSecurityManager.getInstance().findIdentityByName(username);
+		Identity savedIdent = securityManager.findIdentityByName(username);
 
 		assertNotNull(savedVo);
 		assertNotNull(savedIdent);
@@ -669,7 +733,7 @@ public class UserMgmtTest extends OlatJerseyTestCase {
 		HttpResponse response = conn.execute(method);
 		assertTrue(response.getStatusLine().getStatusCode() == 200 || response.getStatusLine().getStatusCode() == 201);
 		UserVO savedVo = conn.parse(response, UserVO.class);
-		Identity savedIdent = BaseSecurityManager.getInstance().findIdentityByName(username);
+		Identity savedIdent = securityManager.findIdentityByName(username);
 
 		assertNotNull(savedVo);
 		assertNotNull(savedIdent);
@@ -717,9 +781,7 @@ public class UserMgmtTest extends OlatJerseyTestCase {
 		
 		HttpResponse response = conn.execute(method);
 		assertEquals(406, response.getStatusLine().getStatusCode());
-		InputStream body = response.getEntity().getContent();
-		
-		List<ErrorVO> errors = parseErrorArray(body);
+		List<ErrorVO> errors = parseErrorArray(response.getEntity());
  		assertNotNull(errors);
 		assertFalse(errors.isEmpty());
 		assertTrue(errors.size() >= 2);
@@ -728,7 +790,7 @@ public class UserMgmtTest extends OlatJerseyTestCase {
 		assertNotNull(errors.get(1).getCode());
 		assertNotNull(errors.get(1).getTranslation());
 		
-		Identity savedIdent = BaseSecurityManager.getInstance().findIdentityByName(login);
+		Identity savedIdent = securityManager.findIdentityByName(login);
 		assertNull(savedIdent);
 		conn.shutdown();
 	}
@@ -891,6 +953,44 @@ public class UserMgmtTest extends OlatJerseyTestCase {
 	}
 	
 	@Test
+	public void testUpdateUser_emptyInstitutionalEmail() throws IOException, URISyntaxException {
+		String login = "update-" + UUID.randomUUID();
+		User user = userManager.createUser(login, login, login + "@openolat.com");
+		user.setProperty(UserConstants.INSTITUTIONALEMAIL, "inst" + login + "@openolat.com");
+		Identity id = securityManager.createAndPersistIdentityAndUser(login, null, user, "OLAT", login,"secret");
+		Organisation organisation = organisationService.getDefaultOrganisation();
+		organisationService.addMember(organisation, id, OrganisationRoles.user);
+		dbInstance.commitAndCloseSession();
+		Assert.assertEquals("inst" + login + "@openolat.com", id.getUser().getInstitutionalEmail());
+		
+		RestConnection conn = new RestConnection();
+		assertTrue(conn.login("administrator", "openolat"));
+
+		// set the institutional email empty 
+		UserVO updateVo = new UserVO();
+		updateVo.setKey(id.getKey());
+		updateVo.setLogin(id.getName());
+		updateVo.setFirstName(id.getUser().getFirstName());
+		updateVo.setLastName(id.getUser().getLastName());
+		updateVo.setEmail(id.getUser().getEmail());
+		updateVo.putProperty(UserConstants.INSTITUTIONALEMAIL, "");
+		
+		URI updateRequest = UriBuilder.fromUri(getContextURI()).path("users").path(id.getKey().toString()).build();
+		HttpPost updateMethod = conn.createPost(updateRequest, MediaType.APPLICATION_JSON);
+		conn.addJsonEntity(updateMethod, updateVo);
+		updateMethod.addHeader("Accept-Language", "en");
+		
+		HttpResponse updateResponse = conn.execute(updateMethod);
+		int  statusCode = updateResponse.getStatusLine().getStatusCode();
+		Assert.assertEquals(200, statusCode);
+		EntityUtils.consume(updateResponse.getEntity());
+		
+		Identity identity = securityManager.loadIdentityByKey(id.getKey());
+		String institutionalEmail = identity.getUser().getInstitutionalEmail();
+		Assert.assertTrue(institutionalEmail == null || institutionalEmail.isEmpty());
+	}	
+	
+	@Test
 	public void testDeleteUser() throws IOException, URISyntaxException {
 		Identity idToDelete = JunitTestHelper.createAndPersistIdentityAsUser("user-to-delete-" + UUID.randomUUID());
 		dbInstance.commitAndCloseSession();
@@ -904,7 +1004,7 @@ public class UserMgmtTest extends OlatJerseyTestCase {
 		assertEquals(200, response.getStatusLine().getStatusCode());
 		EntityUtils.consume(response.getEntity());
 		
-		Identity deletedIdent = BaseSecurityManager.getInstance().loadIdentityByKey(idToDelete.getKey());
+		Identity deletedIdent = securityManager.loadIdentityByKey(idToDelete.getKey());
 		assertNotNull(deletedIdent);//Identity aren't deleted anymore
 		assertEquals(Identity.STATUS_DELETED, deletedIdent.getStatus());
 		conn.shutdown();
@@ -913,7 +1013,7 @@ public class UserMgmtTest extends OlatJerseyTestCase {
 	@Test
 	public void testGetRoles() throws IOException, URISyntaxException {
 		//create an author
-		Identity author = JunitTestHelper.createAndPersistIdentityAsAuthor("author-" + UUID.randomUUID().toString());
+		Identity author = JunitTestHelper.createAndPersistIdentityAsRndAuthor("author-");
 		dbInstance.commitAndCloseSession();
 		RestConnection conn = new RestConnection();
 		assertTrue(conn.login("administrator", "openolat"));
@@ -938,7 +1038,7 @@ public class UserMgmtTest extends OlatJerseyTestCase {
 	@Test
 	public void testGetRoles_xml() throws IOException, URISyntaxException {
 		//create an author
-		Identity author = JunitTestHelper.createAndPersistIdentityAsAuthor("author-" + UUID.randomUUID().toString());
+		Identity author = JunitTestHelper.createAndPersistIdentityAsRndAuthor("author-");
 		dbInstance.commitAndCloseSession();
 		RestConnection conn = new RestConnection();
 		assertTrue(conn.login("administrator", "openolat"));
@@ -980,10 +1080,10 @@ public class UserMgmtTest extends OlatJerseyTestCase {
 		Assert.assertTrue(reloadRoles.isAuthor());
 		Assert.assertFalse(reloadRoles.isGroupManager());
 		Assert.assertFalse(reloadRoles.isGuestOnly());
-		Assert.assertFalse(reloadRoles.isInstitutionalResourceManager());
+		Assert.assertFalse(reloadRoles.isLearnResourceManager());
 		Assert.assertFalse(reloadRoles.isInvitee());
-		Assert.assertFalse(reloadRoles.isOLATAdmin());
-		Assert.assertFalse(reloadRoles.isPoolAdmin());
+		Assert.assertFalse(reloadRoles.isAdministrator());
+		Assert.assertFalse(reloadRoles.isPoolManager());
 		Assert.assertTrue(reloadRoles.isUserManager());
 		conn.shutdown();
 	}
@@ -1252,8 +1352,7 @@ public class UserMgmtTest extends OlatJerseyTestCase {
 		HttpGet method = conn.createGet(uri, MediaType.APPLICATION_JSON, true);
 		HttpResponse response = conn.execute(method);
 		assertEquals(200, response.getStatusLine().getStatusCode());
-		InputStream body = response.getEntity().getContent();
-		List<FileVO> folders = parseFileArray(body);
+		List<FileVO> folders = parseFileArray(response.getEntity());
 
 		assertNotNull(folders);
 		assertFalse(folders.isEmpty());
@@ -1275,8 +1374,8 @@ public class UserMgmtTest extends OlatJerseyTestCase {
 		HttpGet method = conn.createGet(uri, MediaType.APPLICATION_JSON, true);
 		HttpResponse response = conn.execute(method);
 		assertEquals(200, response.getStatusLine().getStatusCode());
-		InputStream body = response.getEntity().getContent();
-		List<FileVO> folders = parseFileArray(body);
+
+		List<FileVO> folders = parseFileArray(response.getEntity());
 
 		assertNotNull(folders);
 		assertFalse(folders.isEmpty());
@@ -1297,8 +1396,8 @@ public class UserMgmtTest extends OlatJerseyTestCase {
 		HttpGet method = conn.createGet(uri, MediaType.APPLICATION_JSON, true);
 		HttpResponse response = conn.execute(method);
 		assertEquals(200, response.getStatusLine().getStatusCode());
-		InputStream body = response.getEntity().getContent();
-		List<FileVO> files = parseFileArray(body);
+		
+		List<FileVO> files = parseFileArray(response.getEntity());
 		
 		assertNotNull(files);
 		assertFalse(files.isEmpty());
@@ -1316,8 +1415,8 @@ public class UserMgmtTest extends OlatJerseyTestCase {
 		HttpGet method = conn.createGet(uri, MediaType.APPLICATION_JSON, true);
 		HttpResponse response = conn.execute(method);
 		assertEquals(200, response.getStatusLine().getStatusCode());
-		InputStream body = response.getEntity().getContent();
-		List<FileVO> files = parseFileArray(body);
+		
+		List<FileVO> files = parseFileArray(response.getEntity());
 		
 		assertNotNull(files);
 		assertTrue(files.isEmpty());
@@ -1335,8 +1434,8 @@ public class UserMgmtTest extends OlatJerseyTestCase {
 		HttpGet method = conn.createGet(uri, MediaType.APPLICATION_JSON, true);
 		HttpResponse response = conn.execute(method);
 		assertEquals(200, response.getStatusLine().getStatusCode());
-		InputStream body = response.getEntity().getContent();
-		List<FileVO> files = parseFileArray(body);
+		
+		List<FileVO> files = parseFileArray(response.getEntity());
 		
 		assertNotNull(files);
 		assertFalse(files.isEmpty());
@@ -1358,8 +1457,7 @@ public class UserMgmtTest extends OlatJerseyTestCase {
 		HttpResponse response = conn.execute(method);
 		assertEquals(200, response.getStatusLine().getStatusCode());
 
-		InputStream body = response.getEntity().getContent();
-		List<GroupVO> groups = parseGroupArray(body);
+		List<GroupVO> groups = parseGroupArray(response.getEntity());
 		assertNotNull(groups);
 		assertEquals(3, groups.size());//g1, g2 and g3
 		conn.shutdown();
@@ -1378,8 +1476,7 @@ public class UserMgmtTest extends OlatJerseyTestCase {
 		HttpResponse response = conn.execute(method);
 		assertEquals(200, response.getStatusLine().getStatusCode());
 
-		InputStream body = response.getEntity().getContent();
-		List<GroupVO> groups = parseGroupArray(body);
+		List<GroupVO> groups = parseGroupArray(response.getEntity());
 		assertNotNull(groups);
 		assertEquals(2, groups.size());//g1 and g3
 		conn.shutdown();
@@ -1398,8 +1495,7 @@ public class UserMgmtTest extends OlatJerseyTestCase {
 		HttpResponse response = conn.execute(method);
 		assertEquals(200, response.getStatusLine().getStatusCode());
 
-		InputStream body = response.getEntity().getContent();
-		List<GroupVO> groups = parseGroupArray(body);
+		List<GroupVO> groups = parseGroupArray(response.getEntity());
 		assertNotNull(groups);
 		assertEquals(1, groups.size());//g2
 		conn.shutdown();
@@ -1418,8 +1514,7 @@ public class UserMgmtTest extends OlatJerseyTestCase {
 		HttpResponse response = conn.execute(method);
 		assertEquals(200, response.getStatusLine().getStatusCode());
 
-		InputStream body = response.getEntity().getContent();
-		List<GroupVO> groups = parseGroupArray(body);
+		List<GroupVO> groups = parseGroupArray(response.getEntity());
 		assertNotNull(groups);
 		assertEquals(1, groups.size());
 		assertEquals(g1.getKey(), groups.get(0).getKey());
@@ -1446,6 +1541,46 @@ public class UserMgmtTest extends OlatJerseyTestCase {
 		assertNotNull(groups.getGroups());
 		assertEquals(1, groups.getGroups().length);
 		assertEquals(3, groups.getTotalCount());//g1, g2 and g3
+		conn.shutdown();
+	}
+	
+	@Test
+	public void testUserGroup_checkRefusedAccess() throws IOException, URISyntaxException {
+		Identity alien = JunitTestHelper.createAndPersistIdentityAsRndUser("user-group-alien-");
+		dbInstance.commitAndCloseSession();
+		
+		RestConnection conn = new RestConnection();
+		assertTrue(conn.login(alien.getName(), JunitTestHelper.PWD));
+		
+		//retrieve all groups
+		URI uri =UriBuilder.fromUri(getContextURI()).path("users").path(id1.getKey().toString()).path("groups")
+			.queryParam("start", 0).queryParam("limit", 1).build();
+
+		HttpGet method = conn.createGet(uri, MediaType.APPLICATION_JSON + ";pagingspec=1.0", true);
+		HttpResponse response = conn.execute(method);
+		assertEquals(401, response.getStatusLine().getStatusCode());
+		EntityUtils.consume(response.getEntity());
+
+		conn.shutdown();
+	}
+	
+	@Test
+	public void testUserGroup_checkAllowedAccess() throws IOException, URISyntaxException {
+		RestConnection conn = new RestConnection();
+		assertTrue(conn.login(id1.getName(), JunitTestHelper.PWD));
+		
+		//retrieve all groups
+		URI uri =UriBuilder.fromUri(getContextURI()).path("users").path(id1.getKey().toString()).path("groups")
+			.queryParam("start", 0).queryParam("limit", 1).build();
+
+		HttpGet method = conn.createGet(uri, MediaType.APPLICATION_JSON + ";pagingspec=1.0", true);
+		HttpResponse response = conn.execute(method);
+		assertEquals(200, response.getStatusLine().getStatusCode());
+		GroupVOes groups = conn.parse(response, GroupVOes.class);
+		
+		assertNotNull(groups);
+		assertNotNull(groups.getGroups());
+
 		conn.shutdown();
 	}
 	
@@ -1530,8 +1665,7 @@ public class UserMgmtTest extends OlatJerseyTestCase {
 
 		
 		//check if big and small portraits exist
-		DisplayPortraitManager dps = DisplayPortraitManager.getInstance();
-		File bigPortrait = dps.getBigPortrait(id1.getName());
+		File bigPortrait = portraitManager.getBigPortrait(id1.getName());
 		assertNotNull(bigPortrait);
 		assertTrue(bigPortrait.exists());
 		assertTrue(bigPortrait.exists());
@@ -1550,7 +1684,7 @@ public class UserMgmtTest extends OlatJerseyTestCase {
 		
 		assertEquals(-1, b);//up to end of file
 		assertTrue(count > 1000);//enough bytes
-		bigPortrait = dps.getBigPortrait(id1.getName());
+		bigPortrait = portraitManager.getBigPortrait(id1.getName());
 		assertNotNull(bigPortrait);
 		assertEquals(count, bigPortrait.length());
 
@@ -1566,7 +1700,7 @@ public class UserMgmtTest extends OlatJerseyTestCase {
 		assertNotNull(datas);
 		assertTrue(datas.length > 0);
 		
-		File smallPortrait = dps.getSmallPortrait(id1.getName());
+		File smallPortrait = portraitManager.getSmallPortrait(id1.getName());
 		assertNotNull(smallPortrait);
 		assertEquals(datas.length, smallPortrait.length());
 		
@@ -1665,32 +1799,32 @@ public class UserMgmtTest extends OlatJerseyTestCase {
 		EntityUtils.consume(headSmallResponse.getEntity());
 	}
 	
-	protected List<UserVO> parseUserArray(InputStream body) {
-		try {
+	protected List<UserVO> parseUserArray(HttpEntity entity) {
+		try(InputStream in=entity.getContent()) {
 			ObjectMapper mapper = new ObjectMapper(jsonFactory); 
-			return mapper.readValue(body, new TypeReference<List<UserVO>>(){/* */});
+			return mapper.readValue(in, new TypeReference<List<UserVO>>(){/* */});
 		} catch (Exception e) {
-			e.printStackTrace();
+			log.error("", e);
 			return null;
 		}
 	}
 	
-	protected List<ManagedUserVO> parseManagedUserArray(InputStream body) {
-		try {
+	protected List<ManagedUserVO> parseManagedUserArray(HttpEntity entity) {
+		try(InputStream in=entity.getContent()) {
 			ObjectMapper mapper = new ObjectMapper(jsonFactory); 
-			return mapper.readValue(body, new TypeReference<List<ManagedUserVO>>(){/* */});
+			return mapper.readValue(in, new TypeReference<List<ManagedUserVO>>(){/* */});
 		} catch (Exception e) {
-			e.printStackTrace();
+			log.error("", e);
 			return null;
 		}
 	}
 	
-	protected List<GroupVO> parseGroupArray(InputStream body) {
-		try {
+	protected List<GroupVO> parseGroupArray(HttpEntity entity) {
+		try(InputStream in=entity.getContent()) {
 			ObjectMapper mapper = new ObjectMapper(jsonFactory); 
-			return mapper.readValue(body, new TypeReference<List<GroupVO>>(){/* */});
+			return mapper.readValue(in, new TypeReference<List<GroupVO>>(){/* */});
 		} catch (Exception e) {
-			e.printStackTrace();
+			log.error("", e);
 			return null;
 		}
 	}

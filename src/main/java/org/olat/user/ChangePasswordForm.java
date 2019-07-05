@@ -25,6 +25,8 @@
 
 package org.olat.user;
 
+import static org.olat.login.ui.LoginUIFactory.formatDescriptionAsList;
+
 import org.olat.core.gui.UserRequest;
 import org.olat.core.gui.components.form.flexible.FormItemContainer;
 import org.olat.core.gui.components.form.flexible.elements.TextElement;
@@ -33,6 +35,11 @@ import org.olat.core.gui.components.form.flexible.impl.FormLayoutContainer;
 import org.olat.core.gui.control.Controller;
 import org.olat.core.gui.control.Event;
 import org.olat.core.gui.control.WindowControl;
+import org.olat.core.id.Identity;
+import org.olat.login.auth.OLATAuthManager;
+import org.olat.login.validation.SyntaxValidator;
+import org.olat.login.validation.ValidationResult;
+import org.springframework.beans.factory.annotation.Autowired;
 
 
 /**
@@ -46,76 +53,55 @@ import org.olat.core.gui.control.WindowControl;
  */
 public class ChangePasswordForm extends FormBasicController {
 
-	private TextElement oldpass;
-	private TextElement newpass1;
-	private TextElement newpass2; // confirm
+	private TextElement oldCredEl;
+	private TextElement newCredEl;
+	private TextElement newCredConfirmationEl;
 	
-	private String _oldpass = "";
-	private String _newpass = "";
+	private String oldCred = "";
+	private String newCred = "";
+	
+	private final SyntaxValidator syntaxValidator;
+	private final Identity identityToChange;
+	
+	@Autowired
+	private OLATAuthManager olatAuthManager;
 
-	/**
-	 * @param name
-	 */
-	public ChangePasswordForm(UserRequest ureq, WindowControl wControl) {
+	public ChangePasswordForm(UserRequest ureq, WindowControl wControl, Identity identityToChange) {
 		super(ureq, wControl);
+		this.identityToChange = identityToChange;
+		this.syntaxValidator = olatAuthManager.createPasswordSytaxValidator();
 		initForm(ureq);
 	}
 
-	/**
-	 * @return Old password field value.
-	 */
 	public String getOldPasswordValue() {
-		return _oldpass;
+		return oldCred;
 	}
 	
-	/**
-	 * @return New password field value.
-	 */
 	public String getNewPasswordValue() {
-		return _newpass;
-	}
-
-	@Override
-	protected void formOK(UserRequest ureq) {
-		
-		_oldpass = oldpass.getValue(); 
-		_newpass = newpass1.getValue();
-		
-		oldpass.setValue("");
-		newpass1.setValue("");
-		newpass2.setValue("");
-		
-		fireEvent (ureq, Event.DONE_EVENT); 
-	}
-	
-	@Override
-	protected void formCancelled(UserRequest ureq) {
-		fireEvent (ureq, Event.CANCELLED_EVENT);
-	}
-	
-	@Override
-	protected boolean validateFormLogic (UserRequest ureq) {
-		if (!UserManager.getInstance().syntaxCheckOlatPassword(newpass1.getValue())) {
-			newpass1.setErrorKey("form.checkPassword", null);
-			return false;
-		}
-		if (!newpass1.getValue().equals(newpass2.getValue())) {
-			newpass1.setValue("");
-			newpass2.setValue("");
-			newpass2.setErrorKey("error.password.nomatch", null);
-			return false;
-		}
-		return true;
+		return newCred;
 	}
 
 	@Override
 	protected void initForm(FormItemContainer formLayout, Controller listener, UserRequest ureq) {
-		oldpass = uifactory.addPasswordElement("oldpass", "form.password.old", 128, "", formLayout);
-		oldpass.setElementCssClass("o_sel_home_pwd_old");
-		newpass1 = uifactory.addPasswordElement("newpass1",  "form.password.new1", 128, "", formLayout);
-		newpass1.setElementCssClass("o_sel_home_pwd_new_1");
-		newpass2 = uifactory.addPasswordElement("newpass2",  "form.password.new2", 128, "", formLayout);
-		newpass2.setElementCssClass("o_sel_home_pwd_new_2");
+		String descriptions = formatDescriptionAsList(syntaxValidator.getAllDescriptions(), getLocale());
+		setFormDescription("form.password.validation.rules", new String[] { descriptions });
+		
+		oldCredEl = uifactory.addPasswordElement("oldpass", "form.password.old", 5000, "", formLayout);
+		oldCredEl.setElementCssClass("o_sel_home_pwd_old");
+		oldCredEl.setNotEmptyCheck("form.please.enter.old");
+		oldCredEl.setMandatory(true);
+		
+		newCredEl = uifactory.addPasswordElement("newpass1",  "form.password.new1", 5000, "", formLayout);
+		newCredEl.setNotEmptyCheck("form.please.enter.new");
+		newCredEl.setElementCssClass("o_sel_home_pwd_new_1");
+		newCredEl.setAutocomplete("new-password");
+		newCredEl.setMandatory(true);
+		
+		newCredConfirmationEl = uifactory.addPasswordElement("newpass2",  "form.password.new2", 5000, "", formLayout);
+		newCredConfirmationEl.setNotEmptyCheck("form.please.enter.new");
+		newCredConfirmationEl.setElementCssClass("o_sel_home_pwd_new_2");
+		newCredConfirmationEl.setAutocomplete("new-password");
+		newCredConfirmationEl.setMandatory(true);
 		
 		// Button layout
 		FormLayoutContainer buttonLayout = FormLayoutContainer.createButtonLayout("button_layout", getTranslator());
@@ -123,14 +109,45 @@ public class ChangePasswordForm extends FormBasicController {
 		formLayout.add(buttonLayout);
 		uifactory.addFormSubmitButton("submit", buttonLayout);
 		uifactory.addFormCancelButton("cancel", buttonLayout, ureq, getWindowControl());	
+	}
+	
+	@Override
+	protected boolean validateFormLogic (UserRequest ureq) {
+		boolean allOk = super.validateFormLogic(ureq);
 		
-		oldpass.setMandatory(true);
-		newpass1.setMandatory(true);
-		newpass2.setMandatory(true);
+		newCredEl.clearError();
+		String newPassword = newCredEl.getValue();
+		ValidationResult validationResult = syntaxValidator.validate(newPassword, identityToChange);
+		if (!validationResult.isValid()) {
+			String descriptions = formatDescriptionAsList(validationResult.getInvalidDescriptions(), getLocale());
+			newCredEl.setErrorKey("error.password.invalid", new String[] { descriptions });
+			allOk &= false;
+		}
+
+		newCredConfirmationEl.clearError();
+		if (!newCredEl.getValue().equals(newCredConfirmationEl.getValue())) {
+			newCredConfirmationEl.setErrorKey("error.password.nomatch", null);
+			allOk &= false;
+		}
 		
-		oldpass.setNotEmptyCheck("form.please.enter.old");
-		newpass1.setNotEmptyCheck("form.please.enter.new");
-		newpass2.setNotEmptyCheck("form.please.enter.new");
+		return allOk;
+	}
+
+	@Override
+	protected void formOK(UserRequest ureq) {
+		oldCred = oldCredEl.getValue(); 
+		newCred = newCredEl.getValue();
+		
+		oldCredEl.setValue("");
+		newCredEl.setValue("");
+		newCredConfirmationEl.setValue("");
+		
+		fireEvent(ureq, Event.DONE_EVENT); 
+	}
+	
+	@Override
+	protected void formCancelled(UserRequest ureq) {
+		fireEvent (ureq, Event.CANCELLED_EVENT);
 	}
 
 	@Override

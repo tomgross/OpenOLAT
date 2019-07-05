@@ -48,7 +48,7 @@ import org.olat.core.gui.media.NotFoundMediaResource;
 import org.olat.core.id.Identity;
 import org.olat.core.id.User;
 import org.olat.core.id.UserConstants;
-import org.olat.core.logging.OLog;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.StringHelper;
 
@@ -62,7 +62,7 @@ import org.olat.core.util.StringHelper;
  */
 public class TunnelMapper implements Mapper {
 	
-	private static final OLog log = Tracing.createLoggerFor(TunnelMapper.class);
+	private static final Logger log = Tracing.createLoggerFor(TunnelMapper.class);
 	
 	private final String proto;
 	private final String host;
@@ -110,7 +110,7 @@ public class TunnelMapper implements Mapper {
 			} else if (method.equals("POST")) {
 				Map<String,String[]> params = hreq.getParameterMap();
 				HttpPost pmeth = new HttpPost(builder.build());
-				List<BasicNameValuePair> pairs = new ArrayList<BasicNameValuePair>();
+				List<BasicNameValuePair> pairs = new ArrayList<>();
 				for (String key: params.keySet()) {
 					String vals[] = params.get(key);
 					for(String val:vals) {
@@ -138,7 +138,7 @@ public class TunnelMapper implements Mapper {
 			HttpResponse response = httpClient.execute(meth);
 			if (response == null) {
 				// error
-				return new NotFoundMediaResource(relPath);
+				return new NotFoundMediaResource();
 			}
 
 			// get or post successfully
@@ -146,13 +146,10 @@ public class TunnelMapper implements Mapper {
 			if (responseHeader == null) {
 				// error
 				EntityUtils.consumeQuietly(response.getEntity());
-				return new NotFoundMediaResource(relPath);
+				return new NotFoundMediaResource();
 			}
 			return new HttpRequestMediaResource(response);
-		} catch (ClientProtocolException e) {
-			log.error("", e);
-			return null;
-		} catch (URISyntaxException e) {
+		} catch (ClientProtocolException | URISyntaxException e) {
 			log.error("", e);
 			return null;
 		} catch (IOException e) {

@@ -37,17 +37,20 @@ import org.olat.core.gui.UserRequest;
 import org.olat.core.gui.control.WindowControl;
 import org.olat.core.id.Identity;
 import org.olat.core.id.Roles;
+import org.olat.core.util.nodes.INode;
+import org.olat.core.util.tree.TreeVisitor;
+import org.olat.core.util.tree.Visitor;
 import org.olat.course.CourseFactory;
 import org.olat.course.ICourse;
 import org.olat.course.groupsandrights.CourseGroupManager;
 import org.olat.course.groupsandrights.CourseRights;
 import org.olat.course.nodes.CalCourseNode;
+import org.olat.course.nodes.CourseNode;
 import org.olat.course.run.calendar.CourseCalendarSubscription;
 import org.olat.course.run.calendar.CourseLinkProviderController;
 import org.olat.course.run.userview.NodeEvaluation;
 import org.olat.course.run.userview.UserCourseEnvironment;
 import org.olat.group.BusinessGroup;
-import org.olat.repository.RepositoryManager;
 
 public class CourseCalendars {
 
@@ -80,37 +83,33 @@ public class CourseCalendars {
 	}
 
 	public CourseCalendarSubscription createSubscription2(UserRequest ureq) {
-		CourseCalendarSubscription calSubscription = new CourseCalendarSubscription(getKalendar(), ureq.getUserSession().getGuiPreferences());
-		return calSubscription;
+		return new CourseCalendarSubscription(getKalendar(), ureq.getUserSession().getGuiPreferences());
 	}
 	
 	/**
-	 * Return only the course calendar without any group calendar
+	 * Return only the course calendar (for course calendar element) without any group calendar.
+	 * 
 	 * @param ureq
 	 * @param wControl
 	 * @param ores
 	 * @param ne
 	 * @return
 	 */
-	public static KalendarRenderWrapper getCourseCalendarWrapper(UserRequest ureq, UserCourseEnvironment courseEnv, NodeEvaluation ne) {
+	public static KalendarRenderWrapper getCourseCalendarWrapper(UserRequest ureq, UserCourseEnvironment userCourseEnv, NodeEvaluation ne) {
 		CalendarManager calendarManager = CoreSpringFactory.getImpl(CalendarManager.class);
 		// add course calendar
-		ICourse course = CourseFactory.loadCourse(courseEnv.getCourseEnvironment().getCourseResourceableId());
+		ICourse course = CourseFactory.loadCourse(userCourseEnv.getCourseEnvironment().getCourseResourceableId());
 		KalendarRenderWrapper courseKalendarWrapper = calendarManager.getCourseCalendar(course);
-		CourseGroupManager cgm = course.getCourseEnvironment().getCourseGroupManager();
-		Identity identity = ureq.getIdentity();
-		Roles roles = ureq.getUserSession().getRoles();
-		boolean isPrivileged = ! courseEnv.isCourseReadOnly() &&
-				(roles.isOLATAdmin() || courseEnv.isAdmin()
-				  || (ne != null && ne.isCapabilityAccessible(CalCourseNode.EDIT_CONDITION_ID))
-				  || RepositoryManager.getInstance().isInstitutionalRessourceManagerFor(identity, roles, cgm.getCourseEntry()));
+		boolean isPrivileged = !userCourseEnv.isCourseReadOnly() &&
+				(userCourseEnv.isAdmin()
+				  || (ne != null && ne.isCapabilityAccessible(CalCourseNode.EDIT_CONDITION_ID)));
 		
 		if (isPrivileged) {
 			courseKalendarWrapper.setAccess(KalendarRenderWrapper.ACCESS_READ_WRITE);
 			courseKalendarWrapper.setPrivateEventsVisible(true);
 		} else {
 			courseKalendarWrapper.setAccess(KalendarRenderWrapper.ACCESS_READ_ONLY);
-			courseKalendarWrapper.setPrivateEventsVisible(courseEnv.isAdmin() || courseEnv.isCoach() || courseEnv.isParticipant());
+			courseKalendarWrapper.setPrivateEventsVisible(userCourseEnv.isAdmin() || userCourseEnv.isCoach() || userCourseEnv.isParticipant());
 		}
 		CalendarUserConfiguration config = calendarManager.findCalendarConfigForIdentity(courseKalendarWrapper.getKalendar(), ureq.getIdentity());
 		if (config != null) {
@@ -119,10 +118,10 @@ public class CourseCalendars {
 		return courseKalendarWrapper;
 	}
 
-	public static CourseCalendars createCourseCalendarsWrapper(UserRequest ureq, WindowControl wControl, UserCourseEnvironment courseEnv, NodeEvaluation ne) {
+	public static CourseCalendars createCourseCalendarsWrapper(UserRequest ureq, WindowControl wControl, UserCourseEnvironment userCourseEnv, NodeEvaluation ne) {
 		List<KalendarRenderWrapper> calendars = new ArrayList<>();
-		ICourse course = CourseFactory.loadCourse(courseEnv.getCourseEnvironment().getCourseResourceableId());
-		KalendarRenderWrapper courseKalendarWrapper = getCourseCalendarWrapper(ureq, courseEnv, ne);
+		ICourse course = CourseFactory.loadCourse(userCourseEnv.getCourseEnvironment().getCourseResourceableId());
+		KalendarRenderWrapper courseKalendarWrapper = getCourseCalendarWrapper(ureq, userCourseEnv, ne);
 		// add link provider
 		
 		CourseLinkProviderController clpc = new CourseLinkProviderController(course, Collections.singletonList(course), ureq, wControl);
@@ -133,30 +132,31 @@ public class CourseCalendars {
 		CourseGroupManager cgm = course.getCourseEnvironment().getCourseGroupManager();
 
 		// add course group calendars
-		boolean isGroupManager = ureq.getUserSession().getRoles().isOLATAdmin() || ureq.getUserSession().getRoles().isGroupManager()
-				|| cgm.isIdentityCourseAdministrator(identity) || cgm.hasRight(identity, CourseRights.RIGHT_GROUPMANAGEMENT);
-		boolean readOnly = courseEnv.isCourseReadOnly();
+		Roles roles = ureq.getUserSession().getRoles();
+		boolean isGroupManager = roles.isGroupManager() || userCourseEnv.isAdmin()
+				|| cgm.hasRight(identity, CourseRights.RIGHT_GROUPMANAGEMENT);
+		boolean readOnly = userCourseEnv.isCourseReadOnly();
 		
 		if (isGroupManager) {
 			// learning groups
 			List<BusinessGroup> allGroups = cgm.getAllBusinessGroups();
-			addCalendars(ureq, courseEnv, allGroups, !readOnly, clpc, calendars);
+			addCalendars(ureq, userCourseEnv, allGroups, !readOnly, clpc, calendars);
 		} else {
 			// learning groups
 			List<BusinessGroup> ownerGroups = cgm.getOwnedBusinessGroups(identity);
-			addCalendars(ureq, courseEnv, ownerGroups, !readOnly, clpc, calendars);
+			addCalendars(ureq, userCourseEnv, ownerGroups, !readOnly, clpc, calendars);
 			List<BusinessGroup> attendedGroups = cgm.getParticipatingBusinessGroups(identity);
 			for (BusinessGroup ownerGroup : ownerGroups) {
 				if (attendedGroups.contains(ownerGroup)) {
 					attendedGroups.remove(ownerGroup);
 				}
 			}
-			addCalendars(ureq, courseEnv, attendedGroups, false, clpc, calendars);
+			addCalendars(ureq, userCourseEnv, attendedGroups, false, clpc, calendars);
 		}
 		return new CourseCalendars(courseKalendarWrapper, calendars);
 	}
 
-	private static void addCalendars(UserRequest ureq, UserCourseEnvironment courseEnv, List<BusinessGroup> groups, boolean isOwner,
+	public static void addCalendars(UserRequest ureq, UserCourseEnvironment courseEnv, List<BusinessGroup> groups, boolean isOwner,
 			LinkProvider linkProvider, List<KalendarRenderWrapper> calendars) {
 		if(groups == null || groups.isEmpty()) return;
 		
@@ -187,6 +187,41 @@ public class CourseCalendars {
 			}
 			groupCalendarWrapper.setLinkProvider(linkProvider);
 			calendars.add(groupCalendarWrapper);
+		}
+	}
+	
+	public static boolean needToDifferentiateManagedEvents(List<KalendarRenderWrapper> calendars) {
+		boolean hasManaged = false;
+		for(KalendarRenderWrapper wrapper:calendars) {
+			Kalendar cal = wrapper.getKalendar();
+			hasManaged |= cal.hasManagedEvents();
+		}
+		return hasManaged;
+	}
+	
+	public static boolean isCourseCalendarEnabled(ICourse course) {
+		if(course.getCourseConfig().isCalendarEnabled()) {
+			return true;
+		}
+		
+		CourseNode rootNode = course.getRunStructure().getRootNode();
+		CalCourseNodeVisitor v = new CalCourseNodeVisitor();
+		new TreeVisitor(v, rootNode, true).visitAll();
+		return v.isFound();
+	}
+	
+	private static class CalCourseNodeVisitor implements Visitor {
+		private boolean found = false;
+		
+		public boolean isFound() {
+			return found;
+		}
+		
+		@Override
+		public void visit(INode node) {
+			if(node instanceof CalCourseNode) {
+				found = true;
+			}
 		}
 	}
 }

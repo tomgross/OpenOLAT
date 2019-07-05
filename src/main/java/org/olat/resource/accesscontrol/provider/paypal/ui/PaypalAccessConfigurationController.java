@@ -110,7 +110,7 @@ public class PaypalAccessConfigurationController extends AbstractConfigurationMe
 		if(link.getOffer() != null) {
 			desc = link.getOffer().getDescription();
 		}
-		descEl = uifactory.addTextAreaElement("offer-desc", "offer.description", 2000, 6, 80, false, desc, formLayout);
+		descEl = uifactory.addTextAreaElement("offer-desc", "offer.description", 2000, 6, 80, false, false, desc, formLayout);
 		
 		Price price = null;
 		if(link.getOffer() != null && link.getOffer().getPrice() != null) {
@@ -150,7 +150,9 @@ public class PaypalAccessConfigurationController extends AbstractConfigurationMe
 		vatEnabledEl.setEnabled(false);
 		
 		dateFrom = uifactory.addDateChooser("from_" + link.getKey(), "from", link.getValidFrom(), formLayout);
+		dateFrom.setHelpText(translate("from.hint"));
 		dateTo = uifactory.addDateChooser("to_" + link.getKey(), "to", link.getValidTo(), formLayout);
+		dateTo.setHelpText(translate("from.hint"));
 		
 		super.initForm(formLayout, listener, ureq);
 	}

@@ -31,8 +31,6 @@ import java.util.List;
 import java.util.Locale;
 
 import org.olat.core.commons.modules.bc.FolderConfig;
-import org.olat.core.commons.modules.bc.vfs.OlatNamedContainerImpl;
-import org.olat.core.commons.modules.bc.vfs.OlatRootFolderImpl;
 import org.olat.core.commons.services.notifications.NotificationsManager;
 import org.olat.core.commons.services.notifications.SubscriptionContext;
 import org.olat.core.gui.UserRequest;
@@ -42,14 +40,16 @@ import org.olat.core.gui.control.WindowControl;
 import org.olat.core.gui.control.generic.tabbable.TabbableController;
 import org.olat.core.gui.translator.PackageTranslator;
 import org.olat.core.id.Identity;
-import org.olat.core.id.IdentityEnvironment;
+import org.olat.core.id.Organisation;
 import org.olat.core.util.FileUtils;
 import org.olat.core.util.StringHelper;
 import org.olat.core.util.Util;
+import org.olat.core.util.ZipUtil;
+import org.olat.core.util.vfs.NamedContainerImpl;
 import org.olat.core.util.vfs.VFSContainer;
 import org.olat.core.util.vfs.VFSItem;
-import org.olat.core.util.vfs.callbacks.VFSSecurityCallback;
-import org.olat.core.util.vfs.filters.SystemItemFilter;
+import org.olat.core.util.vfs.VFSManager;
+import org.olat.core.util.vfs.filters.VFSSystemItemFilter;
 import org.olat.course.CourseModule;
 import org.olat.course.ICourse;
 import org.olat.course.condition.Condition;
@@ -63,14 +63,10 @@ import org.olat.course.nodes.bc.BCCourseNodeEditController;
 import org.olat.course.nodes.bc.BCCourseNodeRunController;
 import org.olat.course.nodes.bc.BCPeekviewController;
 import org.olat.course.nodes.bc.BCPreviewController;
-import org.olat.course.nodes.bc.FolderNodeCallback;
 import org.olat.course.run.environment.CourseEnvironment;
 import org.olat.course.run.navigation.NodeRunConstructionResult;
 import org.olat.course.run.userview.NodeEvaluation;
-import org.olat.course.run.userview.TreeEvaluation;
 import org.olat.course.run.userview.UserCourseEnvironment;
-import org.olat.course.run.userview.UserCourseEnvironmentImpl;
-import org.olat.course.run.userview.VisibleTreeFilter;
 import org.olat.modules.ModuleConfiguration;
 import org.olat.repository.RepositoryEntry;
 
@@ -130,12 +126,6 @@ public class BCCourseNode extends AbstractAccessableCourseNode {
 		return new NodeRunConstructionResult(titledCtrl);
 	}
 
-	/**
-	 * @see org.olat.course.nodes.GenericCourseNode#createPeekViewRunController(org.olat.core.gui.UserRequest,
-	 *      org.olat.core.gui.control.WindowControl,
-	 *      org.olat.course.run.userview.UserCourseEnvironment,
-	 *      org.olat.course.run.userview.NodeEvaluation)
-	 */
 	@Override
 	public Controller createPeekViewRunController(UserRequest ureq, WindowControl wControl, UserCourseEnvironment userCourseEnv,
 			NodeEvaluation ne) {
@@ -157,20 +147,14 @@ public class BCCourseNode extends AbstractAccessableCourseNode {
 			if(rootFolder == null) {
 				return super.createPeekViewRunController(ureq, wControl, userCourseEnv, ne);
 			}
-			rootFolder.setDefaultItemFilter(new SystemItemFilter());
+			rootFolder.setDefaultItemFilter(new VFSSystemItemFilter());
 			return new BCPeekviewController(ureq, wControl, rootFolder, getIdent(), 4);
 		} else {
 			// use standard peekview
 			return super.createPeekViewRunController(ureq, wControl, userCourseEnv, ne);
 		}
 	}
-	
-	/**
-	 * @see org.olat.course.nodes.GenericCourseNode#createPreviewController(org.olat.core.gui.UserRequest,
-	 *      org.olat.core.gui.control.WindowControl,
-	 *      org.olat.course.run.userview.UserCourseEnvironment,
-	 *      org.olat.course.run.userview.NodeEvaluation)
-	 */
+
 	@Override
 	public Controller createPreviewController(UserRequest ureq, WindowControl wControl, UserCourseEnvironment userCourseEnv, NodeEvaluation ne) {
 		return new BCPreviewController(ureq, wControl, this, userCourseEnv.getCourseEnvironment(), ne);
@@ -204,51 +188,52 @@ public class BCCourseNode extends AbstractAccessableCourseNode {
 	 * @param courseEnv
 	 * @return
 	 */
-	public static OlatNamedContainerImpl getNodeFolderContainer(BCCourseNode node, CourseEnvironment courseEnv) {
+	public static VFSContainer getNodeFolderContainer(BCCourseNode node, CourseEnvironment courseEnv) {
 		String path = getFoldernodePathRelToFolderBase(courseEnv, node);
-		OlatRootFolderImpl rootFolder = new OlatRootFolderImpl(path, null);
-		OlatNamedContainerImpl namedFolder = new OlatNamedContainerImpl(node.getShortTitle(), rootFolder);
-		return namedFolder;
-	}
-	
-	public static OlatNamedContainerImpl getSecurisedNodeFolderContainer(BCCourseNode node, CourseEnvironment courseEnv, IdentityEnvironment ienv) {
-		boolean isOlatAdmin = ienv.getRoles().isOLATAdmin();
-		boolean isGuestOnly = ienv.getRoles().isGuestOnly();
-		
-		UserCourseEnvironmentImpl uce = new UserCourseEnvironmentImpl(ienv, courseEnv);
-		NodeEvaluation ne = node.eval(uce.getConditionInterpreter(), new TreeEvaluation(), new VisibleTreeFilter());
-
-		OlatNamedContainerImpl container = getNodeFolderContainer(node, courseEnv);
-		VFSSecurityCallback secCallback = new FolderNodeCallback(container.getRelPath(), ne, isOlatAdmin, isGuestOnly, null);
-		container.setLocalSecurityCallback(secCallback);
-		return container;
+		VFSContainer rootFolder = VFSManager.olatRootContainer(path, null);
+		return new NamedContainerImpl(node.getShortTitle(), rootFolder);
 	}
 
 	@Override
 	public void exportNode(File exportDirectory, ICourse course) {
 		// this is the node folder, a folder with the node's ID, so we can just copy
 		// the contents over to the export folder
-		File fFolderNodeData = new File(FolderConfig.getCanonicalRoot() + getFoldernodePathRelToFolderBase(course.getCourseEnvironment(), this));
-		File fNodeExportDir = new File(exportDirectory, this.getIdent());
+		VFSContainer nodeContainer = VFSManager
+				.olatRootContainer(getFoldernodePathRelToFolderBase(course.getCourseEnvironment(), this), null);
+		File fNodeExportDir = new File(exportDirectory, getIdent());
 		fNodeExportDir.mkdirs();
-		FileUtils.copyDirContentsToDir(fFolderNodeData, fNodeExportDir, false, "export course node");
+		File outputFile = new File(fNodeExportDir, "oonode.zip");
+		ZipUtil.zip(nodeContainer, outputFile);
 	}
 
 	@Override
-	public void importNode(File importDirectory, ICourse course, Identity owner, Locale locale, boolean withReferences) {
+	public void importNode(File importDirectory, ICourse course, Identity owner, Organisation organisation, Locale locale, boolean withReferences) {
 		// the export has copies the files under the node's ID
-		File fFolderNodeData = new File(importDirectory, this.getIdent());
-		// the whole folder can be moved back to the root direcotry of foldernodes
-		// of this course
-		File fFolderNodeDir = new File(FolderConfig.getCanonicalRoot() + getFoldernodePathRelToFolderBase(course.getCourseEnvironment(), this));
-		fFolderNodeDir.mkdirs();
-		FileUtils.copyDirContentsToDir(fFolderNodeData, fFolderNodeDir, true, "import course node");
+		File fFolderNodeData = new File(importDirectory, getIdent());
+		File fFolderNodeZip = new File(fFolderNodeData, "oonode.zip");
+		if(fFolderNodeZip.exists()) {
+			VFSContainer nodeContainer = VFSManager
+					.olatRootContainer(getFoldernodePathRelToFolderBase(course.getCourseEnvironment(), this), null);
+			ZipUtil.unzipNonStrict(fFolderNodeZip, nodeContainer, owner, false);
+		} else {
+			// the whole folder can be moved back to the root direcotry of foldernodes
+			// of this course
+			File fFolderNodeDir = new File(FolderConfig.getCanonicalRoot() + getFoldernodePathRelToFolderBase(course.getCourseEnvironment(), this));
+			fFolderNodeDir.mkdirs();
+			FileUtils.copyDirContentsToDir(fFolderNodeData, fFolderNodeDir, true, "import course node");
+		}
 	}
 
-	/**
-	 * @see org.olat.course.nodes.GenericCourseNode#calcAccessAndVisibility(org.olat.course.condition.interpreter.ConditionInterpreter,
-	 *      org.olat.course.run.userview.NodeEvaluation)
-	 */
+	@Override
+	public CourseNode createInstanceForCopy(boolean isNewTitle, ICourse course, Identity author) {
+		CourseNode node = super.createInstanceForCopy(isNewTitle, course, author);
+		if(node.getModuleConfiguration().getBooleanSafe(BCCourseNodeEditController.CONFIG_AUTO_FOLDER)){
+			File fFolderNodeDir = new File(FolderConfig.getCanonicalRoot() + getFoldernodePathRelToFolderBase(course.getCourseEnvironment(), node));
+			fFolderNodeDir.mkdirs();
+		}
+		return node;
+	}
+
 	@Override
 	protected void calcAccessAndVisibility(ConditionInterpreter ci, NodeEvaluation nodeEval) {
 
@@ -382,6 +367,8 @@ public class BCCourseNode extends AbstractAccessableCourseNode {
 	 */
 	@Override
 	public void cleanupOnDelete(ICourse course) {
+		super.cleanupOnDelete(course);
+		
 		// mark the subscription to this node as deleted
 		SubscriptionContext folderSubContext = CourseModule.createTechnicalSubscriptionContext(course.getCourseEnvironment(), this);
 		NotificationsManager.getInstance().delete(folderSubContext);
@@ -404,16 +391,14 @@ public class BCCourseNode extends AbstractAccessableCourseNode {
 		postExportCondition(preConditionDownloaders, envMapper, backwardsCompatible);
 	}
 
-	/**
-	 * @see org.olat.course.nodes.GenericCourseNode#getConditionExpressions()
-	 */
+	@Override
 	public List<ConditionExpression> getConditionExpressions() {
 		List<ConditionExpression> retVal;
 		List<ConditionExpression> parentsConditions = super.getConditionExpressions();
 		if (parentsConditions.size() > 0) {
-			retVal = new ArrayList<ConditionExpression>(parentsConditions);
-		}else {
-			retVal = new ArrayList<ConditionExpression>();
+			retVal = new ArrayList<>(parentsConditions);
+		} else {
+			retVal = new ArrayList<>();
 		}
 		//
 		String coS = getPreConditionDownloaders().getConditionExpression();

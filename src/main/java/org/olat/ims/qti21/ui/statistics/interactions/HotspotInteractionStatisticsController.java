@@ -44,9 +44,8 @@ import org.olat.core.util.vfs.LocalFileImpl;
 import org.olat.core.util.vfs.VFSMediaResource;
 import org.olat.ims.qti.statistics.QTIType;
 import org.olat.ims.qti.statistics.model.StatisticsItem;
-import org.olat.ims.qti.statistics.ui.ResponseInfos;
-import org.olat.ims.qti.statistics.ui.Series;
 import org.olat.ims.qti21.QTI21StatisticsManager;
+import org.olat.ims.qti21.manager.CorrectResponsesUtil;
 import org.olat.ims.qti21.model.statistics.HotspotChoiceStatistics;
 import org.olat.ims.qti21.ui.statistics.QTI21AssessmentItemStatisticsController;
 import org.olat.ims.qti21.ui.statistics.QTI21StatisticResourceResult;
@@ -190,14 +189,19 @@ public class HotspotInteractionStatisticsController extends BasicController {
 				points = null;
 				cssColor = "bar_default";
 			} else {
-				points = correct ? 1.0f : 0.0f; //response.getPoints();
+				Double mappedValue = CorrectResponsesUtil.getMappedValue(assessmentItem, interaction, choice);
+				if(mappedValue != null) {
+					points = mappedValue.floatValue();
+				} else {
+					points = correct ? 1.0f : 0.0f;
+				}
 				cssColor = correct ? "bar_green" : "bar_red";
 			}
 
 			String label = Integer.toString(++i);
 			d1.add(ans_count, label, cssColor);
 
-			responseInfos.add(new ResponseInfos(label, text, points, correct, survey, false));
+			responseInfos.add(new ResponseInfos(label, text, null, null, points, correct, survey, false));
 		}
 		
 		if(numOfResults != numOfParticipants) {
@@ -205,7 +209,7 @@ public class HotspotInteractionStatisticsController extends BasicController {
 			if(notAnswered > 0) {
 				String label = Integer.toString(++i);
 				String text = translate("user.not.answer");
-				responseInfos.add(new ResponseInfos(label, text, null, false, survey, false));
+				responseInfos.add(new ResponseInfos(label, text, null, null, null, false, survey, false));
 				d1.add(notAnswered, label, "bar_grey");
 			}
 		}
@@ -257,7 +261,7 @@ public class HotspotInteractionStatisticsController extends BasicController {
 			d3.add(notAnswered, label);
 			
 			Float pointsObj = survey ? null : (correct ? 1.0f : 0.0f);
-			responseInfos.add(new ResponseInfos(label, text, pointsObj, correct, survey, false));
+			responseInfos.add(new ResponseInfos(label, text, null, null, pointsObj, correct, survey, false));
 		}
 
 		List<BarSeries> serieList = new ArrayList<>(3);
@@ -364,7 +368,7 @@ public class HotspotInteractionStatisticsController extends BasicController {
 				File backgroundFile = new File(itemFile.getParentFile(), relPath);
 				return new VFSMediaResource(new LocalFileImpl(backgroundFile));
 			}
-			return new NotFoundMediaResource(relPath);
+			return new NotFoundMediaResource();
 		}
 	}
 }

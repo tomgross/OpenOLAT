@@ -51,7 +51,6 @@ public class TextInputController extends StepFormBasicController {
 	private String validatedInp;
 	private TextElement inputElement;
 	
-	private List<AssessmentItemAndMetadata> parsedItems;
 	private final AssessmentItemsPackage importedItems;
 	private final ImportOptions options;
 	
@@ -76,7 +75,7 @@ public class TextInputController extends StepFormBasicController {
 		String mapperURI = registerMapper(ureq, new ExampleMapper());
 		textContainer.contextPut("mapperURI", mapperURI);
 		
-		inputElement = uifactory.addTextAreaElement("importform", "form.importdata", -1, 10, 100, false, "", formLayout);
+		inputElement = uifactory.addTextAreaElement("importform", "form.importdata", -1, 10, 100, false, false, "", formLayout);
 		inputElement.setMandatory(true);
 		inputElement.setNotEmptyCheck("form.legende.mandatory");
 	}
@@ -88,29 +87,33 @@ public class TextInputController extends StepFormBasicController {
 
 	@Override
 	protected boolean validateFormLogic(UserRequest ureq) {
-		boolean allOk = true;
+		boolean allOk = super.validateFormLogic(ureq);
 		
 		String inp = inputElement.getValue();
 		if(validatedInp == null || !validatedInp.equals(inp)) {
-			boolean errors = convertInputField();
-			allOk &= !errors;
+			CSVToAssessmentItemConverter converter = new CSVToAssessmentItemConverter(options, getLocale(), qtiService.qtiSerializer());
+			try {
+				converter.parse(inputElement.getValue());
+				List<AssessmentItemAndMetadata> items = converter.getItems();
+				if(items == null || items.isEmpty()) {
+					inputElement.setErrorKey("form.mandatory.hover", null);
+					allOk &= false;
+				}
+			} catch (Exception e) {
+				inputElement.setErrorKey("error.at.line", new String[] { Integer.toString(converter.getCurrentLine()) });
+				allOk &= false;
+			}
 		}
 		
-		return allOk & super.validateFormLogic(ureq);
+		return allOk;
 	}
 
 	@Override
 	protected void formOK(UserRequest ureq) {
-		importedItems.setItems(parsedItems);
-		fireEvent(ureq, StepsEvent.ACTIVATE_NEXT);
-	}
-	
-	private boolean convertInputField() {
-		boolean importDataError = false;
-		CSVToAssessmentItemConverter converter = new CSVToAssessmentItemConverter(options, qtiService.qtiSerializer());
+		CSVToAssessmentItemConverter converter = new CSVToAssessmentItemConverter(options, getLocale(), qtiService.qtiSerializer());
 		converter.parse(inputElement.getValue());
-		parsedItems = converter.getItems();
-		return importDataError;
+		importedItems.setItems(converter.getItems());
+		fireEvent(ureq, StepsEvent.ACTIVATE_NEXT);
 	}
 	
 	private static class ExampleMapper implements Mapper {

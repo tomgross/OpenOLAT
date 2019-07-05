@@ -24,8 +24,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 
-import org.olat.commons.rss.RSSUtil;
-import org.olat.commons.servlets.RSSServlet;
 import org.olat.core.commons.services.notifications.ui.NotificationSubscriptionController;
 import org.olat.core.dispatcher.impl.StaticMediaDispatcher;
 import org.olat.core.gui.translator.Translator;
@@ -36,13 +34,13 @@ import org.olat.core.util.Util;
 import org.olat.core.util.i18n.I18nManager;
 import org.olat.user.UserManager;
 
-import com.sun.syndication.feed.synd.SyndContent;
-import com.sun.syndication.feed.synd.SyndContentImpl;
-import com.sun.syndication.feed.synd.SyndEntry;
-import com.sun.syndication.feed.synd.SyndEntryImpl;
-import com.sun.syndication.feed.synd.SyndFeedImpl;
-import com.sun.syndication.feed.synd.SyndImage;
-import com.sun.syndication.feed.synd.SyndImageImpl;
+import com.rometools.rome.feed.synd.SyndContent;
+import com.rometools.rome.feed.synd.SyndContentImpl;
+import com.rometools.rome.feed.synd.SyndEntry;
+import com.rometools.rome.feed.synd.SyndEntryImpl;
+import com.rometools.rome.feed.synd.SyndFeedImpl;
+import com.rometools.rome.feed.synd.SyndImage;
+import com.rometools.rome.feed.synd.SyndImageImpl;
 
 /**
  * Description:<BR>
@@ -67,7 +65,7 @@ public class PersonalRSSFeed extends SyndFeedImpl {
 	public PersonalRSSFeed(Identity identity) {
 		super();
 		setFeedType("rss_2.0");
-		setEncoding(RSSServlet.DEFAULT_ENCODING);
+		setEncoding(PersonalRSSServlet.DEFAULT_ENCODING);
 
 		User user = identity.getUser();
 		Locale locale = I18nManager.getInstance().getLocaleOrDefault(user.getPreferences().getLanguage());
@@ -76,7 +74,7 @@ public class PersonalRSSFeed extends SyndFeedImpl {
 		String fullName = UserManager.getInstance().getUserDisplayName(identity);
 		
 		setTitle(translator.translate("rss.title", new String[] { fullName }));
-		setLink(RSSUtil.URI_SERVER);
+		setLink(PersonalRSSUtil.URI_SERVER);
 		setDescription(translator.translate("rss.description", new String[] { fullName }));
 
 		// create and add an image to the feed

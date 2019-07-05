@@ -118,7 +118,7 @@ public class ForumPage {
 		
 		//save
 		By saveBy = By.cssSelector("div.modal-content form button.btn-primary");
-		browser.findElement(saveBy).click();
+		OOGraphene.click(saveBy, browser);
 		OOGraphene.waitBusy(browser);
 		By messageTitleBy = By.xpath("//div[contains(@class,'o_forum_message')][//h4[contains(text(),'" + title + "')]]");
 		OOGraphene.waitElement(messageTitleBy, 5, browser);
@@ -135,7 +135,7 @@ public class ForumPage {
 	public ForumPage openThread(String title) {
 		By threadBy = By.xpath("//table[contains(@class,'table')]//tr//a[text()='" + title + "']");
 		OOGraphene.waitElement(threadBy, 5, browser);
-		browser.findElement(threadBy).click();
+		OOGraphene.click(threadBy, browser);
 		OOGraphene.waitBusy(browser);
 		return this;
 	}
@@ -203,8 +203,10 @@ public class ForumPage {
 	
 	public ForumPage replyToMessageNoWait(String reference, String title, String reply) {
 		By replyBy = By.xpath("//div[contains(@class,'o_forum_message')][//h4[contains(text(),'" + reference + "')]]//a[contains(@class,'o_sel_forum_reply')]");
-		browser.findElement(replyBy).click();
+		OOGraphene.waitElement(replyBy, browser);
+		OOGraphene.click(replyBy, browser);
 		OOGraphene.waitBusy(browser);
+		OOGraphene.waitModalDialog(browser);
 		
 		if(title != null) {
 			By titleBy = By.cssSelector(".o_sel_forum_message_title input[type='text']");
@@ -213,7 +215,7 @@ public class ForumPage {
 		OOGraphene.tinymce(reply, browser);
 		
 		By saveBy = By.cssSelector("fieldset.o_sel_forum_message_form button.btn-primary");
-		browser.findElement(saveBy).click();
+		OOGraphene.click(saveBy, browser);
 		return this;
 	}
 	

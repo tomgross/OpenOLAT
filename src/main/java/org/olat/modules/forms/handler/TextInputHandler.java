@@ -23,17 +23,23 @@ import java.util.Locale;
 import java.util.UUID;
 
 import org.olat.core.gui.UserRequest;
+import org.olat.core.gui.components.form.flexible.impl.Form;
 import org.olat.core.gui.control.Controller;
 import org.olat.core.gui.control.WindowControl;
+import org.olat.modules.ceditor.PageElement;
+import org.olat.modules.ceditor.PageElementCategory;
+import org.olat.modules.ceditor.PageElementEditorController;
+import org.olat.modules.ceditor.PageElementRenderingHints;
+import org.olat.modules.ceditor.PageRunElement;
+import org.olat.modules.ceditor.SimpleAddPageElementHandler;
+import org.olat.modules.ceditor.ui.PageRunControllerElement;
 import org.olat.modules.forms.model.xml.TextInput;
 import org.olat.modules.forms.ui.TextInputController;
 import org.olat.modules.forms.ui.TextInputEditorController;
-import org.olat.modules.portfolio.ui.editor.PageRunControllerElement;
-import org.olat.modules.portfolio.ui.editor.PageElement;
-import org.olat.modules.portfolio.ui.editor.PageElementEditorController;
-import org.olat.modules.portfolio.ui.editor.PageElementHandler;
-import org.olat.modules.portfolio.ui.editor.PageRunElement;
-import org.olat.modules.portfolio.ui.editor.SimpleAddPageElementHandler;
+import org.olat.modules.forms.ui.model.EvaluationFormExecutionElement;
+import org.olat.modules.forms.ui.model.EvaluationFormResponseController;
+import org.olat.modules.forms.ui.model.EvaluationFormResponseControllerElement;
+import org.olat.modules.forms.ui.model.ExecutionIdentity;
 
 /**
  * 
@@ -41,7 +47,13 @@ import org.olat.modules.portfolio.ui.editor.SimpleAddPageElementHandler;
  * @author srosse, stephane.rosse@frentix.com, http://www.frentix.com
  *
  */
-public class TextInputHandler implements PageElementHandler, SimpleAddPageElementHandler {
+public class TextInputHandler implements EvaluationFormElementHandler, SimpleAddPageElementHandler {
+	
+	private final boolean restrictedEdit;
+	
+	public TextInputHandler(boolean restrictedEdit) {
+		this.restrictedEdit = restrictedEdit;
+	}
 	
 	@Override
 	public String getType() {
@@ -52,9 +64,14 @@ public class TextInputHandler implements PageElementHandler, SimpleAddPageElemen
 	public String getIconCssClass() {
 		return "o_icon_textinput";
 	}
+	
+	@Override
+	public PageElementCategory getCategory() {
+		return PageElementCategory.questionType;
+	}
 
 	@Override
-	public PageRunElement getContent(UserRequest ureq, WindowControl wControl, PageElement element) {
+	public PageRunElement getContent(UserRequest ureq, WindowControl wControl, PageElement element, PageElementRenderingHints hints) {
 		if(element instanceof TextInput) {
 			Controller ctrl = new TextInputController(ureq, wControl, (TextInput)element);
 			return new PageRunControllerElement(ctrl);
@@ -65,7 +82,7 @@ public class TextInputHandler implements PageElementHandler, SimpleAddPageElemen
 	@Override
 	public PageElementEditorController getEditor(UserRequest ureq, WindowControl wControl, PageElement element) {
 		if(element instanceof TextInput) {
-			return new TextInputEditorController(ureq, wControl, (TextInput)element);
+			return new TextInputEditorController(ureq, wControl, (TextInput)element, restrictedEdit);
 		}
 		return null;
 	}
@@ -74,7 +91,21 @@ public class TextInputHandler implements PageElementHandler, SimpleAddPageElemen
 	public PageElement createPageElement(Locale locale) {
 		TextInput part = new TextInput();
 		part.setId(UUID.randomUUID().toString());
+		part.setNumeric(false);
+		part.setSingleRow(false);
 		part.setRows(12);
 		return part;
 	}
+
+	@Override
+	public EvaluationFormExecutionElement getExecutionElement(UserRequest ureq, WindowControl wControl, Form rootForm,
+			PageElement element, ExecutionIdentity executionIdentity) {
+		if (element instanceof TextInput) {
+			TextInput textInput = (TextInput) element;
+			EvaluationFormResponseController ctrl = new TextInputController(ureq, wControl, textInput, rootForm);
+			return new EvaluationFormResponseControllerElement(ctrl);
+		}
+		return null;
+	}
+
 }

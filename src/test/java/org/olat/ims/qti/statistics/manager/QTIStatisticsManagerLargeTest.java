@@ -38,8 +38,10 @@ import org.dom4j.Element;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
+import org.olat.basesecurity.OrganisationService;
 import org.olat.core.commons.persistence.DB;
-import org.olat.core.logging.OLog;
+import org.olat.core.id.Organisation;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.xml.XMLParser;
 import org.olat.ims.qti.QTIResult;
@@ -53,6 +55,7 @@ import org.olat.ims.qti.statistics.model.StatisticAssessment;
 import org.olat.ims.qti.statistics.model.StatisticsItem;
 import org.olat.ims.resources.IMSEntityResolver;
 import org.olat.repository.RepositoryEntry;
+import org.olat.repository.RepositoryEntryStatusEnum;
 import org.olat.repository.RepositoryService;
 import org.olat.resource.OLATResource;
 import org.olat.resource.OLATResourceManager;
@@ -70,7 +73,7 @@ import org.springframework.beans.factory.annotation.Autowired;
  * @author mkuendig, srosse, stephane.rosse@frentix.com, http://www.frentix.com
  */
 public class QTIStatisticsManagerLargeTest extends OlatTestCase {
-	private static OLog log = Tracing.createLoggerFor(QTIStatisticsManagerLargeTest.class);
+	private static final Logger log = Tracing.createLoggerFor(QTIStatisticsManagerLargeTest.class);
 
 	private static boolean isInitialized = false;
 	private static Long olatResource ;
@@ -103,6 +106,8 @@ public class QTIStatisticsManagerLargeTest extends OlatTestCase {
 	private QTIStatisticsManager qtim;
 	@Autowired
 	private RepositoryService repositoryService;
+	@Autowired
+	private OrganisationService organisationService;
 
 	@Before
 	public void setUp() throws Exception {
@@ -348,7 +353,9 @@ public class QTIStatisticsManagerLargeTest extends OlatTestCase {
 		dbInstance.saveObject(r);
 		dbInstance.intermediateCommit();
 
-		RepositoryEntry d = repositoryService.create("Kanu Unchou", "QTIStatisticsTest", "QTIStatisticsTest", "Repo entry", r);
+		Organisation defOrganisation = organisationService.getDefaultOrganisation();
+		RepositoryEntry d = repositoryService.create(null, "Kanu Unchou", "QTIStatisticsTest", "QTIStatisticsTest", "Repo entry",
+				r, RepositoryEntryStatusEnum.trash, defOrganisation);
 		dbInstance.saveObject(d);
 		dbInstance.intermediateCommit();
 		return d;

@@ -21,7 +21,12 @@ package org.olat.course.nodes.gta.ui;
 
 import java.io.File;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Date;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.UUID;
 
 import org.olat.basesecurity.GroupRoles;
 import org.olat.core.gui.UserRequest;
@@ -33,13 +38,22 @@ import org.olat.core.gui.control.Controller;
 import org.olat.core.gui.control.Event;
 import org.olat.core.gui.control.WindowControl;
 import org.olat.core.gui.control.controller.BasicController;
+import org.olat.core.gui.control.generic.dtabs.Activateable2;
 import org.olat.core.gui.control.generic.modal.DialogBoxController;
 import org.olat.core.gui.control.generic.modal.DialogBoxUIFactory;
 import org.olat.core.id.Identity;
 import org.olat.core.id.OLATResourceable;
+import org.olat.core.id.context.ContextEntry;
+import org.olat.core.id.context.StateEntry;
 import org.olat.core.util.StringHelper;
 import org.olat.core.util.coordinate.CoordinatorManager;
 import org.olat.core.util.io.SystemFilenameFilter;
+import org.olat.core.util.mail.MailBundle;
+import org.olat.core.util.mail.MailContext;
+import org.olat.core.util.mail.MailContextImpl;
+import org.olat.core.util.mail.MailManager;
+import org.olat.core.util.mail.MailTemplate;
+import org.olat.core.util.mail.MailerResult;
 import org.olat.core.util.vfs.VFSContainer;
 import org.olat.course.CourseFactory;
 import org.olat.course.ICourse;
@@ -57,6 +71,8 @@ import org.olat.course.run.environment.CourseEnvironment;
 import org.olat.course.run.userview.UserCourseEnvironment;
 import org.olat.group.BusinessGroup;
 import org.olat.group.BusinessGroupService;
+import org.olat.modules.ModuleConfiguration;
+import org.olat.modules.assessment.Role;
 import org.springframework.beans.factory.annotation.Autowired;
 
 /**
@@ -65,25 +81,28 @@ import org.springframework.beans.factory.annotation.Autowired;
  * @author srosse, stephane.rosse@frentix.com, http://www.frentix.com
  *
  */
-public class GTAParticipantRevisionAndCorrectionsController extends BasicController {
+public class GTAParticipantRevisionAndCorrectionsController extends BasicController implements Activateable2 {
 	
 	private Link submitRevisionButton;
 	private final VelocityContainer mainVC;
 
 	private DialogBoxController confirmSubmitDialog;
 	private SubmitDocumentsController uploadRevisionsCtrl;
-	private DirectoryController correctionsCtrl, revisionsCtrl;
+	private final Map<Integer,DirectoryController> revisionLoopToCorrectionsCtrl = new HashMap<>();
 	
 	private Task assignedTask;
 	private final boolean businessGroupTask;
 	private final GTACourseNode gtaNode;
-	private final BusinessGroup assessedGroup;
+	private final ModuleConfiguration config;
 	private final CourseEnvironment courseEnv;
+	private final BusinessGroup assessedGroup;
 	private final UserCourseEnvironment assessedUserCourseEnv;
 	private final OLATResourceable taskListEventResource;
 	
 	@Autowired
 	private GTAManager gtaManager;
+	@Autowired
+	private MailManager mailManager;
 	@Autowired
 	private BusinessGroupService businessGroupService;
 	
@@ -92,6 +111,7 @@ public class GTAParticipantRevisionAndCorrectionsController extends BasicControl
 			GTACourseNode gtaNode, BusinessGroup assessedGroup, OLATResourceable taskListEventResource) {
 		super(ureq, wControl);
 		this.gtaNode = gtaNode;
+		config = gtaNode.getModuleConfiguration();
 		courseEnv = assessedUserCourseEnv.getCourseEnvironment();
 		this.assessedUserCourseEnv = assessedUserCourseEnv;
 		this.assignedTask = assignedTask;
@@ -167,8 +187,14 @@ public class GTAParticipantRevisionAndCorrectionsController extends BasicControl
 			documentsDir = gtaManager.getRevisedDocumentsDirectory(courseEnv, gtaNode, iteration, getIdentity());
 			documentsContainer = gtaManager.getRevisedDocumentsContainer(courseEnv, gtaNode, iteration, getIdentity());
 		}
-		uploadRevisionsCtrl = new SubmitDocumentsController(ureq, getWindowControl(), task, documentsDir, documentsContainer, -1,
-				gtaNode, courseEnv, assessedUserCourseEnv.isCourseReadOnly(), null, "document");
+		
+		Date deadline = task == null ? null : task.getRevisionsDueDate();
+		int maxDocs = gtaNode.getModuleConfiguration().getIntegerSafe(GTACourseNode.GTASK_MAX_REVISED_DOCS, -1);
+		if(maxDocs == -1) {
+			maxDocs = gtaNode.getModuleConfiguration().getIntegerSafe(GTACourseNode.GTASK_MAX_SUBMITTED_DOCS, -1);
+		}
+		uploadRevisionsCtrl = new SubmitDocumentsController(ureq, getWindowControl(), task, documentsDir, documentsContainer, maxDocs,
+				gtaNode, courseEnv, assessedUserCourseEnv.isCourseReadOnly(), deadline, "document");
 		listenTo(uploadRevisionsCtrl);
 		mainVC.put("uploadRevisions", uploadRevisionsCtrl.getInitialComponent());
 		
@@ -192,7 +218,7 @@ public class GTAParticipantRevisionAndCorrectionsController extends BasicControl
 
 		boolean hasDocument = TaskHelper.hasDocuments(documentsDir);
 		if(hasDocument) {
-			revisionsCtrl = new DirectoryController(ureq, getWindowControl(), documentsDir, documentsContainer,
+			DirectoryController revisionsCtrl = new DirectoryController(ureq, getWindowControl(), documentsDir, documentsContainer,
 					"run.revised.description", "bulk.submitted.revisions", "revisions.zip");
 			listenTo(revisionsCtrl);
 			mainVC.put(cmpName, revisionsCtrl.getInitialComponent());
@@ -213,12 +239,27 @@ public class GTAParticipantRevisionAndCorrectionsController extends BasicControl
 		
 		boolean hasDocument = TaskHelper.hasDocuments(documentsDir);
 		if(hasDocument) {
-			correctionsCtrl = new DirectoryController(ureq, getWindowControl(), documentsDir, documentsContainer,
+			DirectoryController correctionsCtrl = new DirectoryController(ureq, getWindowControl(), documentsDir, documentsContainer,
 					"run.corrections.description", "bulk.review", "review");
 			listenTo(correctionsCtrl);
 			mainVC.put(cmpName, correctionsCtrl.getInitialComponent());
+			revisionLoopToCorrectionsCtrl.put(iteration, correctionsCtrl);
 		}
 		return hasDocument;
+	}
+
+	@Override
+	public void activate(UserRequest ureq, List<ContextEntry> entries, StateEntry state) {
+		if(entries == null || entries.size() <= 1) return;
+		
+		String type = entries.get(0).getOLATResourceable().getResourceableTypeName();
+		int revisionLoop = entries.get(0).getOLATResourceable().getResourceableId().intValue();
+		if("Correction".equalsIgnoreCase(type)) {
+			if(revisionLoopToCorrectionsCtrl.containsKey(revisionLoop)) {
+				List<ContextEntry> subEntries = entries.subList(1, entries.size());
+				revisionLoopToCorrectionsCtrl.get(revisionLoop).activate(ureq, subEntries, null);
+			}
+		}
 	}
 
 	@Override
@@ -226,7 +267,8 @@ public class GTAParticipantRevisionAndCorrectionsController extends BasicControl
 		if(uploadRevisionsCtrl == source) {
 			if(event instanceof SubmitEvent) {
 				Task aTask = uploadRevisionsCtrl.getAssignedTask();
-				gtaManager.log("Revision", (SubmitEvent)event, aTask, getIdentity(), getIdentity(), assessedGroup, courseEnv, gtaNode);				
+				gtaManager.log("Revision", (SubmitEvent)event, aTask,
+						getIdentity(), getIdentity(), assessedGroup, courseEnv, gtaNode, Role.user);				
 			} else if(event == Event.DONE_EVENT) {
 				fireEvent(ureq, Event.DONE_EVENT);
 			}
@@ -288,8 +330,20 @@ public class GTAParticipantRevisionAndCorrectionsController extends BasicControl
 	}
 	
 	private void doSubmitRevisions() {
-		assignedTask = gtaManager.updateTask(assignedTask, TaskProcess.correction, gtaNode);
-		gtaManager.log("Revision", "revision submitted", assignedTask, getIdentity(), getIdentity(), assessedGroup, courseEnv, gtaNode);
+		File[] submittedDocuments;
+		int iteration = assignedTask.getRevisionLoop();
+		if(GTAType.group.name().equals(gtaNode.getModuleConfiguration().getStringValue(GTACourseNode.GTASK_TYPE))) {
+			File documentsDir = gtaManager.getRevisedDocumentsDirectory(courseEnv, gtaNode, iteration, assessedGroup);
+			submittedDocuments = documentsDir.listFiles(new SystemFilenameFilter(true, false));
+		} else {
+			File documentsDir = gtaManager.getRevisedDocumentsDirectory(courseEnv, gtaNode, iteration, getIdentity());
+			submittedDocuments = documentsDir.listFiles(new SystemFilenameFilter(true, false));
+		}
+		
+		int numOfDocs = submittedDocuments == null ? 0 : submittedDocuments.length;
+		assignedTask = gtaManager.submitRevisions(assignedTask, gtaNode, numOfDocs, Role.user);
+		gtaManager.log("Revision", "revision submitted", assignedTask,
+				getIdentity(), getIdentity(), assessedGroup, courseEnv, gtaNode, Role.user);
 		
 		TaskMultiUserEvent event = new TaskMultiUserEvent(TaskMultiUserEvent.SUBMIT_REVISION,
 				assessedGroup == null ? getIdentity() : null, assessedGroup, getIdentity());
@@ -302,10 +356,39 @@ public class GTAParticipantRevisionAndCorrectionsController extends BasicControl
 
 			for(Identity identity:identities) {
 				UserCourseEnvironment userCourseEnv = AssessmentHelper.createAndInitUserCourseEnvironment(identity, course);
-				gtaNode.incrementUserAttempts(userCourseEnv);
+				gtaNode.incrementUserAttempts(userCourseEnv, Role.user);
 			}
 		} else {
-			gtaNode.incrementUserAttempts(assessedUserCourseEnv);
+			gtaNode.incrementUserAttempts(assessedUserCourseEnv, Role.user);
+		}
+		
+		//do send e-mail
+		if(config.getBooleanSafe(GTACourseNode.GTASK_SUBMISSION_MAIL_CONFIRMATION)) {
+			doSubmissionEmail(iteration);
+		}
+	}
+	
+	private void doSubmissionEmail(int iteration) {
+		String body = config.getStringValue(GTACourseNode.GTASK_SUBMISSION_TEXT);
+		if(StringHelper.containsNonWhitespace(body)) {
+			MailContext context = new MailContextImpl(getWindowControl().getBusinessControl().getAsString());
+			List<Identity> recipientsTO;
+			File submitDirectory;
+			if(GTAType.group.name().equals(config.getStringValue(GTACourseNode.GTASK_TYPE))) {
+				recipientsTO = businessGroupService.getMembers(assessedGroup, GroupRoles.participant.name());
+				submitDirectory = gtaManager.getRevisedDocumentsDirectory(courseEnv, gtaNode, iteration, assessedGroup);
+			} else {
+				recipientsTO = Collections.singletonList(getIdentity());
+				submitDirectory = gtaManager.getRevisedDocumentsDirectory(courseEnv, gtaNode, iteration, getIdentity());
+			}
+			
+			String subject = translate("submission.mail.subject");
+			File[] files = TaskHelper.getDocuments(submitDirectory);
+			MailTemplate template = new GTAMailTemplate(subject, body, files, getIdentity(), getTranslator());
+			
+			MailerResult result = new MailerResult();
+			MailBundle[] bundles = mailManager.makeMailBundles(context, recipientsTO, template, null, UUID.randomUUID().toString(), result);
+			mailManager.sendMessage(bundles);
 		}
 	}
 }

@@ -53,6 +53,7 @@ import org.olat.core.gui.control.WindowControl;
 import org.olat.core.gui.util.CSSHelper;
 import org.olat.core.id.Identity;
 import org.olat.core.util.FileUtils;
+import org.olat.core.util.Formatter;
 import org.olat.core.util.StringHelper;
 import org.olat.core.util.Util;
 import org.olat.core.util.filter.FilterFactory;
@@ -84,34 +85,34 @@ import org.olat.user.UserManager;
 
 public class ContactForm extends FormBasicController {
 	//
-	private final static String NLS_CONTACT_TO = "contact.to";
+	private static final String NLS_CONTACT_TO = "contact.to";
 	private TextElement tto = null;
 	private TextElement ttoBig = null;
-	private final static String NLS_CONTACT_FROM = "contact.from";
+	private static final String NLS_CONTACT_FROM = "contact.from";
 	private TextElement tfrom;
-	private final static String NLS_CONTACT_SUBJECT = "contact.subject";
+	private static final String NLS_CONTACT_SUBJECT = "contact.subject";
 	private TextElement tsubject;
-	private final static String NLS_CONTACT_BODY = "contact.body";
+	private static final String NLS_CONTACT_BODY = "contact.body";
 	private RichTextElement tbody;
-	private final static String NLS_CONTACT_ATTACHMENT = "contact.attachment";
-	private final static String NLS_CONTACT_ATTACHMENT_EXPL = "contact.attachment.maxsize";
+	private static final String NLS_CONTACT_ATTACHMENT = "contact.attachment";
+	private static final String NLS_CONTACT_ATTACHMENT_EXPL = "contact.attachment.maxsize";
 	private int contactAttachmentMaxSizeInMb = 5;
 	private FileElement attachmentEl;
-	private List<FormLink> attachmentLinks = new ArrayList<FormLink>();
+	private List<FormLink> attachmentLinks = new ArrayList<>();
 	private FormLayoutContainer uploadCont;
 	private boolean recipientsAreEditable = false;
-	private final static int emailCols = 60;
+	private static final int emailCols = 60;
 	private boolean readOnly=false;
 	private boolean hasMsgCancel=false;
 	private boolean hasMsgSave=true;
-	private final static String NLS_CONTACT_SEND_CP_FROM = "contact.cp.from";
+	private static final String NLS_CONTACT_SEND_CP_FROM = "contact.cp.from";
 	private SelectionElement tcpfrom;
 	private Identity emailFrom;
 	private File attachementTempDir;
 	private long attachmentSize = 0l;
-	private Map<String,String> attachmentCss = new HashMap<String,String>();
-	private Map<String,String> attachmentNames = new HashMap<String,String>();
-	private Map<String,ContactList> contactLists = new Hashtable<String,ContactList>();
+	private Map<String,String> attachmentCss = new HashMap<>();
+	private Map<String,String> attachmentNames = new HashMap<>();
+	private Map<String,ContactList> contactLists = new Hashtable<>();
 	
 	private final UserManager userManager;
 
@@ -139,9 +140,6 @@ public class ContactForm extends FormBasicController {
 	}
 		
 
-	/**
-	 * @param defaultSubject
-	 */
 	protected void setSubject(final String defaultSubject) {
 		tsubject.setValue(defaultSubject);
 		tsubject.setEnabled(!readOnly);
@@ -169,9 +167,6 @@ public class ContactForm extends FormBasicController {
 		}
 	}
 
-	/**
-	 * @param defaultEmailTo
-	 */
 	private void addContactFormEmailTo(String defaultEmailTo) {
 		defaultEmailTo += tto.getValue();
 		tto.setValue(defaultEmailTo);
@@ -181,9 +176,6 @@ public class ContactForm extends FormBasicController {
 		ttoBig.setVisible(recipientsAreEditable);
 	}
 
-	/**
-	 * @param defaultBody
-	 */
 	public void setBody(String defaultBody) {
 		tbody.setValue(defaultBody);
 		tbody.setEnabled(!readOnly);
@@ -207,25 +199,16 @@ public class ContactForm extends FormBasicController {
 		}
 		boolean subjectOk = !tsubject.isEmpty("error.field.not.empty");
 		boolean bodyOk = !tbody.isEmpty("error.field.not.empty");
-		// the body message may not be longer than about 4 pages or 10000
-		// characters
-		//bodyOk = bodyOk && tbody.notLongerThan(10000, "input.toolong");
 		boolean toOk = false;
 		if (tto != null) {
 			toOk = !tto.isEmpty("error.field.not.empty");
 		} else {
 			toOk = !ttoBig.isEmpty("error.field.not.empty");
-			// limit of recipients about 700 (1 emailaddress medial 40
-			// characters)
-			//toOk = toOk && ttoBig.notLongerThan(30000, "input.toolong");
 		}
 		boolean fromOk = !tfrom.isEmpty("error.field.not.empty");
 		return subjectOk && bodyOk && toOk && fromOk && fromMailAddOk;
 	}
 
-	/**
-	 * @return
-	 */
 	public String getEmailFrom() {
 		return tfrom.getValue().trim();
 	}
@@ -236,7 +219,7 @@ public class ContactForm extends FormBasicController {
 	 * @return
 	 */
 	public List<ContactList> getEmailToContactLists() {
-		List<ContactList> retVal = new ArrayList<ContactList>();
+		List<ContactList> retVal = new ArrayList<>();
 		retVal.addAll(contactLists.values());
 		return retVal;
 	}
@@ -271,22 +254,16 @@ public class ContactForm extends FormBasicController {
 		return retVal;
 	}
 
-	/**
-	 * @return
-	 */
 	public String getSubject() {
 		return tsubject.getValue();
 	}
 
-	/**
-	 * @return email body text
- 	 */
  	public String getBody() {
  		return tbody.getValue(FilterFactory.getSmileysCssToDataUriFilter());
 	}
  	
  	public File[] getAttachments() {
- 		List<File> attachments = new ArrayList<File>();
+ 		List<File> attachments = new ArrayList<>();
  		for(FormLink removeLink : attachmentLinks) {
  			attachments.add((File)removeLink.getUserObject());
  		}
@@ -304,7 +281,7 @@ public class ContactForm extends FormBasicController {
  		return tcpfrom.isSelected(0);
  	}
  	
- 	protected void setDisplayOnly (boolean readOnly) {
+ 	protected void setDisplayOnly(boolean readOnly) {
  		this.readOnly = readOnly;
  		if (readOnly) {
  			flc.setEnabled(false);
@@ -312,13 +289,23 @@ public class ContactForm extends FormBasicController {
  	}
 
 	@Override
+	protected void setFormTranslatedTitle(String translatedTitle) {
+		super.setFormTranslatedTitle(translatedTitle);
+	}
+	
+	@Override
+	protected void setFormTranslatedDescription(String translatedDescription) {
+		super.setFormTranslatedDescription(translatedDescription);
+	}
+	
+	@Override
 	protected void formOK(UserRequest ureq) {
-		fireEvent (ureq, Event.DONE_EVENT);
+		fireEvent(ureq, Event.DONE_EVENT);
 	}
 	
 	@Override
 	protected void formCancelled(UserRequest ureq) {
-		fireEvent (ureq, Event.CANCELLED_EVENT);
+		fireEvent(ureq, Event.CANCELLED_EVENT);
 	}
 	
 	@Override
@@ -335,7 +322,6 @@ public class ContactForm extends FormBasicController {
 				attachmentEl.reset();
 			} else {
 				File attachment = attachmentEl.moveUploadFileTo(attachementTempDir);
-//				attachment = null;
 				// OO-48  somehow file-move can fail, check for it, display error-dialog if it failed
 				if(attachment == null){
 					attachmentEl.reset();
@@ -346,12 +332,13 @@ public class ContactForm extends FormBasicController {
 				}
 				attachmentEl.reset();
 				attachmentSize += size;
-				FormLink removeFile = uifactory.addFormLink(attachment.getName(), "delete", null, uploadCont, Link.BUTTON_SMALL);
+				FormLink removeFile = uifactory.addFormLink(attachment.getName(), "delete", null, uploadCont, Link.BUTTON_XSMALL);
+				removeFile.setIconLeftCSS("o_icon o_icon-fw o_icon_delete");
 				removeFile.setUserObject(attachment);
 				attachmentLinks.add(removeFile);
 				//pretty labels
 				uploadCont.setLabel(NLS_CONTACT_ATTACHMENT, null);
-				attachmentNames.put(attachment.getName(), filename);
+				attachmentNames.put(attachment.getName(), filename + " <span class='text-muted'>(" + Formatter.formatBytes(size) + ")</span>");
 				attachmentCss.put(attachment.getName(), CSSHelper.createFiletypeIconCssClassFor(filename));
 				uploadCont.contextPut("attachments", attachmentLinks);
 				uploadCont.contextPut("attachmentNames", attachmentNames);
@@ -376,6 +363,8 @@ public class ContactForm extends FormBasicController {
 
 	@Override
 	protected void initForm(FormItemContainer formLayout, Controller listener, UserRequest ureq) {
+		formLayout.setElementCssClass("o_sel_contact_form");
+		
 		setFormTitle("header.newcntctmsg");
 		String fullName = userManager.getUserDisplayName(emailFrom);
 		if(StringHelper.containsNonWhitespace(fullName)) {
@@ -387,16 +376,19 @@ public class ContactForm extends FormBasicController {
 		tfrom.setEnabled((this.emailFrom == null));
 		
 		tto = uifactory.addTextElement("tto", NLS_CONTACT_TO, 255, "", formLayout);
+		tto.setElementCssClass("o_sel_contact_to");
 		tto.setEnabled(false);
 		tto.setVisible(false);
 	
-		ttoBig = uifactory.addTextAreaElement("ttoBig", NLS_CONTACT_TO, -1, 2, emailCols, true, "", formLayout);
+		ttoBig = uifactory.addTextAreaElement("ttoBig", NLS_CONTACT_TO, -1, 2, emailCols, true, false, "", formLayout);
 		ttoBig.setEnabled(false);
 		ttoBig.setVisible(false);
 		
 		tsubject = uifactory.addTextElement("tsubject", NLS_CONTACT_SUBJECT, 255, "", formLayout);
+		tsubject.setElementCssClass("o_sel_contact_subject");
 		tsubject.setDisplaySize(emailCols);
 		tbody = uifactory.addRichTextElementForStringDataMinimalistic("tbody", NLS_CONTACT_BODY, "", 15, emailCols, formLayout, getWindowControl());
+		tbody.setElementCssClass("o_sel_contact_body");
 		tbody.setEnabled(!readOnly);
 		tbody.getEditorConfiguration().setRelativeUrls(false);
 		tbody.getEditorConfiguration().setRemoveScriptHost(false);

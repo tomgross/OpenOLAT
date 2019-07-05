@@ -19,22 +19,27 @@
  */
 package org.olat.commons.calendar.ui.components;
 
+import java.text.ParseException;
 import java.util.Calendar;
 import java.util.Date;
 import java.util.List;
 
+import org.apache.logging.log4j.Logger;
 import org.olat.commons.calendar.CalendarManager;
+import org.olat.commons.calendar.CalendarUtils;
 import org.olat.commons.calendar.model.KalendarEvent;
 import org.olat.commons.calendar.model.KalendarRecurEvent;
 import org.olat.commons.calendar.ui.events.CalendarGUIAddEvent;
 import org.olat.commons.calendar.ui.events.CalendarGUIFormEvent;
 import org.olat.commons.calendar.ui.events.CalendarGUIMoveEvent;
 import org.olat.commons.calendar.ui.events.CalendarGUIPrintEvent;
+import org.olat.commons.calendar.ui.events.CalendarGUIResizeEvent;
 import org.olat.commons.calendar.ui.events.CalendarGUISelectEvent;
 import org.olat.core.CoreSpringFactory;
 import org.olat.core.gui.UserRequest;
 import org.olat.core.gui.components.form.flexible.impl.FormItemImpl;
 import org.olat.core.gui.translator.Translator;
+import org.olat.core.logging.Tracing;
 import org.olat.core.util.StringHelper;
 import org.olat.core.util.ValidationStatus;
 
@@ -46,6 +51,8 @@ import org.olat.core.util.ValidationStatus;
  *
  */
 public class FullCalendarElement extends FormItemImpl {
+	
+	private static final Logger log = Tracing.createLoggerFor(FullCalendarElement.class);
 
 	private final FullCalendarComponent component;
 
@@ -84,6 +91,22 @@ public class FullCalendarElement extends FormItemImpl {
 		component.setAggregatedFeedEnabled(aggregatedFeedEnabled);
 	}
 	
+	public boolean isDifferentiateManagedEvents() {
+		return component.isDifferentiateManagedEvents();
+	}
+
+	public void setDifferentiateManagedEvents(boolean differentiateManagedEvents) {
+		component.setDifferentiateManagedEvents(differentiateManagedEvents);
+	}
+	
+	public boolean isDifferentiateLiveStreams() {
+		return component.isDifferentiateLiveStreams();
+	}
+
+	public void setDifferentiateLiveStreams(boolean differentiateLiveStreams) {
+		component.setDifferentiateLiveStreams(differentiateLiveStreams);
+	}
+	
 	public KalendarRenderWrapper getCalendar(String calendarID) {
 		return component.getCalendar(calendarID);
 	}
@@ -96,14 +119,20 @@ public class FullCalendarElement extends FormItemImpl {
 		component.addCalendar(calendarWrapper);
 	}
 	
-	/**
-	 * @see org.olat.core.gui.components.form.flexible.FormItemImpl#evalFormRequest(org.olat.core.gui.UserRequest)
-	 */
+	public List<KalendarRenderWrapper> getAlwaysVisibleCalendars() {
+		return component.getAlwaysVisibleCalendars();
+	}
+
+	public void setAlwaysVisibleCalendars(List<KalendarRenderWrapper> alwaysVisibleCalendars) {
+		component.setAlwaysVisibleCalendars(alwaysVisibleCalendars);
+	}
+	
 	@Override
 	public void evalFormRequest(UserRequest ureq) {
 		String selectedEventId = getRootForm().getRequestParameter("evSelect");
 		String addEventMarker = getRootForm().getRequestParameter("evAdd");
 		String movedEventId = getRootForm().getRequestParameter("evMove");
+		String resizedEventId = getRootForm().getRequestParameter("evResize");
 		String changeViewName = getRootForm().getRequestParameter("evChangeView");
 		String print = getRootForm().getRequestParameter("print");
 		String config = getRootForm().getRequestParameter("config");
@@ -134,6 +163,10 @@ public class FullCalendarElement extends FormItemImpl {
 			String minuteDelta = getRootForm().getRequestParameter("minuteDelta");
 			String allDay = getRootForm().getRequestParameter("allDay");
 			doMove(ureq, movedEventId, dayDelta, minuteDelta, allDay);
+		} else if(StringHelper.containsNonWhitespace(resizedEventId)) {
+			String minuteDelta = getRootForm().getRequestParameter("minuteDelta");
+			String allDay = getRootForm().getRequestParameter("allDay");
+			doResize(ureq, resizedEventId, minuteDelta, allDay);
 		} else if(StringHelper.containsNonWhitespace(changeViewName)) {
 			String start = getRootForm().getRequestParameter("start");
 			doChangeView(changeViewName, start);
@@ -148,9 +181,10 @@ public class FullCalendarElement extends FormItemImpl {
 			component.setCurrentDate(cal.getTime());
 		}
 
-		if("month".equals(viewName) || "agendaWeek".equals(viewName)
-				|| "agendaDay".equals(viewName) || "basicWeek".equals(viewName)
-				|| "basicDay".equals(viewName)) {
+		if("month".equals(viewName)
+				|| "agendaWeek".equals(viewName) || "agendaDay".equals(viewName) 
+				|| "listYear".equals(viewName) || "listMonth".equals(viewName) || "listWeek".equals(viewName) || "listDay".equals(viewName)
+				|| "basicWeek".equals(viewName) || "basicDay".equals(viewName)) {
 			component.setViewName(viewName);
 		}
 	}
@@ -189,17 +223,59 @@ public class FullCalendarElement extends FormItemImpl {
 		}
 	}
 	
+	protected void doResize(UserRequest ureq, String eventId, String minuteDelta, String allDayStr) {
+		Long minute = null;
+		if(StringHelper.isLong(minuteDelta)) {
+			minute = Long.parseLong(minuteDelta);
+		}
+		
+		Boolean allDay = null;
+		if("true".equals(allDayStr)) {
+			allDay = Boolean.TRUE;
+		} else if("false".equals(allDayStr)) {
+			allDay = Boolean.FALSE;
+		}
+		
+		if(component.isOccurenceOfCalendarEvent(eventId)) {
+			String uid = component.getCalendarEventUid(eventId);
+			KalendarRenderWrapper cal = component.getCalendarById(uid);
+			KalendarRecurEvent rEvent = getCurrenceKalendarEvent(cal, eventId);
+			getRootForm().fireFormEvent(ureq, new CalendarGUIResizeEvent(this, rEvent, cal, minute, allDay));
+		} else if(component.isReccurenceOfCalendarEvent(eventId)) {
+			String uid = component.getCalendarEventUid(eventId);
+			KalendarRenderWrapper cal = component.getCalendarById(uid);
+			KalendarRecurEvent rEvent = getCurrenceKalendarEvent(cal, eventId);
+			getRootForm().fireFormEvent(ureq, new CalendarGUIResizeEvent(this, rEvent, cal, minute, allDay));
+		} else {
+			KalendarEvent event = component.getCalendarEvent(eventId);
+			KalendarRenderWrapper calWrapper = component.getCalendarByNormalizedId(eventId);
+			getRootForm().fireFormEvent(ureq, new CalendarGUIResizeEvent(this, event, calWrapper, minute, allDay));
+		}
+	}
+	
 	private void doAdd(UserRequest ureq, String start, String end, String allDay) {
-		long startTime = -1;
-		if(StringHelper.isLong(start)) {
-			startTime = Long.parseLong(start);
+		try {
+			boolean allDayEvent = "true".equalsIgnoreCase(allDay);
+			
+			Date startDate = null;
+			if(StringHelper.containsNonWhitespace(start)) {
+				startDate = CalendarUtils.parseISO8601(start);
+			}
+			Date endDate = null;
+			if(StringHelper.containsNonWhitespace(end)) {
+				endDate = CalendarUtils.parseISO8601(end);
+				if(allDayEvent && end.indexOf('T') == -1) {
+					// all day event ended the next day at 00:00:00, OpenOLAT want something which ends the same day
+					Calendar cal = Calendar.getInstance();
+					cal.setTime(endDate);
+					cal.add(Calendar.DATE, -1);
+					endDate = cal.getTime();
+				}
+			}
+			getRootForm().fireFormEvent(ureq, new CalendarGUIAddEvent(this, null, startDate, endDate, allDayEvent));
+		} catch (ParseException e) {
+			log.error("", e);
 		}
-		long endTime = -1;
-		if(StringHelper.isLong(end)) {
-			endTime = Long.parseLong(end);
-		}
-		boolean allDayEvent = "true".equalsIgnoreCase(allDay);
-		getRootForm().fireFormEvent(ureq, new CalendarGUIAddEvent(this, null, new Date(startTime), new Date(endTime), allDayEvent));
 	}
 	
 	private void doSelect(UserRequest ureq, String eventId, String targetDomId) {

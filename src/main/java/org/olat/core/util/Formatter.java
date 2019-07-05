@@ -50,6 +50,7 @@ import org.apache.commons.lang.time.DurationFormatUtils;
 import org.olat.core.dispatcher.impl.StaticMediaDispatcher;
 import org.olat.core.gui.render.StringOutput;
 import org.olat.core.helpers.Settings;
+import org.olat.core.util.filter.impl.HtmlMathScanner;
 
 /**
  * enclosing_type Description: <br>
@@ -59,13 +60,14 @@ import org.olat.core.helpers.Settings;
  */
 public class Formatter {
 
+	private static final int BYTE_UNIT = 1000;
 	private static final DateFormat formatterDatetimeFilesystem = new SimpleDateFormat("yyyy-MM-dd'T'HH-mm-ss_SSS");
 	private static final DateFormat formatterDatetimeWithMinutes = new SimpleDateFormat("yyyy-MM-dd'T'HH-mm");
 	private static final DateFormat formatDateTime = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss");
 	private static final DateFormat shortFormatDateFileSystem = new SimpleDateFormat("yyyyMMdd");
 
-	private static final Map<Locale,Formatter> localToFormatterMap = new HashMap<Locale,Formatter>();
-	
+	private static final Map<Locale,Formatter> localToFormatterMap = new HashMap<>();
+
 	private final Locale locale;
 	private final DateFormat shortDateFormat;
 	private final DateFormat longDateFormat;
@@ -235,35 +237,6 @@ public class Formatter {
 		formattedDate = formattedDate.replace("1", "%d");
 		return formattedDate;
 	}
-
-	/**
-	 * Generate a simple date pattern that formats a date with time using the
-	 * locale of the formatter
-	 * 
-	 * @return
-	 */
-	public String getSimpleDatePatternForDateAndTime() {
-		Calendar cal = new GregorianCalendar();
-		cal.set( 1999, Calendar.MARCH, 1, 4, 5, 0 );  		
-		Date testDate = cal.getTime();
-		String formattedDate = formatDateAndTime(testDate);
-		formattedDate = formattedDate.replace("1999", "%Y");
-		formattedDate = formattedDate.replace("99", "%Y");
-		formattedDate = formattedDate.replace("03", "%m");
-		formattedDate = formattedDate.replace("3", "%m");
-		formattedDate = formattedDate.replace("01", "%d");
-		formattedDate = formattedDate.replace("1", "%d");
-		formattedDate = formattedDate.replace("04", "%H");
-		formattedDate = formattedDate.replace("4", "%H");
-		formattedDate = formattedDate.replace("05", "%M");
-		formattedDate = formattedDate.replace("5", "%M");
-		if(formattedDate.endsWith("AM")) {
-			formattedDate = formattedDate.replace("%H","%I").replace("AM", "%p");
-		}
-		return formattedDate;
-	}
-
-
 	
 	/**
 	 * Formats the given date with the ISO 8601 standard also known as 'datetime'
@@ -373,19 +346,34 @@ public class Formatter {
 		}
 		return result;
 	}
+	
+	/**
+	 * Formats a duration in millis to "XX:YY".
+	 * 
+	 * @param timecode in milliseconds
+	 * @return formatted timecode
+	 */
+	public static String formatHourAndSeconds(long timecode) {
+		return DurationFormatUtils.formatDuration(timecode, "H:mm", true);
+	}
 
+	public static String formatKBytes(long kBytes) {
+		return formatBytes(BYTE_UNIT * kBytes);
+	}
+	
 	/**
 	 * Format the given bytes to human readable format
 	 * @param bytes the byte count
 	 * @return human readable formatted bytes
 	 */
 	public static String formatBytes(long bytes) {
-	    int unit = 1000;
+	    int unit = BYTE_UNIT;
 	    if (bytes < unit) return bytes + " B";
 	    int exp = (int) (Math.log(bytes) / Math.log(unit));
 	    String pre = "kMGTPE".charAt(exp-1) + "";
 	    return String.format("%.1f %sB", bytes / Math.pow(unit, exp), pre);
-	}	
+	}
+	
 	/**
 	 * Escape " with &quot; in strings
 	 * @param source
@@ -635,18 +623,32 @@ public class Formatter {
 	public static String formatLatexFormulas(String htmlFragment) {
 		if (htmlFragment == null) return "";
 		// optimize, reduce jsmath calls on client
-		if (htmlFragment.contains("<math") || htmlFragment.contains("class='math'") || htmlFragment.contains("class=\"math\"")) {
+		if (new HtmlMathScanner().scan(htmlFragment)) {
 			// add math wrapper
 			String domid = "mw_" + CodeHelper.getRAMUniqueID();
-			String elem = htmlFragment.contains("<div") ? "div" : "span";
+			String elem = htmlFragment.contains("<div") || htmlFragment.contains("<p") ? "div" : "span";
 			StringBuilder sb = new StringBuilder(htmlFragment.length() + 200);
 			sb.append("<").append(elem).append(" id=\"").append(domid).append("\">");
 			sb.append(htmlFragment);
 			sb.append("</").append(elem).append(">");
-			sb.append("\n<script type='text/javascript'>\n/* <![CDATA[ */\n setTimeout(function() { BFormatter.formatLatexFormulas('").append(domid).append("');}, 100);\n/* ]]> */\n</script>");
+			sb.append(elementLatexFormattingScript(domid));
 			return sb.toString();
-		}			
+		}
 		return htmlFragment;
+	}
+
+	/**
+	 * Html code script to render the latex formulas of a given element id 
+	 * @param domid Id of the DOM node containing the elements to render.
+	 */
+	public static String elementLatexFormattingScript(String domid) {
+		return String.format("%n"
+				+ "<script type='text/javascript'>%n"
+				+ "/* <![CDATA[ */%n"
+				+ " jQuery(function() {setTimeout(function() { BFormatter.formatLatexFormulas('%s');}, 100); }); %n"
+				+ "/* ]]> */%n"
+				+ "</script>",
+				domid);
 	}
 	
 	
@@ -661,6 +663,7 @@ public class Formatter {
 	 * @return text with clickable links
 	 */
 	public static String formatURLsAsLinks(String textFragment) {
+		if(textFragment == null) return "";
 		Matcher matcher = urlPattern.matcher(textFragment); 		
 		
 		StringBuilder sb = new StringBuilder(128);

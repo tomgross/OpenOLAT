@@ -29,7 +29,6 @@ import org.olat.basesecurity.GroupRoles;
 import org.olat.basesecurity.IdentityShort;
 import org.olat.core.commons.persistence.DB;
 import org.olat.core.id.Identity;
-import org.olat.course.ICourse;
 import org.olat.course.assessment.AssessmentToolManager;
 import org.olat.course.assessment.model.AssessedBusinessGroup;
 import org.olat.course.assessment.model.AssessmentStatistics;
@@ -40,9 +39,10 @@ import org.olat.group.manager.BusinessGroupRelationDAO;
 import org.olat.modules.assessment.AssessmentEntry;
 import org.olat.modules.assessment.manager.AssessmentEntryDAO;
 import org.olat.modules.assessment.model.AssessmentEntryStatus;
+import org.olat.modules.assessment.model.AssessmentMembersStatistics;
 import org.olat.modules.assessment.ui.AssessmentToolSecurityCallback;
 import org.olat.repository.RepositoryEntry;
-import org.olat.restapi.repository.course.CoursesWebService;
+import org.olat.repository.manager.RepositoryEntryRelationDAO;
 import org.olat.test.JunitTestHelper;
 import org.olat.test.OlatTestCase;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -66,12 +66,16 @@ public class AssessmentToolManagerTest extends OlatTestCase {
 	private AssessmentToolManager assessmentToolManager;
 	@Autowired
 	private BusinessGroupRelationDAO businessGroupRelationDao;
+	@Autowired
+	private RepositoryEntryRelationDAO repositoryEntryRelationDao;
+	@Autowired
+	private UserCourseInformationsManager userCourseInformationsManager;
 	
 	@Test
 	public void assessmentTool_coach() {
 		//course
 		Identity author = JunitTestHelper.createAndPersistIdentityAsRndUser("ast-author-1");
-		ICourse course = CoursesWebService.createEmptyCourse(author, "course-assessment-tool", "course long name", null);
+		RepositoryEntry entry = JunitTestHelper.deployBasicCourse(author);
 		
 		//members as participant and coach
 		Identity assessedIdentity1 = JunitTestHelper.createAndPersistIdentityAsRndUser("ast-1");
@@ -80,7 +84,6 @@ public class AssessmentToolManagerTest extends OlatTestCase {
 		Identity assessedIdentity4 = JunitTestHelper.createAndPersistIdentityAsRndUser("ast-4");
 		Identity coach = JunitTestHelper.createAndPersistIdentityAsRndUser("ast-coach-1");
 
-		RepositoryEntry entry = course.getCourseEnvironment().getCourseGroupManager().getCourseEntry();
 		RepositoryEntry refEntry = JunitTestHelper.createAndPersistRepositoryEntry();
 		String subIdent = UUID.randomUUID().toString();
 		
@@ -96,16 +99,16 @@ public class AssessmentToolManagerTest extends OlatTestCase {
 		dbInstance.commitAndCloseSession();
 		
 		// some datas
-		assessmentEntryDao.createAssessmentEntry(assessedIdentity1, null, entry, subIdent, refEntry, 3.0f, Boolean.FALSE);
-		assessmentEntryDao.createAssessmentEntry(assessedIdentity2, null, entry, subIdent, refEntry, 5.0f, Boolean.TRUE);
-		assessmentEntryDao.createAssessmentEntry(assessedIdentity3, null, entry, subIdent, refEntry, 8.0f, Boolean.TRUE);
-		assessmentEntryDao.createAssessmentEntry(assessedIdentity4, null, entry, subIdent, refEntry, 9.0f, Boolean.TRUE);
+		assessmentEntryDao.createAssessmentEntry(assessedIdentity1, null, entry, subIdent, refEntry, 3.0f, Boolean.FALSE, null, null);
+		assessmentEntryDao.createAssessmentEntry(assessedIdentity2, null, entry, subIdent, refEntry, 5.0f, Boolean.TRUE, null, null);
+		assessmentEntryDao.createAssessmentEntry(assessedIdentity3, null, entry, subIdent, refEntry, 8.0f, Boolean.TRUE, null, null);
+		assessmentEntryDao.createAssessmentEntry(assessedIdentity4, null, entry, subIdent, refEntry, 9.0f, Boolean.TRUE, null, null);
 		assessmentEntryDao.createAssessmentEntry(null, UUID.randomUUID().toString(), entry, subIdent, refEntry);
 		dbInstance.commitAndCloseSession();
 		
 		// coach of group 1 with id 1 and id2
 		List<BusinessGroup> coachedGroups = Collections.singletonList(group1);
-		AssessmentToolSecurityCallback assessmentCallback = new AssessmentToolSecurityCallback(false, false, false, true, coachedGroups);
+		AssessmentToolSecurityCallback assessmentCallback = new AssessmentToolSecurityCallback(false, false, false, true, false, coachedGroups);
 		SearchAssessedIdentityParams params = new SearchAssessedIdentityParams(entry, subIdent, refEntry, assessmentCallback);
 
 		// statistics
@@ -122,6 +125,10 @@ public class AssessmentToolManagerTest extends OlatTestCase {
 		//number of assessed identities
 		int numOfAssessedIdentities = assessmentToolManager.getNumberOfAssessedIdentities(coach, params);
 		Assert.assertEquals(2, numOfAssessedIdentities);
+		
+		//check only the queries
+		AssessmentMembersStatistics participantStatistics = assessmentToolManager.getNumberOfParticipants(coach, params);
+		Assert.assertNotNull(participantStatistics);
 
 		List<IdentityShort> assessedShortIdentities = assessmentToolManager.getShortAssessedIdentities(coach, params, 120);
 		Assert.assertNotNull(assessedShortIdentities);
@@ -157,4 +164,141 @@ public class AssessmentToolManagerTest extends OlatTestCase {
 		Assert.assertNotNull(assessmentEntriesAlt);
 		Assert.assertEquals(0, assessmentEntriesAlt.size());
 	}
+	
+	@Test
+	public void assessmentTool_admin() {
+		//course
+		Identity admin = JunitTestHelper.createAndPersistIdentityAsRndAdmin("ast-admin-1");
+		RepositoryEntry entry = JunitTestHelper.deployBasicCourse(admin);
+		
+		//members as participant and coach
+		Identity assessedIdentity1 = JunitTestHelper.createAndPersistIdentityAsRndUser("ast-5");
+		Identity assessedIdentity2 = JunitTestHelper.createAndPersistIdentityAsRndUser("ast-6");
+		Identity assessedIdentity3 = JunitTestHelper.createAndPersistIdentityAsRndUser("ast-7");
+		Identity assessedIdentity4 = JunitTestHelper.createAndPersistIdentityAsRndUser("ast-8");
+		Identity assessedExtIdentity5 = JunitTestHelper.createAndPersistIdentityAsRndUser("ast-ext-9");
+		Identity assessedExtIdentity6 = JunitTestHelper.createAndPersistIdentityAsRndUser("ast-ext-10");
+		Identity assessedExtIdentity7 = JunitTestHelper.createAndPersistIdentityAsRndUser("ast-ext-11");
+		Identity coach = JunitTestHelper.createAndPersistIdentityAsRndUser("ast-coach-9");
+
+		RepositoryEntry refEntry = JunitTestHelper.createAndPersistRepositoryEntry();
+		String subIdent = UUID.randomUUID().toString();
+		
+		BusinessGroup group1 = businessGroupDao.createAndPersist(null, "assessment-tool-bg-1", "assessment-tool-bg-1-desc", -1, -1, false, false, false, false, false);
+		businessGroupRelationDao.addRelationToResource(group1, entry);
+		BusinessGroup group2 = businessGroupDao.createAndPersist(null, "assessment-tool-bg-2", "assessment-tool-bg-2-desc", -1, -1, false, false, false, false, false);
+		businessGroupRelationDao.addRelationToResource(group2, entry);
+		
+		businessGroupRelationDao.addRole(assessedIdentity1, group1, GroupRoles.participant.name());
+		businessGroupRelationDao.addRole(assessedIdentity2, group1, GroupRoles.participant.name());
+		businessGroupRelationDao.addRole(assessedIdentity3, group2, GroupRoles.participant.name());
+		businessGroupRelationDao.addRole(assessedIdentity3, group2, GroupRoles.participant.name());
+		businessGroupRelationDao.addRole(coach, group1, GroupRoles.coach.name());
+		dbInstance.commitAndCloseSession();
+		
+		// some datas
+		assessmentEntryDao.createAssessmentEntry(assessedIdentity1, null, entry, subIdent, refEntry, 3.0f, Boolean.FALSE, null, null);
+		assessmentEntryDao.createAssessmentEntry(assessedIdentity2, null, entry, subIdent, refEntry, 5.0f, Boolean.TRUE, null, null);
+		assessmentEntryDao.createAssessmentEntry(assessedIdentity3, null, entry, subIdent, refEntry, 8.0f, Boolean.TRUE, null, null);
+		assessmentEntryDao.createAssessmentEntry(assessedIdentity4, null, entry, subIdent, refEntry, 9.0f, Boolean.TRUE, null, null);
+		assessmentEntryDao.createAssessmentEntry(assessedExtIdentity5, null, entry, subIdent, refEntry, 3.0f, Boolean.TRUE, null, null);
+		assessmentEntryDao.createAssessmentEntry(assessedExtIdentity6, null, entry, subIdent, refEntry, 4.0f, Boolean.TRUE, null, null);
+		assessmentEntryDao.createAssessmentEntry(assessedExtIdentity7, null, entry, subIdent, refEntry, 5.0f, Boolean.TRUE, null, null);
+		assessmentEntryDao.createAssessmentEntry(null, UUID.randomUUID().toString(), entry, subIdent, refEntry);
+		dbInstance.commitAndCloseSession();
+		
+		// administrator with full access
+		AssessmentToolSecurityCallback assessmentCallback = new AssessmentToolSecurityCallback(true, true, true, true, true, null);
+		SearchAssessedIdentityParams params = new SearchAssessedIdentityParams(entry, subIdent, refEntry, assessmentCallback);
+
+		//check assessed identities list
+		List<Identity> assessedIdentities = assessmentToolManager.getAssessedIdentities(admin, params);
+		Assert.assertNotNull(assessedIdentities);
+		Assert.assertEquals(7, assessedIdentities.size());
+		
+		List<IdentityShort> assessedShortIdentities = assessmentToolManager.getShortAssessedIdentities(admin, params, 120);
+		Assert.assertNotNull(assessedShortIdentities);
+		Assert.assertEquals(7, assessedShortIdentities.size());
+		
+		//number of assessed identities
+		int numOfAssessedIdentities = assessmentToolManager.getNumberOfAssessedIdentities(admin, params);
+		Assert.assertEquals(7, numOfAssessedIdentities);
+		
+		// statistics
+		AssessmentStatistics statistics = assessmentToolManager.getStatistics(admin, params);
+		Assert.assertEquals(5.28571d, statistics.getAverageScore().doubleValue(), 0.0001);
+		Assert.assertEquals(1, statistics.getCountFailed());
+		Assert.assertEquals(6, statistics.getCountPassed());
+		
+		//check only the queries as the statistics need the course infos
+		AssessmentMembersStatistics participantStatistics = assessmentToolManager.getNumberOfParticipants(admin, params);
+		Assert.assertNotNull(participantStatistics);
+	}
+	
+	@Test
+	public void getNumberOfParticipants() {
+		//course
+		Identity admin = JunitTestHelper.createAndPersistIdentityAsRndAdmin("ast-admin-1");
+		RepositoryEntry entry = JunitTestHelper.deployBasicCourse(admin);
+		
+		//members as participant and coach
+		Identity assessedIdentity1 = JunitTestHelper.createAndPersistIdentityAsRndUser("ast-5");
+		Identity assessedIdentity2 = JunitTestHelper.createAndPersistIdentityAsRndUser("ast-6");
+		Identity assessedIdentity3 = JunitTestHelper.createAndPersistIdentityAsRndUser("ast-7");
+		Identity assessedIdentity4 = JunitTestHelper.createAndPersistIdentityAsRndUser("ast-8");
+		Identity assessedExtIdentity5 = JunitTestHelper.createAndPersistIdentityAsRndUser("ast-ext-9");
+		Identity assessedExtIdentity6 = JunitTestHelper.createAndPersistIdentityAsRndUser("ast-ext-10");
+		Identity assessedExtIdentity7 = JunitTestHelper.createAndPersistIdentityAsRndUser("ast-ext-11");
+		Identity coach = JunitTestHelper.createAndPersistIdentityAsRndUser("ast-coach-9");
+
+		RepositoryEntry refEntry = JunitTestHelper.createAndPersistRepositoryEntry();
+		String subIdent = UUID.randomUUID().toString();
+		
+		BusinessGroup group1 = businessGroupDao.createAndPersist(null, "assessment-tool-bg-1", "assessment-tool-bg-1-desc", -1, -1, false, false, false, false, false);
+		businessGroupRelationDao.addRelationToResource(group1, entry);
+		
+		repositoryEntryRelationDao.addRole(coach, entry, GroupRoles.coach.name());
+		repositoryEntryRelationDao.addRole(assessedIdentity3, entry, GroupRoles.participant.name());
+		repositoryEntryRelationDao.addRole(assessedIdentity4, entry, GroupRoles.participant.name());
+		
+		businessGroupRelationDao.addRole(assessedIdentity1, group1, GroupRoles.participant.name());
+		businessGroupRelationDao.addRole(assessedIdentity2, group1, GroupRoles.participant.name());
+		businessGroupRelationDao.addRole(assessedIdentity3, group1, GroupRoles.participant.name());
+		businessGroupRelationDao.addRole(coach, group1, GroupRoles.coach.name());
+		dbInstance.commitAndCloseSession();
+		
+		// some datas
+		assessmentEntryDao.createAssessmentEntry(assessedIdentity1, null, entry, subIdent, refEntry, 3.0f, Boolean.FALSE, null, null);
+		assessmentEntryDao.createAssessmentEntry(assessedIdentity2, null, entry, subIdent, refEntry, 5.0f, Boolean.TRUE, null, null);
+		assessmentEntryDao.createAssessmentEntry(assessedIdentity3, null, entry, subIdent, refEntry, 8.0f, Boolean.TRUE, null, null);
+		assessmentEntryDao.createAssessmentEntry(assessedIdentity4, null, entry, subIdent, refEntry, 9.0f, Boolean.TRUE, null, null);
+		assessmentEntryDao.createAssessmentEntry(assessedExtIdentity5, null, entry, subIdent, refEntry, 3.0f, Boolean.TRUE, null, null);
+		assessmentEntryDao.createAssessmentEntry(assessedExtIdentity6, null, entry, subIdent, refEntry, 4.0f, Boolean.TRUE, null, null);
+		assessmentEntryDao.createAssessmentEntry(assessedExtIdentity7, null, entry, subIdent, refEntry, 5.0f, Boolean.TRUE, null, null);
+		assessmentEntryDao.createAssessmentEntry(null, UUID.randomUUID().toString(), entry, subIdent, refEntry);
+		dbInstance.commitAndCloseSession();
+		
+		// the course infos need to calculate the number of participants
+		userCourseInformationsManager.updateUserCourseInformations(entry.getOlatResource(), assessedIdentity1);
+		userCourseInformationsManager.updateUserCourseInformations(entry.getOlatResource(), assessedIdentity2);
+		userCourseInformationsManager.updateUserCourseInformations(entry.getOlatResource(), assessedIdentity3);
+		userCourseInformationsManager.updateUserCourseInformations(entry.getOlatResource(), assessedIdentity4);
+		userCourseInformationsManager.updateUserCourseInformations(entry.getOlatResource(), assessedExtIdentity5);
+		userCourseInformationsManager.updateUserCourseInformations(entry.getOlatResource(), assessedExtIdentity6);
+		userCourseInformationsManager.updateUserCourseInformations(entry.getOlatResource(), assessedExtIdentity7);
+		dbInstance.commitAndCloseSession();
+		
+		// statistics as admin
+		AssessmentToolSecurityCallback assessmentCallback = new AssessmentToolSecurityCallback(true, true, true, true, true, null);
+		SearchAssessedIdentityParams params = new SearchAssessedIdentityParams(entry, subIdent, refEntry, assessmentCallback);
+
+		AssessmentMembersStatistics statisticsAsAdmin = assessmentToolManager.getNumberOfParticipants(admin, params);
+		Assert.assertNotNull(statisticsAsAdmin);
+		Assert.assertEquals(3, statisticsAsAdmin.getNumOfOtherUsers());
+		Assert.assertEquals(4, statisticsAsAdmin.getNumOfParticipants());
+		Assert.assertEquals(3, statisticsAsAdmin.getLoggedIn());
+		Assert.assertEquals(4, statisticsAsAdmin.getNumOfParticipantsLoggedIn());
+	}
+
+
 }

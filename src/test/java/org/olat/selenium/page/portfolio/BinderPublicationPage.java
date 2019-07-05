@@ -50,7 +50,7 @@ public class BinderPublicationPage {
 		By memberBy = By.cssSelector("a.o_sel_pf_access_member");
 		browser.findElement(memberBy).click();
 		OOGraphene.waitBusy(browser);
-		OOGraphene.waitModalDialog(browser);
+		OOGraphene.waitModalWizard(browser);
 		return new BinderMemberWizardPage(browser);
 	}
 	
@@ -60,6 +60,7 @@ public class BinderPublicationPage {
 		OOGraphene.waitModalDialog(browser);
 		
 		By emailBy = By.cssSelector(".o_sel_pf_invitation_mail input[type='text']");
+		OOGraphene.waitElement(emailBy, browser);
 		browser.findElement(emailBy).sendKeys(email);
 		
 		//save
@@ -82,6 +83,7 @@ public class BinderPublicationPage {
 	public BinderPublicationPage fillAccessRights(String name, Boolean check) {
 		By checkBy = By.xpath("//div[contains(@class,'o_portfolio_rights')]//table//tr[td[contains(text(),'" + name + "')]]/td//input[@type='checkbox']");
 		WebElement checkEl = browser.findElement(checkBy);
+		OOGraphene.scrollTo(checkBy, browser);
 		OOGraphene.check(checkEl, check);
 		OOGraphene.waitBusy(browser);
 		return this;
@@ -97,12 +99,6 @@ public class BinderPublicationPage {
 		By submitBy = By.cssSelector(".o_sel_pf_invitation_button_group button.btn-primary");
 		browser.findElement(submitBy).click();
 		OOGraphene.waitBusy(browser);
-		
-		By closeMailErrorBy = By.cssSelector("div.modal-dialog div.modal-header button");
-		OOGraphene.waitElement(closeMailErrorBy, 5, browser);
-		browser.findElement(closeMailErrorBy).click();
-		OOGraphene.waitBusy(browser);
-
 		return this;
 	}
 }

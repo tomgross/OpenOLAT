@@ -22,12 +22,12 @@ package org.olat.core.util.mail.ui;
 import java.io.File;
 import java.text.DecimalFormat;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.Iterator;
 import java.util.List;
 import java.util.UUID;
 
 import org.olat.basesecurity.BaseSecurity;
-import org.olat.basesecurity.BaseSecurityManager;
 import org.olat.basesecurity.events.SingleIdentityChosenEvent;
 import org.olat.core.CoreSpringFactory;
 import org.olat.core.commons.modules.bc.FileSelection;
@@ -37,8 +37,7 @@ import org.olat.core.commons.modules.bc.commands.FolderCommand;
 import org.olat.core.commons.modules.bc.commands.FolderCommandHelper;
 import org.olat.core.commons.modules.bc.commands.FolderCommandStatus;
 import org.olat.core.commons.modules.bc.components.FolderComponent;
-import org.olat.core.commons.modules.bc.meta.MetaInfo;
-import org.olat.core.commons.modules.bc.meta.tagged.MetaTagged;
+import org.olat.core.commons.services.vfs.VFSMetadata;
 import org.olat.core.gui.UserRequest;
 import org.olat.core.gui.components.form.flexible.FormItem;
 import org.olat.core.gui.components.form.flexible.FormItemContainer;
@@ -56,6 +55,7 @@ import org.olat.core.gui.control.generic.folder.FolderHelper;
 import org.olat.core.gui.translator.Translator;
 import org.olat.core.gui.util.CSSHelper;
 import org.olat.core.id.Identity;
+import org.olat.core.id.Roles;
 import org.olat.core.id.UserConstants;
 import org.olat.core.id.context.BusinessControlFactory;
 import org.olat.core.id.context.ContextEntry;
@@ -69,11 +69,13 @@ import org.olat.core.util.mail.MailManager;
 import org.olat.core.util.mail.MailModule;
 import org.olat.core.util.mail.MailerResult;
 import org.olat.core.util.vfs.LocalFileImpl;
+import org.olat.core.util.vfs.VFSConstants;
 import org.olat.core.util.vfs.VFSContainer;
 import org.olat.core.util.vfs.VFSItem;
 import org.olat.core.util.vfs.VFSLeaf;
 import org.olat.core.util.vfs.VFSManager;
 import org.olat.user.UserManager;
+import org.springframework.beans.factory.annotation.Autowired;
 
 /**
  * 
@@ -97,22 +99,21 @@ public class SendDocumentsByEMailController extends FormBasicController implemen
 	private final DecimalFormat formatMb = new DecimalFormat("0.00");
 
 	private int status = FolderCommandStatus.STATUS_SUCCESS;
-	private List<VFSLeaf> files;
-	private FileSelection selection;
 	private List<File> attachments;
-	private List<IdentityWrapper> toValues = new ArrayList<IdentityWrapper>();
-
-	private final MailManager mailManager;
-	private final BaseSecurity securityManager;
 	private final boolean allowAttachments;
+	private List<IdentityWrapper> toValues = new ArrayList<>();
+
+	@Autowired
+	private UserManager userManager;
+	@Autowired
+	private MailManager mailManager;
+	@Autowired
+	private BaseSecurity securityManager;
 
 	public SendDocumentsByEMailController(UserRequest ureq, WindowControl wControl) {
-		super(ureq, wControl, null, Util.createPackageTranslator(MetaInfo.class, ureq.getLocale(),
-				Util.createPackageTranslator(MailModule.class, ureq.getLocale())));
+		super(ureq, wControl, null, Util.createPackageTranslator(MailModule.class, ureq.getLocale()));
 		setBasePackage(MailModule.class);
 
-		mailManager = CoreSpringFactory.getImpl(MailManager.class);
-		securityManager = BaseSecurityManager.getInstance();
 		allowAttachments = !FolderConfig.getSendDocumentLinkOnly();
 
 		initForm(ureq);
@@ -137,7 +138,7 @@ public class SendDocumentsByEMailController extends FormBasicController implemen
 
 		subjectElement = uifactory.addTextElement("tsubject", "send.mail.subject", 255, "", formLayout);
 
-		bodyElement = uifactory.addTextAreaElement("tbody", "send.mail.body", -1, 20, emailCols, false, "", formLayout);
+		bodyElement = uifactory.addTextAreaElement("tbody", "send.mail.body", -1, 20, emailCols, false, false, "", formLayout);
 
 		if (allowAttachments) {
 			String page = Util.getPackageVelocityRoot(MailModule.class) + "/sendattachments.html";
@@ -186,7 +187,7 @@ public class SendDocumentsByEMailController extends FormBasicController implemen
 		if (status == FolderCommandStatus.STATUS_FAILED) {
 			return null;
 		}
-		selection = new FileSelection(ureq, folderComponent.getCurrentContainerPath());
+		FileSelection selection = new FileSelection(ureq, folderComponent.getCurrentContainerPath());
 		status = FolderCommandHelper.sanityCheck3(wControl, folderComponent, selection);
 		if (status == FolderCommandStatus.STATUS_FAILED) {
 			return null;
@@ -194,7 +195,7 @@ public class SendDocumentsByEMailController extends FormBasicController implemen
 
 		boolean selectionWithContainer = false;
 		List<String> filenames = selection.getFiles();
-		List<VFSLeaf> leafs = new ArrayList<VFSLeaf>();
+		List<VFSLeaf> leafs = new ArrayList<>();
 		for (String file : filenames) {
 			VFSItem item = currentContainer.resolve(file);
 			if (item instanceof VFSContainer) {
@@ -215,9 +216,7 @@ public class SendDocumentsByEMailController extends FormBasicController implemen
 		return this;
 	}
 
-	protected void setFiles(VFSContainer rootContainer, List<VFSLeaf> leafs) {
-		this.files = leafs;
-
+	protected void setFiles(VFSContainer rootContainer, List<VFSLeaf> files) {
 		StringBuilder subjectSb = new StringBuilder();
 		if (StringHelper.containsNonWhitespace(subjectElement.getValue())) {
 			subjectSb.append(subjectElement.getValue()).append('\n').append('\n');
@@ -227,12 +226,12 @@ public class SendDocumentsByEMailController extends FormBasicController implemen
 			bodySb.append(bodyElement.getValue()).append('\n').append('\n');
 		}
 
-		attachments = new ArrayList<File>();
+		attachments = new ArrayList<>();
 		long fileSize = 0l;
 		for (VFSLeaf file : files) {
-			MetaInfo infos = null;
-			if (file instanceof MetaTagged) {
-				infos = ((MetaTagged) file).getMetaInfo();
+			VFSMetadata infos = null;
+			if (file.canMeta() == VFSConstants.YES) {
+				infos = file.getMetaInfo();
 			}
 			// subject
 			appendToSubject(file, infos, subjectSb);
@@ -255,7 +254,7 @@ public class SendDocumentsByEMailController extends FormBasicController implemen
 				attachments.clear();
 				setFormWarning("send.mail.fileToBigForAttachments", new String[] { String.valueOf(mailQuota), String.valueOf(fileSizeInMB) });
 			} else {
-				List<FileInfo> infos = new ArrayList<FileInfo>(files.size());
+				List<FileInfo> infos = new ArrayList<>(files.size());
 				for (VFSLeaf file : files) {
 					final String name = file.getName();
 					final double size = file.getSize() / (1024.0 * 1024.0);
@@ -271,7 +270,7 @@ public class SendDocumentsByEMailController extends FormBasicController implemen
 		bodyElement.setValue(bodySb.toString());
 	}
 
-	protected void appendToSubject(VFSLeaf file, MetaInfo infos, StringBuilder sb) {
+	protected void appendToSubject(VFSLeaf file, VFSMetadata infos, StringBuilder sb) {
 		if (sb.length() > 0)
 			sb.append(", ");
 		if (infos != null && StringHelper.containsNonWhitespace(infos.getTitle())) {
@@ -281,11 +280,11 @@ public class SendDocumentsByEMailController extends FormBasicController implemen
 		}
 	}
 
-	protected void appendMetadatas(VFSLeaf file, MetaInfo infos, StringBuilder sb) {
+	protected void appendMetadatas(VFSLeaf file, VFSMetadata infos, StringBuilder sb) {
 		if (infos == null) {
 			appendMetadata("mf.filename", file.getName(), sb);
 		} else {
-			appendMetadata("mf.filename", infos.getName(), sb);
+			appendMetadata("mf.filename", infos.getFilename(), sb);
 			String title = infos.getTitle();
 			if (StringHelper.containsNonWhitespace(title)) {
 				appendMetadata("mf.title", title, sb);
@@ -323,15 +322,15 @@ public class SendDocumentsByEMailController extends FormBasicController implemen
 			if (StringHelper.containsNonWhitespace(url)) {
 				appendMetadata("mf.url", url, sb);
 			}
-			String author = infos.getHTMLFormattedAuthor();
+			String author = userManager.getUserDisplayName(infos.getAuthor());
 			if (StringHelper.containsNonWhitespace(author)) {
 				appendMetadata("mf.author", author, sb);
 			}
 			String size = Formatter.formatBytes(file.getSize());
 			appendMetadata("mf.size", size, sb);
-			long lastModifiedDate = infos.getLastModified();
-			if (lastModifiedDate > 0) {
-				appendMetadata("mf.lastModified", StringHelper.formatLocaleDate(lastModifiedDate, getLocale()), sb);
+			Date lastModifiedDate = infos.getFileLastModified();
+			if (lastModifiedDate != null) {
+				appendMetadata("mf.lastModified", Formatter.getInstance(getLocale()).formatDate(lastModifiedDate), sb);
 			}
 			String type = FolderHelper.extractFileType(file.getName(), getLocale());
 			if (StringHelper.containsNonWhitespace(type)) {
@@ -348,7 +347,7 @@ public class SendDocumentsByEMailController extends FormBasicController implemen
 		sb.append(translate(i18nKey)).append(": ").append(value).append('\n');
 	}
 
-	protected void appendPublicationDate(MetaInfo infos, StringBuilder sb) {
+	protected void appendPublicationDate(VFSMetadata infos, StringBuilder sb) {
 		String[] publicationDate = infos.getPublicationDate();
 		if (publicationDate == null || publicationDate.length != 2)
 			return;
@@ -412,7 +411,7 @@ public class SendDocumentsByEMailController extends FormBasicController implemen
 
 		List<Identity> invalidTos = getInvalidToAddressesFromTextBoxList();
 		userListBox.clearError();
-		if (invalidTos.size() > 0) {
+		if (!invalidTos.isEmpty()) {
 			String[] invalidTosArray = new String[invalidTos.size()];
 			userListBox.setErrorKey("mailhelper.error.addressinvalid", invalidTos.toArray(invalidTosArray));
 			allOk &= false;
@@ -432,7 +431,7 @@ public class SendDocumentsByEMailController extends FormBasicController implemen
 	 * @return
 	 */
 	private List<Identity> getInvalidToAddressesFromTextBoxList() {
-		List<Identity> invalidTos = new ArrayList<Identity>();
+		List<Identity> invalidTos = new ArrayList<>();
 
 		// the toValues are either usernames (from autocompletion, thus OLAT
 		// users) or email-addresses (external)
@@ -459,7 +458,7 @@ public class SendDocumentsByEMailController extends FormBasicController implemen
 	protected void formInnerEvent(UserRequest ureq, FormItem source, FormEvent event) {
 		if(source == addEmailLink) {
 			doAddEmail(ureq);
-		} if(source instanceof FormLink && source.getUserObject() instanceof IdentityWrapper) {
+		} else if(source instanceof FormLink && source.getUserObject() instanceof IdentityWrapper) {
 			if(source.getName().startsWith("rm-")) {
 				for(Iterator<IdentityWrapper> wrapperIt=toValues.iterator(); wrapperIt.hasNext(); ) {
 					IdentityWrapper wrapper = wrapperIt.next();
@@ -502,7 +501,7 @@ public class SendDocumentsByEMailController extends FormBasicController implemen
 
 	@Override
 	protected void formOK(UserRequest ureq) {
-		List<Identity> tos = new ArrayList<Identity>(toValues.size());
+		List<Identity> tos = new ArrayList<>(toValues.size());
 		for(IdentityWrapper wrapper:toValues) {
 			tos.add(wrapper.getIdentity());
 		}
@@ -548,8 +547,10 @@ public class SendDocumentsByEMailController extends FormBasicController implemen
 			bundle.setContent(subject, body, attachmentArray);
 			result.append(mailManager.sendMessage(bundle));
 		}
-
-		MailHelper.printErrorsAndWarnings(result, getWindowControl(), ureq.getLocale());
+		
+		Roles roles = ureq.getUserSession().getRoles();
+		boolean detailedErrorOutput = roles.isAdministrator() || roles.isSystemAdmin();
+		MailHelper.printErrorsAndWarnings(result, getWindowControl(), detailedErrorOutput, ureq.getLocale());
 	}
 
 	public class FileInfo {
@@ -589,7 +590,7 @@ public class SendDocumentsByEMailController extends FormBasicController implemen
 			if(identity instanceof EMailIdentity) {
 				return identity.getUser().getProperty(UserConstants.EMAIL, null);
 			}
-			return UserManager.getInstance().getUserDisplayName(identity);
+			return userManager.getUserDisplayName(identity);
 		}
 		
 		public Identity getIdentity() {

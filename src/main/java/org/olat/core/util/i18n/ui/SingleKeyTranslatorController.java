@@ -40,6 +40,7 @@ import org.olat.core.util.Util;
 import org.olat.core.util.i18n.I18nItem;
 import org.olat.core.util.i18n.I18nManager;
 import org.olat.core.util.i18n.I18nModule;
+import org.springframework.beans.factory.annotation.Autowired;
 
 /**
  * 
@@ -61,7 +62,10 @@ public class SingleKeyTranslatorController extends FormBasicController {
 	private static final String LBL_NAME_PREFIX = "lbl.";
 	private Map<String, TextElement> textElements;
 
+	@Autowired
 	private I18nManager i18nMng;
+	@Autowired
+	private I18nModule i18nModule;
 
 	public SingleKeyTranslatorController(UserRequest ureq, WindowControl wControl, String keyToTranslate, Class<?> translatorBaseClass) {
 		this(ureq,wControl,new String[]{keyToTranslate},translatorBaseClass);
@@ -94,20 +98,17 @@ public class SingleKeyTranslatorController extends FormBasicController {
 
 	@Override
 	protected void initForm(FormItemContainer formLayout, Controller listener, UserRequest ureq) {
-		// load 18n-stuff
-		i18nMng = I18nManager.getInstance();
+		Map<Locale, Locale> allOverlays = i18nModule.getOverlayLocales();
 
-		Map<Locale, Locale> allOverlays = I18nModule.getOverlayLocales();
-
-		Collection<String> enabledKeys = I18nModule.getEnabledLanguageKeys();
-		bundles = new ArrayList<I18nRowBundle>();
+		Collection<String> enabledKeys = i18nModule.getEnabledLanguageKeys();
+		bundles = new ArrayList<>();
 		for (String key : enabledKeys) {
 			Locale loc = i18nMng.getLocaleOrNull(key);
 			if (loc != null) bundles.add(new I18nRowBundle(key, allOverlays.get(loc), loc));
 		}
 
 		// build the form
-		textElements = new HashMap<String, TextElement>();
+		textElements = new HashMap<>();
 		for (I18nRowBundle i18nRowBundle : bundles) {
 			uifactory.addStaticTextElement(LBL_NAME_PREFIX + i18nRowBundle.getLanguageKey(), null, i18nRowBundle.getKeyTranslator().getLocale()
 					.getDisplayLanguage(getLocale()), formLayout);
@@ -130,12 +131,8 @@ public class SingleKeyTranslatorController extends FormBasicController {
 		formLayout.add(buttonLayout);
 	}
 
-	/**
-	 * @param ureq
-	 * @return
-	 */
+	@Override
 	protected boolean validateFormLogic(UserRequest ureq) {
-		// TODO Auto-generated method stub
 		return true;
 	}
 
@@ -158,12 +155,9 @@ public class SingleKeyTranslatorController extends FormBasicController {
 
 	@Override
 	protected void formOK(UserRequest ureq) {
-
 		// save new values
 		for (I18nRowBundle bundle : bundles) {
 			String newValue = textElements.get(bundle.getLanguageKey()).getValue();
-			// getLogger().info("saving new value for language " +
-			// bundle.getLanguageKey() + ":: " + newValue);
 			for (String itemKey : this.i18nItemKeys) {
 				I18nItem item = i18nMng.getI18nItem(translatorBaseClass.getPackage().getName(), itemKey, bundle.getOverlayLocale());
 				i18nMng.saveOrUpdateI18nItem(item, newValue);
@@ -175,7 +169,7 @@ public class SingleKeyTranslatorController extends FormBasicController {
 
 	@Override
 	protected void doDispose() {
-		// TODO Auto-generated method stub
+		//
 	}
 
 	/**

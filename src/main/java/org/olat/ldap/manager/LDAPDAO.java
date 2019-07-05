@@ -30,6 +30,7 @@ import javax.naming.NamingEnumeration;
 import javax.naming.NamingException;
 import javax.naming.SizeLimitExceededException;
 import javax.naming.directory.Attribute;
+import javax.naming.directory.Attributes;
 import javax.naming.directory.DirContext;
 import javax.naming.directory.SearchControls;
 import javax.naming.directory.SearchResult;
@@ -38,9 +39,7 @@ import javax.naming.ldap.LdapContext;
 import javax.naming.ldap.PagedResultsControl;
 import javax.naming.ldap.PagedResultsResponseControl;
 
-import net.fortuna.ical4j.util.TimeZones;
-
-import org.olat.core.logging.OLog;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.StringHelper;
 import org.olat.ldap.LDAPConstants;
@@ -51,6 +50,8 @@ import org.olat.ldap.model.LDAPUser;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
+import net.fortuna.ical4j.util.TimeZones;
+
 /**
  * 
  * Initial date: 24.11.2014<br>
@@ -60,7 +61,7 @@ import org.springframework.stereotype.Service;
 @Service
 public class LDAPDAO {
 	
-	private static final OLog log = Tracing.createLoggerFor(LDAPDAO.class);
+	private static final Logger log = Tracing.createLoggerFor(LDAPDAO.class);
 	
 	private static final int PAGE_SIZE = 50;
 	private static final TimeZone UTC_TIME_ZONE;
@@ -86,6 +87,30 @@ public class LDAPDAO {
 			LDAPGroupVisitor visitor = new LDAPGroupVisitor();
 			search(visitor, groupDN, filter, groupAttributes, ctx);
 			ldapGroups.addAll(visitor.getGroups());
+		}
+		return ldapGroups;
+	}
+	
+	public List<LDAPGroup> searchGroups(LdapContext ctx, List<String> groupDNs, String filter) {
+		final List<LDAPGroup> ldapGroups = new ArrayList<>();
+		String[] groupAttributes = new String[]{ "cn" };
+		for(String groupDN:groupDNs) {
+			LDAPVisitor visitor = new LDAPVisitor() {
+				@Override
+				public void visit(SearchResult searchResult) throws NamingException {
+					Attributes resAttributes = searchResult.getAttributes();
+					Attribute cnAttr = resAttributes.get("cn");
+
+					Object cn = cnAttr.get();
+					if(cn instanceof String) {
+						LDAPGroup group = new LDAPGroup();
+						group.setCommonName((String)cn);
+						ldapGroups.add(group);
+					}
+				}
+				
+			};
+			search(visitor, groupDN, filter, groupAttributes, ctx);
 		}
 		return ldapGroups;
 	}
@@ -121,7 +146,7 @@ public class LDAPDAO {
 		} catch (SizeLimitExceededException e) {
 			log.error("SizeLimitExceededException after "
 							+ counter
-							+ " records when getting all users from LDAP, reconfigure your LDAP server, hints: http://www.ldapbrowser.com/forum/viewtopic.php?t=14", null);
+							+ " records when getting all users from LDAP, reconfigure your LDAP server, hints: http://www.ldapbrowser.com/forum/viewtopic.php?t=14");
 		} catch (NamingException e) {
 			log.error("NamingException when trying to search from LDAP using ldapBase::" + ldapBase + " on row::" + counter, e);
 		} catch (Exception e) {
@@ -217,7 +242,7 @@ public class LDAPDAO {
 		return userDN;
 	}
 	
-	private String buildSearchUserFilter(String attribute, String uid) {
+	protected String buildSearchUserFilter(String attribute, String uid) {
 		String ldapUserFilter = syncConfiguration.getLdapUserFilter();
 		StringBuilder filter = new StringBuilder();
 		if (ldapUserFilter != null) {
@@ -252,7 +277,7 @@ public class LDAPDAO {
 	 */
 
 	public List<LDAPUser> getUserAttributesModifiedSince(Date syncTime, LdapContext ctx) {
-		final boolean debug = log.isDebug();
+		final boolean debug = log.isDebugEnabled();
 		String userFilter = syncConfiguration.getLdapUserFilter();
 		StringBuilder filter = new StringBuilder();
 		if (syncTime == null) {

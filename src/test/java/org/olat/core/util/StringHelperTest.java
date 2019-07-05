@@ -22,6 +22,9 @@ package org.olat.core.util;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
+import java.util.ArrayList;
+import java.util.List;
+
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -40,7 +43,7 @@ public class StringHelperTest {
 	public void base64() throws Exception {
 		String str = "this a super secret string avec un \u00E9 et encore quelques charact\u00E8res kanji \u30b0.";
 
-		String xstream64 = new com.thoughtworks.xstream.core.util.Base64Encoder().encode(str.getBytes());
+		String xstream64 = new com.thoughtworks.xstream.core.util.Base64Encoder(true).encode(str.getBytes());
 		String infinispan64 = org.infinispan.commons.util.Base64.encodeBytes(str.getBytes());
 		String olat64 = StringHelper.encodeBase64(str);
 		String olatBytes64 = StringHelper.encodeBase64(str.getBytes());
@@ -51,15 +54,15 @@ public class StringHelperTest {
 		
 		//decode with the same coder
 		Assert.assertEquals(str, new String(org.infinispan.commons.util.Base64.decode(infinispan64)));
-		Assert.assertEquals(str, new String(new com.thoughtworks.xstream.core.util.Base64Encoder().decode(xstream64)));
+		Assert.assertEquals(str, new String(new com.thoughtworks.xstream.core.util.Base64Encoder(true).decode(xstream64)));
 		Assert.assertEquals(str, StringHelper.decodeBase64(olat64));
 		Assert.assertEquals(str, StringHelper.decodeBase64(olatBytes64));
 		
 		//decode with an other decoder
 		Assert.assertEquals(str, new String(org.infinispan.commons.util.Base64.decode(olat64)));
 		Assert.assertEquals(str, new String(org.infinispan.commons.util.Base64.decode(olatBytes64)));
-		Assert.assertEquals(str, new String(new com.thoughtworks.xstream.core.util.Base64Encoder().decode(olat64)));
-		Assert.assertEquals(str, new String(new com.thoughtworks.xstream.core.util.Base64Encoder().decode(olatBytes64)));
+		Assert.assertEquals(str, new String(new com.thoughtworks.xstream.core.util.Base64Encoder(true).decode(olat64)));
+		Assert.assertEquals(str, new String(new com.thoughtworks.xstream.core.util.Base64Encoder(true).decode(olatBytes64)));
 		Assert.assertEquals(str, StringHelper.decodeBase64(infinispan64));
 		Assert.assertEquals(str, StringHelper.decodeBase64(xstream64));
 	}
@@ -136,6 +139,10 @@ public class StringHelperTest {
 		//it's pahlavi \u10B7x
 		String value12 = StringHelper.cleanUTF8ForXml("Hello\u10B7x pahlavi");
 		Assert.assertEquals("Pahlavi test", "Hello\u10B7x pahlavi", value12);
+
+		// smile
+		String value13 = StringHelper.cleanUTF8ForXml("Smile \uD83D\uDE00x now");
+		Assert.assertEquals("Smile test", "Smile \uD83D\uDE00x now", value13);
 	}
 	
 	@Test
@@ -171,9 +178,30 @@ public class StringHelperTest {
 		Assert.assertFalse(StringHelper.isHtml("http://some.domain:8080/olat/dmz/registration/index.html?key=b67a28bd5e5820155b3ba496ef16d1d9&lang=de"));
 		
 		//good and bad html code
-		Assert.assertTrue(StringHelper.isHtml("<html><head></head><body>Hello world</body></html>"));
 		Assert.assertTrue(StringHelper.isHtml("Hello <p>world</p>"));
 		Assert.assertTrue(StringHelper.isHtml("<ul><li>Hello<li>world</ul>"));
 		Assert.assertTrue(StringHelper.isHtml("Hello<br>world"));
+		Assert.assertTrue(StringHelper.isHtml("<html><head></head><body>Hello world</body></html>"));
+		Assert.assertTrue(StringHelper.isHtml("<html><head></head><body><p>Hello world</p></body></html>"));
+	}
+	
+	@Test
+	public void formatAsCSVString() {
+		List<String> entries = new ArrayList<>();
+		entries.add("Hell\"o\"");
+		entries.add("Test,dru,");
+		entries.add("Final");
+		String csv = StringHelper.formatAsCSVString(entries);
+		Assert.assertEquals("Hell\"o\",Test,dru,,Final", csv);
+	}
+	
+	@Test
+	public void formatAsEscapedCSVString() {
+		List<String> entries = new ArrayList<>();
+		entries.add("Hell\"o\"");
+		entries.add("Test,dru,");
+		entries.add("Final");
+		String csv = StringHelper.formatAsEscapedCSVString(entries);
+		Assert.assertEquals("Hell\"\"o\"\",\"Test,dru,\",Final", csv);
 	}
 }

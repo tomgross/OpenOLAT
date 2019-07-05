@@ -38,7 +38,7 @@ import org.olat.core.gui.control.WindowControl;
 import org.olat.core.gui.control.controller.BasicController;
 import org.olat.core.gui.control.generic.modal.DialogBoxController;
 import org.olat.core.gui.control.generic.modal.DialogBoxUIFactory;
-import org.olat.core.logging.OLog;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
 import org.olat.course.statistic.StatisticUpdateManager;
 import org.quartz.CronTrigger;
@@ -46,7 +46,7 @@ import org.quartz.Scheduler;
 import org.quartz.SchedulerException;
 import org.quartz.Trigger;
 import org.quartz.TriggerKey;
-import org.springframework.scheduling.quartz.CronTriggerFactoryBean;
+import org.springframework.beans.factory.annotation.Autowired;
 
 /**
  * Admin Controller for statistics - similar to the notifications controller.
@@ -62,7 +62,7 @@ import org.springframework.scheduling.quartz.CronTriggerFactoryBean;
 public class StatisticsAdminController extends BasicController {
 
 	/** the logging object used in this class **/
-	private static final OLog log_ = Tracing.createLoggerFor(StatisticsAdminController.class);
+	private static final Logger log_ = Tracing.createLoggerFor(StatisticsAdminController.class);
 
 	private static final String STATISTICS_FULL_RECALCULATION_TRIGGER_BUTTON = "statistics.fullrecalculation.trigger.button";
 	private static final String STATISTICS_UPDATE_TRIGGER_BUTTON = "statistics.update.trigger.button";
@@ -70,6 +70,9 @@ public class StatisticsAdminController extends BasicController {
 	private VelocityContainer content;
 
 	private DialogBoxController dialogCtr_;
+	
+	@Autowired
+	private Scheduler scheduler;
 	
 	public StatisticsAdminController(UserRequest ureq, WindowControl wControl) {
 		super(ureq, wControl);
@@ -83,35 +86,42 @@ public class StatisticsAdminController extends BasicController {
 	}
 
 	private void refreshUIState() {
+
+		log_.info("refreshUIState: schedulerFactoryBean found");
+
 		boolean enabled = false;
 		String cronExpression = "";
-		if (CoreSpringFactory.containsBean(Scheduler.class)) {
-			log_.info("refreshUIState: scheduler found");
-			Scheduler scheduler = (Scheduler) CoreSpringFactory.getBean(Scheduler.class);
-			try {
-				TriggerKey triggerKey = new TriggerKey("updateStatisticsTrigger", null/*trigger group*/);
-				Trigger.TriggerState triggerState = scheduler.getTriggerState(triggerKey);
-				enabled = (triggerState!=Trigger.TriggerState.NONE) && (triggerState!=Trigger.TriggerState.ERROR);
-				log_.info("refreshUIState: updateStatisticsTrigger state was "+triggerState+", enabled now: "+enabled);
-			} catch (SchedulerException e) {
-				log_.warn("refreshUIState: Got a SchedulerException while asking for the updateStatisticsTrigger's state", e);
-			}
-
-			CronTrigger cronTrigger  = (CronTrigger) CoreSpringFactory.getBean("updateStatisticsTrigger");
-			enabled &= cronTrigger.getJobKey().getName().equals("org.olat.statistics.job.enabled");
-			log_.info("refreshUIState: org.olat.statistics.job.enabled check, enabled now: "+enabled);
-			cronExpression = cronTrigger.getCronExpression();
-			StatisticUpdateManager statisticUpdateManager = getStatisticUpdateManager();
-			if (statisticUpdateManager==null) {
-				log_.info("refreshUIState: statisticUpdateManager not configured");
-				enabled = false;
+		Trigger.TriggerState triggerState;
+		try {
+			TriggerKey triggerKey = new TriggerKey("updateStatisticsTrigger", null/*trigger group*/);
+			triggerState = scheduler.getTriggerState(triggerKey);
+			enabled = triggerState != Trigger.TriggerState.NONE && triggerState!=Trigger.TriggerState.ERROR;
+			
+			Trigger trigger = scheduler.getTrigger(triggerKey);
+			if(trigger == null) {
+				enabled &= false;
 			} else {
-				enabled &= statisticUpdateManager.isEnabled();
-				log_.info("refreshUIState: statisticUpdateManager configured, enabled now: "+enabled);
+				enabled &= trigger.getJobKey().getName().equals("org.olat.statistics.job.enabled");
+				if(trigger instanceof CronTrigger) {
+					log_.info("refreshUIState: org.olat.statistics.job.enabled check, enabled now: "+enabled);
+					cronExpression = ((CronTrigger)trigger).getCronExpression();
+				}
 			}
-		} else {
-			log_.info("refreshUIState: scheduler not found");
+			
+			log_.info("refreshUIState: updateStatisticsTrigger state was "+triggerState+", enabled now: "+enabled);
+		} catch (SchedulerException e) {
+			log_.warn("refreshUIState: Got a SchedulerException while asking for the updateStatisticsTrigger's state", e);
 		}
+		
+		StatisticUpdateManager statisticUpdateManager = getStatisticUpdateManager();
+		if (statisticUpdateManager==null) {
+			log_.info("refreshUIState: statisticUpdateManager not configured");
+			enabled = false;
+		} else {
+			enabled &= statisticUpdateManager.isEnabled();
+			log_.info("refreshUIState: statisticUpdateManager configured, enabled now: "+enabled);
+		}
+
 		if (enabled) {
 			content.contextPut("status", getTranslator().translate("statistics.status.enabled", new String[]{ cronExpression }));
 		} else {
@@ -148,6 +158,7 @@ public class StatisticsAdminController extends BasicController {
 		}
 	}
 
+	@Override
 	public void event(UserRequest ureq, Controller source, Event event) {
 		if (source == dialogCtr_) {
 			if (DialogBoxUIFactory.isYesEvent(event)) {				
@@ -163,12 +174,6 @@ public class StatisticsAdminController extends BasicController {
 		}
 	}
 
-	
-	/**
-	 * @see org.olat.core.gui.control.DefaultController#event(org.olat.core.gui.UserRequest,
-	 *      org.olat.core.gui.components.Component,
-	 *      org.olat.core.gui.control.Event)
-	 */
 	@Override
 	public void event(UserRequest ureq, Component source, Event event) {
 		if (STATISTICS_FULL_RECALCULATION_TRIGGER_BUTTON.equals(event.getCommand())) {

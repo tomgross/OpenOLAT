@@ -39,13 +39,13 @@ import javax.persistence.Temporal;
 import javax.persistence.TemporalType;
 import javax.persistence.Version;
 
+import org.apache.logging.log4j.Logger;
 import org.hibernate.annotations.GenericGenerator;
 import org.hibernate.annotations.Parameter;
 import org.olat.basesecurity.Group;
 import org.olat.basesecurity.model.GroupImpl;
 import org.olat.core.id.ModifiedInfo;
 import org.olat.core.id.Persistable;
-import org.olat.core.logging.OLog;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.StringHelper;
 import org.olat.core.util.resource.OresHelper;
@@ -65,7 +65,7 @@ import org.olat.resource.OLATResourceImpl;
 public class BusinessGroupImpl implements Persistable, ModifiedInfo, BusinessGroup {
 
 	private static final long serialVersionUID = -6977108696910447781L;
-	private static final OLog log = Tracing.createLoggerFor(BusinessGroupImpl.class);
+	private static final Logger log = Tracing.createLoggerFor(BusinessGroupImpl.class);
 	
 	@Id
 	@GeneratedValue(generator = "system-uuid")
@@ -373,30 +373,18 @@ public class BusinessGroupImpl implements Persistable, ModifiedInfo, BusinessGro
 		int oldMaxParticipants = getMaxParticipants()!=null ? getMaxParticipants() : 0;
 		this.maxParticipants = maxParticipants;
 		if(maxParticipantsChanged) {
-		  log.audit("Max participants value changed for group " + this + " was " + oldMaxParticipants + " changed to " + maxParticipants);
+		  log.info(Tracing.M_AUDIT, "Max participants value changed for group " + this + " was " + oldMaxParticipants + " changed to " + maxParticipants);
 		}
 	}
 
-	/**
-	 * @see org.olat.group.BusinessGroup#getMinParticipants()
-	 */
 	public Integer getMinParticipants() {
 		return minParticipants;
 	}
 
-	/**
-	 * @see org.olat.group.BusinessGroup#setMinParticipants(java.lang.Integer)
-	 */
 	public void setMinParticipants(Integer minParticipants) {
 		this.minParticipants = minParticipants;
 	}
 
-	/**
-	 * @see java.lang.Object#toString()
-	 */
-	public String toString() {
-		return "name=" + name + "::" + "::" + super.toString();
-	}
 
 	public Boolean getAutoCloseRanksEnabled() {
 		return autoCloseRanksEnabled;
@@ -437,5 +425,14 @@ public class BusinessGroupImpl implements Persistable, ModifiedInfo, BusinessGro
 	@Override
 	public int hashCode() {
 		return getKey() == null ? 2901 : getKey().hashCode();
+	}
+	
+	@Override
+	public String toString() {
+		StringBuilder sb = new StringBuilder(256);
+		sb.append("businessGroup[key=").append(getKey() == null ? "" : getKey())
+		  .append(";name=").append(getName() == null ? "" : getName()).append("]")
+		  .append(super.toString());
+		return sb.toString();
 	}
 }

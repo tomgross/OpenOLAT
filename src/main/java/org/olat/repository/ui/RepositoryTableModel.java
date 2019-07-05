@@ -48,14 +48,13 @@ import org.olat.core.gui.render.StringOutput;
 import org.olat.core.gui.translator.Translator;
 import org.olat.core.util.StringHelper;
 import org.olat.core.util.Util;
-import org.olat.login.LoginModule;
 import org.olat.repository.RepositoryEntry;
-import org.olat.repository.RepositoryEntryStatus;
-import org.olat.repository.RepositoryManager;
+import org.olat.repository.RepositoryEntryStatusEnum;
 import org.olat.repository.RepositoryModule;
 import org.olat.repository.RepositoryService;
 import org.olat.repository.manager.RepositoryEntryLifecycleDAO;
 import org.olat.repository.model.RepositoryEntryLifecycle;
+import org.olat.repository.ui.author.AccessRenderer;
 import org.olat.resource.accesscontrol.ACService;
 import org.olat.resource.accesscontrol.AccessControlModule;
 import org.olat.resource.accesscontrol.model.OLATResourceAccess;
@@ -70,7 +69,7 @@ import org.olat.user.UserManager;
  * 
  */
 public class RepositoryTableModel extends DefaultTableDataModel<RepositoryEntry> {
-
+	
 	/**
 	 * Identifies a table selection event (outer-left column)
 	 */
@@ -92,14 +91,14 @@ public class RepositoryTableModel extends DefaultTableDataModel<RepositoryEntry>
 	private static final int COLUMN_COUNT = 7;
 	private final Translator translator;
 	private final ACService acService;
-	private final LoginModule loginModule;
 	private final AccessControlModule acModule;
 	private final RepositoryModule repositoryModule;
 	private final RepositoryEntryLifecycleDAO lifecycleDao;
 	private final UserManager userManager;
+	private final AccessRenderer accessRenderer;
 	
-	private final Map<Long,OLATResourceAccess> repoEntriesWithOffer = new HashMap<Long,OLATResourceAccess>();;
-	private final Map<String,String> fullNames = new HashMap<String, String>();
+	private final Map<Long,OLATResourceAccess> repoEntriesWithOffer = new HashMap<>();
+	private final Map<String,String> fullNames = new HashMap<>();
 	
 	/**
 	 * Default constructor.
@@ -109,11 +108,11 @@ public class RepositoryTableModel extends DefaultTableDataModel<RepositoryEntry>
 		super(new ArrayList<RepositoryEntry>());
 		translator = Util.createPackageTranslator(RepositoryService.class, locale);
 		acService = CoreSpringFactory.getImpl(ACService.class);
-		loginModule = CoreSpringFactory.getImpl(LoginModule.class);
 		userManager = CoreSpringFactory.getImpl(UserManager.class);
 		acModule = CoreSpringFactory.getImpl(AccessControlModule.class);
 		repositoryModule = CoreSpringFactory.getImpl(RepositoryModule.class);
 		lifecycleDao = CoreSpringFactory.getImpl(RepositoryEntryLifecycleDAO.class);
+		accessRenderer = new AccessRenderer(locale);
 	}
 
 	/**
@@ -133,16 +132,16 @@ public class RepositoryTableModel extends DefaultTableDataModel<RepositoryEntry>
 			public int compareTo(int rowa, int rowb) {
 				Object o1 = table.getTableDataModel().getObject(rowa);
 				Object o2 = table.getTableDataModel().getObject(rowb);
-				if(o1 == null || !(o1 instanceof RepositoryEntry)) return -1;
-				if(o2 == null || !(o2 instanceof RepositoryEntry)) return 1;
+				if(!(o1 instanceof RepositoryEntry)) return -1;
+				if(!(o2 instanceof RepositoryEntry)) return 1;
 				RepositoryEntry re1 = (RepositoryEntry)o1;
 				RepositoryEntry re2 = (RepositoryEntry)o2;
 				
-				if(re1.isMembersOnly()) {
-					if(!re2.isMembersOnly()) {
+				if(!re1.isAllUsers() && !re1.isGuests()) {
+					if(re2.isAllUsers() || re2.isGuests()) {
 						return 1;
 					}
-				} else if(re2.isMembersOnly()) {
+				} else if(!re1.isAllUsers() && !re1.isGuests()) {
 					return -1;
 				}
 				
@@ -186,18 +185,18 @@ public class RepositoryTableModel extends DefaultTableDataModel<RepositoryEntry>
 				Object o1 = table.getTableDataModel().getValueAt(rowa, 1);
 				Object o2 = table.getTableDataModel().getValueAt(rowb, 1);
 				
-				if(o1 == null || !(o1 instanceof RepositoryEntry)) return -1;
-				if(o2 == null || !(o2 instanceof RepositoryEntry)) return 1;
+				if(!(o1 instanceof RepositoryEntry)) return -1;
+				if(!(o2 instanceof RepositoryEntry)) return 1;
 				RepositoryEntry re1 = (RepositoryEntry)o1;
 				RepositoryEntry re2 = (RepositoryEntry)o2;
-				boolean c1 = RepositoryManager.getInstance().createRepositoryEntryStatus(re1.getStatusCode()).isClosed();
-				boolean c2 = RepositoryManager.getInstance().createRepositoryEntryStatus(re2.getStatusCode()).isClosed();
+				boolean c1 = re1.getEntryStatus() == RepositoryEntryStatusEnum.closed;
+				boolean c2 = re2.getEntryStatus() == RepositoryEntryStatusEnum.closed;
 				int result = (c2 == c1 ? 0 : (c1 ? 1 : -1));//same as Boolean compare
 				if(result == 0) {
 					Object a = table.getTableDataModel().getValueAt(rowa, dataColumn);
 					Object b = table.getTableDataModel().getValueAt(rowb, dataColumn);
-					if(a == null || !(a instanceof String)) return -1;
-					if(b == null || !(b instanceof String)) return 1;
+					if(!(a instanceof String)) return -1;
+					if(!(b instanceof String)) return 1;
 					String s1 = (String)a;
 					String s2 = (String)b;
 					result = compareString(s1, s2);
@@ -214,7 +213,6 @@ public class RepositoryTableModel extends DefaultTableDataModel<RepositoryEntry>
 				RepoCols.lifecycleEnd.ordinal(), null, loc, ColumnDescriptor.ALIGNMENT_LEFT, dateRenderer));
 		tableCtr.addColumnDescriptor(new DefaultColumnDescriptor("table.header.author", RepoCols.author.ordinal(), null, loc));
 
-		CustomCellRenderer accessRenderer = new RepositoryEntryAccessColumnDescriptor(translator);
 		ColumnDescriptor accessColDesc = new CustomRenderColumnDescriptor("table.header.access", RepoCols.repoEntry.ordinal(), null, loc, 
 				ColumnDescriptor.ALIGNMENT_LEFT, accessRenderer) {
 			@Override
@@ -222,16 +220,18 @@ public class RepositoryTableModel extends DefaultTableDataModel<RepositoryEntry>
 				Object o1 = table.getTableDataModel().getValueAt(rowa, 1);
 				Object o2 = table.getTableDataModel().getValueAt(rowb, 1);
 				
-				if(o1 == null || !(o1 instanceof RepositoryEntry)) return -1;
-				if(o2 == null || !(o2 instanceof RepositoryEntry)) return 1;
+				if(!(o1 instanceof RepositoryEntry)) return -1;
+				if(!(o2 instanceof RepositoryEntry)) return 1;
 				RepositoryEntry re1 = (RepositoryEntry)o1;
 				RepositoryEntry re2 = (RepositoryEntry)o2;
-				int ar1 = re1.getAccess();
-				if(re1.isMembersOnly()) {
+				
+				int ar1 = re1.getEntryStatus().ordinal();
+				if(!re1.isAllUsers() && !re1.isGuests()) {
 					ar1 = 99;
 				}
-				int ar2 = re2.getAccess();
-				if(re2.isMembersOnly()) {
+				
+				int ar2 = re2.getEntryStatus().ordinal();
+				if(!re2.isAllUsers() && !re2.isGuests()) {
 					ar2 = 99;
 				}
 				if(ar1 < ar2) return -1;
@@ -261,27 +261,19 @@ public class RepositoryTableModel extends DefaultTableDataModel<RepositoryEntry>
 		return nameColDesc;
 	}
 	
-	/**
-	 * @see org.olat.core.gui.components.table.TableDataModel#getColumnCount()
-	 */
 	@Override
 	public int getColumnCount() {
 		return COLUMN_COUNT;
 	}
 
-	/**
-	 * @see org.olat.core.gui.components.table.TableDataModel#getValueAt(int, int)
-	 */
 	@Override
 	public Object getValueAt(int row, int col) {
 		RepositoryEntry re = getObject(row);
 		switch (RepoCols.values()[col]) {
 			case ac: {
-				if (re.isMembersOnly()) {
+				if (!re.isAllUsers() && !re.isGuests()) {
 					// members only always show lock icon
-					List<String> types = new ArrayList<String>(1);
-					types.add("o_ac_membersonly");
-					return types;
+					return Collections.singletonList("o_ac_membersonly");
 				}
 				OLATResourceAccess access = repoEntriesWithOffer.get(re.getOlatResource().getKey());
 				if(access == null) {
@@ -289,29 +281,13 @@ public class RepositoryTableModel extends DefaultTableDataModel<RepositoryEntry>
 				}
 				return access;
 			}
+			case acGuest: {
+				return re.isGuests();
+			}
 			case repoEntry: return re; 
 			case displayname: return getDisplayName(re, translator.getLocale());
 			case author: return getFullname(re.getInitialAuthor());
-			case access: {
-				if(re.isMembersOnly()) {
-					return translator.translate("table.header.access.membersonly"); 
-				}
-				switch (re.getAccess()) {
-					case RepositoryEntry.ACC_OWNERS: return translator.translate("table.header.access.owner");
-					case RepositoryEntry.ACC_OWNERS_AUTHORS: return translator.translate("table.header.access.author");
-					case RepositoryEntry.ACC_USERS: return translator.translate("table.header.access.user");
-					case RepositoryEntry.ACC_USERS_GUESTS: {
-						if(!loginModule.isGuestLoginLinksEnabled()) {
-							return translator.translate("table.header.access.user");
-						}
-						return translator.translate("table.header.access.guest");
-					}
-					default:						
-						// OLAT-6272 in case of broken repo entries with no access code
-						// return error instead of nothing
-						return "ERROR";
-				}
-			}
+			case access: return accessRenderer.renderEntryStatus(re);
 			case creationDate: return re.getCreationDate();
 			case lastUsage: return re.getStatistics().getLastUsage();
 			case externalId: return re.getExternalId();
@@ -338,6 +314,7 @@ public class RepositoryTableModel extends DefaultTableDataModel<RepositoryEntry>
 	
 	public enum RepoCols {
 		ac,
+		acGuest,
 		repoEntry,
 		displayname,
 		author,
@@ -389,7 +366,7 @@ public class RepositoryTableModel extends DefaultTableDataModel<RepositoryEntry>
 	private void secondaryInformationsUsernames(List<RepositoryEntry> repoEntries) {
 		if(repoEntries == null || repoEntries.isEmpty()) return;
 
-		Set<String> newNames = new HashSet<String>();
+		Set<String> newNames = new HashSet<>();
 		for(RepositoryEntry re:repoEntries) {
 			final String author = re.getInitialAuthor();
 			if(StringHelper.containsNonWhitespace(author) &&
@@ -422,8 +399,8 @@ public class RepositoryTableModel extends DefaultTableDataModel<RepositoryEntry>
 	 */
 	private String getDisplayName(RepositoryEntry repositoryEntry, Locale locale) {
 		String displayName = repositoryEntry.getDisplayname();
-		if (repositoryEntry != null && repositoryEntry.getRepositoryEntryStatus().isClosed()) {
-			Translator pT = Util.createPackageTranslator(RepositoryEntryStatus.class, locale);
+		if (repositoryEntry.getEntryStatus().decommissioned()) {
+			Translator pT = Util.createPackageTranslator(RepositoryModule.class, locale);
 			displayName = "[" + pT.translate("title.prefix.closed") + "] ".concat(displayName);
 		}
 		return displayName;
@@ -431,7 +408,6 @@ public class RepositoryTableModel extends DefaultTableDataModel<RepositoryEntry>
 
 	@Override
 	public Object createCopyWithEmptyList() {
-		RepositoryTableModel copy = new RepositoryTableModel(translator.getLocale());
-		return copy;
+		return new RepositoryTableModel(translator.getLocale());
 	}
 }

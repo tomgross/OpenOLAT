@@ -19,6 +19,8 @@
  */
 package org.olat.modules.webFeed;
 
+import org.olat.core.commons.services.notifications.SubscriptionContext;
+
 /**
  * Feed resource security callback.
  * 
@@ -29,25 +31,22 @@ package org.olat.modules.webFeed;
  */
 public class FeedResourceSecurityCallback implements FeedSecurityCallback {
 
-	private boolean isAdmin, isOwner;
+	private boolean isAdministrator;
+	
+	private SubscriptionContext subsContext;
 
-	public FeedResourceSecurityCallback(boolean isAdmin, boolean isOwner) {
-		this.isAdmin = isAdmin;
-		this.isOwner = isOwner;
+	public FeedResourceSecurityCallback(boolean isAdministrator) {
+		this.isAdministrator = isAdministrator;
 	}
 
-	/**
-	 * @see org.olat.modules.webFeed.FeedSecurityCallback#mayCreateItems()
-	 */
+	@Override
 	public boolean mayCreateItems() {
-		return isAdmin || isOwner;
+		return isAdministrator;
 	}
 
-	/**
-	 * @see org.olat.modules.webFeed.FeedSecurityCallback#mayDeleteItems()
-	 */
+	@Override
 	public boolean mayDeleteItems() {
-		return isAdmin || isOwner;
+		return isAdministrator;
 	}
 	
 	@Override
@@ -55,11 +54,9 @@ public class FeedResourceSecurityCallback implements FeedSecurityCallback {
 		return true;
 	}
 
-	/**
-	 * @see org.olat.modules.webFeed.FeedSecurityCallback#mayEditItems()
-	 */
+	@Override
 	public boolean mayEditItems() {
-		return isAdmin || isOwner;
+		return isAdministrator;
 	}
 
 	@Override
@@ -67,18 +64,23 @@ public class FeedResourceSecurityCallback implements FeedSecurityCallback {
 		return true;
 	}
 
-	/**
-	 * @see org.olat.modules.webFeed.FeedSecurityCallback#mayEditMetadata()
-	 */
+	@Override
 	public boolean mayEditMetadata() {
-		return isAdmin || isOwner;
+		return isAdministrator;
 	}
 
-	/**
-	 * @see org.olat.modules.webFeed.FeedSecurityCallback#mayViewAllDrafts()
-	 */
 	@Override
 	public boolean mayViewAllDrafts() {
-		return isAdmin || isOwner;
+		return isAdministrator;
+	}
+	
+	@Override
+	public SubscriptionContext getSubscriptionContext() {
+		return subsContext;
+	}
+	
+	@Override
+	public void setSubscriptionContext(SubscriptionContext subsContext) {
+		this.subsContext = subsContext;
 	}
 }

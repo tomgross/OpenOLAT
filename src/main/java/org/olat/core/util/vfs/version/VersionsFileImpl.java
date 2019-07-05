@@ -19,12 +19,9 @@
  */
 package org.olat.core.util.vfs.version;
 
-import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.List;
 
-import org.olat.core.id.Identity;
-import org.olat.core.util.vfs.VFSContainer;
 import org.olat.core.util.vfs.VFSLeaf;
 
 /**
@@ -39,26 +36,26 @@ import org.olat.core.util.vfs.VFSLeaf;
  * 
  * @author srosse
  */
-public class VersionsFileImpl implements Versions {
+public class VersionsFileImpl {
 
 	private boolean versioned;
 	private String author;
 	private String creator;
-	private String revisionNr;
+	private int revisionNr;
 	private String comment;
-	private Versionable currentVersion;
+	private Object currentVersion;
 	private VFSLeaf versionFile;
-	private List<VFSRevision> revisions;
+	private List<RevisionFileImpl> revisions;
 
 	public VersionsFileImpl() {
 	//
 	}
 
-	public String getRevisionNr() {
+	public int getRevisionNr() {
 		return revisionNr;
 	}
 
-	public void setRevisionNr(String revisionNr) {
+	public void setRevisionNr(int revisionNr) {
 		this.revisionNr = revisionNr;
 	}
 
@@ -70,38 +67,22 @@ public class VersionsFileImpl implements Versions {
 		this.versionFile = versionFile;
 	}
 
-	public Versionable getCurrentVersion() {
+	public Object getCurrentVersion() {
 		return currentVersion;
 	}
 
-	public void setCurrentVersion(Versionable currentVersion) {
+	public void setCurrentVersion(Object currentVersion) {
 		this.currentVersion = currentVersion;
 	}
 
-	public boolean addVersion(Identity identity, String comment, InputStream newVersion) {
-		return VersionsManager.getInstance().addVersion(getCurrentVersion(), identity, comment, newVersion);
-	}
-
-	public boolean move(VFSContainer container) {
-		return VersionsManager.getInstance().move(getCurrentVersion(), container);
-	}
-
-	public boolean restore(Identity identity, VFSRevision version, String comment) {
-		return VersionsManager.getInstance().restore(getCurrentVersion(), version, comment);
-	}
-
-	public boolean delete(Identity identity, List<VFSRevision> revisionsToDelete) {
-		return VersionsManager.getInstance().deleteRevisions(getCurrentVersion(), revisionsToDelete);
-	}
-
-	public List<VFSRevision> getRevisions() {
+	public List<RevisionFileImpl> getRevisions() {
 		if (revisions == null) {
-			revisions = new ArrayList<VFSRevision>();
+			revisions = new ArrayList<>();
 		}
 		return revisions;
 	}
 
-	public void setRevisions(List<VFSRevision> revisions) {
+	public void setRevisions(List<RevisionFileImpl> revisions) {
 		this.revisions = revisions;
 	}
 
@@ -113,7 +94,6 @@ public class VersionsFileImpl implements Versions {
 		this.versioned = versioned;
 	}
 
-	@Override
 	public String getAuthor() {
 		return author;
 	}
@@ -136,19 +116,5 @@ public class VersionsFileImpl implements Versions {
 
 	public void setComment(String comment) {
 		this.comment = comment;
-	}
-
-	protected void update(Versions newVersions) {
-		if (newVersions instanceof VersionsFileImpl) {
-			VersionsFileImpl newVersionsImpl = (VersionsFileImpl) newVersions;
-			author = newVersionsImpl.getAuthor();
-			creator = newVersionsImpl.getCreator();
-			currentVersion = newVersionsImpl.getCurrentVersion();
-			revisionNr = newVersionsImpl.getRevisionNr();
-			comment = newVersionsImpl.getComment();
-		}
-
-		revisions = new ArrayList<VFSRevision>();
-		revisions.addAll(newVersions.getRevisions());
 	}
 }

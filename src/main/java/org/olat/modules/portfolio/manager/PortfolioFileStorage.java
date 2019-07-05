@@ -26,9 +26,10 @@ import java.util.Set;
 import java.util.UUID;
 
 import org.olat.core.commons.modules.bc.FolderConfig;
-import org.olat.core.commons.modules.bc.vfs.OlatRootFolderImpl;
 import org.olat.core.util.StringHelper;
+import org.olat.core.util.io.SystemFilenameFilter;
 import org.olat.core.util.vfs.VFSContainer;
+import org.olat.core.util.vfs.VFSManager;
 import org.olat.modules.portfolio.Assignment;
 import org.olat.modules.portfolio.Media;
 import org.olat.modules.portfolio.MediaLight;
@@ -139,7 +140,7 @@ public class PortfolioFileStorage implements InitializingBean {
 				|| !StringHelper.containsNonWhitespace(assignment.getStorage())) {
 			return null;
 		}
-		return new OlatRootFolderImpl("/" + assignment.getStorage(), null);
+		return VFSManager.olatRootContainer("/" + assignment.getStorage(), null);
 	}
 	
 	public File getAssignmentDirectory(Assignment assignment) {
@@ -149,8 +150,26 @@ public class PortfolioFileStorage implements InitializingBean {
 		return null;
 	}
 	
+	/**
+	 * 
+	 * @param assignment The assignment
+	 * @return The first relevant document in the assignment directory or null.
+	 */
+	public File getAssignmentFirstFile(Assignment assignment) {
+		File dir = getAssignmentDirectory(assignment);
+		File[] files = dir.listFiles(new SystemFilenameFilter(true, false));
+		if(files != null && files.length >= 1) {
+			return files[0];
+		}
+		return null;
+	}
+	
+	public File getMediaDirectory(MediaLight media) {
+		return new File(FolderConfig.getCanonicalRoot(), media.getStoragePath());
+	}
+	
 	public VFSContainer getMediaContainer(MediaLight media) {
-		return new OlatRootFolderImpl("/" + media.getStoragePath(), null);
+		return VFSManager.olatRootContainer("/" + media.getStoragePath(), null);
 	}
 	
 	public File generateMediaSubDirectory(Media media) {

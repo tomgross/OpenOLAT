@@ -42,6 +42,7 @@ public class DefaultUser {
 	private boolean isAdmin;
 	private boolean isUserManager;
 	private boolean isGroupManager;
+	private boolean isSysAdmin;
 	private String userName;
 	
 	/**
@@ -52,13 +53,13 @@ public class DefaultUser {
 	 * @param firstName
 	 * @param lastName
 	 * @param email
-	 * @param password
+	 * @param cred
 	 * @param language
 	 * @param isGuest
 	 * @param isAuthor
 	 * @param isAdmin
 	 */
-	private DefaultUser(String userName) {
+	public DefaultUser(String userName) {
 		this.userName = userName;
 	}
 
@@ -100,6 +101,10 @@ public class DefaultUser {
 
 	public boolean isGroupManager() {
 		return isGroupManager;
+	}
+
+	public boolean isSysAdmin() {
+		return isSysAdmin;
 	}
 
 	public String getUserName() {
@@ -145,6 +150,8 @@ public class DefaultUser {
 	public void setGroupManager(boolean isGroupManager) {
 		this.isGroupManager = isGroupManager;
 	}
-	
 
+	public void setSysAdmin(boolean isSysAdmin) {
+		this.isSysAdmin = isSysAdmin;
+	}
 }

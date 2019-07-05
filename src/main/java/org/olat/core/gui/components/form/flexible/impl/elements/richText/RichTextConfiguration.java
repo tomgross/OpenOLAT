@@ -20,6 +20,7 @@
 package org.olat.core.gui.components.form.flexible.impl.elements.richText;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -41,18 +42,24 @@ import org.olat.core.gui.render.StringOutput;
 import org.olat.core.gui.themes.Theme;
 import org.olat.core.gui.translator.Translator;
 import org.olat.core.helpers.Settings;
-import org.olat.core.logging.OLog;
+import org.olat.core.id.Identity;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.CodeHelper;
 import org.olat.core.util.Formatter;
 import org.olat.core.util.UserSession;
 import org.olat.core.util.Util;
+import org.olat.core.util.WebappHelper;
+import org.olat.core.util.filter.Filter;
 import org.olat.core.util.i18n.I18nManager;
 import org.olat.core.util.i18n.I18nModule;
 import org.olat.core.util.vfs.LocalFolderImpl;
 import org.olat.core.util.vfs.VFSContainer;
 import org.olat.core.util.vfs.VFSContainerMapper;
 import org.olat.core.util.vfs.VFSManager;
+import org.olat.modules.edusharing.EdusharingFilter;
+import org.olat.modules.edusharing.EdusharingModule;
+import org.olat.modules.edusharing.EdusharingProvider;
 
 /**
  * Description:<br>
@@ -68,32 +75,7 @@ import org.olat.core.util.vfs.VFSManager;
  * @author gnaegi
  */
 public class RichTextConfiguration implements Disposable {
-
-	private static final String JS_LANG_PATH = "/static/js/tinymce4/tinymce/langs";
-
-	private static boolean requiredJsLangFilesAvailable() {
-		Set<String> availableLanguageFiles = CoreSpringFactory.servletContext.getResourcePaths(JS_LANG_PATH);
-		next : for (String enabledLanguageKey : I18nModule.getEnabledLanguageKeys()) {
-			if ("en".equals(enabledLanguageKey)) {
-				continue;
-			}
-			for (String availableLanguageFile : availableLanguageFiles) {
-				if (availableLanguageFile.regionMatches(
-						JS_LANG_PATH.length() + 1, enabledLanguageKey,
-						0, enabledLanguageKey.length())) {
-					continue next;
-				}
-			}
-			return false;
-		}
-		return true;
-	}
-
-	static {
-		assert requiredJsLangFilesAvailable();
-	}
-
-	private static final OLog log = Tracing.createLoggerFor(RichTextConfiguration.class); 
+	private static final Logger log = Tracing.createLoggerFor(RichTextConfiguration.class); 
 	private static final String MODE = "mode";
 	private static final String MODE_VALUE_EXACT = "exact";
 	private static final String ELEMENTS = "elements";
@@ -124,7 +106,7 @@ public class RichTextConfiguration implements Disposable {
 	private static final String TABFOCUS_SETTINGS_PREV_NEXT = ":prev,:next";
 	// Valid elements
 	private static final String EXTENDED_VALID_ELEMENTS = "extended_valid_elements";
-	private static final String EXTENDED_VALID_ELEMENTS_VALUE_FULL = "script[src|type|defer],form[*],input[*],a[*],p[*],#comment[*],img[*],iframe[*],map[*],area[*],textentryinteraction[*]";
+	private static final String EXTENDED_VALID_ELEMENTS_VALUE_FULL = "script[src|type|defer],form[*],input[*],a[*],p[*],#comment[*],figure[*],figcaption,img[*],iframe[*],map[*],area[*],textentryinteraction[*]";
 	private static final String MATHML_VALID_ELEMENTS = "math[*],mi[*],mn[*],mo[*],mtext[*],mspace[*],ms[*],mrow[*],mfrac[*],msqrt[*],mroot[*],merror[*],mpadded[*],mphantom[*],mfenced[*],mstyle[*],menclose[*],msub[*],msup[*],msubsup[*],munder[*],mover[*],munderover[*],mmultiscripts[*],mtable[*],mtr[*],mtd[*],maction[*]";
 	private static final String INVALID_ELEMENTS = "invalid_elements";
 	private static final String INVALID_ELEMENTS_FORM_MINIMALISTIC_VALUE_UNSAVE = "iframe,script,@[on*],object,embed";
@@ -156,9 +138,9 @@ public class RichTextConfiguration implements Disposable {
 	private static final String URLCONVERTER_CALLBACK = "urlconverter_callback";
 	private static final String URLCONVERTER_CALLBACK_VALUE_BRASATO_URL_CONVERTER = "BTinyHelper.linkConverter";
 
-	private Map<String, String> quotedConfigValues = new HashMap<String, String>();
-	private Map<String, String> nonQuotedConfigValues = new HashMap<String, String>();
-	private List<String> oninit = new ArrayList<String>();
+	private Map<String, String> quotedConfigValues = new HashMap<>();
+	private Map<String, String> nonQuotedConfigValues = new HashMap<>();
+	private List<String> oninit = new ArrayList<>();
 
 	// Supported image and media suffixes
 	private static final String[] IMAGE_SUFFIXES_VALUES = { "jpg", "gif", "jpeg", "png" };
@@ -175,10 +157,9 @@ public class RichTextConfiguration implements Disposable {
 	private String linkBrowserAbsolutFilePath;
 	private boolean relativeUrls = true;
 	private boolean removeScriptHost = true;
-	private boolean statusBar = true;
 	private boolean pathInStatusBar = true;
+	private boolean figCaption = true;
 	private boolean allowCustomMediaFactory = true;
-	private boolean inline = false;
 	private boolean sendOnBlur;
 	private boolean readOnly;
 	private boolean filenameUriValidation = false;
@@ -186,12 +167,16 @@ public class RichTextConfiguration implements Disposable {
 	// DOM ID of the flexi form element
 	private String domID;
 	
+	private String mapperUri;
 	private MapperKey contentMapperKey;
 	
 	private final Locale locale;
 	private TinyConfig tinyConfig;
 	
+	private List<TextMode> textModes = Collections.singletonList(TextMode.formatted);
 	private RichTextConfigurationDelegate additionalConfiguration;
+	
+	private Collection<Filter> valueFilters = new ArrayList<>(1);
 	
 	public RichTextConfiguration(Locale locale) {
 		this.locale = locale;
@@ -244,6 +229,20 @@ public class RichTextConfiguration implements Disposable {
 		setQuotedConfigValue(INVALID_ELEMENTS, INVALID_ELEMENTS_FORM_MINIMALISTIC_VALUE_UNSAVE);
 		
 		tinyConfig = TinyConfig.minimalisticConfig;
+	}
+	
+	public void setConfigProfileFormParagraphEditor(Theme guiTheme) {
+		setConfigBasics(guiTheme);
+		// Add additional plugins
+		TinyMCECustomPluginFactory customPluginFactory = CoreSpringFactory.getImpl(TinyMCECustomPluginFactory.class);
+		List<TinyMCECustomPlugin> enabledCustomPlugins = customPluginFactory.getCustomPlugionsForProfile();
+		for (TinyMCECustomPlugin tinyMCECustomPlugin : enabledCustomPlugins) {
+			setCustomPluginEnabled(tinyMCECustomPlugin);
+		}
+		// Don't allow javascript or iframes
+		setQuotedConfigValue(INVALID_ELEMENTS, INVALID_ELEMENTS_FORM_MINIMALISTIC_VALUE_UNSAVE);
+		
+		tinyConfig = TinyConfig.paragraphEditorConfig;
 	}
 	
 	public void setConfigProfileFormCompactEditor(UserSession usess, Theme guiTheme, VFSContainer baseContainer) {
@@ -439,14 +438,6 @@ public class RichTextConfiguration implements Disposable {
 		this.allowCustomMediaFactory = allowCustomMediaFactory;
 	}
 
-	public boolean isInline() {
-		return inline;
-	}
-
-	public void setInline(boolean inline) {
-		this.inline = inline;
-	}
-
 	public boolean isSendOnBlur() {
 		return sendOnBlur;
 	}
@@ -457,21 +448,6 @@ public class RichTextConfiguration implements Disposable {
 	 */
 	public void setSendOnBlur(boolean sendOnBlur) {
 		this.sendOnBlur = sendOnBlur;
-	}
-
-	public boolean isStatusBar() {
-		return statusBar;
-	}
-
-	/**
-	 * Allow to remove the status bar
-	 * 
-	 * @see https://www.tinymce.com/docs/configure/editor-appearance/#statusbar
-	 * 
-	 * @param statusBar
-	 */
-	public void setStatusBar2(boolean statusBar) {
-		this.statusBar = statusBar;
 	}
 
 	public boolean isPathInStatusBar() {
@@ -489,6 +465,22 @@ public class RichTextConfiguration implements Disposable {
 
 	public void setReadOnly(boolean readOnly) {
 		this.readOnly = readOnly;
+	}
+
+	public List<TextMode> getTextModes() {
+		return new ArrayList<>(textModes);
+	}
+
+	public void setSimplestTextModeAllowed(TextMode textMode) {
+		if(textMode != null) {
+			List<TextMode> newModes = new ArrayList<>(3);
+			for(int i=textMode.ordinal(); i<=TextMode.formatted.ordinal(); i++) {
+				newModes.add(TextMode.values()[i]);
+			}
+			textModes = newModes;
+		} else {
+			textModes = Collections.singletonList(TextMode.formatted);
+		}
 	}
 
 	public RichTextConfigurationDelegate getAdditionalConfiguration() {
@@ -785,6 +777,13 @@ public class RichTextConfiguration implements Disposable {
 	public void setFileBrowserUploadRelPath(String linkBrowserUploadRelPath) {
 		this.linkBrowserUploadRelPath = linkBrowserUploadRelPath;
 	}
+	
+	/**
+	 * @return The URI to the mapper or null if there isn't any mapper.
+	 */
+	public String getMapperURI() {
+		return mapperUri;
+	}
 
 	/**
 	 * Set the documents media base that is used to deliver media files
@@ -840,8 +839,8 @@ public class RichTextConfiguration implements Disposable {
 			// set empty relative file path to prevent nullpointers later on
 			linkBrowserRelativeFilePath = relFilePath;
 		}
-		String fulluri = contentMapperKey.getUrl() + "/" + relFilePath;
-		setQuotedConfigValue(DOCUMENT_BASE_URL, fulluri);
+		mapperUri = contentMapperKey.getUrl() + "/" + relFilePath;
+		setQuotedConfigValue(DOCUMENT_BASE_URL, mapperUri);
 	}
 	
 	/**
@@ -877,10 +876,42 @@ public class RichTextConfiguration implements Disposable {
 		tinyConfig = tinyConfig.enableCode();
 	}
 	
+	public void enableCharCount() {
+		tinyConfig = tinyConfig.enableCharcount();
+	}
+	
 	public void enableQTITools(boolean textEntry, boolean numericalInput, boolean hottext) {
 		tinyConfig = tinyConfig.enableQTITools(textEntry, numericalInput, hottext);
 		setQuotedConfigValue("custom_elements", "~textentryinteraction,~hottext");
 		setQuotedConfigValue(EXTENDED_VALID_ELEMENTS, "script[src|type|defer],textentryinteraction[*],hottext[*]");
+	}
+	
+	public void enableEdusharing(Identity identity, EdusharingProvider provider) {
+		if (identity == null || provider == null) return;
+		
+		EdusharingModule edusharingModule = CoreSpringFactory.getImpl(EdusharingModule.class);
+		if (edusharingModule.isEnabled()) {
+			tinyConfig = tinyConfig.enableEdusharing();
+			EdusharingFilter filter = new EdusharingFilter(identity, provider);
+			addValueFilter(filter);
+		}
+	}
+	
+	public EdusharingFilter getEdusharingFilter() {
+		for (Filter filter : valueFilters) {
+			if (filter instanceof EdusharingFilter) {
+				return (EdusharingFilter) filter;
+			}
+		}
+		return null;
+	}
+	
+	public void addValueFilter(Filter filter) {
+		valueFilters.add(filter);
+	}
+	
+	Collection<Filter> getValueFilters() {
+		return valueFilters;
 	}
 
 	/**
@@ -903,6 +934,21 @@ public class RichTextConfiguration implements Disposable {
 		setNonQuotedConfigValue(RichTextConfiguration.HEIGHT, "b_initialEditorHeight()");
 	}
 	
+	/**
+	 * @return True if the fig caption for image is enabled.
+	 */
+	public boolean isFigCaption() {
+		return figCaption;
+	}
+
+	/**
+	 * Enable or disable fig caption for image.
+	 * @param figCaption
+	 */
+	public void setFigCaption(boolean figCaption) {
+		this.figCaption = figCaption;
+	}
+
 	public boolean isFilenameUriValidation() {
 		return filenameUriValidation;
 	}
@@ -989,10 +1035,10 @@ public class RichTextConfiguration implements Disposable {
 
 	protected void appendConfigToTinyJSArray_4(StringOutput out, Translator translator) {
 		// Now add the quoted values
-		Map<String,String> copyValues = new HashMap<String,String>(quotedConfigValues);
+		Map<String,String> copyValues = new HashMap<>(quotedConfigValues);
 
 		// Now add the non-quoted values (e.g. true, false or functions)
-		Map<String,String> copyNonValues = new HashMap<String,String>(nonQuotedConfigValues);
+		Map<String,String> copyNonValues = new HashMap<>(nonQuotedConfigValues);
 		String converter = copyNonValues.get(URLCONVERTER_CALLBACK);
 		if(converter != null) {
 			copyNonValues.put(CONVERT_URLS, "true");
@@ -1024,9 +1070,10 @@ public class RichTextConfiguration implements Disposable {
  		StringOutput tinyMenuSb = new StringOutput();
  		tinyMenuSb.append("plugins: '").append(tinyConfig.getPlugins()).append("',\n")
  		  .append("image_advtab:true,\n")
+ 		  .append("image_caption:").append(figCaption).append(",\n")
+ 		  .append("image_title:true,\n")
 		  .append("relative_urls:").append(isRelativeUrls()).append(",\n")
 		  .append("remove_script_host:").append(isRemoveScriptHost()).append(",\n")
-		  .append("inline:").append(isInline()).append(",\n")
 		  .append("statusbar:").append(true).append(",\n")
 		  .append("resize:").append(true).append(",\n")
 		  .append("menubar:").append(tinyConfig.hasMenu()).append(",\n");
@@ -1060,7 +1107,10 @@ public class RichTextConfiguration implements Disposable {
 		  .append("  {title: 'Mail', value: 'b_link_mailto'},\n")
 		  .append("  {title: 'Forward', value: 'b_link_forward'}\n")
 		  .append("],\n");
+ 		// predefined table styles selectable in a menu
  		tinyMenuSb.append("table_class_list: [\n")
+		  .append("  {title: 'No style', value: ''},\n")
+		  .append("  {title: 'Default', value: 'b_default'},\n")
  		  .append("  {title: 'Borderless', value: 'b_borderless'},\n")
 		  .append("  {title: 'Grid', value: 'b_grid'},\n")
 		  .append("  {title: 'Border', value: 'b_border'},\n")
@@ -1072,6 +1122,9 @@ public class RichTextConfiguration implements Disposable {
 		  .append("  {title: 'Blue', value: 'b_blue'},\n")
 		  .append("  {title: 'Yellow', value: 'b_yellow'}\n")
 		  .append("],\n");
+ 			
+ 		// default table style
+ 		tinyMenuSb.append("table_default_attributes: { class: 'b_default' },\n");
  		
 		if (tinyConfig.getTool1() != null) {
 			tinyMenuSb.append("toolbar1: '").append(tinyConfig.getTool1()).append("',\n");

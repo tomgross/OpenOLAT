@@ -19,7 +19,6 @@
  */
 package org.olat.repository.ui.author;
 
-import org.apache.commons.lang.StringEscapeUtils;
 import org.olat.NewControllerFactory;
 import org.olat.core.gui.components.form.flexible.impl.elements.table.FlexiCellRenderer;
 import org.olat.core.gui.components.form.flexible.impl.elements.table.FlexiTableComponent;
@@ -30,7 +29,9 @@ import org.olat.core.gui.translator.Translator;
 import org.olat.core.util.StringHelper;
 import org.olat.repository.RepositoryEntry;
 import org.olat.repository.RepositoryEntryShort;
+import org.olat.repository.RepositoryEntryStatusEnum;
 import org.olat.repository.ui.RepositoyUIFactory;
+import org.olat.repository.ui.list.RepositoryEntryRow;
 
 /**
  * 
@@ -49,6 +50,8 @@ public class TypeRenderer implements FlexiCellRenderer {
 			type = ((RepositoryEntryShort)cellValue).getResourceType();
 		} else if(cellValue instanceof RepositoryEntry) {
 			type = ((RepositoryEntry)cellValue).getOlatResource().getResourceableTypeName();
+		} else if(cellValue instanceof RepositoryEntryRow) {
+			type = ((RepositoryEntryRow)cellValue).getOLATResourceable().getResourceableTypeName();
 		}
 		
 		if(type == null) {
@@ -56,16 +59,16 @@ public class TypeRenderer implements FlexiCellRenderer {
 		} else {
 			type = NewControllerFactory.translateResourceableTypeName(type, translator.getLocale());
 		}
-		type = StringEscapeUtils.escapeHtml(type);
+		type = StringHelper.escapeHtml(type);
 		
 		String cssClass = "";
 		boolean managed = false;
-		int access = -1;
+		RepositoryEntryStatusEnum status = null;
 		if(cellValue instanceof AuthoringEntryRow) {
 			AuthoringEntryRow re = (AuthoringEntryRow) cellValue;
 			cssClass = RepositoyUIFactory.getIconCssClass(re);
 			managed = re.isManaged();
-			access = re.getAccess();
+			status = re.getEntryStatus();
 		} else if (cellValue instanceof RepositoryEntryShort) {
 			RepositoryEntryShort re = (RepositoryEntryShort) cellValue;
 			cssClass = RepositoyUIFactory.getIconCssClass(re);
@@ -73,7 +76,12 @@ public class TypeRenderer implements FlexiCellRenderer {
 			RepositoryEntry re = (RepositoryEntry) cellValue;
 			cssClass = RepositoyUIFactory.getIconCssClass(re);
 			managed = StringHelper.containsNonWhitespace(re.getManagedFlagsString());
-			access = re.getStatusCode();
+			status = re.getEntryStatus();
+		} else if (cellValue instanceof RepositoryEntryRow) {
+			RepositoryEntryRow re = (RepositoryEntryRow) cellValue;
+			cssClass = RepositoyUIFactory.getIconCssClass(re.getOLATResourceable().getResourceableTypeName());
+			managed = false;// no indication for this type of row
+			status = re.getStatus();
 		}
 		
 		if(renderer == null) {
@@ -85,7 +93,7 @@ public class TypeRenderer implements FlexiCellRenderer {
 			if (managed) {
 				target.append(" <i class='o_icon o_icon_managed' title=\"").append(translator.translate("cif.managedflags")).append("\"> </i> ");
 			}
-			if (access == 0) {
+			if (status == null || status == RepositoryEntryStatusEnum.trash || status == RepositoryEntryStatusEnum.deleted) {
 				target.append(" <i class='o_icon o_icon-lg o_icon_deleted'> </i> ");
 			}
 			target.append("</div>");

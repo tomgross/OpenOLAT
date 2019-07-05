@@ -25,8 +25,6 @@
 
 package org.olat.basesecurity;
 
-import java.net.InetAddress;
-import java.net.UnknownHostException;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Date;
@@ -38,6 +36,7 @@ import java.util.Map;
 import javax.servlet.http.Cookie;
 import javax.servlet.http.HttpSession;
 
+import org.apache.logging.log4j.Logger;
 import org.olat.basesecurity.manager.GroupDAO;
 import org.olat.core.CoreSpringFactory;
 import org.olat.core.commons.fullWebApp.BaseFullWebappController;
@@ -55,7 +54,6 @@ import org.olat.core.id.Identity;
 import org.olat.core.id.Roles;
 import org.olat.core.id.UserConstants;
 import org.olat.core.logging.AssertException;
-import org.olat.core.logging.OLog;
 import org.olat.core.logging.Tracing;
 import org.olat.core.logging.activity.OlatLoggingAction;
 import org.olat.core.logging.activity.ThreadLocalUserActivityLogger;
@@ -78,22 +76,27 @@ import org.olat.util.logging.activity.LoggingResourceable;
 
 /**
  * Description: <br>
- * 
+ *
  * @author Felix Jost
  */
 public class AuthHelper {
+
+	public static final String ATTRIBUTE_AUTHPROVIDER = "authprovider";
+	public static final String ATTRIBUTE_LANGUAGE = "language";
+	public static final String ATTRIBUTE_IS_REST = "isrest";
+	public static final String ATTRIBUTE_IS_WEBDAV = "iswebdav";
 	/**
 	 * <code>LOGOUT_PAGE</code>
 	 */
 	public  static final int LOGIN_OK = 0;
-	private static final int LOGIN_FAILED = 1;
-	private static final int LOGIN_DENIED = 2;
+	public static final int LOGIN_FAILED = 1;
+	public static final int LOGIN_DENIED = 2;
 	public  static final int LOGIN_NOTAVAILABLE = 3;
 
 	private static final int MAX_SESSION_NO_LIMIT = 0;
 
-	
-	/** whether or not requests to dmz (except those coming via 'switch-to-node' cluster feature) are 
+
+	/** whether or not requests to dmz (except those coming via 'switch-to-node' cluster feature) are
 	 * rejected hence resulting the browser to go to another node.
 	 * Note: this is not configurable currently as it's more of a runtime choice to change this to true
 	 */
@@ -101,15 +104,15 @@ public class AuthHelper {
 
 	private static boolean loginBlocked = false;
 	private static int maxSessions = MAX_SESSION_NO_LIMIT;
-	
-	private static OLog log = Tracing.createLoggerFor(AuthHelper.class);
+
+	private static final Logger log = Tracing.createLoggerFor(AuthHelper.class);
 
 	/**
 	 * Used by DMZDispatcher to do regular logins and by ShibbolethDispatcher
 	 * which is somewhat special because logins are handled asynchronuous ->
 	 * therefore a dedicated dispatcher is needed which also has to have access to
 	 * the doLogin() method.
-	 * 
+	 *
 	 * @param identity
 	 * @param authProvider
 	 * @param ureq
@@ -117,14 +120,14 @@ public class AuthHelper {
 	 */
 	public static int doLogin(Identity identity, String authProvider, UserRequest ureq) {
 		int initializeStatus = initializeLogin(identity, authProvider, ureq, false);
-		if (initializeStatus != LOGIN_OK) { 
+		if (initializeStatus != LOGIN_OK) {
 			return initializeStatus; // login not successfull
 		}
-		
+
 		// do logging
 		ThreadLocalUserActivityLogger.log(OlatLoggingAction.OLAT_LOGIN, AuthHelper.class, LoggingResourceable.wrap(identity));
 
-		// brasato:: fix it 
+		// brasato:: fix it
 		// successfull login, reregister window
 		ChiefController occ;
 		if(ureq.getUserSession().getRoles().isGuestOnly()){
@@ -132,11 +135,11 @@ public class AuthHelper {
 		}else{
 			occ = createAuthHome(ureq);
 		}
-	
+
 		Window currentWindow = occ.getWindow();
 		currentWindow.setUriPrefix(WebappHelper.getServletContextPath() + DispatcherModule.PATH_AUTHENTICATED);
 		Windows.getWindows(ureq).registerWindow(currentWindow);
-		
+
 		RedirectMediaResource redirect;
 		String redirectTo = (String)ureq.getUserSession().getEntry("redirect-bc");
 		if(StringHelper.containsNonWhitespace(redirectTo)) {
@@ -145,7 +148,7 @@ public class AuthHelper {
 		} else {
 			// redirect to AuthenticatedDispatcher
 			// IMPORTANT: windowID has changed due to re-registering current window -> do not use ureq.getWindowID() to build new URLBuilder.
-			URLBuilder ubu = new URLBuilder(WebappHelper.getServletContextPath() + DispatcherModule.PATH_AUTHENTICATED, currentWindow.getInstanceId(), "1");	
+			URLBuilder ubu = new URLBuilder(WebappHelper.getServletContextPath() + DispatcherModule.PATH_AUTHENTICATED, currentWindow.getInstanceId(), "1");
 			StringOutput sout = new StringOutput(30);
 			ubu.buildURI(sout, null, null);
 			redirect = new RedirectMediaResource(sout.toString());
@@ -153,9 +156,9 @@ public class AuthHelper {
 		ureq.getDispatchResult().setResultingMediaResource(redirect);
 		return LOGIN_OK;
 	}
-	
+
 	/**
-	 * 
+	 *
 	 * @param identity
 	 * @param authProvider
 	 * @param ureq
@@ -164,13 +167,13 @@ public class AuthHelper {
 	 */
 	public static int doHeadlessLogin(Identity identity, String authProvider, UserRequest ureq, boolean rest) {
 		int initializeStatus = initializeLogin(identity, authProvider, ureq, rest);
-		if (initializeStatus != LOGIN_OK) { 
+		if (initializeStatus != LOGIN_OK) {
 			return initializeStatus; // login not successful
 		}
-		// Set session info to reflect the REST headless login 
+		// Set session info to reflect the REST headless login
 		UserSession usess = ureq.getUserSession();
 		usess.getSessionInfo().setREST(true);
-		usess.getIdentityEnvironment().getAttributes().put("isrest", "true");
+		usess.getIdentityEnvironment().getAttributes().put(ATTRIBUTE_IS_REST, "true");
 		//
 		ThreadLocalUserActivityLogger.log(OlatLoggingAction.OLAT_LOGIN, AuthHelper.class, LoggingResourceable.wrap(identity));
 		return LOGIN_OK;
@@ -178,15 +181,15 @@ public class AuthHelper {
 
 	/**
 	 * Create a base chief controller for the current anonymous user request
-	 * and initialize the first screen after login. Note, the user request 
+	 * and initialize the first screen after login. Note, the user request
 	 * must be authenticated, but as an anonymous user and not a known user.
-	 * 
-	 * @param ureq The authenticated user request. 
+	 *
+	 * @param ureq The authenticated user request.
 	 * @return The chief controller
 	 */
 	private static ChiefController createGuestHome(UserRequest ureq) {
 		if (!ureq.getUserSession().isAuthenticated()) throw new AssertException("not authenticated!");
-		
+
 		BaseFullWebappControllerParts guestSitesAndNav = new GuestBFWCParts();
 		ChiefController cc = new BaseFullWebappController(ureq, guestSitesAndNav);
 		Windows.getWindows(ureq.getUserSession()).setChiefController(cc);
@@ -196,13 +199,13 @@ public class AuthHelper {
 	/**
 	 * Create a base chief controller for the current authenticated user request
 	 * and initialize the first screen after login.
-	 * 
-	 * @param ureq The authenticated user request. 
+	 *
+	 * @param ureq The authenticated user request.
 	 * @return The chief controller
 	 */
 	public static ChiefController createAuthHome(UserRequest ureq) {
 		if (!ureq.getUserSession().isAuthenticated()) throw new AssertException("not authenticated!");
-		
+
 		BaseFullWebappControllerParts authSitesAndNav = new AuthBFWCParts();
 		ChiefController cc = new BaseFullWebappController(ureq, authSitesAndNav);
 		Windows.getWindows(ureq.getUserSession()).setChiefController(cc);
@@ -213,41 +216,45 @@ public class AuthHelper {
 	 * Logs in as anonymous user using the given language key. If the current
 	 * installation does not support this language, the systems default language
 	 * is used instead
-	 * 
+	 *
 	 * @param ureq The user request
 	 * @param lang The language of the anonymous user or null if system default should be used
 	 * @return true if login was successful, false otherwise
 	 */
 	public static int doAnonymousLogin(UserRequest ureq, Locale locale) {
-		Collection<String> supportedLanguages = I18nModule.getEnabledLanguageKeys();
+		Collection<String> supportedLanguages = CoreSpringFactory.getImpl(I18nModule.class).getEnabledLanguageKeys();
 		if ( locale == null || ! supportedLanguages.contains(locale.toString()) ) {
 			locale = I18nModule.getDefaultLocale();
-		} 
-		Identity guestIdent = BaseSecurityManager.getInstance().getAndUpdateAnonymousUserForLanguage(locale);
-		int loginStatus = doLogin(guestIdent, BaseSecurityModule.getDefaultAuthProviderIdentifier(), ureq);
-		return loginStatus;
+		}
+		BaseSecurity securityManager = CoreSpringFactory.getImpl(BaseSecurity.class);
+		Identity guestIdent = securityManager.getAndUpdateAnonymousUserForLanguage(locale);
+		Roles guestRoles = securityManager.getRoles(guestIdent);
+		if(guestRoles.isGuestOnly()) {
+			return doLogin(guestIdent, BaseSecurityModule.getDefaultAuthProviderIdentifier(), ureq);
+		}
+		log.error("Guest account has user permissions: " + guestIdent);
+		return LOGIN_DENIED;
 	}
-	
+
 	public static int doInvitationLogin(String invitationToken, UserRequest ureq, Locale locale) {
 		InvitationDAO invitationDao = CoreSpringFactory.getImpl(InvitationDAO.class);
 		boolean hasPolicies = invitationDao.hasInvitations(invitationToken, new Date());
 		if(!hasPolicies) {
 			return LOGIN_DENIED;
 		}
-		
+
 		UserManager um = UserManager.getInstance();
-		BaseSecurity securityManager = BaseSecurityManager.getInstance();
 		GroupDAO groupDao = CoreSpringFactory.getImpl(GroupDAO.class);
 		Invitation invitation = invitationDao.findInvitation(invitationToken);
 		if(invitation == null) {
 			return LOGIN_DENIED;
 		}
-		
+
 		//check if identity exists
-		Identity identity = um.findIdentityByEmail(invitation.getMail());
+		Identity identity = um.findUniqueIdentityByEmail(invitation.getMail());
 		if(identity != null) {
-			SecurityGroup allUsers = securityManager.findSecurityGroupByName(Constants.GROUP_OLATUSERS);
-			if(securityManager.isIdentityInSecurityGroup(identity, allUsers)) {
+			OrganisationService organisationService = CoreSpringFactory.getImpl(OrganisationService.class);
+			if(organisationService.hasRole(identity, OrganisationRoles.user)) {
 				//already a normal olat user, cannot be invited
 				return LOGIN_DENIED;
 			} else {
@@ -265,12 +272,12 @@ public class AuthHelper {
 				return LOGIN_DENIED;
 			}
 		}
-		
-		Collection<String> supportedLanguages = I18nModule.getEnabledLanguageKeys();
+
+		Collection<String> supportedLanguages = CoreSpringFactory.getImpl(I18nModule.class).getEnabledLanguageKeys();
 		if ( locale == null || ! supportedLanguages.contains(locale.toString()) ) {
 			locale = I18nModule.getDefaultLocale();
-		} 
-		
+		}
+
 		//invitation ok -> create a temporary user
 		Identity invitee = invitationDao.createIdentityFrom(invitation, locale);
 		return doLogin(invitee, BaseSecurityModule.getDefaultAuthProviderIdentifier(), ureq);
@@ -279,7 +286,7 @@ public class AuthHelper {
 	/**
 	 * ONLY for authentication provider OLAT Authenticate Identity and do the
 	 * necessary work. Returns true if successfull, false otherwise.
-	 * 
+	 *
 	 * @param identity
 	 * @param authProvider
 	 * @param ureq
@@ -290,8 +297,8 @@ public class AuthHelper {
 		if (identity == null) return LOGIN_FAILED;
 		//test if a user may not logon, since he/she is in the PERMISSION_LOGON
 		if (!BaseSecurityManager.getInstance().isIdentityVisible(identity)) {
-			log.audit("was denied login");
-			return LOGIN_DENIED;			
+			log.info(Tracing.M_AUDIT, "was denied login");
+			return LOGIN_DENIED;
 		}
 		UserSessionManager sessionManager = CoreSpringFactory.getImpl(UserSessionManager.class);
 		// if the user sending the cookie did not log out and we are logging in
@@ -303,18 +310,20 @@ public class AuthHelper {
 		// init the UserSession for the new User
 		// we can set the identity and finish the log in process
 		usess.setIdentity(identity);
+		Tracing.setIdentity(identity);
 		setRolesFor(identity, usess);
 
 		// check if loginDenied or maxSession (only for non-admin)
-		if ( (loginBlocked && !usess.getRoles().isOLATAdmin())
-				|| ( ((maxSessions != MAX_SESSION_NO_LIMIT) && (sessionManager.getUserSessionsCnt() >= maxSessions)) && !usess.getRoles().isOLATAdmin() ) ) {
-			log.audit("Login was blocked for username=" + usess.getIdentity().getName() + ", loginBlocked=" + loginBlocked + " NbrOfSessions=" + sessionManager.getUserSessionsCnt());
+		if ( (loginBlocked && !usess.getRoles().isAdministrator() && !usess.getRoles().isSystemAdmin())
+				|| ( ((maxSessions != MAX_SESSION_NO_LIMIT) && (sessionManager.getUserSessionsCnt() >= maxSessions))
+						&& !usess.getRoles().isAdministrator() && !usess.getRoles().isSystemAdmin())) {
+			log.info(Tracing.M_AUDIT, "Login was blocked for identity=" + usess.getIdentity().getKey() + ", loginBlocked=" + loginBlocked + " NbrOfSessions=" + sessionManager.getUserSessionsCnt());
 			sessionManager.signOffAndClear(usess);
 			return LOGIN_NOTAVAILABLE;
 		}
-		
+
 		//need to block the all things for assessment?
-		if(usess.getRoles() != null && usess.getRoles().isOLATAdmin()) {
+		if(usess.getRoles() != null && (usess.getRoles().isAdministrator() || usess.getRoles().isSystemAdmin())) {
 			usess.setAssessmentModes(Collections.<TransientAssessmentMode>emptyList());
 		} else {
 			AssessmentModule assessmentModule = CoreSpringFactory.getImpl(AssessmentModule.class);
@@ -328,11 +337,11 @@ public class AuthHelper {
 				}
 			}
 		}
-		
+
 		//set the language
 		usess.setLocale( I18nManager.getInstance().getLocaleOrDefault(identity.getUser().getPreferences().getLanguage()) );
 		// update fontsize in users session globalsettings
-		Windows.getWindows(ureq).getWindowManager().setFontSize(Integer.parseInt(identity.getUser().getPreferences().getFontsize() ));		
+		Windows.getWindows(ureq).getWindowManager().setFontSize(Integer.parseInt(identity.getUser().getPreferences().getFontsize() ));
 		// calculate session info and attach it to the user session
 		setSessionInfoFor(identity, authProvider, ureq, rest);
 		//confirm signedOn
@@ -349,7 +358,7 @@ public class AuthHelper {
 	 * redirect and RETURN. Make sure you return the call hierarchy gracefully.
 	 * Most of all, don't touch HttpServletRequest or the Session after you call
 	 * this method.
-	 * 
+	 *
 	 * @param ureq
 	 */
 	public static void doLogout(UserRequest ureq) {
@@ -358,10 +367,10 @@ public class AuthHelper {
 		boolean wasGuest = false;
 		UserSession usess = ureq.getUserSession();
 		if(usess != null && usess.getRoles() != null) {
-			wasGuest = ureq.getUserSession().getRoles().isGuestOnly();
+			wasGuest = usess.getRoles().isGuestOnly();
 		}
-		
-		String lang = I18nManager.getInstance().getLocaleKey(ureq.getLocale());
+
+		String lang = CoreSpringFactory.getImpl(I18nModule.class).getLocaleKey(ureq.getLocale());
 		HttpSession session = ureq.getHttpReq().getSession(false);
 		// next line fires a valueunbound event to UserSession, which does some
 		// stuff on logout
@@ -387,10 +396,7 @@ public class AuthHelper {
 		Cookie[] cookies = ureq.getHttpReq().getCookies();
 		Cookie cookie = null;
 		if (cookies != null) {
-			for (int i = 0; i < cookies.length; i++) {						
-				/*if(log.isDebug()) {
-					log.info("found cookie with name: " + cookies[i].getName() + " and value: " + cookies[i].getValue());
-				}*/
+			for (int i = 0; i < cookies.length; i++) {
 				if (cookies[i].getName().indexOf("shibsession")!=-1) { //contains "shibsession"
 					cookie = cookies[i];
 					break;
@@ -401,10 +407,10 @@ public class AuthHelper {
 			//A zero value causes the cookie to be deleted.
 			cookie.setMaxAge(0);
 			cookie.setPath("/");
-			ureq.getHttpResp().addCookie(cookie);					
-			if(log.isDebug()) {
+			ureq.getHttpResp().addCookie(cookie);
+			if(log.isDebugEnabled()) {
 				log.info("AuthHelper - shibsession cookie deleted");
-			}					
+			}
 		}
 	}
 
@@ -420,13 +426,6 @@ public class AuthHelper {
 		sinfo.setFirstname(identity.getUser().getProperty(UserConstants.FIRSTNAME, ureq.getLocale()));
 		sinfo.setLastname(identity.getUser().getProperty(UserConstants.LASTNAME, ureq.getLocale()));
 		sinfo.setFromIP(ureq.getHttpReq().getRemoteAddr());
-		sinfo.setFromFQN(ureq.getHttpReq().getRemoteAddr());
-		try {
-			InetAddress[] iaddr = InetAddress.getAllByName(ureq.getHttpReq().getRemoteAddr());
-			if (iaddr.length > 0) sinfo.setFromFQN(iaddr[0].getHostName());
-		} catch (UnknownHostException e) {
-			//       ok, already set IP as FQDN
-		}
 		sinfo.setAuthProvider(authProvider);
 		sinfo.setUserAgent(ureq.getHttpReq().getHeader("User-Agent"));
 		sinfo.setSecure(ureq.getHttpReq().isSecure());
@@ -436,13 +435,13 @@ public class AuthHelper {
 		UserSession usess = ureq.getUserSession();
 		usess.setSessionInfo(sinfo);
 		// For Usertracking, let the User object know about some desired/specified infos from the sessioninfo
-		Map<String,String> sessionInfoForUsertracking = new HashMap<String, String>();
-		sessionInfoForUsertracking.put("language", usess.getLocale().toString());
-		sessionInfoForUsertracking.put("authprovider", authProvider);
-		sessionInfoForUsertracking.put("iswebdav", String.valueOf(sinfo.isWebDAV()));
-		sessionInfoForUsertracking.put("isrest", String.valueOf(sinfo.isREST()));
+		Map<String,String> sessionInfoForUsertracking = new HashMap<>();
+		sessionInfoForUsertracking.put(ATTRIBUTE_LANGUAGE, usess.getLocale().toString());
+		sessionInfoForUsertracking.put(ATTRIBUTE_AUTHPROVIDER, authProvider);
+		sessionInfoForUsertracking.put(ATTRIBUTE_IS_WEBDAV, String.valueOf(sinfo.isWebDAV()));
+		sessionInfoForUsertracking.put(ATTRIBUTE_IS_REST, String.valueOf(sinfo.isREST()));
 		usess.getIdentityEnvironment().setAttributes(sessionInfoForUsertracking);
-		
+
 	}
 
 	/**
@@ -454,23 +453,23 @@ public class AuthHelper {
 		Roles roles = BaseSecurityManager.getInstance().getRoles(identity);
 		usess.setRoles(roles);
 	}
-	
+
 	public static void setLoginBlocked(boolean newLoginBlocked) {
 		loginBlocked = newLoginBlocked;
 	}
-	
+
 	public static boolean isLoginBlocked() {
 		return loginBlocked;
 	}
-	
+
 	public static void setRejectDMZRequests(boolean newRejectDMZRequests) {
 		rejectDMZRequests = newRejectDMZRequests;
 	}
-	
+
 	public static boolean isRejectDMZRequests() {
 		return rejectDMZRequests;
 	}
-	
+
 	public static void setMaxSessions(int maxSession) {
 		maxSessions  = maxSession;
 	}
@@ -478,5 +477,5 @@ public class AuthHelper {
 	public static int getMaxSessions() {
 		return maxSessions;
 	}
-	
+
 }

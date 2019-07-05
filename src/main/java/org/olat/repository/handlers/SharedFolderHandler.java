@@ -41,15 +41,14 @@ import org.olat.core.gui.media.MediaResource;
 import org.olat.core.gui.translator.Translator;
 import org.olat.core.id.Identity;
 import org.olat.core.id.OLATResourceable;
+import org.olat.core.id.Organisation;
 import org.olat.core.id.Roles;
 import org.olat.core.logging.AssertException;
-import org.olat.core.util.FileUtils;
 import org.olat.core.util.Util;
 import org.olat.core.util.coordinate.CoordinatorManager;
 import org.olat.core.util.coordinate.LockResult;
 import org.olat.core.util.resource.OLATResourceableJustBeforeDeletedEvent;
 import org.olat.core.util.vfs.VFSContainer;
-import org.olat.course.assessment.AssessmentMode;
 import org.olat.course.assessment.manager.UserCourseInformationsManager;
 import org.olat.fileresource.FileResourceManager;
 import org.olat.fileresource.types.ResourceEvaluation;
@@ -59,21 +58,18 @@ import org.olat.modules.sharedfolder.SharedFolderEditorController;
 import org.olat.modules.sharedfolder.SharedFolderManager;
 import org.olat.repository.ErrorList;
 import org.olat.repository.RepositoryEntry;
+import org.olat.repository.RepositoryEntryStatusEnum;
 import org.olat.repository.RepositoryManager;
 import org.olat.repository.RepositoryService;
 import org.olat.repository.model.RepositoryEntrySecurity;
 import org.olat.repository.ui.CorruptedCourseController;
 import org.olat.repository.ui.RepositoryEntryRuntimeController;
-import org.olat.repository.ui.RepositoryEntryRuntimeController.RuntimeControllerCreator;
 import org.olat.resource.OLATResource;
 import org.olat.resource.OLATResourceManager;
 import org.olat.resource.references.ReferenceManager;
 
 
 /**
- * Description:<br>
- * TODO: as Class Description for SharedFolderHandler
- * 
  * <P>
  * Initial Date: Apr 6 <br>
  * @author gnaegi
@@ -81,7 +77,7 @@ import org.olat.resource.references.ReferenceManager;
 public class SharedFolderHandler implements RepositoryHandler {
 	
 	@Override
-	public boolean isCreate() {
+	public boolean supportCreate(Identity identity, Roles roles) {
 		return true;
 	}
 	
@@ -91,12 +87,13 @@ public class SharedFolderHandler implements RepositoryHandler {
 	}
 
 	@Override
-	public RepositoryEntry createResource(Identity initialAuthor, String displayname, String description, Object createObject, Locale locale) {
+	public RepositoryEntry createResource(Identity initialAuthor, String displayname, String description,
+			Object createObject, Organisation organisation, Locale locale) {
 		RepositoryService repositoryService = CoreSpringFactory.getImpl(RepositoryService.class);
 		SharedFolderFileResource folderResource = SharedFolderManager.getInstance().createSharedFolder();
 		OLATResource resource = OLATResourceManager.getInstance().findOrPersistResourceable(folderResource);
-		RepositoryEntry re = repositoryService.create(initialAuthor, null,
-				SharedFolderFileResource.RESOURCE_NAME, displayname, description, resource, RepositoryEntry.ACC_OWNERS);
+		RepositoryEntry re = repositoryService.create(initialAuthor, null, SharedFolderFileResource.RESOURCE_NAME, displayname, description,
+				resource, RepositoryEntryStatusEnum.preparation, organisation);
 		DBFactory.getInstance().commit();
 		return re;
 	}
@@ -107,13 +104,34 @@ public class SharedFolderHandler implements RepositoryHandler {
 	}
 
 	@Override
+	public boolean supportImport() {
+		return false;
+	}
+
+	@Override
 	public ResourceEvaluation acceptImport(File file, String filename) {
-		return new ResourceEvaluation(false);
+		return ResourceEvaluation.notValid();
+	}
+
+	@Override
+	public boolean supportImportUrl() {
+		return false;
+	}
+
+	@Override
+	public ResourceEvaluation acceptImport(String url) {
+		return ResourceEvaluation.notValid();
 	}
 	
 	@Override
 	public RepositoryEntry importResource(Identity initialAuthor, String initialAuthorAlt, String displayname, String description,
-			boolean withReferences, Locale locale, File file, String filename) {
+			boolean withReferences, Organisation organisation, Locale locale, File file, String filename) {
+		return null;
+	}
+	
+	@Override
+	public RepositoryEntry importResource(Identity initialAuthor, String initialAuthorAlt, String displayname,
+			String description, Organisation organisation, Locale locale, String url) {
 		return null;
 	}
 	
@@ -121,9 +139,9 @@ public class SharedFolderHandler implements RepositoryHandler {
 	public RepositoryEntry copy(Identity author, RepositoryEntry source, RepositoryEntry target) {
 		OLATResource sourceResource = source.getOlatResource();
 		OLATResource targetResource = target.getOlatResource();
-		File sourceFileroot = FileResourceManager.getInstance().getFileResourceRootImpl(sourceResource).getBasefile();
-		File targetFileroot = FileResourceManager.getInstance().getFileResourceRootImpl(targetResource).getBasefile();
-		FileUtils.copyDirContentsToDir(sourceFileroot, targetFileroot, false, "copy");
+		VFSContainer sourceContainer = FileResourceManager.getInstance().getFileResourceRootImpl(sourceResource);
+		VFSContainer targetContainer = FileResourceManager.getInstance().getFileResourceRootImpl(targetResource);
+		targetContainer.copyContentOf(sourceContainer);
 		return target;
 	}
 
@@ -138,7 +156,7 @@ public class SharedFolderHandler implements RepositoryHandler {
 	}
 
 	@Override
-	public EditionSupport supportsEdit(OLATResourceable resource) {
+	public EditionSupport supportsEdit(OLATResourceable resource, Identity identity, Roles roles) {
 		return EditionSupport.embedded;
 	}
 	
@@ -147,9 +165,6 @@ public class SharedFolderHandler implements RepositoryHandler {
 		return false;
 	}
 
-	/**
-	 * @see org.olat.repository.handlers.RepositoryHandler#getCreateWizardController(org.olat.core.id.OLATResourceable, org.olat.core.gui.UserRequest, org.olat.core.gui.control.WindowControl)
-	 */
 	@Override
 	public StepsMainRunController createWizardController(OLATResourceable res, UserRequest ureq, WindowControl wControl) {
 		throw new AssertException("Trying to get wizard where no creation wizard is provided for this type.");
@@ -170,33 +185,26 @@ public class SharedFolderHandler implements RepositoryHandler {
 	 */
 	@Override
 	public MainLayoutController createLaunchController(RepositoryEntry re, RepositoryEntrySecurity reSecurity, UserRequest ureq, WindowControl wControl) {
-		
-		RepositoryEntryRuntimeController runtime = new RepositoryEntryRuntimeController(ureq, wControl, re, reSecurity,
-				new RuntimeControllerCreator() {
-					@Override
-					public Controller create(UserRequest uureq, WindowControl wwControl, TooledStackedPanel toolbarPanel,
-							RepositoryEntry entry, RepositoryEntrySecurity security, AssessmentMode assessmentMode) {
-						OLATResource res = entry.getOlatResource();
-						VFSContainer sfContainer = SharedFolderManager.getInstance().getSharedFolder(res);
-						CoreSpringFactory.getImpl(UserCourseInformationsManager.class)
-							.updateUserCourseInformations(res, uureq.getIdentity());
-						
-						Controller sfdCtr;
-						if(sfContainer == null || !sfContainer.exists()) {
-							sfdCtr = new CorruptedCourseController(uureq, wwControl);
-						} else {
-							boolean canEdit = security.isEntryAdmin() || security.isCourseCoach();
-							if(canEdit) {
-								sfdCtr = new SharedFolderEditorController(entry, uureq, wwControl);
-							} else {
-								sfdCtr = new SharedFolderDisplayController(uureq, wwControl, sfContainer, res);
-							}
-						}
-						return sfdCtr;
-					}
-			});
-		
-		return runtime;
+		return new RepositoryEntryRuntimeController(ureq, wControl, re, reSecurity,
+				(uureq, wwControl, toolbarPanel, entry, security, assessmentMode) -> {
+			OLATResource res = entry.getOlatResource();
+			VFSContainer sfContainer = SharedFolderManager.getInstance().getSharedFolder(res);
+			CoreSpringFactory.getImpl(UserCourseInformationsManager.class)
+				.updateUserCourseInformations(res, uureq.getIdentity());
+			
+			Controller sfdCtr;
+			if(sfContainer == null || !sfContainer.exists()) {
+				sfdCtr = new CorruptedCourseController(uureq, wwControl);
+			} else {
+				boolean canEdit = security.isEntryAdmin() || security.isCourseCoach();
+				if(canEdit) {
+					sfdCtr = new SharedFolderEditorController(entry, uureq, wwControl);
+				} else {
+					sfdCtr = new SharedFolderDisplayController(uureq, wwControl, sfContainer, res);
+				}
+			}
+			return sfdCtr;
+		});
 	}
 	
 	@Override
@@ -204,11 +212,8 @@ public class SharedFolderHandler implements RepositoryHandler {
 		return null;
 	}
 
-	/**
-	 * @see org.olat.repository.handlers.RepositoryHandler#getAsMediaResource(org.olat.core.id.OLATResourceable
-	 */
 	@Override
-	public MediaResource getAsMediaResource(OLATResourceable res, boolean backwardsCompatible) {
+	public MediaResource getAsMediaResource(OLATResourceable res) {
 		return SharedFolderManager.getInstance().getAsMediaResource(res);
 	}
 

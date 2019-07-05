@@ -1,8 +1,8 @@
 (function ($) {
     $.fn.qtiTimer = function(options) {
-    	
+    	"use strict";
     	var settings = $.extend({
-    		startTime: null,
+    		testDuration: null,
     		availableTime: null,
     		formName: null,//forn name
     		dispIdField: null,//form dispatch id
@@ -15,15 +15,16 @@
     	}
     	
     	var wrapperId = this.attr('id');
-    	var startTime = Date.now() - settings.startTime;
+    	var now = Date.now();
+    	var startTime = now - settings.testDuration;
     	var availableTime = startTime + settings.availableTime;
-    	var remainingTime = availableTime - Date.now();
+    	var remainingTime = availableTime - now;
 		displayRemainingTime(wrapperId, settings.availableTime, remainingTime);
     	
     	var periodic = jQuery.periodic({period: 1000, decay:1.0, max_period: remainingTime + 1000 }, function() {
-			remainingTime = availableTime - Date.now();
-			if(remainingTime >= 0) {
-				displayRemainingTime(wrapperId, settings.availableTime, remainingTime);
+			var remaining = availableTime - Date.now();
+			if(remaining >= 0) {
+				displayRemainingTime(wrapperId, settings.availableTime, remaining);
 			} else {
 				periodic.cancel();
 				timesUp(settings);
@@ -42,7 +43,7 @@
     	if(jQuery('#o_qti_run').length > 0) {
     		o_ffXHREvent(settings.formName, settings.dispIdField, settings.dispId, settings.eventIdField, '2', false, false, false, 'cid', 'timesUp');
     	}
-    };
+    }
     
     function displayRemainingTime(wrapperId, availableTime, remainingTime) {
     	var available = formatRemainingTime(availableTime);
@@ -59,7 +60,7 @@
     	} else if(remainingTime < 10 * 60 * 1000) {
     		addClass(wrapperId, "o_10_minutes");
     	} 
-    };
+    }
     
     function addClass(wrappedId, warningClass) {
     	var wrapperEl = jQuery('#' + wrappedId);

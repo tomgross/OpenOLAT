@@ -27,12 +27,13 @@ package org.olat.course;
 
 import java.io.File;
 
-import org.olat.core.commons.modules.bc.vfs.OlatRootFolderImpl;
 import org.olat.core.id.IdentityEnvironment;
 import org.olat.core.id.OLATResourceable;
+import org.olat.core.util.vfs.LocalFolderImpl;
 import org.olat.core.util.vfs.VFSContainer;
 import org.olat.course.config.CourseConfig;
 import org.olat.course.export.CourseEnvironmentMapper;
+import org.olat.course.folder.CourseContainerOptions;
 import org.olat.course.run.environment.CourseEnvironment;
 import org.olat.course.tree.CourseEditorTreeModel;
 import org.olat.resource.OLATResource;
@@ -70,8 +71,7 @@ public interface ICourse extends OLATResourceable {
 	 * @param backwardsCompatible Export in a format compatible with older OpenOLAT version
 	 * @param foldersToCleanup Can add there folders which need to be clean up after the export
 	 */
-	public void exportToFilesystem(OLATResource originalCourseResource, File exportDirectory,
-			boolean runtimeDatas, boolean backwardsCompatible);
+	public void exportToFilesystem(OLATResource originalCourseResource, File exportDirectory, boolean runtimeDatas);
 	
 	public void postCopy(CourseEnvironmentMapper envMapper, ICourse sourceCourse);
 	
@@ -82,7 +82,7 @@ public interface ICourse extends OLATResourceable {
 	 * (E.g. "/course/123/")
 	 * @return the container to files for this course
 	 */
-	public OlatRootFolderImpl getCourseBaseContainer();
+	public LocalFolderImpl getCourseBaseContainer();
 	
 	/**
 	 * Return the container to the coursefolder of this course. (E.g.
@@ -96,6 +96,16 @@ public interface ICourse extends OLATResourceable {
 
 	public boolean exceedsSizeLimit();
 
+	/**
+	 * Return the merged course container with the desired directories:
+	 * course folder, shared resource folder, folders course elements 
+	 * and participants folder elements.
+	 * 
+	 * @return the container to the coursefolder of this course
+	 */
+	public VFSContainer getCourseFolderContainer(CourseContainerOptions options);
+	
+	
 	/**
 	 * Give the possibility to override the read-only mode of the containers
 	 * if the course is closed.
@@ -114,7 +124,7 @@ public interface ICourse extends OLATResourceable {
 	 */
 	public VFSContainer getCourseFolderContainer(IdentityEnvironment identityEnv);
 	
-	public OlatRootFolderImpl getCourseExportDataDir();
+	public LocalFolderImpl getCourseExportDataDir();
 
 	/**
 	 * @return The course title. This is the display name of the course repository entry

@@ -26,6 +26,7 @@ import java.util.*;
 
 import org.olat.admin.SystemAdminMainController;
 import org.olat.core.OlatServletResource;
+import org.olat.core.dispatcher.impl.StaticMediaDispatcher;
 import org.olat.core.gui.UserRequest;
 import org.olat.core.gui.components.form.flexible.FormItem;
 import org.olat.core.gui.components.form.flexible.FormItemContainer;
@@ -59,7 +60,7 @@ import org.springframework.beans.factory.annotation.Autowired;
  */
 public class LayoutAdminController extends FormBasicController {
 	
-	private static final Set<String> imageMimeTypes = new HashSet<String>();
+	private static final Set<String> imageMimeTypes = new HashSet<>();
 	static {
 		imageMimeTypes.add("image/gif");
 		imageMimeTypes.add("image/jpg");
@@ -71,6 +72,7 @@ public class LayoutAdminController extends FormBasicController {
 	private SingleSelection logoLinkTypeEl;
 	private TextElement footerLine, footerUrl;
 	private SingleSelection themeSelection;
+	private FormLink forceThemeReload;	
 	private FileElement logoUpload;
 	
 	private static final String[] logoUrlTypeKeys = new String[]{ LogoURLType.landingpage.name(), LogoURLType.custom.name() };
@@ -115,6 +117,8 @@ public class LayoutAdminController extends FormBasicController {
 			}
 		}
 		themeSelection.addActionListener(FormEvent.ONCHANGE);
+		forceThemeReload = uifactory.addFormLink("forceThemeReload", "form.theme.forceReload", null, themeCont, Link.BUTTON_SMALL);
+		forceThemeReload.setExampleKey("form.theme.forceReload.help", null);
 
 		//logo
 		FormLayoutContainer logoCont = FormLayoutContainer.createDefaultFormLayout("logo", getTranslator());
@@ -178,7 +182,7 @@ public class LayoutAdminController extends FormBasicController {
 		footerUrl.setPlaceholderKey("linkUrl.default", null);
 		
 		String oldFooterLine = layoutModule.getFooterLine();
-		footerLine = uifactory.addTextAreaElement("footerLine", "footerLine.description", -1, 3, 50, true, oldFooterLine, footerCont);
+		footerLine = uifactory.addTextAreaElement("footerLine", "footerLine.description", -1, 3, 50, true, false, oldFooterLine, footerCont);
 		footerLine.setPlaceholderKey("footerLine.default", null);
 
 		FormLayoutContainer buttonsCont = FormLayoutContainer.createButtonLayout("buttons", getTranslator());
@@ -193,10 +197,10 @@ public class LayoutAdminController extends FormBasicController {
 	
 	@Override
 	protected boolean validateFormLogic(UserRequest ureq) {
-		boolean allOk = true;
+		boolean allOk = super.validateFormLogic(ureq);
 		allOk &= validateUrl(logoUrlEl);
 		allOk &= validateUrl(footerUrl);
-		return allOk & super.validateFormLogic(ureq);
+		return allOk;
 	}
 	
 	private boolean validateUrl(TextElement el) {
@@ -243,10 +247,14 @@ public class LayoutAdminController extends FormBasicController {
 			String newThemeIdentifyer = themeSelection.getSelectedKey();
 			guiSettings.setGuiThemeIdentifyer(newThemeIdentifyer);
 			// use new theme in current window
-			getWindowControl().getWindowBackOffice().getWindow().getGuiTheme().init(newThemeIdentifyer);
 			getWindowControl().getWindowBackOffice().getWindow().setDirty(true);
 			logAudit("GUI theme changed", newThemeIdentifyer);
 			fireEvent(ureq, Event.CHANGED_EVENT);
+		} else if (forceThemeReload == source) {
+			StaticMediaDispatcher.forceReloadStaticMediaDelivery();
+			// make reloading happen for the admin window right away
+			getWindowControl().getWindowBackOffice().getWindow().getGuiTheme().init(themeSelection.getSelectedKey());
+			getWindowControl().getWindowBackOffice().getWindow().setDirty(true);
 		}
 	}
 

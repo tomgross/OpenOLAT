@@ -33,11 +33,12 @@ import javax.ws.rs.core.MediaType;
 import javax.ws.rs.core.Response;
 import javax.ws.rs.core.Response.Status;
 
-import org.olat.core.CoreSpringFactory;
 import org.olat.core.id.Roles;
 import org.olat.repository.manager.RepositoryEntryLifecycleDAO;
 import org.olat.repository.model.RepositoryEntryLifecycle;
 import org.olat.restapi.support.vo.RepositoryEntryLifecycleVO;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Component;
 
 /**
  * 
@@ -45,15 +46,19 @@ import org.olat.restapi.support.vo.RepositoryEntryLifecycleVO;
  * @author srosse, stephane.rosse@frentix.com, http://www.frentix.com
  *
  */
+@Component
 @Path("repo/lifecycle")
 public class RepositoryEntryLifecycleWebService {
+	
+	@Autowired
+	private RepositoryEntryLifecycleDAO lifeCycleDao;
 	
 	/**
 	 * List all public lifecycles
 	 * @response.representation.200.qname {http://www.example.com}repositoryEntryVO
-   * @response.representation.200.mediaType text/plain, text/html, application/xml, application/json
-   * @response.representation.200.doc List all entries in the repository
-   * @response.representation.200.example {@link org.olat.restapi.support.vo.Examples#SAMPLE_REPOENTRYVOes}
+	 * @response.representation.200.mediaType text/plain, text/html, application/xml, application/json
+	 * @response.representation.200.doc List all entries in the repository
+	 * @response.representation.200.example {@link org.olat.restapi.support.vo.Examples#SAMPLE_REPOENTRYVOes}
 	 * @param uriInfo The URI information
 	 * @param httpRequest The HTTP request
 	 * @return
@@ -62,13 +67,12 @@ public class RepositoryEntryLifecycleWebService {
 	@Produces({MediaType.APPLICATION_JSON, MediaType.APPLICATION_XML})
 	public Response getPublicLifeCycles(@Context HttpServletRequest httpRequest) {
 		Roles roles = getRoles(httpRequest);
-		if(!roles.isInstitutionalResourceManager() && !roles.isOLATAdmin()) {
+		if(!roles.isLearnResourceManager() && !roles.isAdministrator()) {
 			return Response.serverError().status(Status.UNAUTHORIZED).build();
 		}
 		
-		RepositoryEntryLifecycleDAO lifeCycleDao = CoreSpringFactory.getImpl(RepositoryEntryLifecycleDAO.class);
 		List<RepositoryEntryLifecycle> publicLifeCycles = lifeCycleDao.loadPublicLifecycle();
-		List<RepositoryEntryLifecycleVO> voList = new ArrayList<RepositoryEntryLifecycleVO>(publicLifeCycles.size());
+		List<RepositoryEntryLifecycleVO> voList = new ArrayList<>(publicLifeCycles.size());
 		for(RepositoryEntryLifecycle lifeCycle: publicLifeCycles) {
 			voList.add(new RepositoryEntryLifecycleVO(lifeCycle));
 		}

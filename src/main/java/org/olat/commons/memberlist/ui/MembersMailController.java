@@ -21,7 +21,6 @@ package org.olat.commons.memberlist.ui;
 
 import java.io.File;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -62,11 +61,11 @@ import org.olat.core.util.mail.MailLoggingAction;
 import org.olat.core.util.mail.MailManager;
 import org.olat.core.util.mail.MailModule;
 import org.olat.core.util.mail.MailerResult;
-import org.olat.core.util.mail.ui.EMailIdentity;
 import org.olat.course.groupsandrights.CourseGroupManager;
 import org.olat.course.nodes.members.Member;
 import org.olat.course.run.environment.CourseEnvironment;
 import org.olat.repository.RepositoryEntry;
+import org.olat.repository.RepositoryEntryRelationType;
 import org.olat.repository.RepositoryService;
 import org.olat.user.UserManager;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -113,8 +112,8 @@ public class MembersMailController extends FormBasicController {
 	
 	public MembersMailController(UserRequest ureq, WindowControl wControl, Translator translator, CourseEnvironment courseEnv,
 			List<Member> ownerList, List<Member> coachList, List<Member> participantList, List<Member> waitingList, String bodyTemplate) {
-		super(ureq, wControl);
-		setTranslator(Util.createPackageTranslator(translator, MailHelper.class, ureq.getLocale()));
+		super(ureq, wControl, Util.createPackageTranslator(translator, MailHelper.class, ureq.getLocale()));
+		
 		
 		this.courseEnv = courseEnv;
 		this.ownerList = ownerList;
@@ -146,21 +145,25 @@ public class MembersMailController extends FormBasicController {
 		if(ownerList != null && ownerList.size() > 0) {
 			String[] values = new String[] { translate("contact.all.owners") };
 			ownerEl = uifactory.addCheckboxesHorizontal("contact.all.owners", to, formLayout, keys, values);
+			ownerEl.setElementCssClass("o_sel_cmembers_mail_owner");
 			to = null;
 		}
 		if(coachList != null && coachList.size() > 0) {
 			String[] values = new String[] { translate("contact.all.coaches") };
 			coachEl = uifactory.addCheckboxesHorizontal("contact.all.coaches", to, formLayout, keys, values);
+			coachEl.setElementCssClass("o_sel_cmembers_mail_coach");
 			to = null;
 		}
 		if(participantList != null && participantList.size() > 0) {
 			String[] values = new String[] { translate("contact.all.participants") };
 			participantEl = uifactory.addCheckboxesHorizontal("contact.all.participants", to, formLayout, keys, values);
+			participantEl.setElementCssClass("o_sel_cmembers_mail_participant");
 			to = null;
 		}
 		if(waitingList != null && waitingList.size() > 0) {
 			String[] values = new String[] { translate("contact.all.waiting") };
 			waitingEl = uifactory.addCheckboxesHorizontal("contact.all.waiting", to, formLayout, keys, values);
+			waitingEl.setElementCssClass("o_sel_cmembers_mail_waiting");
 			to = null;
 		}
 		
@@ -188,19 +191,25 @@ public class MembersMailController extends FormBasicController {
 
 		String[] extValues = new String[] { translate("contact.external") };
 		externalEl = uifactory.addCheckboxesHorizontal("contact.external", to, formLayout, keys, extValues);
+		externalEl.setElementCssClass("o_sel_cmembers_mail_external");
 		externalEl.addActionListener(FormEvent.ONCHANGE);
 		
-		externalAddressesEl = uifactory.addTextAreaElement("contact.external.list", null, 4096, 3, 60, false, "", formLayout);
+		externalAddressesEl = uifactory.addTextAreaElement("contact.external.list", null, 4096, 3, 60, false, false, "", formLayout);
 		externalAddressesEl.setExampleKey("contact.external.list.example", null);
+		externalAddressesEl.setElementCssClass("o_sel_cmembers_external_mail");
 		externalAddressesEl.setVisible(false);
 
 		uifactory.addSpacerElement("space-2", formLayout, false);
 		
 		subjectEl = uifactory.addTextElement("subject", "mail.subject", 255, "", formLayout);
+		subjectEl.setElementCssClass("o_sel_cmembers_mail_subject");
 		subjectEl.setDisplaySize(255);
 		subjectEl.setMandatory(true);
 		bodyEl = uifactory.addRichTextElementForStringDataMinimalistic("body", "mail.body", "", 15, 8, formLayout, getWindowControl());
+		bodyEl.setElementCssClass("o_sel_cmembers_mail_body");
 		bodyEl.setMandatory(true);
+		bodyEl.getEditorConfiguration().setRelativeUrls(false);
+		bodyEl.getEditorConfiguration().setRemoveScriptHost(false);
 		
 		attachmentEl = uifactory.addFileElement(getWindowControl(), "file_upload_1", "contact.attachment", formLayout);
 		attachmentEl.addActionListener(FormEvent.ONCHANGE);
@@ -231,7 +240,7 @@ public class MembersMailController extends FormBasicController {
 	
 	@Override
 	protected boolean validateFormLogic(UserRequest ureq) {
-		boolean allOk = true;
+		boolean allOk = super.validateFormLogic(ureq);
 		
 		subjectEl.clearError();
 		if(!StringHelper.containsNonWhitespace(subjectEl.getValue())) {
@@ -245,6 +254,16 @@ public class MembersMailController extends FormBasicController {
 			allOk &= false;
 		}
 		
+		allOk &= validateRecipients();
+		
+		return allOk;
+	}
+	
+	private boolean validateRecipients() {
+		boolean allOk = true;
+		
+		boolean atLeastOne = false;
+		
 		externalAddressesEl.clearError();
 		if(externalEl != null && externalEl.isAtLeastSelected(1)) {
 			String value = externalAddressesEl.getValue();
@@ -257,6 +276,7 @@ public class MembersMailController extends FormBasicController {
 						errors.append(email);
 					}
 				}
+				atLeastOne |= true;
 			}
 			
 			if(errors.length() > 0) {
@@ -265,7 +285,46 @@ public class MembersMailController extends FormBasicController {
 			}
 		}
 		
-		return allOk & super.validateFormLogic(ureq);
+		
+		if(ownerEl != null) ownerEl.clearError();
+		if(coachEl != null) coachEl.clearError();
+		if(participantEl != null) participantEl.clearError();
+		if(waitingEl != null) waitingEl.clearError();
+		if(individualEl != null) individualEl.clearError();
+		
+		if((ownerEl != null && ownerEl.isAtLeastSelected(1))
+				|| (coachEl != null && coachEl.isAtLeastSelected(1))
+				|| (participantEl != null && participantEl.isAtLeastSelected(1))
+				|| (waitingEl != null && waitingEl.isAtLeastSelected(1))) {
+			atLeastOne |= true;
+		}
+		
+		//check if there is an individual email
+		if(!atLeastOne && individualEl != null && individualEl.isAtLeastSelected(1) && !selectedMembers.isEmpty()) {
+			atLeastOne |= true;
+		}
+		
+		if(!atLeastOne) {
+			if(externalEl != null && externalEl.isAtLeastSelected(1) && !StringHelper.containsNonWhitespace(externalAddressesEl.getValue())) {
+				externalEl.setErrorKey("at.least.one.recipient", null);
+			} else if(individualEl != null && individualEl.isAtLeastSelected(1) && selectedMembers.isEmpty()) {
+				individualEl.setErrorKey("at.least.one.recipient", null);
+			} else if(ownerEl != null && !ownerEl.isAtLeastSelected(1)) {
+				ownerEl.setErrorKey("at.least.one.recipient", null);
+			} else if(coachEl != null && !coachEl.isAtLeastSelected(1)) {
+				coachEl.setErrorKey("at.least.one.recipient", null);
+			} else if(participantEl != null && !participantEl.isAtLeastSelected(1)) {
+				participantEl.setErrorKey("at.least.one.recipient", null);
+			} else if(waitingEl != null && !waitingEl.isAtLeastSelected(1)) {
+				waitingEl.setErrorKey("at.least.one.recipient", null);
+			} else if (individualEl != null && !individualEl.isAtLeastSelected(1)) {
+				individualEl.setErrorKey("at.least.one.recipient", null);
+			} else if (externalEl != null && !externalEl.isAtLeastSelected(1)) {
+				externalEl.setErrorKey("at.least.one.recipient", null);
+			}
+		}
+		
+		return allOk && atLeastOne;
 	}
 	
 	private File[] getAttachments() {
@@ -428,7 +487,7 @@ public class MembersMailController extends FormBasicController {
 	}
 	
 	private void doSend(UserRequest ureq) {
-		ContactList contactList = new ContactList("");
+		List<ContactList> contactList = new ArrayList<>();
 		if (courseEnv == null) {
 			if(coachEl != null && coachEl.isAtLeastSelected(1)) {
 				List<Long> identityKeys = new ArrayList<>(coachList.size());
@@ -436,7 +495,9 @@ public class MembersMailController extends FormBasicController {
 					identityKeys.add(coach.getKey());
 				}
 				List<Identity> coaches = securityManager.loadIdentityByKeys(identityKeys);
-				contactList.addAllIdentites(coaches);
+				ContactList memberList = new ContactList(translate("contact.list.coaches"));
+				memberList.addAllIdentites(coaches);
+				contactList.add(memberList);
 			}
 			
 			if(participantEl != null && participantEl.isAtLeastSelected(1)) {
@@ -445,7 +506,9 @@ public class MembersMailController extends FormBasicController {
 					identityKeys.add(participant.getKey());
 				}
 				List<Identity> participants = securityManager.loadIdentityByKeys(identityKeys);
-				contactList.addAllIdentites(participants);
+				ContactList memberList = new ContactList(translate("contact.list.participants"));
+				memberList.addAllIdentites(participants);
+				contactList.add(memberList);
 			}
 			
 			if(waitingEl != null && waitingEl.isAtLeastSelected(1)) {
@@ -454,13 +517,17 @@ public class MembersMailController extends FormBasicController {
 					identityKeys.add(waiter.getKey());
 				}
 				List<Identity> waiters = securityManager.loadIdentityByKeys(identityKeys);
-				contactList.addAllIdentites(waiters);
+				ContactList memberList = new ContactList(translate("contact.list.waiting"));
+				memberList.addAllIdentites(waiters);
+				contactList.add(memberList);
 			}
 		} else {			
 			if(ownerEl != null && ownerEl.isAtLeastSelected(1)) {
 				RepositoryEntry courseRepositoryEntry = courseEnv.getCourseGroupManager().getCourseEntry();
-				List<Identity> owners = repositoryService.getMembers(courseRepositoryEntry, GroupRoles.owner.name());
-				contactList.addAllIdentites(owners);
+				List<Identity> owners = repositoryService.getMembers(courseRepositoryEntry, RepositoryEntryRelationType.entryAndCurriculums, GroupRoles.owner.name());
+				ContactList memberList = new ContactList(translate("contact.list.owners"));
+				memberList.addAllIdentites(owners);
+				contactList.add(memberList);
 			}
 			
 			if(coachEl != null && coachEl.isAtLeastSelected(1)) {
@@ -469,8 +536,10 @@ public class MembersMailController extends FormBasicController {
 					sendToWhatYouSee.add(coach.getKey());
 				}
 				CourseGroupManager cgm = courseEnv.getCourseGroupManager();
-				avoidInvisibleMember(cgm.getCoachesFromBusinessGroups(), contactList, sendToWhatYouSee);
-				avoidInvisibleMember(cgm.getCoaches(), contactList, sendToWhatYouSee);
+				ContactList memberList = new ContactList(translate("contact.list.coaches"));
+				avoidInvisibleMember(cgm.getCoachesFromBusinessGroups(), memberList, sendToWhatYouSee);
+				avoidInvisibleMember(cgm.getCoaches(), memberList, sendToWhatYouSee);
+				contactList.add(memberList);
 			}
 			
 			if(participantEl != null && participantEl.isAtLeastSelected(1)) {
@@ -479,8 +548,10 @@ public class MembersMailController extends FormBasicController {
 					sendToWhatYouSee.add(participant.getKey());
 				}
 				CourseGroupManager cgm = courseEnv.getCourseGroupManager();
-				avoidInvisibleMember(cgm.getParticipantsFromBusinessGroups(), contactList, sendToWhatYouSee);
-				avoidInvisibleMember(cgm.getParticipants(), contactList, sendToWhatYouSee);
+				ContactList memberList = new ContactList(translate("contact.list.participants"));
+				avoidInvisibleMember(cgm.getParticipantsFromBusinessGroups(), memberList, sendToWhatYouSee);
+				avoidInvisibleMember(cgm.getParticipants(), memberList, sendToWhatYouSee);
+				contactList.add(memberList);
 			}
 		}
 		
@@ -491,23 +562,27 @@ public class MembersMailController extends FormBasicController {
 				identityKeys.add(member.getKey());
 			}
 			List<Identity> selectedIdentities = securityManager.loadIdentityByKeys(identityKeys);
-			contactList.addAllIdentites(selectedIdentities);
+			ContactList otherList = new ContactList(translate("contact.list.others"));
+			otherList.addAllIdentites(selectedIdentities);
+			contactList.add(otherList);
 		}
 		
 		if(externalEl != null && externalEl.isAtLeastSelected(1)) {
 			String value = externalAddressesEl.getValue();
 			if(StringHelper.containsNonWhitespace(value)) {
+				ContactList externalList = new ContactList(translate("contact.list.external"));
 				for(StringTokenizer tokenizer= new StringTokenizer(value, ",\r\n", false); tokenizer.hasMoreTokens(); ) {
 					String email = tokenizer.nextToken().trim();
-					contactList.add(new EMailIdentity(email, getLocale()));
+					externalList.add(email);
 				}
+				contactList.add(externalList);
 			}
 		}
 
 		doSendEmailToMember(ureq, contactList);
 	}
 	
-	private void doSendEmailToMember(UserRequest ureq, ContactList contactList) {
+	private void doSendEmailToMember(UserRequest ureq, List<ContactList> contactList) {
 		boolean success = false;
 		try {
 			File[] attachmentArr = getAttachments();
@@ -515,7 +590,7 @@ public class MembersMailController extends FormBasicController {
 			MailBundle bundle = new MailBundle();
 			bundle.setContext(context);
 			bundle.setFromId(getIdentity());						
-			bundle.setContactLists(Collections.singletonList(contactList));
+			bundle.setContactLists(contactList);
 			bundle.setContent(subjectEl.getValue(), bodyEl.getValue(), attachmentArr);
 			MailerResult result = mailService.sendMessage(bundle);
 			if(copyFromEl.isAtLeastSelected(1)) {

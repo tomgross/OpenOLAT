@@ -21,21 +21,27 @@ package org.olat.ims.qti21.ui.components;
 
 import static org.olat.ims.qti21.ui.components.AssessmentRenderFunctions.renderValue;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Iterator;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+import org.apache.logging.log4j.Logger;
 import org.olat.core.gui.components.form.flexible.impl.FormJSHelper;
 import org.olat.core.gui.render.StringOutput;
 import org.olat.core.gui.render.URLBuilder;
 import org.olat.core.gui.render.velocity.VelocityRenderDecorator;
 import org.olat.core.gui.translator.Translator;
 import org.olat.core.helpers.Settings;
+import org.olat.core.logging.Tracing;
 import org.olat.core.util.StringHelper;
 import org.olat.ims.qti21.AssessmentTestSession;
+import org.olat.ims.qti21.manager.CorrectResponsesUtil;
+import org.olat.ims.qti21.model.xml.interactions.FIBAssessmentItemBuilder.AbstractEntry;
 import org.olat.ims.qti21.ui.CandidateSessionContext;
 
 import uk.ac.ed.ph.jqtiplus.attribute.value.StringMultipleAttribute;
@@ -48,6 +54,7 @@ import uk.ac.ed.ph.jqtiplus.node.content.basic.FlowStatic;
 import uk.ac.ed.ph.jqtiplus.node.content.variable.TextOrVariable;
 import uk.ac.ed.ph.jqtiplus.node.expression.operator.Shape;
 import uk.ac.ed.ph.jqtiplus.node.item.AssessmentItem;
+import uk.ac.ed.ph.jqtiplus.node.item.CorrectResponse;
 import uk.ac.ed.ph.jqtiplus.node.item.interaction.AssociateInteraction;
 import uk.ac.ed.ph.jqtiplus.node.item.interaction.ChoiceInteraction;
 import uk.ac.ed.ph.jqtiplus.node.item.interaction.ExtendedTextInteraction;
@@ -55,6 +62,8 @@ import uk.ac.ed.ph.jqtiplus.node.item.interaction.GapMatchInteraction;
 import uk.ac.ed.ph.jqtiplus.node.item.interaction.GraphicAssociateInteraction;
 import uk.ac.ed.ph.jqtiplus.node.item.interaction.GraphicGapMatchInteraction;
 import uk.ac.ed.ph.jqtiplus.node.item.interaction.GraphicOrderInteraction;
+import uk.ac.ed.ph.jqtiplus.node.item.interaction.HotspotInteraction;
+import uk.ac.ed.ph.jqtiplus.node.item.interaction.HottextInteraction;
 import uk.ac.ed.ph.jqtiplus.node.item.interaction.InlineChoiceInteraction;
 import uk.ac.ed.ph.jqtiplus.node.item.interaction.Interaction;
 import uk.ac.ed.ph.jqtiplus.node.item.interaction.MatchInteraction;
@@ -62,6 +71,7 @@ import uk.ac.ed.ph.jqtiplus.node.item.interaction.OrderInteraction;
 import uk.ac.ed.ph.jqtiplus.node.item.interaction.Prompt;
 import uk.ac.ed.ph.jqtiplus.node.item.interaction.SliderInteraction;
 import uk.ac.ed.ph.jqtiplus.node.item.interaction.StringInteraction;
+import uk.ac.ed.ph.jqtiplus.node.item.interaction.TextEntryInteraction;
 import uk.ac.ed.ph.jqtiplus.node.item.interaction.choice.Choice;
 import uk.ac.ed.ph.jqtiplus.node.item.interaction.choice.GapChoice;
 import uk.ac.ed.ph.jqtiplus.node.item.interaction.choice.GapImg;
@@ -71,7 +81,10 @@ import uk.ac.ed.ph.jqtiplus.node.item.interaction.choice.SimpleChoice;
 import uk.ac.ed.ph.jqtiplus.node.item.interaction.content.Gap;
 import uk.ac.ed.ph.jqtiplus.node.item.interaction.graphic.AssociableHotspot;
 import uk.ac.ed.ph.jqtiplus.node.item.interaction.graphic.HotspotChoice;
+import uk.ac.ed.ph.jqtiplus.node.item.response.declaration.MapEntry;
+import uk.ac.ed.ph.jqtiplus.node.item.response.declaration.Mapping;
 import uk.ac.ed.ph.jqtiplus.node.item.response.declaration.ResponseDeclaration;
+import uk.ac.ed.ph.jqtiplus.node.shared.FieldValue;
 import uk.ac.ed.ph.jqtiplus.resolution.ResolvedAssessmentItem;
 import uk.ac.ed.ph.jqtiplus.state.ItemSessionState;
 import uk.ac.ed.ph.jqtiplus.types.Identifier;
@@ -85,6 +98,7 @@ import uk.ac.ed.ph.jqtiplus.value.NullValue;
 import uk.ac.ed.ph.jqtiplus.value.Orientation;
 import uk.ac.ed.ph.jqtiplus.value.RecordValue;
 import uk.ac.ed.ph.jqtiplus.value.SingleValue;
+import uk.ac.ed.ph.jqtiplus.value.StringValue;
 import uk.ac.ed.ph.jqtiplus.value.Value;
 
 /**
@@ -94,6 +108,8 @@ import uk.ac.ed.ph.jqtiplus.value.Value;
  *
  */
 public class AssessmentObjectVelocityRenderDecorator extends VelocityRenderDecorator {
+	
+	private static final Logger log = Tracing.createLoggerFor(AssessmentObjectVelocityRenderDecorator.class);
 
 	private final URLBuilder ubu;
 	private final AssessmentRenderer renderer;
@@ -240,6 +256,21 @@ public class AssessmentObjectVelocityRenderDecorator extends VelocityRenderDecor
 				return false;
 			}
 			return sc;
+		} else if(interaction instanceof HottextInteraction) {
+			HottextInteraction hottextInteraction = (HottextInteraction)interaction;
+			boolean sc = hottextInteraction.getMaxChoices() == 1;
+			ResponseDeclaration responseDeclaration = assessmentItem.getResponseDeclaration(hottextInteraction.getResponseIdentifier());
+			if(responseDeclaration != null && responseDeclaration.hasCardinality(Cardinality.MULTIPLE)) {
+				return false;
+			}
+			return sc;
+		} else if(interaction instanceof HotspotInteraction) {
+			HotspotInteraction hotspotInteraction = (HotspotInteraction)interaction;
+			ResponseDeclaration responseDeclaration = assessmentItem.getResponseDeclaration(hotspotInteraction.getResponseIdentifier());
+			if(responseDeclaration != null && responseDeclaration.hasCardinality(Cardinality.SINGLE)) {
+				return true;
+			}
+			return false;
 		}
 		return false;
 	}
@@ -319,7 +350,7 @@ public class AssessmentObjectVelocityRenderDecorator extends VelocityRenderDecor
 					.filter((choice) -> isVisible(choice, itemSessionState))
 					.collect(Collectors.toList());
 		} catch (Exception e) {
-			e.printStackTrace();
+			log.error("", e);
 			return null;
 		}
 	}
@@ -512,6 +543,14 @@ public class AssessmentObjectVelocityRenderDecorator extends VelocityRenderDecor
 		return new SliderOptions(discrete, reverse, min, max, step);
 	}
 	
+	public boolean hasCssClass(Interaction interaction, String cssClass) {
+		if(StringHelper.containsNonWhitespace(cssClass)) {
+			List<String> cssClasses = interaction.getClassAttr();
+			return cssClasses != null && cssClasses.contains(cssClass);
+		}
+		return false;
+	}
+	
 	public boolean isVisible(Choice choice, ItemSessionState iSessionState) {
 		return AssessmentRenderFunctions.isVisible(choice, iSessionState);
 	}
@@ -522,6 +561,10 @@ public class AssessmentObjectVelocityRenderDecorator extends VelocityRenderDecor
 	
 	public boolean valueContains(Value value, String string) {
 		return AssessmentRenderFunctions.valueContains(value, string);
+	}
+	
+	public boolean trueFalseDefault(Value response, String targetIdentifier, MatchInteraction interaction) {
+		return AssessmentRenderFunctions.trueFalseDefault(response, targetIdentifier, interaction);
 	}
 	
 	public ResponseData getResponseInput(Identifier identifier) {
@@ -553,16 +596,76 @@ public class AssessmentObjectVelocityRenderDecorator extends VelocityRenderDecor
 	public String getResponseValueAsBase64(Identifier identifier) {
 		AssessmentTestSession assessmentTestSession = avc.getCandidateSessionContext().getCandidateSession();
 		return AssessmentRenderFunctions.getResponseValueAsBase64(assessmentItem, assessmentTestSession, itemSessionState, identifier, isSolutionMode());
-		
 	}
 	
 	public ResponseDeclaration getResponseDeclaration(Identifier identifier) {
 		return AssessmentRenderFunctions.getResponseDeclaration(assessmentItem, identifier);
 	}
 	
+	public Boolean isCorrectTextEntry(TextEntryInteraction textEntry) {
+		if(textEntry == null) return null;
+		
+		Value val = getResponseValue(textEntry.getResponseIdentifier());
+		if(val == null) {
+			val = NullValue.INSTANCE;
+		}
+		
+		String stringuifiedResponses = toString(val);
+		AbstractEntry correctAnswers = CorrectResponsesUtil.getCorrectTextResponses(assessmentItem, textEntry);
+		stringuifiedResponses = CorrectResponsesUtil.stripResponse(stringuifiedResponses);
+		boolean correct = correctAnswers.match(stringuifiedResponses);
+		return Boolean.valueOf(correct);
+	}
+	
+	public String renderTextEntryAlternatives(TextEntryInteraction textEntry) {
+		LinkedHashSet<String> alternatives = new LinkedHashSet<>();
+		ResponseDeclaration responseDeclaration = assessmentItem.getResponseDeclaration(textEntry.getResponseIdentifier());
+		if(responseDeclaration != null &&responseDeclaration.hasBaseType(BaseType.STRING) && responseDeclaration.hasCardinality(Cardinality.SINGLE)) {
+			CorrectResponse correctResponse = responseDeclaration.getCorrectResponse();
+			if(correctResponse != null && correctResponse.getFieldValues() != null) {
+				for(FieldValue fValue:correctResponse.getFieldValues()) {
+					SingleValue aValue = fValue.getSingleValue();
+					if(aValue instanceof StringValue) {
+						alternatives.add(((StringValue)aValue).stringValue());
+					}
+				}
+			}
+
+			Mapping mapping = responseDeclaration.getMapping();
+			if(mapping != null) {
+				for(MapEntry mapEntry:mapping.getMapEntries()) {
+					SingleValue sValue = mapEntry.getMapKey();
+					if(sValue instanceof StringValue) {
+						alternatives.add(((StringValue)sValue).stringValue());
+					}
+				}
+			}
+			
+			// if there is a correct answer, remove the first one
+			if(correctResponse != null && correctResponse.getFieldValues() != null
+					&& !correctResponse.getFieldValues().isEmpty() && !alternatives.isEmpty()) {
+				alternatives.remove(alternatives.iterator().next());
+			}
+			
+		}
+		
+		String separator = ", ";
+		// Don't use , as a separator on punctuation exercise
+		if(alternatives.contains(",") || alternatives.contains(" ") || alternatives.contains(".")) {
+			separator = " \u007C ";
+		}
+		
+		StringBuilder sb = new StringBuilder();
+		for(String alternative:alternatives) {
+			if(sb.length() > 0) sb.append(separator);
+			sb.append(alternative);
+		}
+		return sb.toString();
+	}
+	
 	public String renderClassAttr(BodyElement block) {
 		List<String> classAttr = block.getClassAttr();
-		if(classAttr != null && classAttr.size() > 0) {
+		if(classAttr != null && !classAttr.isEmpty()) {
 			for(String attr:classAttr) {
 				if(target.getLastChar() != ' ') target.append(" ");
 				target.append(attr);
@@ -603,26 +706,30 @@ public class AssessmentObjectVelocityRenderDecorator extends VelocityRenderDecor
 	}
 	
 	public String renderKprimSpecialFlowStatics(List<FlowStatic> flowStaticList) {
-		StringOutput sb = new StringOutput();
-		if(flowStaticList != null && flowStaticList.size() > 0) {
-			flowStaticList.forEach((flow)
-					-> avc.getHTMLRendererSingleton().renderFlow(renderer, sb, avc, resolvedAssessmentItem, itemSessionState, flow, ubu, translator));
-		}
-		String specialKprim = sb.toString();
-		if("+".equals(specialKprim)) {
-			if(translator != null) {
-				specialKprim = translator.translate("kprim.plus");
-			} else {
-				specialKprim = "True";
+		try(StringOutput sb = new StringOutput()) {
+			if(flowStaticList != null && flowStaticList.size() > 0) {
+				flowStaticList.forEach((flow)
+						-> avc.getHTMLRendererSingleton().renderFlow(renderer, sb, avc, resolvedAssessmentItem, itemSessionState, flow, ubu, translator));
 			}
-		} else if("-".equals(specialKprim)) {
-			if(translator != null) {
-				specialKprim = translator.translate("kprim.minus");
-			} else {
-				specialKprim = "False";
+			String specialKprim = sb.toString();
+			if("+".equals(specialKprim)) {
+				if(translator != null) {
+					specialKprim = translator.translate("kprim.plus");
+				} else {
+					specialKprim = "True";
+				}
+			} else if("-".equals(specialKprim)) {
+				if(translator != null) {
+					specialKprim = translator.translate("kprim.minus");
+				} else {
+					specialKprim = "False";
+				}
 			}
+			return specialKprim;
+		} catch(IOException e) {
+			log.error("", e);
+			return "";
 		}
-		return specialKprim;
 	}
 	
 	public String renderTextOrVariables(List<TextOrVariable> textOrVariables) {
@@ -677,9 +784,13 @@ public class AssessmentObjectVelocityRenderDecorator extends VelocityRenderDecor
 	}
 
 	public String toString(Value value, String delimiter, String mappingIndicator) {
-		StringOutput out = new StringOutput(32);
-		renderValue(out, value, delimiter, mappingIndicator);
-		return out.toString();
+		try(StringOutput out = new StringOutput(32)) {
+			renderValue(out, value, delimiter, mappingIndicator);
+			return out.toString();
+		} catch(IOException e) {
+			log.error("", e);
+			return "";
+		}
 	}
 	
 	public String toJavascriptArguments(List<? extends Choice> choices) {

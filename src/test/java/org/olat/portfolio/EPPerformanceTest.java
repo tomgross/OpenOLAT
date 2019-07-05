@@ -28,6 +28,7 @@ import java.util.Collections;
 import java.util.Date;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Locale;
 import java.util.UUID;
 
 import org.junit.After;
@@ -104,11 +105,6 @@ public class EPPerformanceTest extends OlatTestCase {
 	public void testRealisticArtefactAmount(){
 		internalTestManyArtefactCreation(200);
 	}
-	
-	@Test
-	public void testHugeArtefactAmount(){
-		internalTestManyArtefactCreation(2000);
-	}
 		
 	private void internalTestManyArtefactCreation(int artefactAmount){
 		long start = System.currentTimeMillis();
@@ -145,14 +141,14 @@ public class EPPerformanceTest extends OlatTestCase {
 		EPFilterSettings filterSettings = new EPFilterSettings();
 		filterSettings.setTagFilter(new ArrayList<String>(Arrays.asList("Schule")));
 		start = System.currentTimeMillis();
-		artList = epFrontendManager.filterArtefactsByFilterSettings(filterSettings, ident1, new Roles(false, false, false, false, false, false, false));
+		artList = epFrontendManager.filterArtefactsByFilterSettings(filterSettings, ident1, Roles.userRoles(), Locale.ENGLISH);
 		now = System.currentTimeMillis();
 		logger.info("filter artefacts by one tag took: " + (now - start) + " ms.");
 		assertEquals(artList.size(), artefactAmount/2);
 		
 		filterSettings.setTagFilter(tagList1);
 		start = System.currentTimeMillis();
-		artList = epFrontendManager.filterArtefactsByFilterSettings(filterSettings, ident1, new Roles(false, false, false, false, false, false, false));
+		artList = epFrontendManager.filterArtefactsByFilterSettings(filterSettings, ident1, Roles.userRoles(), Locale.ENGLISH);
 		now = System.currentTimeMillis();
 		logger.info("filter artefacts by tagList1 took: " + (now - start) + " ms.");
 		assertEquals(artList.size(), artefactAmount/2);

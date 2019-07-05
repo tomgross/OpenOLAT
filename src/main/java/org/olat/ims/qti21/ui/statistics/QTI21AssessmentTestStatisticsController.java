@@ -53,8 +53,8 @@ import org.olat.core.id.context.StateEntry;
 import org.olat.core.util.CodeHelper;
 import org.olat.core.util.Formatter;
 import org.olat.core.util.StringHelper;
+import org.olat.course.nodes.IQTESTCourseNode;
 import org.olat.course.nodes.QTICourseNode;
-import org.olat.course.nodes.iq.IQEditController;
 import org.olat.ims.qti.statistics.QTIType;
 import org.olat.ims.qti.statistics.model.StatisticAssessment;
 import org.olat.ims.qti.statistics.ui.QTI12AssessmentStatisticsController.ItemInfos;
@@ -96,7 +96,7 @@ public class QTI21AssessmentTestStatisticsController extends BasicController imp
 
 		mainVC = createVelocityContainer("statistics_assessment_test");
 		mainVC.put("loadd3js", new StatisticsComponent("d3loader"));
-		mainVC.contextPut("printMode", new Boolean(printMode));
+		mainVC.contextPut("printMode", Boolean.valueOf(printMode));
 		if(resourceResult.getCourseEntry() != null) {
 			mainVC.contextPut("courseId", resourceResult.getCourseEntry().getKey());
 		}
@@ -105,10 +105,8 @@ public class QTI21AssessmentTestStatisticsController extends BasicController imp
 			printLink = LinkFactory.createToolLink("print" + CodeHelper.getRAMUniqueID(), translate("print"), this);
 			printLink.setIconLeftCSS("o_icon o_icon_print o_icon-lg");
 			printLink.setPopup(new LinkPopupSettings(680, 500, "qti-stats"));
-			stackPanel.addTool(printLink, Align.right);
 
 			downloadRawLink = LinkFactory.createToolLink("download" + CodeHelper.getRAMUniqueID(), translate("download.raw.data"), this);
-			stackPanel.addTool(downloadRawLink, Align.right);
 		} else {
 			printLink = null;
 			downloadRawLink = LinkFactory.createLink("download.raw.data", mainVC, this);
@@ -116,7 +114,6 @@ public class QTI21AssessmentTestStatisticsController extends BasicController imp
 			mainVC.put("download", downloadRawLink);
 		}
 		downloadRawLink.setIconLeftCSS("o_icon o_icon_download o_icon-lg");
-
 		
 		if(withFilter && (resourceResult.canViewAnonymousUsers() || resourceResult.canViewNonParticipantUsers())) {
 			filterCtrl = new UserFilterController(ureq, getWindowControl(),
@@ -157,19 +154,7 @@ public class QTI21AssessmentTestStatisticsController extends BasicController imp
 	private Float getMaxScoreSetting(QTICourseNode testNode) {
 		Float maxScoreSetting = null;
 		if(QTIType.qtiworks.equals(type)) {
-			Object maxScoreObj = testNode == null ? null : testNode.getModuleConfiguration().get(IQEditController.CONFIG_KEY_MAXSCORE);
-			if (maxScoreObj instanceof Float) {
-				maxScoreSetting = (Float)maxScoreObj;
-			} else {
-				// try to calculate max
-				float max = 0;
-				/*for (Item item: items) {
-					if(item.getQuestion() != null) {
-						max += item.getQuestion().getMaxValue();
-					}
-				}*/
-				maxScoreSetting = max > 0 ? max : null;
-			}
+			maxScoreSetting = testNode instanceof IQTESTCourseNode ? ((IQTESTCourseNode)testNode).getMaxScoreConfiguration() : null;
 		}
 		return maxScoreSetting;
 	}
@@ -177,10 +162,7 @@ public class QTI21AssessmentTestStatisticsController extends BasicController imp
 	private Float getCutValueSetting(QTICourseNode testNode) {
 		Float cutValueSetting = null;
 		if(QTIType.qtiworks.equals(type)) {
-			Object cutScoreObj = testNode == null ? null : testNode.getModuleConfiguration().get(IQEditController.CONFIG_KEY_CUTVALUE);
-			if (cutScoreObj instanceof Float) {
-				cutValueSetting = (Float)cutScoreObj;
-			}
+			cutValueSetting = testNode instanceof IQTESTCourseNode ? ((IQTESTCourseNode)testNode).getCutValueConfiguration() : null;
 		}
 		return cutValueSetting;
 	}
@@ -225,6 +207,11 @@ public class QTI21AssessmentTestStatisticsController extends BasicController imp
 		mainVC.put("durationHistogram", durationHistogramVC);
 	}
 	
+	/**
+	 * The 2 graphs with the score per questions and right answers per questions.
+	 * 
+	 * @param numOfParticipants The number of participants
+	 */
 	private void initScoreStatisticPerItem(double numOfParticipants) {
 		BarSeries d1 = new BarSeries();
 		BarSeries d2 = new BarSeries();
@@ -236,12 +223,13 @@ public class QTI21AssessmentTestStatisticsController extends BasicController imp
 		List<ItemInfos> itemInfos = new ArrayList<>(statisticItems.size());
 		for (AssessmentItemStatistic statisticItem: statisticItems) {
 			AssessmentItem item = statisticItem.getAssessmentItem();
-			
-			String label = Integer.toString(++i);
-			String text = item.getTitle(); 
-			d1.add(statisticItem.getAverageScore(), label);
-			d2.add(statisticItem.getNumOfCorrectAnswers(), label);
-			itemInfos.add(new ItemInfos(label, text));
+			if(item != null) {
+				String label = Integer.toString(++i);
+				String text = item.getTitle(); 
+				d1.add(statisticItem.getAverageScore(), label);
+				d2.add(statisticItem.getNumOfCorrectAnswers(), label);
+				itemInfos.add(new ItemInfos(label, text));
+			}
 		}
 		
 		mainVC.contextPut("itemInfoList", itemInfos);
@@ -286,11 +274,8 @@ public class QTI21AssessmentTestStatisticsController extends BasicController imp
 	}
 	
 	private void printPages(UserRequest ureq) {
-		ControllerCreator printControllerCreator = new ControllerCreator() {
-			@Override
-			public Controller createController(UserRequest lureq, WindowControl lwControl) {
-				return new QTI21PrintController(lureq, lwControl, resourceResult);
-			}					
+		ControllerCreator printControllerCreator = (lureq, lwControl) -> {
+			return new QTI21PrintController(lureq, lwControl, resourceResult);				
 		};
 		ControllerCreator layoutCtrlr = BaseFullWebappPopupLayoutFactory.createPrintPopupLayout(printControllerCreator);
 		openInNewBrowserWindow(ureq, layoutCtrlr);

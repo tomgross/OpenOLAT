@@ -36,6 +36,7 @@ import org.olat.ims.qti21.model.ResponseLegality;
 import org.olat.ims.qti21.model.audit.CandidateEvent;
 import org.olat.ims.qti21.model.audit.CandidateItemEventType;
 import org.olat.ims.qti21.model.audit.CandidateTestEventType;
+import org.olat.ims.qti21.model.jpa.AssessmentTestSessionStatistics;
 import org.olat.modules.assessment.AssessmentEntry;
 import org.olat.repository.RepositoryEntry;
 import org.olat.repository.RepositoryEntryRef;
@@ -150,13 +151,23 @@ public interface QTI21Service {
 	 * Remove all test sessions in author mode, e.g. after an assessment test
 	 * was changed.
 	 * 
-	 * @param testEntry
+	 * @param testEntry The test repository entry
 	 * @return
 	 */
-	public boolean deleteAuthorAssessmentTestSession(RepositoryEntryRef testEntry);
+	public boolean deleteAuthorsAssessmentTestSession(RepositoryEntryRef testEntry);
 	
 	/**
-	 * Delete a specific test session.
+	 * Remove a test sessions in author mode, e.g. after an assessment test
+	 * was changed.
+	 * 
+	 * @param testEntry The test repository entry
+	 * @param testSession The session of the author
+	 * @return
+	 */
+	public boolean deleteAuthorAssessmentTestSession(RepositoryEntryRef testEntry, AssessmentTestSession testSession);
+	
+	/**
+	 * Delete a specific preview test session.
 	 * 
 	 * @param testSession
 	 * @return
@@ -219,6 +230,13 @@ public interface QTI21Service {
 	public AssessmentSessionAuditLogger getAssessmentSessionAuditLogger(AssessmentTestSession session, boolean authorMode);
 	
 	/**
+	 * 
+	 * @param session The test session
+	 * @return The file or null if it doesn't exists
+	 */
+	public File getAssessmentSessionAuditLogFile(AssessmentTestSession session);
+	
+	/**
 	 * This will return the last session if it's not finished, terminated or exploded.
 	 * 
 	 * @param identity The identity which play the session
@@ -234,13 +252,49 @@ public interface QTI21Service {
 
 	public AssessmentTestSession reloadAssessmentTestSession(AssessmentTestSession session);
 	
+	public AssessmentTestSession getResumableAssessmentItemsSession(Identity identity, String anonymousIdentifier,
+			RepositoryEntry entry, String subIdent, RepositoryEntry testEntry, boolean authorMode);
+	
+	/**
+	 * 
+	 * @param session The assessment test session to update
+	 * @return The merged assessment test session
+	 */
 	public AssessmentTestSession updateAssessmentTestSession(AssessmentTestSession session);
+	
+	/**
+	 * Recalculate the score and manual score of an assessment test session. As a security
+	 * will the method do a commit first to ensure that all item session are saved on the
+	 * database.
+	 * 
+	 * @param session The assessment test session primary key
+	 * @return The merged assessment test session
+	 */
+	public AssessmentTestSession recalculateAssessmentTestSessionScores(Long sessionKey);
 
-	public boolean isRunningAssessmentTestSession(RepositoryEntry entry, String subIdent, RepositoryEntry testEntry);
+	public boolean isRunningAssessmentTestSession(RepositoryEntry entry, String subIdent, RepositoryEntry testEntry, List<? extends IdentityRef> identities);
+	
+	/**
+	 * Add some extra time to an assessment test session.
+	 * 
+	 * @param session The session to extend
+	 * @param extraTime The extra time in seconds
+	 */
+	public void extraTimeAssessmentTestSession(AssessmentTestSession session, int extraTime, Identity actor);
+	
+	/**
+	 * Reopen a closed test. The method remove end and exit date, set a current
+	 * question... to make the test playable again.
+	 * 
+	 * @param session The session to reopen
+	 */
+	public AssessmentTestSession reopenAssessmentTestSession(AssessmentTestSession session, Identity actor);
 	
 	public List<AssessmentTestSession> getRunningAssessmentTestSession(RepositoryEntry entry, String subIdent, RepositoryEntry testEntry);
 	
 	public TestSessionState loadTestSessionState(AssessmentTestSession session);
+	
+	public ItemSessionState loadItemSessionState(AssessmentTestSession session, AssessmentItemSession itemSession);
 
 	public AssessmentTestMarks createMarks(Identity identity, RepositoryEntry entry, String subIdent, RepositoryEntry testEntry, String marks);
 	
@@ -269,6 +323,16 @@ public interface QTI21Service {
 	public List<AssessmentTestSession> getAssessmentTestSessions(RepositoryEntryRef courseEntry, String subIdent, IdentityRef identity);
 	
 	/**
+	 * Retrieve the sessions of a user with the number of corrected assessment items (only the test and its resource are fetched).
+	 * 
+	 * @param courseEntry The course
+	 * @param subIdent The course node identifier
+	 * @param identity The user to assess
+	 * @return A list of assessment test sessions wrapped with number of corrected items
+	 */
+	public List<AssessmentTestSessionStatistics> getAssessmentTestSessionsStatistics(RepositoryEntryRef courseEntry, String subIdent, IdentityRef identity);
+	
+	/**
 	 * Retrieve the last finished test session.
 	 * 
 	 * @param courseEntry
@@ -280,7 +344,8 @@ public interface QTI21Service {
 	public AssessmentTestSession getLastAssessmentTestSessions(RepositoryEntryRef courseEntry, String subIdent, RepositoryEntry testEntry, IdentityRef identity);
 	
 	/**
-	 * Retrieve the sessions for a test.
+	 * Retrieve the sessions for a test. It returns only the sessions of authenticated users (fetched).
+	 * The anonymous ones are not included.
 	 * 
 	 * @param courseEntry
 	 * @param subIdent
@@ -289,7 +354,27 @@ public interface QTI21Service {
 	 */
 	public List<AssessmentTestSession> getAssessmentTestSessions(RepositoryEntryRef courseEntry, String subIdent, RepositoryEntry testEntry);
 	
+	/**
+	 * 
+	 * @param candidateSession The candidate session
+	 * @param parentParts The parent sections (optional)
+	 * @param assessmentItemIdentifier The assessment item identifier 
+	 * @return The item session (persistent if the candidate session is persitable, in memory if not)
+	 */
 	public AssessmentItemSession getOrCreateAssessmentItemSession(AssessmentTestSession candidateSession, ParentPartItemRefs parentParts, String assessmentItemIdentifier);
+
+	public AssessmentItemSession getAssessmentItemSession(AssessmentItemSessionRef candidateSession);
+	
+	/**
+	 * Update the review flag on a batch of assessment item sessions. The method will do a commit.
+	 * 
+	 * @param courseEntry The course
+	 * @param subIdent Typically the course element identifier
+	 * @param testEntry The test (mandatory)
+	 * @param itemRef The item reference (mandatory)
+	 * @param toReview The flag (true/false)
+	 */
+	public int setAssessmentItemSessionReviewFlag(RepositoryEntryRef courseEntry, String subIdent, RepositoryEntry testEntry, String itemRef, boolean toReview);
 	
 	public List<AssessmentItemSession> getAssessmentItemSessions(AssessmentTestSession candidateSession);
 	
@@ -323,6 +408,15 @@ public interface QTI21Service {
 			Date timestamp, DigitalSignatureOptions signatureOptions, Identity assessedIdentity);
 	
 	public void cancelTestSession(AssessmentTestSession candidateSession, TestSessionState testSessionState);
+	
+	/**
+	 * Pull a running test
+	 * 
+	 * @param candidateSession The test session to pull
+	 * @param actor The user which pull the test session
+	 * @return The updated test session
+	 */
+	public AssessmentTestSession pullSession(AssessmentTestSession candidateSession, DigitalSignatureOptions signatureOptions, Identity actor);
 	
 	/**
 	 * Sign the assessment result. Be careful, the file must not be changed
@@ -373,11 +467,13 @@ public interface QTI21Service {
 
 	public void recordItemAssessmentResult(AssessmentTestSession candidateSession, AssessmentResult assessmentResult, AssessmentSessionAuditLogger candidateAuditLogger);
 	
-	public CandidateEvent recordCandidateItemEvent(AssessmentTestSession candidateSession, RepositoryEntryRef testEntry, RepositoryEntryRef entry,
-			CandidateItemEventType itemEventType, ItemSessionState itemSessionState, NotificationRecorder notificationRecorder);
+	public CandidateEvent recordCandidateItemEvent(AssessmentTestSession candidateSession, AssessmentItemSession itemSession,
+			RepositoryEntryRef testEntry, RepositoryEntryRef entry, CandidateItemEventType itemEventType,
+			ItemSessionState itemSessionState, NotificationRecorder notificationRecorder);
 	
-	public CandidateEvent recordCandidateItemEvent(AssessmentTestSession candidateSession, RepositoryEntryRef testEntry, RepositoryEntryRef entry,
-            CandidateItemEventType itemEventType, ItemSessionState itemSessionState);
+	public CandidateEvent recordCandidateItemEvent(AssessmentTestSession candidateSession, AssessmentItemSession itemSession,
+			RepositoryEntryRef testEntry, RepositoryEntryRef entry, CandidateItemEventType itemEventType,
+			ItemSessionState itemSessionState);
 	
 	/**
 	 * 

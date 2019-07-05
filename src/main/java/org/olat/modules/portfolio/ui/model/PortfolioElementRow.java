@@ -23,6 +23,7 @@ import java.util.Collection;
 import java.util.Date;
 
 import org.olat.core.gui.components.form.flexible.elements.FormLink;
+import org.olat.core.gui.components.form.flexible.elements.SingleSelection;
 import org.olat.core.gui.components.image.ImageComponent;
 import org.olat.core.util.StringHelper;
 import org.olat.course.assessment.AssessmentHelper;
@@ -30,6 +31,7 @@ import org.olat.modules.portfolio.AssessmentSection;
 import org.olat.modules.portfolio.Assignment;
 import org.olat.modules.portfolio.Page;
 import org.olat.modules.portfolio.PageStatus;
+import org.olat.modules.portfolio.PageUserStatus;
 import org.olat.modules.portfolio.Section;
 import org.olat.modules.portfolio.SectionStatus;
 
@@ -44,6 +46,7 @@ public class PortfolioElementRow {
 	private final Page page;
 	private final Section section;
 	private Assignment assignment;
+	private PageUserStatus userInfosStatus;
 	private final AssessmentSection assessmentSection;
 	
 	private String imageUrl;
@@ -53,10 +56,6 @@ public class PortfolioElementRow {
 	
 	private final boolean assessable;
 	private final boolean assignments;
-	// calculated by the sort
-	private boolean lastAssignmentToInstantiate;
-	// calculated by the sort
-	private boolean sectionWithAssignmentToInstantiate;
 
 	private Collection<String> pageCategories;
 	private Collection<String> sectionCategories;
@@ -69,6 +68,7 @@ public class PortfolioElementRow {
 	// assignment
 	private FormLink newAssignmentLink, editAssignmentLink, deleteAssignmentLink,
 		instantiateAssignmentLink, upAssignmentLink, downAssignmentLink, moveAssignmentLink;
+	private SingleSelection startSelection;
 	
 	private ImageComponent poster;
 	
@@ -149,6 +149,14 @@ public class PortfolioElementRow {
 		return page.getSummary();
 	}
 	
+	public PageUserStatus getUserInfosStatus() {
+		return userInfosStatus;
+	}
+
+	public void setUserInfosStatus(PageUserStatus userInfosStatus) {
+		this.userInfosStatus = userInfosStatus;
+	}
+
 	public Date getLastModified() {
 		return page.getLastModified();
 	}
@@ -178,7 +186,8 @@ public class PortfolioElementRow {
 	}
 
 	public PageStatus getPageStatus() {
-		return page == null ? null : page.getPageStatus();
+		if(page == null) return null;
+		return page.getPageStatus() == null ? PageStatus.draft : page.getPageStatus();
 	}
 	
 	public String getPageStatusI18nKey() {
@@ -390,22 +399,6 @@ public class PortfolioElementRow {
 		this.downAssignmentLink = downAssignmentLink;
 	}
 	
-	public boolean isLastAssignmentToInstantiate() {
-		return lastAssignmentToInstantiate;
-	}
-
-	public void setLastAssignmentToInstantiate(boolean lastAssignmentToInstantiate) {
-		this.lastAssignmentToInstantiate = lastAssignmentToInstantiate;
-	}
-
-	public boolean isSectionWithAssignmentToInstantiate() {
-		return sectionWithAssignmentToInstantiate;
-	}
-	
-	public void setSectionWithAssignmentToInstantiate(boolean instatiate) {
-		sectionWithAssignmentToInstantiate = instatiate;
-	}
-	
 	public boolean isAssignmentToInstantiate() {
 		return instantiateAssignmentLink != null;
 	}
@@ -416,6 +409,18 @@ public class PortfolioElementRow {
 
 	public void setInstantiateAssignmentLink(FormLink instantiateAssignmentLink) {
 		this.instantiateAssignmentLink = instantiateAssignmentLink;
+	}
+	
+	public SingleSelection getStartSelection() {
+		return startSelection;
+	}
+
+	public void setStartSelection(SingleSelection startSelection) {
+		this.startSelection = startSelection;
+	}
+
+	public boolean isSectionEnded() {
+		return section != null && section.getEndDate() != null && new Date().after(section.getEndDate());
 	}
 
 	public FormLink getCloseSectionLink() {

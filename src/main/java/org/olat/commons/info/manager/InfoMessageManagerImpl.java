@@ -25,16 +25,20 @@ import java.util.Date;
 import java.util.List;
 import java.util.StringTokenizer;
 
+import javax.persistence.TemporalType;
+import javax.persistence.TypedQuery;
+
 import org.olat.basesecurity.IdentityRef;
-import org.olat.commons.info.model.InfoMessage;
+import org.olat.commons.info.InfoMessage;
+import org.olat.commons.info.InfoMessageManager;
 import org.olat.commons.info.model.InfoMessageImpl;
 import org.olat.core.commons.persistence.DB;
-import org.olat.core.commons.persistence.DBQuery;
 import org.olat.core.id.Identity;
 import org.olat.core.id.OLATResourceable;
 import org.olat.core.util.StringHelper;
 import org.olat.group.BusinessGroupRef;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
 
 /**
  * 
@@ -45,17 +49,11 @@ import org.springframework.beans.factory.annotation.Autowired;
  * Initial Date:  26 jul. 2010 <br>
  * @author srosse, stephane.rosse@frentix.com, http://www.frentix.com
  */
-public class InfoMessageManagerImpl extends InfoMessageManager {
+@Service("infoMessageManager")
+public class InfoMessageManagerImpl implements InfoMessageManager {
 	
-	private final DB dbInstance;
-	
-	/**
-	 * [used by Spring]
-	 */
-	public InfoMessageManagerImpl(DB dbInstance) {
-        this.dbInstance = dbInstance;
-		INSTANCE = this;
-	}
+	@Autowired
+	private DB dbInstance;
 
 	@Override
 	public InfoMessage createInfoMessage(OLATResourceable ores, String subPath, String businessPath, Identity author) {
@@ -92,7 +90,6 @@ public class InfoMessageManagerImpl extends InfoMessageManager {
 		}
 	}
 
-
 	@Override
 	public List<InfoMessage> loadInfoMessagesOfIdentity(BusinessGroupRef businessGroup, IdentityRef identity) {
 		StringBuilder sb = new StringBuilder();
@@ -125,7 +122,7 @@ public class InfoMessageManagerImpl extends InfoMessageManager {
 				.createQuery(sb.toString(), InfoMessage.class)
 				.setParameter("key", key)
 				.getResultList();
-		if (infoMessages.size() == 0) {
+		if (infoMessages.isEmpty()) {
 			return null;
 		}
 		return infoMessages.get(0);
@@ -135,40 +132,38 @@ public class InfoMessageManagerImpl extends InfoMessageManager {
 	public List<InfoMessage> loadInfoMessageByResource(OLATResourceable ores, String subPath, String businessPath,
 			Date after, Date before, int firstResult, int maxResults) {
 		
-		DBQuery query = queryInfoMessageByResource(ores, subPath, businessPath, after, before, false);
+		TypedQuery<InfoMessage> query = queryInfoMessageByResource(ores, subPath, businessPath, after, before, InfoMessage.class);
 		if(firstResult >= 0) {
 			query.setFirstResult(firstResult);
 		}
 		if(maxResults > 0) {
 			query.setMaxResults(maxResults);
 		}
-		
-		@SuppressWarnings("unchecked")
-		List<InfoMessage> msgs = query.list();
-		return msgs;
+		return query.getResultList();
 	}
 	
 	@Override
 	public int countInfoMessageByResource(OLATResourceable ores, String subPath, String businessPath,
 			Date after, Date before) {
 		
-		DBQuery query = queryInfoMessageByResource(ores, subPath, businessPath, after, before, true);
-		Number count = (Number)query.uniqueResult();
+		TypedQuery<Number> query = queryInfoMessageByResource(ores, subPath, businessPath, after, before, Number.class);
+		Number count = query.getSingleResult();
 		return count.intValue();
 	}
 	
-	private DBQuery queryInfoMessageByResource(OLATResourceable ores, String subPath, String businessPath,
-			Date after, Date before, boolean count) {
+	private <U> TypedQuery<U> queryInfoMessageByResource(OLATResourceable ores, String subPath, String businessPath,
+			Date after, Date before, Class<U> resultClass) {
+		boolean count = resultClass.equals(Number.class);
 		
-		StringBuilder sb = new StringBuilder();
+		StringBuilder sb = new StringBuilder(256);
 		sb.append("select ");
-		if(count)
+		if(count) {
 			sb.append("count(msg.key)");
-		else
+		} else {
 			sb.append("msg");
+		}
 		
-		sb.append(" from ").append(InfoMessageImpl.class.getName()).append(" msg");
-		
+		sb.append(" from infomessage msg");
 		if (!count) {
 			sb.append(" left join fetch msg.author author")
 			.append(" left join fetch author.user")
@@ -195,24 +190,23 @@ public class InfoMessageManagerImpl extends InfoMessageManager {
 			sb.append(" order by msg.creationDate desc");
 		}
 		
-		DBQuery query = dbInstance.createQuery(sb.toString());
+		TypedQuery<U> query = dbInstance.getCurrentEntityManager().createQuery(sb.toString(), resultClass);
 		if(ores != null) {
-			query.setLong("resId", ores.getResourceableId());
-			query.setString("resName", ores.getResourceableTypeName());
+			query.setParameter("resId", ores.getResourceableId());
+			query.setParameter("resName", ores.getResourceableTypeName());
 		}
 		if(StringHelper.containsNonWhitespace(subPath)) {
-			query.setString("subPath", subPath);
+			query.setParameter("subPath", subPath);
 		}
 		if(StringHelper.containsNonWhitespace(businessPath)) {
-			query.setString("businessPath", normalizeBusinessPath(businessPath));
+			query.setParameter("businessPath", normalizeBusinessPath(businessPath));
 		}
 		if(after != null) {
-			query.setTimestamp("after", after);
+			query.setParameter("after", after, TemporalType.TIMESTAMP);
 		}
 		if(before != null) {
-			query.setTimestamp("before", before);
+			query.setParameter("before", before, TemporalType.TIMESTAMP);
 		}
-		
 		return query;
 	}
 	
@@ -228,7 +222,7 @@ public class InfoMessageManagerImpl extends InfoMessageManager {
 		if (url.startsWith("ROOT")) {
 			url = url.substring(4, url.length());
 		}
-		List<String> tokens = new ArrayList<String>();
+		List<String> tokens = new ArrayList<>();
 		for(StringTokenizer tokenizer = new StringTokenizer(url, "[]"); tokenizer.hasMoreTokens(); ) {
 			String token = tokenizer.nextToken();
 			if(!tokens.contains(token)) {

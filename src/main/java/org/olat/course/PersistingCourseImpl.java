@@ -26,35 +26,37 @@
 package org.olat.course;
 
 import java.io.File;
+import java.io.InputStream;
 import java.io.Serializable;
 
 import org.olat.admin.quota.QuotaConstants;
 import org.olat.core.CoreSpringFactory;
-import org.olat.core.commons.modules.bc.vfs.OlatRootFolderImpl;
 import org.olat.core.commons.persistence.DBFactory;
+import org.olat.core.commons.services.vfs.VFSRepositoryService;
 import org.olat.core.id.IdentityEnvironment;
 import org.olat.core.id.OLATResourceable;
 import org.olat.core.logging.AssertException;
 import org.olat.core.logging.OLATRuntimeException;
-import org.olat.core.logging.OLog;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.FileUtils;
+import org.olat.core.util.ZipUtil;
 import org.olat.core.util.nodes.INode;
 import org.olat.core.util.tree.TreeVisitor;
 import org.olat.core.util.tree.Visitor;
+import org.olat.core.util.vfs.LocalFolderImpl;
 import org.olat.core.util.vfs.VFSContainer;
 import org.olat.core.util.vfs.VFSItem;
 import org.olat.core.util.vfs.VFSLeaf;
+import org.olat.core.util.vfs.VFSManager;
 import org.olat.core.util.vfs.callbacks.FullAccessWithLazyQuotaCallback;
 import org.olat.core.util.vfs.callbacks.FullAccessWithQuotaCallback;
-import org.olat.core.util.vfs.version.Versionable;
-import org.olat.core.util.vfs.version.VersionsFileManager;
 import org.olat.core.util.xml.XStreamHelper;
 import org.olat.course.assessment.AssessmentHelper;
 import org.olat.course.config.CourseConfig;
 import org.olat.course.config.CourseConfigManager;
-import org.olat.course.config.CourseConfigManagerImpl;
 import org.olat.course.export.CourseEnvironmentMapper;
+import org.olat.course.folder.CourseContainerOptions;
 import org.olat.course.nodes.CourseNode;
 import org.olat.course.nodes.CourseNode.Processing;
 import org.olat.course.run.environment.CourseEnvironment;
@@ -86,12 +88,12 @@ public class PersistingCourseImpl implements ICourse, OLATResourceable, Serializ
 
 	private static final long serialVersionUID = -1022498371474445868L;
 
-	public static String COURSE_ROOT_DIR_NAME = "course";
+	public static final String COURSE_ROOT_DIR_NAME = "course";
 	
 	private static final String EDITORTREEMODEL_XML = "editortreemodel.xml";
 	private static final String RUNSTRUCTURE_XML = "runstructure.xml";
 	private static final String ORES_TYPE_NAME = CourseModule.getCourseTypeName();
-	private static final String COURSEFOLDER = "coursefolder";
+	public static final String COURSEFOLDER = "coursefolder";
 
 	private Long resourceableId;
 	private Structure runStructure;
@@ -99,11 +101,11 @@ public class PersistingCourseImpl implements ICourse, OLATResourceable, Serializ
 	private CourseEditorTreeModel editorTreeModel;
 	private CourseConfig courseConfig;
 	private final CourseEnvironmentImpl courseEnvironment;
-	private OlatRootFolderImpl courseRootContainer;
+	private LocalFolderImpl courseRootContainer;
 	private String courseTitle = null;
 	/** courseTitleSyncObj is a final Object only used for synchronizing the courseTitle getter - see OLAT-5654 */
 	private final Object courseTitleSyncObj = new Object();
-	private static OLog log = Tracing.createLoggerFor(PersistingCourseImpl.class);
+	private static final Logger log = Tracing.createLoggerFor(PersistingCourseImpl.class);
 	
 	//an PersistingCourseImpl instance could be readOnly if readAndWrite == false, or readAndWrite 
 	private boolean readAndWrite = false; //default readOnly
@@ -127,7 +129,7 @@ public class PersistingCourseImpl implements ICourse, OLATResourceable, Serializ
 		this.resourceableId = resource.getResourceableId();
 		// prepare filesystem and set course base path and course folder paths
 		prepareFilesystem();
-		courseConfig = CourseConfigManagerImpl.getInstance().loadConfigFor(this); // load or init defaults
+		courseConfig = CoreSpringFactory.getImpl(CourseConfigManager.class).loadConfigFor(this); // load or init defaults
 		courseEnvironment = new CourseEnvironmentImpl(this, resource);
 	}
 	
@@ -136,45 +138,34 @@ public class PersistingCourseImpl implements ICourse, OLATResourceable, Serializ
 		resourceableId = courseEntry.getOlatResource().getResourceableId();
 		// prepare filesystem and set course base path and course folder paths
 		prepareFilesystem();
-		courseConfig = CourseConfigManagerImpl.getInstance().loadConfigFor(this); // load or init defaults
+		courseConfig = CoreSpringFactory.getImpl(CourseConfigManager.class).loadConfigFor(this); // load or init defaults
 		courseEnvironment = new CourseEnvironmentImpl(this, courseEntry);
 	}
 	
-
-	/**
-	 * @see org.olat.course.ICourse#getRunStructure()
-	 */
+	@Override
 	public Structure getRunStructure() {
 		return runStructure;
 	}
 
-	/**
-	 * @see org.olat.course.ICourse#getEditorTreeModel()
-	 */
+	@Override
 	public CourseEditorTreeModel getEditorTreeModel() {
 		return editorTreeModel;
 	}
 
-	/**
-	 * @see org.olat.course.ICourse#getCourseBasePath()
-	 */
 	@Override
-	public OlatRootFolderImpl getCourseBaseContainer() {
+	public LocalFolderImpl getCourseBaseContainer() {
 		return courseRootContainer;
 	}
 	
 	@Override
-	public OlatRootFolderImpl getCourseExportDataDir() {
-		OlatRootFolderImpl vfsExportDir = (OlatRootFolderImpl)getCourseBaseContainer().resolve(ICourse.EXPORTED_DATA_FOLDERNAME);
+	public LocalFolderImpl getCourseExportDataDir() {
+		LocalFolderImpl vfsExportDir = (LocalFolderImpl)getCourseBaseContainer().resolve(ICourse.EXPORTED_DATA_FOLDERNAME);
 		if (vfsExportDir == null) {
-			vfsExportDir = getCourseBaseContainer().createChildContainer(ICourse.EXPORTED_DATA_FOLDERNAME);
+			vfsExportDir = (LocalFolderImpl)getCourseBaseContainer().createChildContainer(ICourse.EXPORTED_DATA_FOLDERNAME);
 		}
 		return vfsExportDir;
 	}
 
-	/**
-	 * @see org.olat.course.ICourse#getCourseFolderPath()
-	 */
 	@Override
 	public VFSContainer getCourseFolderContainer() {
 		// add local course folder's children as read/write source and any sharedfolder as subfolder
@@ -182,11 +173,21 @@ public class PersistingCourseImpl implements ICourse, OLATResourceable, Serializ
 		courseFolderContainer.init(this);
 		return courseFolderContainer;
 	}
-	
+
+	@Override
+	public VFSContainer getCourseFolderContainer(CourseContainerOptions options) {
+		// add local course folder's children as read/write source and any sharedfolder as subfolder
+		MergedCourseContainer courseFolderContainer = new MergedCourseContainer(resourceableId, getCourseTitle(), null,
+				options, false);
+		courseFolderContainer.init(this);
+		return courseFolderContainer;
+	}
+
 	@Override
 	public VFSContainer getCourseFolderContainer(boolean overrideReadOnly) {
 		// add local course folder's children as read/write source and any sharedfolder as subfolder
-		MergedCourseContainer courseFolderContainer = new MergedCourseContainer(resourceableId, getCourseTitle(), null, overrideReadOnly);
+		MergedCourseContainer courseFolderContainer = new MergedCourseContainer(resourceableId, getCourseTitle(), null,
+				CourseContainerOptions.all(), overrideReadOnly);
 		courseFolderContainer.init(this);
 		return courseFolderContainer;
 	}
@@ -232,15 +233,18 @@ public class PersistingCourseImpl implements ICourse, OLATResourceable, Serializ
 	private void prepareFilesystem() {
 		// generate course base path
 		String relPath = File.separator + COURSE_ROOT_DIR_NAME + File.separator + getResourceableId().longValue();
-		courseRootContainer = new OlatRootFolderImpl(relPath, null);
+		courseRootContainer = VFSManager.olatRootContainer(relPath, null);
 		File fBasePath = courseRootContainer.getBasefile();
 		if (!fBasePath.exists() && !fBasePath.mkdirs())
 			throw new OLATRuntimeException(this.getClass(), "Could not create course base path:" + courseRootContainer, null);
 	}
 
-	protected OlatRootFolderImpl getIsolatedCourseFolder() {
+	/**
+	 * @return The directory "coursefolder" or storage folder of the course
+	 */
+	protected LocalFolderImpl getIsolatedCourseFolder() {
 		// create local course folder
-		OlatRootFolderImpl isolatedCourseFolder = new OlatRootFolderImpl(courseRootContainer.getRelPath() + File.separator + COURSEFOLDER, null);
+		LocalFolderImpl isolatedCourseFolder = VFSManager.olatRootContainer(courseRootContainer.getRelPath() + File.separator + COURSEFOLDER, null);
 		// generate course folder
 		File fCourseFolder = isolatedCourseFolder.getBasefile();
 		if (!fCourseFolder.exists() && !fCourseFolder.mkdirs()) {
@@ -253,10 +257,20 @@ public class PersistingCourseImpl implements ICourse, OLATResourceable, Serializ
 		return isolatedCourseFolder;
 	}
 	
+	/**
+	 * @return The directory "coursefolder" or storage folder of the course
+	 */
 	protected File getIsolatedCourseBaseFolder() {
 		// create local course folder
-		OlatRootFolderImpl isolatedCourseFolder = new OlatRootFolderImpl(courseRootContainer.getRelPath() + File.separator + COURSEFOLDER, null);
-		return isolatedCourseFolder.getBasefile();
+		return VFSManager.olatRootDirectory(courseRootContainer.getRelPath() + File.separator + COURSEFOLDER);
+	}
+	
+	/**
+	 * @return The directory "coursefolder" or storage folder of the course
+	 */
+	protected VFSContainer getIsolatedCourseBaseContainer() {
+		// create local course folder
+		return VFSManager.olatRootContainer(courseRootContainer.getRelPath() + File.separator + COURSEFOLDER, null);
 	}
 	
 	/**
@@ -282,8 +296,7 @@ public class PersistingCourseImpl implements ICourse, OLATResourceable, Serializ
 	 * <p>
 	 */
 	@Override
-	public void exportToFilesystem(OLATResource originalCourseResource, File exportDirectory,
-			boolean runtimeDatas, boolean backwardsCompatible) {
+	public void exportToFilesystem(OLATResource originalCourseResource, File exportDirectory, boolean runtimeDatas) {
 		long s = System.currentTimeMillis();
 		log.info("exportToFilesystem: exporting course "+this+" to "+exportDirectory+"...");
 		File fCourseBase = getCourseBaseContainer().getBasefile();
@@ -296,34 +309,21 @@ public class PersistingCourseImpl implements ICourse, OLATResourceable, Serializ
 		
 		//export business groups
 		CourseEnvironmentMapper envMapper = getCourseEnvironment().getCourseGroupManager().getBusinessGroupEnvironment();
-		if(backwardsCompatible) {
-			//prevents duplicate names
-			envMapper.avoidDuplicateNames();
-		}
-	
-		getCourseEnvironment().getCourseGroupManager().exportCourseBusinessGroups(fExportedDataDir, envMapper, runtimeDatas, backwardsCompatible);
-		if(backwardsCompatible) {
-			XStream xstream = CourseXStreamAliases.getReadCourseXStream();
 
-			Structure exportedStructure = (Structure)XStreamHelper.readObject(xstream, new File(fCourseBase, RUNSTRUCTURE_XML));
-			visit(new NodePostExportVisitor(envMapper, backwardsCompatible), exportedStructure.getRootNode());
-			XStreamHelper.writeObject(xstream, new File(exportDirectory, RUNSTRUCTURE_XML), exportedStructure);
-			
-			CourseEditorTreeModel exportedEditorModel = (CourseEditorTreeModel)XStreamHelper.readObject(xstream, new File(fCourseBase, EDITORTREEMODEL_XML));
-			visit(new NodePostExportVisitor(envMapper, backwardsCompatible), exportedEditorModel.getRootNode());
-			XStreamHelper.writeObject(xstream, new File(exportDirectory, EDITORTREEMODEL_XML), exportedEditorModel);
-		} else {
-			// export editor structure
-			FileUtils.copyFileToDir(new File(fCourseBase, EDITORTREEMODEL_XML), exportDirectory, "course export exitortreemodel");
-			// export run structure
-			FileUtils.copyFileToDir(new File(fCourseBase, RUNSTRUCTURE_XML), exportDirectory, "course export runstructure");
-		}
-		
+		getCourseEnvironment().getCourseGroupManager().exportCourseBusinessGroups(fExportedDataDir, envMapper, runtimeDatas);
+		// export editor structure
+		FileUtils.copyFileToDir(new File(fCourseBase, EDITORTREEMODEL_XML), exportDirectory, "course export exitortreemodel");
+		// export run structure
+		FileUtils.copyFileToDir(new File(fCourseBase, RUNSTRUCTURE_XML), exportDirectory, "course export runstructure");
+
 		// export layout and media folder
 		FileUtils.copyDirToDir(new File(fCourseBase, "layout"), exportDirectory, "course export layout folder");
 		FileUtils.copyDirToDir(new File(fCourseBase, "media"), exportDirectory, "course export media folder");
 		// export course folder
-		FileUtils.copyDirToDir(getIsolatedCourseBaseFolder(), exportDirectory, "course export folder");
+		File fExportedCoursefolderZip = new File(exportDirectory, "oocoursefolder.zip");
+		File courseFolder = getIsolatedCourseBaseFolder();
+		ZipUtil.zipAll(courseFolder, fExportedCoursefolderZip);
+
 		// export any node data
 		log.info("exportToFilesystem: exporting course "+this+": exporting all nodes...");
 		Visitor visitor = new NodeExportVisitor(fExportedDataDir, this);
@@ -331,11 +331,7 @@ public class PersistingCourseImpl implements ICourse, OLATResourceable, Serializ
 		tv.visitAll();
 		log.info("exportToFilesystem: exporting course "+this+": exporting all nodes...done.");
 		
-		//OLAT-5368: do intermediate commit to avoid transaction timeout
-		// discussion intermediatecommit vs increased transaction timeout:
-		//  pro intermediatecommit: not much
-		//  pro increased transaction timeout: would fix OLAT-5368 but only move the problem
-		//@TODO OLAT-2597: real solution is a long-running background-task concept...
+		// Do intermediate commit to avoid transaction timeout
 		DBFactory.getInstance().intermediateCommit();
 
 		// export shared folder
@@ -347,36 +343,30 @@ public class PersistingCourseImpl implements ICourse, OLATResourceable, Serializ
 				// export failed, delete reference to shared folder in the course config
 				log.info("exportToFilesystem: exporting course "+this+": export of shared folder failed.");
 				config.setSharedFolderSoftkey(CourseConfig.VALUE_EMPTY_SHAREDFOLDER_SOFTKEY);
-				CourseConfigManagerImpl.getInstance().saveConfigTo(this, config);
+				CoreSpringFactory.getImpl(CourseConfigManager.class).saveConfigTo(this, config);
 			}
 			log.info("exportToFilesystem: exporting course "+this+": shared folder...done.");
 		}
 		
-		//OLAT-5368: do intermediate commit to avoid transaction timeout
-		// discussion intermediatecommit vs increased transaction timeout:
-		//  pro intermediatecommit: not much
-		//  pro increased transaction timeout: would fix OLAT-5368 but only move the problem
-		//@TODO OLAT-2597: real solution is a long-running background-task concept...
+		// Do intermediate commit to avoid transaction timeout
 		DBFactory.getInstance().intermediateCommit();
 
 		// export glossary
 		if (config.hasGlossary()) {
 			log.info("exportToFilesystem: exporting course "+this+": glossary...");
-			if (!GlossaryManager.getInstance().exportGlossary(
+			final GlossaryManager glossaryManager = CoreSpringFactory.getImpl(GlossaryManager.class);
+			final CourseConfigManager courseConfigManager = CoreSpringFactory.getImpl(CourseConfigManager.class);
+			if (!glossaryManager.exportGlossary(
 					config.getGlossarySoftKey(), fExportedDataDir)) {
 				// export failed, delete reference to glossary in the course config
 				log.info("exportToFilesystem: exporting course "+this+": export of glossary failed.");
 				config.setGlossarySoftKey(null);
-				CourseConfigManagerImpl.getInstance().saveConfigTo(this, config);
+				courseConfigManager.saveConfigTo(this, config);
 			}
 			log.info("exportToFilesystem: exporting course "+this+": glossary...done.");
 		}
 		
-		//OLAT-5368: do intermediate commit to avoid transaction timeout
-		// discussion intermediatecommit vs increased transaction timeout:
-		//  pro intermediatecommit: not much
-		//  pro increased transaction timeout: would fix OLAT-5368 but only move the problem
-		//@TODO OLAT-2597: real solution is a long-running background-task concept...
+		// Do intermediate commit to avoid transaction timeout
 		DBFactory.getInstance().intermediateCommit();
 
 		log.info("exportToFilesystem: exporting course "+this+": configuration and repo data...");
@@ -389,11 +379,7 @@ public class PersistingCourseImpl implements ICourse, OLATResourceable, Serializ
 		RepositoryEntryImportExport importExport = new RepositoryEntryImportExport(myRE, fExportedDataDir);
 		importExport.exportDoExportProperties();
 		
-		//OLAT-5368: do intermediate commit to avoid transaction timeout
-		// discussion intermediatecommit vs increased transaction timeout:
-		//  pro intermediatecommit: not much
-		//  pro increased transaction timeout: would fix OLAT-5368 but only move the problem
-		//@TODO OLAT-2597: real solution is a long-running background-task concept...
+		// Do intermediate commit to avoid transaction timeout
 		DBFactory.getInstance().intermediateCommit();
 		
 		//export reminders
@@ -460,18 +446,18 @@ public class PersistingCourseImpl implements ICourse, OLATResourceable, Serializ
 	 * @param obj
 	 */
 	private void writeObject(String fileName, Object obj) {
-		VFSItem vfsItem = getCourseBaseContainer().resolve(fileName);
+		VFSLeaf vfsItem =(VFSLeaf)getCourseBaseContainer().resolve(fileName);
 		if (vfsItem == null) {
 			vfsItem = getCourseBaseContainer().createChildLeaf(fileName);
-		} else if(vfsItem.exists() && vfsItem instanceof Versionable) {
-			try {
-				VersionsFileManager.getInstance().addToRevisions((Versionable)vfsItem, null, "");
+		} else if(vfsItem.exists()) {
+			try(InputStream in=vfsItem.getInputStream()) {
+				CoreSpringFactory.getImpl(VFSRepositoryService.class).addVersion(vfsItem, null, "", in);
 			} catch (Exception e) {
 				log.error("Cannot versioned " + fileName, e);
 			}
 		}
 		XStream xstream = CourseXStreamAliases.getWriteCourseXStream();
-		XStreamHelper.writeObject(xstream, (VFSLeaf)vfsItem, obj);
+		XStreamHelper.writeObject(xstream, vfsItem, obj);
 	}
 
 	/**
@@ -483,28 +469,24 @@ public class PersistingCourseImpl implements ICourse, OLATResourceable, Serializ
 	 */
 	private Object readObject(String fileName) {
 		VFSItem vfsItem = getCourseBaseContainer().resolve(fileName);
-		if (vfsItem == null || !(vfsItem instanceof VFSLeaf)) {
+		if (!(vfsItem instanceof VFSLeaf)) {
 			throw new CorruptedCourseException("Cannot resolve file: " + fileName + " course=" + toString());
 		}
 		try {
 			XStream xstream = CourseXStreamAliases.getReadCourseXStream();
-			return XStreamHelper.readObject(xstream, ((VFSLeaf)vfsItem).getInputStream());
+			return XStreamHelper.readObject(xstream, (VFSLeaf)vfsItem);
 		} catch (Exception e) {
 			log.error("Cannot read course tree file: " + fileName, e);
 			throw new CorruptedCourseException("Cannot resolve file: " + fileName + " course=" + toString(), e);
 		}
 	}
 
-	/**
-	 * @see org.olat.core.id.OLATResourceablegetResourceableTypeName()
-	 */
+	@Override
 	public String getResourceableTypeName() {
 		return ORES_TYPE_NAME;
 	}
 
-	/**
-	 * @see org.olat.core.id.OLATResourceablegetResourceableId()
-	 */
+	@Override
 	public Long getResourceableId() {
 		return resourceableId;
 	}
@@ -535,13 +517,10 @@ public class PersistingCourseImpl implements ICourse, OLATResourceable, Serializ
 	 */
 	protected void setCourseConfig(CourseConfig courseConfig) {
 		this.courseConfig = courseConfig;
-		CourseConfigManagerImpl.getInstance().saveConfigTo(this, courseConfig);
+		CoreSpringFactory.getImpl(CourseConfigManager.class).saveConfigTo(this, courseConfig);
 	}
 	
-	/**
-	 * 
-	 * @return
-	 */
+	@Override
 	public CourseConfig getCourseConfig() {
 		return courseConfig;
 	}
@@ -555,16 +534,12 @@ public class PersistingCourseImpl implements ICourse, OLATResourceable, Serializ
 		this.hasAssessableNodes = AssessmentHelper.checkForAssessableNodes(runStructure.getRootNode());
 	}
 
-	/**
-	 * @see org.olat.course.ICourse#hasAssessableNodes()
-	 */
+	@Override
 	public boolean hasAssessableNodes() {
 		return hasAssessableNodes;
 	}
 
-	/**
-	 * @see java.lang.Object#toString()
-	 */
+	@Override
 	public String toString() {
 		return "Course:[" + getResourceableId() + "," + courseTitle + "], " + super.toString();
 	}
@@ -661,14 +636,11 @@ class NodeExportVisitor implements Visitor {
 	 * 
 	 * @see org.olat.core.util.tree.Visitor#visit(org.olat.core.util.nodes.INode)
 	 */
+	@Override
 	public void visit(INode node) {
 		CourseEditorTreeNode cNode = (CourseEditorTreeNode) node;
 		cNode.getCourseNode().exportNode(exportDirectory, course);
-		//OLAT-5368: do frequent intermediate commits to avoid transaction timeout
-		// discussion intermediatecommit vs increased transaction timeout:
-		//  pro intermediatecommit: not much
-		//  pro increased transaction timeout: would fix OLAT-5368 but only move the problem
-		//@TODO OLAT-2597: real solution is a long-running background-task concept...
+		// Do frequent intermediate commits to avoid transaction timeout
 		DBFactory.getInstance().intermediateCommit();
 	}
 

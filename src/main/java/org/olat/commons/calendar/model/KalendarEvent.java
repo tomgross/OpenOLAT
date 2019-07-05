@@ -76,6 +76,8 @@ public class KalendarEvent implements Cloneable, Comparable<KalendarEvent> {
 	private String recurrenceRule;
 	private String recurrenceExc;
 	
+	private String liveStreamUrl;
+	
 	private String externalId;
 	private String externalSource;
 	private CalendarManagedFlag[] managedFlags;
@@ -203,6 +205,10 @@ public class KalendarEvent implements Cloneable, Comparable<KalendarEvent> {
 	
 	public void setSubject(String subject) {
 		this.subject = subject;
+	}
+	
+	public boolean isManaged() {
+		return managedFlags != null && managedFlags.length > 0;
 	}
 
 	public CalendarManagedFlag[] getManagedFlags() {
@@ -382,11 +388,27 @@ public class KalendarEvent implements Cloneable, Comparable<KalendarEvent> {
 		this.recurrenceExc = recurrenceExc;
 	}
 	
+	public String getLiveStreamUrl() {
+		return liveStreamUrl;
+	}
+
+	public void setLiveStreamUrl(String liveStreamUrl) {
+		this.liveStreamUrl = liveStreamUrl;
+	}
+
 	public void addRecurrenceExc(Date excDate) {
 		List<Date> excDates = CalendarUtils.getRecurrenceExcludeDates(recurrenceExc);
 		excDates.add(excDate);
 		String excRule = CalendarUtils.getRecurrenceExcludeRule(excDates);
 		setRecurrenceExc(excRule);
+	}
+	
+	/**
+	 * Set the immutable dates equals to the begin and end dates.
+	 */
+	public void resetImmutableDates() {
+		immutableBegin = begin;
+		immutableEnd = end;
 	}
 	
 	@Override
@@ -399,7 +421,8 @@ public class KalendarEvent implements Cloneable, Comparable<KalendarEvent> {
 		}
 		return (KalendarEvent)c;
 	}
-	
+
+	@Override
 	public int compareTo(KalendarEvent event1) {
 		if(event1 == null) {
 			return -1;

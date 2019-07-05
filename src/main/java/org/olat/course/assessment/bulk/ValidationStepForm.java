@@ -120,21 +120,21 @@ public class ValidationStepForm extends StepFormBasicController {
 		if(datas.getRows() != null) {
 			doValidateRows(datas);
 		}
-		flc.contextPut("hasNoItems", Boolean.valueOf(datas.getRows() == null ||  datas.getRows().size() == 0));			
+		flc.contextPut("hasNoItems", Boolean.valueOf(datas.getRows() == null || datas.getRows().isEmpty()));			
 	}
 	
 	private void doValidateRows(BulkAssessmentDatas datas) {
 		List<BulkAssessmentRow> rows = datas.getRows();
 		
-		List<String> assessedIdList = new ArrayList<String>(rows.size());
+		List<String> assessedIdList = new ArrayList<>(rows.size());
 		for(BulkAssessmentRow row : rows) {
 			assessedIdList.add(row.getAssessedId());
 		}
 		
 		Map<String,Identity> idToIdentityMap = loadAssessedIdentities(assessedIdList);
 
-		List<UserData> validDatas = new ArrayList<UserData>(idToIdentityMap.size());
-		List<UserData> invalidDatas = new ArrayList<UserData>(rows.size() - idToIdentityMap.size());
+		List<UserData> validDatas = new ArrayList<>(idToIdentityMap.size());
+		List<UserData> invalidDatas = new ArrayList<>(rows.size() - idToIdentityMap.size());
 		for(BulkAssessmentRow row : datas.getRows()) {
 			Identity foundIdentity = idToIdentityMap.get(row.getAssessedId());
 			if(foundIdentity == null) {
@@ -153,7 +153,7 @@ public class ValidationStepForm extends StepFormBasicController {
 	}
 	
 	private Map<String,Identity> loadAssessedIdentities(List<String> assessedIdList) {
-		Map<String,Identity> idToIdentityMap = new HashMap<String, Identity>();
+		Map<String,Identity> idToIdentityMap = new HashMap<>();
 		
 		for(String assessedId : assessedIdList) {
 			Identity identity = securityManager.findIdentityByName(assessedId);
@@ -163,8 +163,10 @@ public class ValidationStepForm extends StepFormBasicController {
 			}
 
 			for(String prop : userPropsToSearch) {
-				identity = userManager.findIdentityKeyWithProperty(prop, assessedId);
-				if(identity != null) {
+				List<Identity> found = userManager.findIdentitiesWithProperty(prop, assessedId);
+				if(found != null && found.size() > 0) {
+					// ignore multiple hits, just take the first one
+					identity = found.get(0);
 					idToIdentityMap.put(assessedId, identity);
 					continue;
 				}

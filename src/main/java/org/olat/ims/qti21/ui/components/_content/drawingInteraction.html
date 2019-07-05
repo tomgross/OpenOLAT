@@ -38,11 +38,11 @@
 		<div class="btn-group">
 			<canvas id="brush_size" width="50" height="50"> </canvas>
 		</div>
-		<div class="btn-group">	
-			<input type="range" id="width_range" value="10">$r.translate("drawing.brushsize")
+		<div class="btn-group o_slider_width_range">	
+			<div id="width_range_ui"></div>$r.translate("drawing.brushsize")
 		</div>
-		<div class="btn-group">
-			<input type="range" id="opacity_range" value="100">$r.translate("drawing.opacity")
+		<div class="btn-group o_slider_opacity_range">
+			<div id="opacity_range_ui"></div>$r.translate("drawing.opacity")
 		</div>
 	</div>
 	#end
@@ -50,7 +50,7 @@
 	#set($widthWithBorder = $r.parseInt(${interaction.object.width}) + 2)
 	#set($heightWithBorder = $r.parseInt(${interaction.object.height}) + 2)
 	<div id="sketch_${responseIdentifier}" class="sketch" style="border:1px solid black; width:${widthWithBorder}px; height:${heightWithBorder}px;" draggable="false" ondragstart="return false;">
-		<canvas id="paint_${responseIdentifier}" width="${interaction.object.width}" height="${interaction.object.height}" style="background:url('${r.convertLinkFull($interaction.object.data)}')" draggable="false" ondragstart="return false;"></canvas>
+		<canvas id="paint_${responseIdentifier}" width="${interaction.object.width}" height="${interaction.object.height}" style="background:url('${r.convertLinkFull($interaction.object.data)}') !important;" draggable="false" ondragstart="return false;"></canvas>
 	</div>
 	<script type='text/javascript'>
 	jQuery(function() {

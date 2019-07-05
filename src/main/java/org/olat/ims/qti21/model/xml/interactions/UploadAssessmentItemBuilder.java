@@ -25,11 +25,13 @@ import static org.olat.ims.qti21.model.xml.AssessmentItemFactory.appendUploadInt
 import static org.olat.ims.qti21.model.xml.AssessmentItemFactory.createResponseProcessing;
 import static org.olat.ims.qti21.model.xml.AssessmentItemFactory.createUploadResponseDeclaration;
 
+import java.io.IOException;
+import java.util.ArrayList;
 import java.util.List;
 
-import javax.xml.transform.stream.StreamResult;
-
 import org.olat.core.gui.render.StringOutput;
+import org.apache.logging.log4j.Logger;
+import org.olat.core.logging.Tracing;
 import org.olat.ims.qti21.model.QTI21QuestionType;
 import org.olat.ims.qti21.model.xml.AssessmentItemFactory;
 
@@ -49,6 +51,8 @@ import uk.ac.ed.ph.jqtiplus.types.Identifier;
  *
  */
 public class UploadAssessmentItemBuilder extends LobAssessmentItemBuilder {
+	
+	private static final Logger log = Tracing.createLoggerFor(UploadAssessmentItemBuilder.class);
 
 	private UploadInteraction uploadInteraction;
 	
@@ -85,6 +89,23 @@ public class UploadAssessmentItemBuilder extends LobAssessmentItemBuilder {
 		return QTI21QuestionType.upload;
 	}
 	
+	/**
+	 * @return A copy of the list of blocks which make the question.
+	 * 		The list is a copy and modification will not be persisted.
+	 */
+	public List<Block> getQuestionBlocks() {
+		List<Block> blocks = assessmentItem.getItemBody().getBlocks();
+		List<Block> questionBlocks = new ArrayList<>(blocks.size());
+		for(Block block:blocks) {
+			if(block instanceof UploadInteraction) {
+				break;
+			} else {
+				questionBlocks.add(block);
+			}
+		}
+		return questionBlocks;
+	}
+	
 	@Override
 	public void extract() {
 		super.extract();
@@ -92,18 +113,21 @@ public class UploadAssessmentItemBuilder extends LobAssessmentItemBuilder {
 	}
 	
 	private void extractExtendedTextInteraction() {
-		StringOutput sb = new StringOutput();
-		List<Block> blocks = assessmentItem.getItemBody().getBlocks();
-		for(Block block:blocks) {
-			if(block instanceof UploadInteraction) {
-				uploadInteraction = (UploadInteraction)block;
-				responseIdentifier = uploadInteraction.getResponseIdentifier();
-				break;
-			} else {
-				qtiSerializer.serializeJqtiObject(block, new StreamResult(sb));
+		try(StringOutput sb = new StringOutput()) {
+			List<Block> blocks = assessmentItem.getItemBody().getBlocks();
+			for(Block block:blocks) {
+				if(block instanceof UploadInteraction) {
+					uploadInteraction = (UploadInteraction)block;
+					responseIdentifier = uploadInteraction.getResponseIdentifier();
+					break;
+				} else {
+					serializeJqtiObject(block, sb);
+				}
 			}
+			question = sb.toString();
+		} catch(IOException e) {
+			log.error("", e);
 		}
-		question = sb.toString();
 	}
 
 	@Override

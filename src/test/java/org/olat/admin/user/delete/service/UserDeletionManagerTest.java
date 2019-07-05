@@ -37,8 +37,14 @@ import java.util.concurrent.TimeUnit;
 import org.junit.Assert;
 import org.junit.Test;
 import org.olat.basesecurity.BaseSecurity;
+import org.olat.basesecurity.BaseSecurityModule;
+import org.olat.basesecurity.GroupRoles;
+import org.olat.basesecurity.IdentityImpl;
+import org.olat.core.CoreSpringFactory;
+import org.olat.core.commons.persistence.DB;
 import org.olat.core.commons.persistence.DBFactory;
 import org.olat.core.id.Identity;
+import org.olat.core.id.Roles;
 import org.olat.core.id.User;
 import org.olat.core.id.UserConstants;
 import org.olat.core.util.StringHelper;
@@ -46,14 +52,18 @@ import org.olat.group.BusinessGroup;
 import org.olat.group.BusinessGroupService;
 import org.olat.portfolio.manager.EPFrontendManager;
 import org.olat.portfolio.manager.EPStructureManager;
+import org.olat.portfolio.manager.EPStructureManagerTest;
 import org.olat.portfolio.model.artefacts.AbstractArtefact;
 import org.olat.portfolio.model.structel.ElementType;
 import org.olat.portfolio.model.structel.PortfolioStructure;
 import org.olat.portfolio.model.structel.PortfolioStructureMap;
+import org.olat.repository.RepositoryEntry;
+import org.olat.repository.RepositoryService;
 import org.olat.test.JunitTestHelper;
 import org.olat.test.OlatTestCase;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
+
 
 /**
  * Description: <br>
@@ -66,6 +76,8 @@ public class UserDeletionManagerTest extends OlatTestCase {
 	@Autowired
 	private BaseSecurity securityManager;
 	@Autowired
+	private RepositoryService repositoryService;
+	@Autowired
 	private EPFrontendManager epFrontendManager;
 	@Autowired
 	private EPStructureManager epStructureManager;
@@ -75,29 +87,40 @@ public class UserDeletionManagerTest extends OlatTestCase {
 	private BusinessGroupService businessGroupService;
 
 	@Test
-	public void testDeleteIdentity() {
-		Identity identity = JunitTestHelper.createAndPersistIdentityAsUser("anIdentityToDelete");
-		dbInstance.commit();
+	public void deleteIdentity() {
+		String username = "id-to-del-" + UUID.randomUUID();
+		String email = username + "@frentix.com";
+		User user = userManager.createUser("first" + username, "last" + username, email);
+		user.setProperty(UserConstants.COUNTRY, "");
+		user.setProperty(UserConstants.CITY, "Basel");
+		user.setProperty(UserConstants.INSTITUTIONALNAME, "Del-23");
+		user.setProperty(UserConstants.INSTITUTIONALUSERIDENTIFIER, "Del-24");
+		Identity identity = securityManager.createAndPersistIdentityAndUser(username, null, user, BaseSecurityModule.getDefaultAuthProviderIdentifier(), username, "secret");
+		dbInstance.commitAndCloseSession();
 		// add some stuff
 		
 		//a default map
 		PortfolioStructureMap map = epFrontendManager.createAndPersistPortfolioDefaultMap(identity, "A map to delete", "This map must be deleted");
 		Assert.assertNotNull(map);
 		//a template
-		PortfolioStructureMap template = epStructureManager.createPortfolioMapTemplate(identity, "A template to delete", "This template must be deleted");
+		PortfolioStructureMap template = EPStructureManagerTest.createPortfolioMapTemplate(identity, "A template to delete", "This template must be deleted");
 		epStructureManager.savePortfolioStructure(template);
 		//an artefact
 		AbstractArtefact artefact = epFrontendManager.createAndPersistArtefact(identity, "Forum");
 		dbInstance.commit();
 		Assert.assertNotNull(artefact);
-
 		//a group
 		BusinessGroup group = businessGroupService.createBusinessGroup(identity, "Group", "Group", -1, -1, false, false, null);
 		Assert.assertNotNull(group);
+		dbInstance.commit();
+		//a course
+		RepositoryEntry course = JunitTestHelper.deployBasicCourse(identity);
 		dbInstance.commitAndCloseSession();
+		Assert.assertEquals(username, course.getInitialAuthor());
+		Assert.assertTrue(repositoryService.hasRoleExpanded(identity, GroupRoles.owner.name()));
 		
 		//delete the identity
-		userDeletionManager.deleteIdentity(identity);
+		userDeletionManager.deleteIdentity(identity, null);
 		dbInstance.commit();
 
 		//check
@@ -118,47 +141,97 @@ public class UserDeletionManagerTest extends OlatTestCase {
 		//check membership of group
 		boolean isMember = businessGroupService.isIdentityInBusinessGroup(deletedIdentity, group);
 		Assert.assertFalse(isMember);
+		RepositoryEntry reloadedCourse = repositoryService.loadByKey(course.getKey());
+		Assert.assertFalse(reloadedCourse.getInitialAuthor().equals(username));
+		boolean isOwner = repositoryService.hasRoleExpanded(identity, GroupRoles.owner.name());
+		Assert.assertFalse(isOwner);
 		
 		User deletedUser = deletedIdentity.getUser();
+		// process keep first name last name from user with some "administrative"
+		Assert.assertEquals("first" + username, deletedUser.getProperty(UserConstants.FIRSTNAME, null));
+		Assert.assertEquals("last" + username, deletedUser.getProperty(UserConstants.LASTNAME, null));
+		// but not the other properties
 		String institutionalName = deletedUser.getProperty(UserConstants.INSTITUTIONALNAME, null);
 		Assert.assertFalse(StringHelper.containsNonWhitespace(institutionalName));
 		String institutionalId = deletedUser.getProperty(UserConstants.INSTITUTIONALUSERIDENTIFIER, null);
 		Assert.assertFalse(StringHelper.containsNonWhitespace(institutionalId));
 		String deletedEmail = deletedUser.getProperty(UserConstants.EMAIL, null);
-		Assert.assertNotNull(deletedEmail);
-		Assert.assertFalse(identity.getUser().getEmail().equals(deletedEmail));
+		Assert.assertFalse(StringHelper.containsNonWhitespace(deletedEmail));
+	}
+	
+
+	/**
+	 * The test checked that all of the user properties are wiped out.
+	 * 
+	 */
+	@Test
+	public void deleteIdentity_noRoles() {
+		Identity groupCoach = JunitTestHelper.createAndPersistIdentityAsRndUser("del-6");
+		
+		String username = "id-to-del-2-" + UUID.randomUUID();
+		String email = username + "@frentix.com";
+		User user = userManager.createUser("first" + username, "last" + username, email);
+		user.setProperty(UserConstants.COUNTRY, "");
+		user.setProperty(UserConstants.CITY, "Basel");
+		user.setProperty(UserConstants.INSTITUTIONALNAME, "Del-23");
+		user.setProperty(UserConstants.INSTITUTIONALUSERIDENTIFIER, "Del-24");
+		Identity identity = securityManager.createAndPersistIdentityAndUser(username, null, user, BaseSecurityModule.getDefaultAuthProviderIdentifier(), username, "secret");
+		dbInstance.commitAndCloseSession();
+
+		//a group
+		Roles coachRolesId = securityManager.getRoles(groupCoach);
+		BusinessGroup group = businessGroupService.createBusinessGroup(groupCoach, "Group", "Group", -1, -1, false, false, null);
+		dbInstance.commit();
+		businessGroupService.addParticipants(groupCoach, coachRolesId, Collections.singletonList(identity), group, null);
+		dbInstance.commit();
+		
+		//delete the identity
+		userDeletionManager.deleteIdentity(identity, groupCoach);
+		dbInstance.commit();
+		
+		IdentityImpl deletedIdentity = (IdentityImpl)securityManager.loadIdentityByKey(identity.getKey());
+		Assert.assertNotNull(deletedIdentity);
+		Assert.assertNotNull(deletedIdentity.getDeletedDate());
+		Assert.assertEquals(groupCoach.getUser().getLastName() + ", " + groupCoach.getUser().getFirstName(), deletedIdentity.getDeletedBy());
+
+		User deletedUser = deletedIdentity.getUser();
+		Assert.assertFalse(StringHelper.containsNonWhitespace(deletedUser.getProperty(UserConstants.FIRSTNAME, null)));
+		Assert.assertFalse(StringHelper.containsNonWhitespace(deletedUser.getProperty(UserConstants.LASTNAME, null)));
+		Assert.assertFalse(StringHelper.containsNonWhitespace(deletedUser.getProperty(UserConstants.INSTITUTIONALNAME, null)));
+		Assert.assertFalse(StringHelper.containsNonWhitespace(deletedUser.getProperty(UserConstants.INSTITUTIONALUSERIDENTIFIER, null)));
+		Assert.assertFalse(StringHelper.containsNonWhitespace(deletedUser.getProperty(UserConstants.EMAIL, null)));
 	}
 
 	@Test
-	public void testSetIdentityAsActiv() {
+	public void setIdentityAsActiv() throws InterruptedException {
 		Identity ident = JunitTestHelper.createAndPersistIdentityAsUser("anIdentity");
 		
 		final int maxLoop = 2000; // => 2000 x 11ms => 22sec => finished in 120sec
 		// Let two thread call UserDeletionManager.setIdentityAsActiv
-		final List<Exception> exceptionHolder = Collections.synchronizedList(new ArrayList<Exception>(1));
 
 		CountDownLatch latch = new CountDownLatch(4);
 		ActivThread[] threads = new ActivThread[4];
 		for(int i=0; i<threads.length;i++) {
-			threads[i] = new ActivThread(ident, maxLoop, latch, exceptionHolder);
+			threads[i] = new ActivThread(ident, maxLoop, latch);
 		}
 
 		for(int i=0; i<threads.length;i++) {
 			threads[i].start();
 		}
-		
-		try {
-			latch.await(120, TimeUnit.SECONDS);
-		} catch (InterruptedException e) {
-			exceptionHolder.add(e);
+
+		latch.await(120, TimeUnit.SECONDS);
+
+		List<Exception> exceptionsHolder = new ArrayList<>();
+		for(int i=0; i<threads.length;i++) {
+			exceptionsHolder.addAll(threads[i].exceptionHolder);
 		}
 		
 		// if not -> they are in deadlock and the db did not detect it
-		for (Exception exception : exceptionHolder) {
+		for (Exception exception : exceptionsHolder) {
 			System.err.println("exception: "+exception.getMessage());
 			exception.printStackTrace();
 		}
-		assertTrue("Exceptions #" + exceptionHolder.size(), exceptionHolder.size() == 0);				
+		assertTrue("Exceptions #" + exceptionsHolder.size(), exceptionsHolder.isEmpty());				
 	}
 	
 	private static class ActivThread extends Thread {
@@ -166,21 +239,23 @@ public class UserDeletionManagerTest extends OlatTestCase {
 		private final int maxLoop;
 		private final Identity identity;
 		private final CountDownLatch countDown;
-		private final List<Exception> exceptionHolder;
+		private final List<Exception> exceptionHolder = new ArrayList<>();
+		private final UserDeletionManager userDeletionManager;
 		
-		public ActivThread(Identity identity, int maxLoop, CountDownLatch countDown, List<Exception> exceptionHolder) {
+		public ActivThread(Identity identity, int maxLoop, CountDownLatch countDown) {
 			this.identity = identity;
 			this.maxLoop = maxLoop;
 			this.countDown = countDown;
-			this.exceptionHolder = exceptionHolder;
+			userDeletionManager = CoreSpringFactory.getImpl(UserDeletionManager.class);
 		}
 		
+		@Override
 		public void run() {
 			try {
 				sleep(10);
 				for (int i=0; i<maxLoop; i++) {
 					try {
-						UserDeletionManager.getInstance().setIdentityAsActiv(identity);
+						userDeletionManager.setIdentityAsActiv(identity);
 					} catch (Exception e) {
 						exceptionHolder.add(e);
 					} finally {

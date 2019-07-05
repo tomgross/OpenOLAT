@@ -20,6 +20,7 @@
  */
 package org.olat.user.propertyhandlers;
 
+import java.io.BufferedInputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.InputStream;
@@ -35,7 +36,7 @@ import org.olat.core.gui.components.form.flexible.FormItem;
 import org.olat.core.gui.components.form.flexible.FormItemContainer;
 import org.olat.core.gui.translator.Translator;
 import org.olat.core.id.User;
-import org.olat.core.logging.OLog;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.Util;
 import org.olat.core.util.WebappHelper;
@@ -57,9 +58,9 @@ import com.thoughtworks.xstream.XStream;
  * @author twuersch, frentix GmbH, http://www.frentix.com
  */
 public class UserInterestsPropertyHandler extends AbstractUserPropertyHandler {
-	private static final OLog log = Tracing.createLoggerFor(UserInterestsPropertyHandler.class);
+	private static final Logger log = Tracing.createLoggerFor(UserInterestsPropertyHandler.class);
 
-	public final static String PACKAGE_UINTERESTS = "com.frentix.olat.user";
+	public static final String PACKAGE_UINTERESTS = "com.frentix.olat.user";
 	
 	private static final XStream interestsXStream = XStreamHelper.createXStreamInstance();
 	static {
@@ -78,8 +79,8 @@ public class UserInterestsPropertyHandler extends AbstractUserPropertyHandler {
 			FormItemContainer formItemContainer) {
 		String name = getName();
 		UserInterestsElement userInterestsElement = new UserInterestsElement(name, getInternalValue(user), locale);
-		userInterestsElement.setLabel("form.name." + name, null);
 		formItemContainer.add(userInterestsElement);
+		userInterestsElement.setLabel("form.name." + name, null);
 		return userInterestsElement;
 	}
 
@@ -123,12 +124,13 @@ public class UserInterestsPropertyHandler extends AbstractUserPropertyHandler {
 	 */
 	public static List<UserInterestsCategory> loadAvailableUserInterests() {
 		File userInterestsConfigurationFile = new File(WebappHelper.getUserDataRoot(), USERINTERESTS_CONFIGURATION_FILE);
-		List<UserInterestsCategory> availableUserInterests = new ArrayList<UserInterestsCategory>();
+		List<UserInterestsCategory> availableUserInterests = new ArrayList<>();
 		if (userInterestsConfigurationFile.exists()) {
 			
-			try(InputStream in = new FileInputStream(userInterestsConfigurationFile)) {
+			try(InputStream in = new FileInputStream(userInterestsConfigurationFile);
+					BufferedInputStream bis = new BufferedInputStream(in)) {
 				 @SuppressWarnings("unchecked")
-				List<UserInterestsCategory> available = (List<UserInterestsCategory>)interestsXStream.fromXML(in);
+				List<UserInterestsCategory> available = (List<UserInterestsCategory>)interestsXStream.fromXML(bis);
 				 if(available != null) {
 					 availableUserInterests.addAll(available); 
 				 }
@@ -151,7 +153,7 @@ public class UserInterestsPropertyHandler extends AbstractUserPropertyHandler {
 		StringBuilder sb = new StringBuilder(256);
 		if (getInternalValue(user) != null) {
 			String[] userInterestsIDs = getInternalValue(user).split(":");
-			List<String> sortedUserInterestsIDs = new Vector<String>();
+			List<String> sortedUserInterestsIDs = new Vector<>();
 			for (String id : userInterestsIDs) {
 				if (!id.equals("")) {
 					sortedUserInterestsIDs.add(id);
@@ -179,7 +181,7 @@ public class UserInterestsPropertyHandler extends AbstractUserPropertyHandler {
 		StringBuilder sb = new StringBuilder(256);
 		if (getInternalValue(user) != null) {
 			String[] userInterestsIDs = getInternalValue(user).split(":");
-			List<String> sortedUserInterestsIDs = new Vector<String>();
+			List<String> sortedUserInterestsIDs = new Vector<>();
 			for (String id : userInterestsIDs) {
 				if (!id.equals("")) {
 					sortedUserInterestsIDs.add(id);

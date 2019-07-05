@@ -28,8 +28,9 @@ package org.olat.core.gui.render.velocity;
 
 import java.io.StringWriter;
 import java.io.Writer;
-import java.util.HashSet;
 import java.util.Properties;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 import org.apache.velocity.Template;
 import org.apache.velocity.app.VelocityEngine;
@@ -38,20 +39,23 @@ import org.apache.velocity.exception.MethodInvocationException;
 import org.apache.velocity.runtime.RuntimeConstants;
 import org.olat.core.helpers.Settings;
 import org.olat.core.logging.AssertException;
-import org.olat.core.logging.LogDelegator;
 import org.olat.core.logging.OLATRuntimeException;
+import org.apache.logging.log4j.Logger;
+import org.olat.core.logging.Tracing;
 import org.olat.core.util.WebappHelper;
 
 /**
  * Initial Date: 01.12.2003
  * @author Mike Stock
  */
-public class VelocityHelper extends LogDelegator {
-	private static final VelocityHelper INSTANCE = new VelocityHelper();
+public class VelocityHelper {
 
+	private static final Logger log = Tracing.createLoggerFor(VelocityHelper.class);
+	private static final VelocityHelper INSTANCE = new VelocityHelper();
+	
 	private VelocityEngine ve;
 	
-	private HashSet<String> resourcesNotFound = new HashSet<String>(128);
+	private Set<String> resourcesNotFound = ConcurrentHashMap.newKeySet();
 
 	/**
 	 * 
@@ -73,38 +77,33 @@ public class VelocityHelper extends LogDelegator {
 		try {
 			ve = new VelocityEngine();
 			p = new Properties();
-			p.setProperty(RuntimeConstants.RUNTIME_LOG_LOGSYSTEM_CLASS, "org.apache.velocity.runtime.log.SimpleLog4JLogSystem");
-			p.setProperty("runtime.log.logsystem.log4j.category", "syslog");
-
-
-			p.setProperty(RuntimeConstants.INPUT_ENCODING, VelocityModule.getInputEncoding());
-			p.setProperty(RuntimeConstants.OUTPUT_ENCODING, VelocityModule.getOutputEncoding());			
+			p.setProperty(RuntimeConstants.INPUT_ENCODING, VelocityModule.getInputEncoding());	
 			p.setProperty(RuntimeConstants.PARSER_POOL_SIZE, VelocityModule.getParserPoolSize());
 			p.setProperty(RuntimeConstants.RESOURCE_MANAGER_CACHE_CLASS, "org.olat.core.gui.render.velocity.InfinispanResourceCache");
 
 			if (Settings.isDebuging()) {
-				p.setProperty(RuntimeConstants.RESOURCE_LOADER, "file, classpath");					
+				p.setProperty(RuntimeConstants.RESOURCE_LOADERS, "file, classpath");					
 				// config for file lookup from webapp classpath
-				p.setProperty("file.resource.loader.class", "org.apache.velocity.runtime.resource.loader.FileResourceLoader");
+				p.setProperty("resource.loader.file.class", "org.apache.velocity.runtime.resource.loader.FileResourceLoader");
 				p.setProperty(RuntimeConstants.FILE_RESOURCE_LOADER_PATH, WebappHelper.getSourcePath());
 				p.setProperty(RuntimeConstants.FILE_RESOURCE_LOADER_CACHE, "false");								
-				p.setProperty("file.resource.loader.modificationCheckInterval", "3");
+				p.setProperty("resource.loader.file.modification_check_interval", "3");
 			} else {
-				p.setProperty(RuntimeConstants.RESOURCE_LOADER, "classpath");
+				p.setProperty(RuntimeConstants.RESOURCE_LOADERS, "classpath");
 				p.setProperty(RuntimeConstants.FILE_RESOURCE_LOADER_CACHE, "true");
 			}
 			
 			//for jars: use the classpathloader
-			p.setProperty("classpath.resource.loader.class", "org.apache.velocity.runtime.resource.loader.ClasspathResourceLoader");
+			p.setProperty("resource.loader.classpath.class", "org.apache.velocity.runtime.resource.loader.ClasspathResourceLoader");
 			// caching is on normally
-			p.setProperty("classpath.resource.loader.cache", Settings.isDebuging() ? "false" : "true");
+			p.setProperty("resource.loader.classpath.cache", Settings.isDebuging() ? "false" : "true");
 			
 			p.setProperty(RuntimeConstants.RESOURCE_MANAGER_LOGWHENFOUND, "false");
 			p.setProperty(RuntimeConstants.VM_LIBRARY, "velocity/olat_velocimacros.vm");
 			p.setProperty(RuntimeConstants.VM_LIBRARY_AUTORELOAD, "false");
 			ve.init(p);
 		} catch (Exception e) {
-			throw new RuntimeException("config error " + p.toString());
+			throw new RuntimeException("config error " + p);
 		}
 	}
 
@@ -117,24 +116,20 @@ public class VelocityHelper extends LogDelegator {
 	private void merge(String template, Context c, Writer wOut, String theme) {
 		try {
 			Template vtemplate = null;
-			if (isLogDebugEnabled()) logDebug("Merging template::" + template + " for theme::" + theme, null);
+			if (log.isDebugEnabled()) log.debug("Merging template::" + template + " for theme::" + theme);
 
 			if (theme != null) {
 				// try the theme first, if resource not found exception, fallback to normal resource.
 				// e.g. try /_accessibility/index.html first, if not found, try /index.html.
 				// this allows for themes to only provide the delta to the default templates
 				
-				// todo we could avoid those string operations, if the performance gain is measureable
 				int latestSlash = template.lastIndexOf('/');
 				StringBuilder sb = new StringBuilder(template.substring(0,latestSlash));
 				sb.append("/_").append(theme).append("/").append(template.substring(latestSlash+1));
 				String themedTemplatePath = sb.toString();
 
 				// check cache
-				boolean notFound;
-				synchronized (resourcesNotFound) { //o_clusterOK by:fj
-					notFound = resourcesNotFound.contains(themedTemplatePath);
-				}
+				boolean notFound = resourcesNotFound.contains(themedTemplatePath);
 				
 				if (!notFound) {
 					// never tried before -> try to load it
@@ -142,9 +137,7 @@ public class VelocityHelper extends LogDelegator {
 						// remember not found (since velocity doesn't) then try fallback.
 						// this will happen once for each theme when a resource does not exist in its themed variant but only in the default theme.
 						if (!Settings.isDebuging()) {
-							synchronized (resourcesNotFound) { //o_clusterOK by:fj
-								resourcesNotFound.add(themedTemplatePath);
-							}
+							resourcesNotFound.add(themedTemplatePath);
 						} // for debugging, allow introduction of themed files without restarting the application
 					} else {
 						// template exists -> load it
@@ -163,7 +156,7 @@ public class VelocityHelper extends LogDelegator {
 			vtemplate.merge(c, wOut);			
 		} catch (MethodInvocationException me) {
 			throw new OLATRuntimeException(VelocityHelper.class, "MethodInvocationException occured while merging template: methName:"
-					+ me.getMethodName() + ", refName:" + me.getReferenceName(), me.getWrappedThrowable());
+					+ me.getMethodName() + ", refName:" + me.getReferenceName(), me.getCause());
 		} catch (Exception e) {
 			throw new OLATRuntimeException(VelocityHelper.class, "exception occured while merging template: " + e.getMessage(), e);
 		}

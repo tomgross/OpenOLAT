@@ -60,17 +60,25 @@ public class QTI21EditLayoutForm extends FormBasicController {
 
 	private SingleSelection configEl;
 	private SelectionElement fullWindowEl;
-	private MultipleSelectionElement showTitlesEl, showMenuEl;
+	private MultipleSelectionElement showTitlesEl;
+	private MultipleSelectionElement showMenuEl;
 	private MultipleSelectionElement personalNotesEl;
-	private MultipleSelectionElement enableCancelEl, enableSuspendEl;
-	private MultipleSelectionElement limitAttemptsEl, blockAfterSuccessEl;
-	private MultipleSelectionElement displayQuestionProgressEl, displayScoreProgressEl;
+	private MultipleSelectionElement enableCancelEl;
+	private MultipleSelectionElement enableSuspendEl;
+	private MultipleSelectionElement limitAttemptsEl;
+	private MultipleSelectionElement blockAfterSuccessEl;
+	private MultipleSelectionElement displayQuestionProgressEl;
+	private MultipleSelectionElement displayScoreProgressEl;
+	private MultipleSelectionElement displayMaxScoreItemEl;
 	private MultipleSelectionElement allowAnonymEl;
-	private MultipleSelectionElement digitalSignatureEl, digitalSignatureMailEl;
+	private MultipleSelectionElement showFeedbacksEl;
+	private MultipleSelectionElement digitalSignatureEl;
+	private MultipleSelectionElement digitalSignatureMailEl;
 
 	private FormLayoutContainer maxTimeCont;
 	private MultipleSelectionElement maxTimeEl;
-	private TextElement maxTimeHourEl, maxTimeMinuteEl;
+	private TextElement maxTimeHourEl;
+	private TextElement maxTimeMinuteEl;
 	
 	private TextElement maxAttemptsEl;
 	
@@ -235,6 +243,14 @@ public class QTI21EditLayoutForm extends FormBasicController {
 		if(questionScore) {
 			displayScoreProgressEl.select(onKeys[0], true);
 		}
+		
+		boolean questionMaxScore = configRef ? deliveryOptions.isDisplayScoreProgress() :
+			modConfig.getBooleanSafe(IQEditController.CONFIG_KEY_QUESTION_MAX_SCORE, deliveryOptions.isDisplayMaxScoreItem());
+		displayMaxScoreItemEl = uifactory.addCheckboxesHorizontal("scoreMaxItem", "qti.form.max.score.item", formLayout, onKeys, onValues);
+		displayMaxScoreItemEl.setEnabled(!configRef);
+		if(questionMaxScore) {
+			displayMaxScoreItemEl.select(onKeys[0], true);
+		}
 
 		boolean enableSuspend = configRef ? deliveryOptions.isEnableSuspend() :
 				modConfig.getBooleanSafe(IQEditController.CONFIG_KEY_ENABLESUSPEND, deliveryOptions.isEnableSuspend());
@@ -252,6 +268,15 @@ public class QTI21EditLayoutForm extends FormBasicController {
 		enableCancelEl.setEnabled(!configRef);
 		if(enableCancel) {
 			enableCancelEl.select(onKeys[0], true);
+		}
+		
+		boolean hideFeedbacks = configRef ? deliveryOptions.isHideFeedbacks() :
+			modConfig.getBooleanSafe(IQEditController.CONFIG_KEY_HIDE_FEEDBACKS, deliveryOptions.isHideFeedbacks());
+		showFeedbacksEl = uifactory.addCheckboxesHorizontal("showFeedbacks", "qti.form.showfeedbacks", formLayout, onKeys, onValues);
+		showFeedbacksEl.setElementCssClass("o_sel_qti_show_feedbacks");
+		showFeedbacksEl.setEnabled(!configRef);
+		if(!hideFeedbacks) {
+			showFeedbacksEl.select(onKeys[0], true);
 		}
 		
 		if(!configRef) {
@@ -344,6 +369,7 @@ public class QTI21EditLayoutForm extends FormBasicController {
 			if(configEl.isOneSelected()) {
 				modConfig.setBooleanEntry(IQEditController.CONFIG_KEY_CONFIG_REF, configEl.isSelected(0));
 				if(configEl.isSelected(1)) {// manual configuration
+					persistConfiguration();
 					long maxTime = getMaxTimeLimit();
 					if(maxTime > 0) {
 						modConfig.setIntValue(IQEditController.CONFIG_KEY_TIME_LIMIT, (int)maxTime);
@@ -365,6 +391,11 @@ public class QTI21EditLayoutForm extends FormBasicController {
 
 	@Override
 	protected void formOK(UserRequest ureq) {
+		persistConfiguration();
+		fireEvent(ureq, Event.DONE_EVENT);
+	}
+	
+	protected void persistConfiguration() {
 		modConfig.setBooleanEntry(IQEditController.CONFIG_KEY_CONFIG_REF, configEl.isSelected(0));
 		modConfig.setBooleanEntry(IQEditController.CONFIG_FULLWINDOW, fullWindowEl.isSelected(0));
 		if(limitAttemptsEl.isSelected(0)) {
@@ -381,6 +412,8 @@ public class QTI21EditLayoutForm extends FormBasicController {
 		modConfig.setBooleanEntry(IQEditController.CONFIG_KEY_ENABLESUSPEND, enableSuspendEl.isSelected(0));
 		modConfig.setBooleanEntry(IQEditController.CONFIG_KEY_QUESTIONPROGRESS, displayQuestionProgressEl.isSelected(0));
 		modConfig.setBooleanEntry(IQEditController.CONFIG_KEY_SCOREPROGRESS, displayScoreProgressEl.isSelected(0));
+		modConfig.setBooleanEntry(IQEditController.CONFIG_KEY_QUESTION_MAX_SCORE, displayMaxScoreItemEl.isSelected(0));
+		modConfig.setBooleanEntry(IQEditController.CONFIG_KEY_HIDE_FEEDBACKS, !showFeedbacksEl.isSelected(0));
 		modConfig.setBooleanEntry(IQEditController.CONFIG_ALLOW_ANONYM, allowAnonymEl.isSelected(0));
 		
 		if(qtiModule.isDigitalSignatureEnabled() && digitalSignatureEl.isSelected(0)) {
@@ -407,7 +440,5 @@ public class QTI21EditLayoutForm extends FormBasicController {
 		} else {
 			modConfig.remove(IQEditController.CONFIG_KEY_TIME_LIMIT);
 		}
-		
-		fireEvent(ureq, Event.DONE_EVENT);
 	}
 }

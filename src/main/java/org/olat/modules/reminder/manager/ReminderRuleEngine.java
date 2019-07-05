@@ -28,6 +28,8 @@ import java.util.Set;
 
 import org.olat.basesecurity.GroupRoles;
 import org.olat.core.id.Identity;
+import org.apache.logging.log4j.Logger;
+import org.olat.core.logging.Tracing;
 import org.olat.modules.reminder.FilterRuleSPI;
 import org.olat.modules.reminder.IdentitiesProviderRuleSPI;
 import org.olat.modules.reminder.Reminder;
@@ -39,6 +41,7 @@ import org.olat.modules.reminder.RuleSPI;
 import org.olat.modules.reminder.model.ReminderRules;
 import org.olat.modules.reminder.rule.BusinessGroupRoleRuleSPI;
 import org.olat.modules.reminder.rule.DateRuleSPI;
+import org.olat.modules.reminder.rule.BeforeDateRuleSPI;
 import org.olat.modules.reminder.rule.RepositoryEntryRoleRuleSPI;
 import org.olat.modules.reminder.rule.UserPropertyRuleSPI;
 import org.olat.repository.RepositoryEntry;
@@ -56,6 +59,9 @@ import org.springframework.stereotype.Service;
 @Service
 public class ReminderRuleEngine {
 	
+	private static final Logger log = Tracing.createLoggerFor(ReminderRuleEngine.class);
+	
+	public static final String BEFORE_DATE_RULE_TYPE = BeforeDateRuleSPI.class.getSimpleName();
 	public static final String DATE_RULE_TYPE = DateRuleSPI.class.getSimpleName();
 	public static final String USER_PROP_RULE_TYPE = UserPropertyRuleSPI.class.getSimpleName();
 	public static final String REPO_ROLE_RULE_TYPE = RepositoryEntryRoleRuleSPI.class.getSimpleName();
@@ -63,6 +69,8 @@ public class ReminderRuleEngine {
 
 	@Autowired
 	private DateRuleSPI dateRuleSpi;
+	@Autowired
+	private BeforeDateRuleSPI beforeDateRuleSpi;
 	@Autowired
 	private UserPropertyRuleSPI userPropertyRuleSpi;
 	
@@ -84,11 +92,7 @@ public class ReminderRuleEngine {
 		}
 		
 		List<ReminderRule> ruleList = new ArrayList<>(rules.getRules());
-		//1. Date rules doesn't need database queries
-		boolean allOk = evaluateDateRule(ruleList);
-		if(allOk) {
-			allOk = evaluateRepositoryEntryRule(reminder.getEntry(), ruleList);
-		}
+		boolean allOk = evaluate(reminder, ruleList);
 		
 		List<Identity> identities;
 		if(allOk) {
@@ -103,6 +107,21 @@ public class ReminderRuleEngine {
 		}
 		return identities;
 	}
+
+	public boolean evaluate(Reminder reminder, List<ReminderRule> ruleList) {
+		boolean allOk = true;
+		try {
+			// 1. Date rules doesn't need database queries
+			allOk = evaluateDateRule(ruleList);
+			if (allOk) {
+				allOk = evaluateRepositoryEntryRule(reminder.getEntry(), ruleList);
+			}
+		} catch (Exception e) {
+			allOk = false;
+			log.error("", e);
+		}
+		return allOk;
+	}
 	
 	/**
 	 * 
@@ -115,6 +134,10 @@ public class ReminderRuleEngine {
 			ReminderRule rule = ruleIt.next();
 			if(DATE_RULE_TYPE.equals(rule.getType())) {
 				allOk &= dateRuleSpi.evaluate(rule);
+				ruleIt.remove();
+			}
+			if(BEFORE_DATE_RULE_TYPE.equals(rule.getType())) {
+				allOk &= beforeDateRuleSpi.evaluate(rule);
 				ruleIt.remove();
 			}
 		}
@@ -156,16 +179,14 @@ public class ReminderRuleEngine {
 		List<Identity> identities;
 		if(identitiesProviderRules.isEmpty()) {
 			//all members of repository entry
-			List<Identity> duplicatedIdentities = repositoryEntryRelationDao.getMembers(entry, RepositoryEntryRelationType.both,
+			List<Identity> duplicatedIdentities = repositoryEntryRelationDao.getMembers(entry, RepositoryEntryRelationType.all,
 					GroupRoles.owner.name(), GroupRoles.coach.name(), GroupRoles.participant.name());
 			identities = new ArrayList<>(new HashSet<>(duplicatedIdentities));
 		} else {
 			identities = null;
 			
 			for(ReminderRule rule:identitiesProviderRules) {
-				RuleSPI ruleSpi = reminderModule.getRuleSPIByType(rule.getType());
-				IdentitiesProviderRuleSPI identitiesProviderRuleSpi = (IdentitiesProviderRuleSPI)ruleSpi;
-				List<Identity> members = identitiesProviderRuleSpi.evaluate(entry, rule);
+				List<Identity> members = getMembers(entry, rule);
 				if(identities == null) {
 					identities = members;
 				} else {
@@ -188,6 +209,18 @@ public class ReminderRuleEngine {
 			}
 		}
 		return identities;
+	}
+
+	public List<Identity> getMembers(RepositoryEntry entry, ReminderRule rule) {
+		List<Identity> members = new ArrayList<>();
+		try {
+			RuleSPI ruleSpi = reminderModule.getRuleSPIByType(rule.getType());
+			IdentitiesProviderRuleSPI identitiesProviderRuleSpi = (IdentitiesProviderRuleSPI)ruleSpi;
+			members = identitiesProviderRuleSpi.evaluate(entry, rule);
+		} catch (Exception e) {
+			log.error("", e);
+		}
+		return members;
 	}
 	
 	/**
@@ -239,11 +272,19 @@ public class ReminderRuleEngine {
 		}
 		
 		for(ReminderRule rule:filterRules) {
+			filterByRule(entry, identities, rule);	
+		}
+	}
+
+	public void filterByRule(RepositoryEntry entry, List<Identity> identities, ReminderRule rule) {
+		try {
 			RuleSPI ruleSpi = reminderModule.getRuleSPIByType(rule.getType());
 			if(ruleSpi instanceof FilterRuleSPI) {
 				FilterRuleSPI filter = (FilterRuleSPI)ruleSpi;
 				filter.filter(entry, identities, rule);
-			}	
+			}
+		} catch (Exception e) {
+			log.error("", e);
 		}
 	}
 }

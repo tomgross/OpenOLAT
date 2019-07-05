@@ -23,12 +23,12 @@ import java.io.IOException;
 import java.util.List;
 
 import org.apache.lucene.document.Document;
-import org.olat.commons.info.manager.InfoMessageFrontendManager;
-import org.olat.commons.info.manager.InfoMessageManager;
-import org.olat.commons.info.model.InfoMessage;
+import org.olat.commons.info.InfoMessage;
+import org.olat.commons.info.InfoMessageFrontendManager;
+import org.olat.commons.info.InfoMessageManager;
 import org.olat.core.id.OLATResourceable;
 import org.olat.core.logging.AssertException;
-import org.olat.core.logging.OLog;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.resource.OresHelper;
 import org.olat.group.BusinessGroup;
@@ -44,7 +44,7 @@ import org.olat.search.service.indexer.OlatFullIndexer;
  */
 public class GroupInfoIndexer extends AbstractHierarchicalIndexer{
 	
-	private static final OLog log = Tracing.createLoggerFor(GroupInfoIndexer.class);
+	private static final Logger log = Tracing.createLoggerFor(GroupInfoIndexer.class);
 
 	public static final String TYPE = "type.group.info.message";
 	

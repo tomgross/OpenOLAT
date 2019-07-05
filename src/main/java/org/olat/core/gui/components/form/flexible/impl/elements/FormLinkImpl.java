@@ -32,8 +32,8 @@ import org.olat.core.gui.components.Component;
 import org.olat.core.gui.components.form.flexible.elements.FormLink;
 import org.olat.core.gui.components.form.flexible.impl.FormEvent;
 import org.olat.core.gui.components.form.flexible.impl.FormItemImpl;
-import org.olat.core.gui.components.link.FormLinkFactory;
 import org.olat.core.gui.components.link.Link;
+import org.olat.core.gui.components.link.LinkPopupSettings;
 import org.olat.core.gui.control.Event;
 import org.olat.core.gui.translator.Translator;
 import org.olat.core.util.StringHelper;
@@ -58,12 +58,14 @@ public class FormLinkImpl extends FormItemImpl implements FormLink {
 
 	private Link component;
 	private int presentation = Link.LINK;
-	private String i18n = null;
-	private String cmd = null;
+	private String i18n;
+	private String cmd;
 	private boolean hasCustomEnabledCss = false;
 	private boolean hasCustomDisabledCss = false;
 	private boolean domReplacementWrapperRequired = false;
 	private boolean ownDirtyFormWarning = false;
+	private boolean newWindow;
+	private LinkPopupSettings popup;
 	private String iconLeftCSS;
 	private String iconRightCSS;
 	private String customEnabledLinkCSS;
@@ -133,6 +135,37 @@ public class FormLinkImpl extends FormItemImpl implements FormLink {
 	}
 
 	@Override
+	public boolean isNewWindow() {
+		return newWindow;
+	}
+
+	@Override
+	public void setNewWindow(boolean openInNewWindow) {
+		newWindow = openInNewWindow;
+		if(component != null) {
+			component.setNewWindow(openInNewWindow);
+		}
+	}
+
+	@Override
+	public boolean isPopup() {
+		return popup != null;
+	}
+
+	@Override
+	public LinkPopupSettings getPopup() {
+		return popup;
+	}
+
+	@Override
+	public void setPopup(LinkPopupSettings popup) {
+		this.popup = popup;
+		if(component != null) {
+			component.setPopup(popup);
+		}
+	}
+
+	@Override
 	public boolean isForceOwnDirtyFormWarning() {
 		return ownDirtyFormWarning;
 	}
@@ -157,7 +190,7 @@ public class FormLinkImpl extends FormItemImpl implements FormLink {
 		cmd = cmd == null ? name : cmd;
 		i18n = i18n == null ? name : i18n;
 		if(hasCustomEnabledCss || hasCustomDisabledCss){
-			component = FormLinkFactory.createCustomFormLink(name, cmd, i18n, presentation, this.getRootForm());
+			component = new Link(null, name, cmd, i18n, presentation + Link.FLEXIBLEFORMLNK, this);
 			if(customEnabledLinkCSS != null){
 				component.setCustomEnabledLinkCSS(customEnabledLinkCSS);
 			}
@@ -169,7 +202,7 @@ public class FormLinkImpl extends FormItemImpl implements FormLink {
 				component.setCustomDisplayText(i18n);					
 			}
 		} else {
-			component = FormLinkFactory.createFormLink(name, this.getRootForm());
+			component = new Link(null, name, name, name,  Link.LINK + Link.FLEXIBLEFORMLNK, this);
 			// set link text
 			if ((presentation - Link.FLEXIBLEFORMLNK - Link.NONTRANSLATED) >= 0) {
 				// don't translate non-tranlated links
@@ -189,6 +222,8 @@ public class FormLinkImpl extends FormItemImpl implements FormLink {
 		component.setElementCssClass(getElementCssClass());
 		component.setTitle(title);
 		component.setForceFlexiDirtyFormWarning(ownDirtyFormWarning);
+		component.setPopup(popup);
+		component.setNewWindow(newWindow);
 		if(textReasonForDisabling != null) {
 			component.setTextReasonForDisabling(textReasonForDisabling);
 		}
@@ -231,8 +266,8 @@ public class FormLinkImpl extends FormItemImpl implements FormLink {
 
 	@Override
 	public void setTranslator(Translator translator) {
-		if(this.component != null) {
-			this.component.setTranslator(translator);
+		if(component != null) {
+			component.setTranslator(translator);
 		}
 		super.setTranslator(translator);
 	}
@@ -268,10 +303,8 @@ public class FormLinkImpl extends FormItemImpl implements FormLink {
 			component.setTitle(linkTitle);
 		}
 	}
-	
-	/**
-	 * @see org.olat.core.gui.components.form.flexible.elements.FormLink#setCustomEnabledLinkCSS(java.lang.String)
-	 */
+
+	@Override
 	public void setCustomEnabledLinkCSS(String customEnabledLinkCSS) {
 		hasCustomEnabledCss=true;
 		this.customEnabledLinkCSS = customEnabledLinkCSS;
@@ -280,9 +313,7 @@ public class FormLinkImpl extends FormItemImpl implements FormLink {
 		}
 	}
 
-	/**
-	 * @see org.olat.core.gui.components.form.flexible.elements.FormLink#setCustomDisabledLinkCSS(java.lang.String)
-	 */
+	@Override
 	public void setCustomDisabledLinkCSS(String customDisabledLinkCSS) {
 		hasCustomDisabledCss = true;
 		this.customDisabledLinkCSS  = customDisabledLinkCSS;
@@ -290,14 +321,13 @@ public class FormLinkImpl extends FormItemImpl implements FormLink {
 			component.setCustomDisabledLinkCSS(customDisabledLinkCSS);
 		}
 	}
-	
+
+	@Override
 	public String getI18nKey() {
 		return i18n;
 	}
 
-	/**
-	 * @see org.olat.core.gui.components.form.flexible.elements.FormLink#setI18nKey(java.lang.String)
-	 */
+	@Override
 	public void setI18nKey(String i18n) {
 		this.i18n = i18n;
 		if (component != null) {
@@ -307,6 +337,20 @@ public class FormLinkImpl extends FormItemImpl implements FormLink {
 			} else if (StringHelper.containsNonWhitespace(i18n)) {
 				// translate other links
 				component.setCustomDisplayText(getTranslator().translate(i18n));
+			}
+		}
+	}
+	
+	@Override
+	public void setI18nKey(String i18n, String[] args) {
+		this.i18n = i18n;
+		if (component != null) {
+			if ((presentation - Link.NONTRANSLATED) >= 0) {
+				// don't translate non-tranlated links
+				component.setCustomDisplayText(i18n);					
+			} else if (StringHelper.containsNonWhitespace(i18n)) {
+				// translate other links
+				component.setCustomDisplayText(getTranslator().translate(i18n, args));
 			}
 		}
 	}
@@ -333,16 +377,16 @@ public class FormLinkImpl extends FormItemImpl implements FormLink {
 
 	@Override
 	public String getLinkTitleText() {
-		String title = null;
+		String linkTitle = null;
 		if (component != null) {
-			title = component.getCustomDisplayText();
-			if (title == null && getTranslator() != null) {
+			linkTitle = component.getCustomDisplayText();
+			if (linkTitle == null && getTranslator() != null) {
 				if (StringHelper.containsNonWhitespace(component.getI18n())) {
-					title = getTranslator().translate(component.getI18n());
+					linkTitle = getTranslator().translate(component.getI18n());
 				}
 			}
 		}
-		return title;
+		return linkTitle;
 	}
 
 	@Override

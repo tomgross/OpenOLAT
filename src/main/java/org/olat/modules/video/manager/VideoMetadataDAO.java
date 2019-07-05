@@ -22,10 +22,11 @@ package org.olat.modules.video.manager;
 import java.util.Date;
 import java.util.List;
 
-import org.apache.commons.io.FilenameUtils;
 import org.olat.core.commons.persistence.DB;
 import org.olat.core.commons.services.image.Size;
+import org.olat.modules.video.VideoFormat;
 import org.olat.modules.video.VideoManager;
+import org.olat.modules.video.VideoMeta;
 import org.olat.modules.video.model.VideoMetaImpl;
 import org.olat.repository.RepositoryEntry;
 import org.olat.resource.OLATResource;
@@ -56,18 +57,20 @@ public class VideoMetadataDAO {
 	 * @return the videometadata or null
 	 */
 	VideoMetaImpl getVideoMetadata(OLATResource videoResource) {
-		StringBuilder sb = new StringBuilder();
+		StringBuilder sb = new StringBuilder(128);
 		sb.append("select meta from videometadata as meta")
-			.append(" where meta.videoResource=:videoresource");
+		  .append(" inner join fetch meta.videoResource as vResource")
+		  .append(" where vResource.key=:resourceKey");
 		List<VideoMetaImpl> metadata = dbInstance.getCurrentEntityManager()
 				.createQuery(sb.toString(),VideoMetaImpl.class)
-				.setParameter("videoresource", videoResource)
+				.setParameter("resourceKey", videoResource.getKey())
 				.getResultList();
-		if (metadata.size() > 0) {
-			return metadata.get(0);
-		} else {
-			return null;
-		}
+		return metadata.isEmpty() ? null :  metadata.get(0);
+	}
+	
+	VideoMeta updateVideoMetadata(VideoMeta videoMetadata) {
+		((VideoMetaImpl)videoMetadata).setLastModified(new Date());
+		return dbInstance.getCurrentEntityManager().merge(videoMetadata);
 	}
 	
 	/**
@@ -95,11 +98,10 @@ public class VideoMetadataDAO {
 		sb.append("select v from ").append(RepositoryEntry.class.getName()).append(" v ")
 		  .append(" inner join fetch v.olatResource as ores")
 		  .append(" where ores.resName = :type");
-		List<RepositoryEntry> result = dbInstance.getCurrentEntityManager()
+		return dbInstance.getCurrentEntityManager()
 				.createQuery(sb.toString(), RepositoryEntry.class)
 				.setParameter("type",typename)
 				.getResultList();
-		return result;
 	}
 	
 	/**
@@ -122,19 +124,34 @@ public class VideoMetadataDAO {
 	 * @param filename
 	 * @return metadata
 	 */
-	VideoMetaImpl createVideoMetadata(RepositoryEntry repoEntry, long size, String fileName) {
+	VideoMetaImpl createVideoMetadata(RepositoryEntry repoEntry, long size, String url, VideoFormat format) {
 		VideoMetaImpl videometa = new VideoMetaImpl();
 		OLATResource videoResource = repoEntry.getOlatResource();
 		videometa.setVideoResource(videoResource);
-		String format = FilenameUtils.getExtension(fileName);
-		videometa.setFormat(format);
+		videometa.setVideoFormat(format);
+		videometa.setUrl(url);
 		videometa.setCreationDate(new Date());
-		videometa.setLastModified(new Date());		
+		videometa.setLastModified(videometa.getCreationDate());		
 		Size resolution = videoManager.getVideoResolutionFromOLATResource(videoResource);
 		videometa.setHeight(resolution.getHeight());
 		videometa.setWidth(resolution.getWidth());
 		videometa.setSize(size);
 		videometa.setLength(repoEntry.getExpenditureOfWork());
+		dbInstance.getCurrentEntityManager().persist(videometa);
+		return videometa;
+	}
+	
+	VideoMetaImpl copyVideoMetadata(RepositoryEntry repoEntry, VideoMeta sourceMeta) {
+		VideoMetaImpl videometa = new VideoMetaImpl();
+		videometa.setVideoResource(repoEntry.getOlatResource());
+		videometa.setVideoFormat(sourceMeta.getVideoFormat());
+		videometa.setUrl(sourceMeta.getUrl());
+		videometa.setCreationDate(new Date());
+		videometa.setLastModified(videometa.getCreationDate());		
+		videometa.setHeight(sourceMeta.getHeight());
+		videometa.setWidth(sourceMeta.getWidth());
+		videometa.setSize(sourceMeta.getSize());
+		videometa.setLength(sourceMeta.getLength());
 		dbInstance.getCurrentEntityManager().persist(videometa);
 		return videometa;
 	}

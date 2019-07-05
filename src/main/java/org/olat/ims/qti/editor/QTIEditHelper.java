@@ -43,7 +43,7 @@ import org.dom4j.Element;
 import org.dom4j.io.OutputFormat;
 import org.dom4j.io.XMLWriter;
 import org.olat.core.gui.translator.Translator;
-import org.olat.core.logging.OLog;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.CodeHelper;
 import org.olat.core.util.vfs.VFSItem;
@@ -78,7 +78,7 @@ import org.olat.ims.resources.IMSEntityResolver;
  */
 public class QTIEditHelper {
 	
-	private static final OLog log = Tracing.createLoggerFor(QTIEditHelper.class);
+	private static final Logger log = Tracing.createLoggerFor(QTIEditHelper.class);
 
 	private static String EDITOR_IDENT = "QTIEDIT";
 	private static String ITEM_TYPE_SC = "SCQ";
@@ -252,7 +252,7 @@ public class QTIEditHelper {
 
 		// controls
 		Control control = new Control();
-		List<Control> controls = new ArrayList<Control>();
+		List<Control> controls = new ArrayList<>();
 		controls.add(control);
 		newItem.setItemcontrols(controls);
 		
@@ -308,7 +308,7 @@ public class QTIEditHelper {
 
 		// conrols
 		Control control = new Control();
-		List<Control> controls = new ArrayList<Control>();
+		List<Control> controls = new ArrayList<>();
 		controls.add(control);
 		newItem.setItemcontrols(controls);
 		
@@ -345,7 +345,7 @@ public class QTIEditHelper {
 
 		// conrols
 		Control control = new Control();
-		List<Control> controls = new ArrayList<Control>();
+		List<Control> controls = new ArrayList<>();
 		controls.add(control);
 		newItem.setItemcontrols(controls);
 		

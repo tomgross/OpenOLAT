@@ -37,13 +37,15 @@ import org.olat.NewControllerFactory;
 import org.olat.admin.landingpages.LandingPagesModule;
 import org.olat.admin.layout.LayoutModule;
 import org.olat.admin.layout.LogoInformations;
-import org.olat.basesecurity.BaseSecurityModule;
 import org.olat.core.CoreSpringFactory;
 import org.olat.core.commons.chiefcontrollers.BaseChiefController;
 import org.olat.core.commons.chiefcontrollers.ChiefControllerMessageEvent;
 import org.olat.core.commons.chiefcontrollers.LanguageChangedEvent;
 import org.olat.core.commons.controllers.resume.ResumeSessionController;
 import org.olat.core.commons.fullWebApp.util.GlobalStickyMessage;
+import org.olat.core.commons.services.analytics.AnalyticsModule;
+import org.olat.core.commons.services.analytics.AnalyticsSPI;
+import org.olat.core.commons.services.csp.CSPModule;
 import org.olat.core.dispatcher.Dispatcher;
 import org.olat.core.gui.GUIMessage;
 import org.olat.core.gui.UserRequest;
@@ -55,7 +57,6 @@ import org.olat.core.gui.components.ComponentCollection;
 import org.olat.core.gui.components.Window;
 import org.olat.core.gui.components.countdown.CountDownComponent;
 import org.olat.core.gui.components.htmlheader.jscss.CustomCSS;
-import org.olat.core.gui.components.htmlheader.jscss.CustomJSComponent;
 import org.olat.core.gui.components.link.Link;
 import org.olat.core.gui.components.link.LinkFactory;
 import org.olat.core.gui.components.panel.OncePanel;
@@ -82,11 +83,12 @@ import org.olat.core.gui.control.navigation.NavElement;
 import org.olat.core.gui.control.navigation.SiteInstance;
 import org.olat.core.gui.control.util.ZIndexWrapper;
 import org.olat.core.gui.control.winmgr.JSCommand;
-import org.olat.core.gui.themes.Theme;
 import org.olat.core.gui.translator.Translator;
 import org.olat.core.helpers.Settings;
+import org.olat.core.id.Identity;
 import org.olat.core.id.IdentityEnvironment;
 import org.olat.core.id.OLATResourceable;
+import org.olat.core.id.User;
 import org.olat.core.id.context.BusinessControl;
 import org.olat.core.id.context.BusinessControlFactory;
 import org.olat.core.id.context.ContextEntry;
@@ -95,7 +97,6 @@ import org.olat.core.id.context.HistoryPointImpl;
 import org.olat.core.id.context.StateEntry;
 import org.olat.core.id.context.StateSite;
 import org.olat.core.logging.AssertException;
-import org.olat.core.logging.JavaScriptTracingController;
 import org.olat.core.util.CodeHelper;
 import org.olat.core.util.Formatter;
 import org.olat.core.util.StringHelper;
@@ -114,6 +115,10 @@ import org.olat.course.assessment.ui.mode.AssessmentModeGuardController;
 import org.olat.course.assessment.ui.mode.ChooseAssessmentModeEvent;
 import org.olat.gui.control.UserToolsMenuController;
 import org.olat.home.HomeSite;
+import org.olat.modules.edusharing.EdusharingModule;
+import org.olat.user.UserManager;
+import org.olat.user.propertyhandlers.UserPropertyHandler;
+import org.springframework.beans.factory.annotation.Autowired;
 
 /**
  * Description:<br>
@@ -125,6 +130,7 @@ import org.olat.home.HomeSite;
  */
 public class BaseFullWebappController extends BasicController implements DTabs, ChiefController, GenericEventListener {
 	private static final String PRESENTED_AFTER_LOGIN_WORKFLOW = "presentedAfterLoginWorkflow";
+	private static final String USER_PROPS_ID = BaseFullWebappController.class.getCanonicalName();
 	
 	//Base chief
 	private Panel contentPanel;
@@ -132,14 +138,13 @@ public class BaseFullWebappController extends BasicController implements DTabs, 
 	private Controller debugC;
 	private Controller inlineTranslationC;
 	private Controller developmentC;
-	private Controller jsLoggerC;
 	private List<String> bodyCssClasses = new ArrayList<>(3);
 
 	private Boolean reload;
 	private final ScreenMode screenMode = new ScreenMode();
 	private WindowBackOffice wbo;
 	
-	// STARTED
+	// PARTICIPATING
 	private GuiStack currentGuiStack;
 	private Panel main, modalPanel;
 	private GUIMessage guiMessage;
@@ -159,20 +164,20 @@ public class BaseFullWebappController extends BasicController implements DTabs, 
 	private SiteInstance curSite;
 	private DTab curDTab;
 	
-	private final List<TabState> siteAndTabs = new ArrayList<TabState>();
+	private final List<TabState> siteAndTabs = new ArrayList<>();
 
 	// the dynamic tabs list
 	private List<DTab> dtabs;
 	private List<Integer> dtabsLinkNames;
 	private List<Controller> dtabsControllers;
-	private Map<DTab,HistoryPoint> dtabToBusinessPath = new HashMap<DTab,HistoryPoint>();
+	private Map<DTab,HistoryPoint> dtabToBusinessPath = new HashMap<>();
 	// used as link id which is load url safe (e.g. replayable
 	private int dtabCreateCounter = 0;
 	// the sites list
 	private SiteInstance userTools;
 	private List<SiteInstance> sites;
-	private Map<SiteInstance, BornSiteInstance> siteToBornSite = new HashMap<SiteInstance, BornSiteInstance>();
-	private Map<SiteInstance,HistoryPoint> siteToBusinessPath = new HashMap<SiteInstance,HistoryPoint>();
+	private Map<SiteInstance, BornSiteInstance> siteToBornSite = new HashMap<>();
+	private Map<SiteInstance,HistoryPoint> siteToBusinessPath = new HashMap<>();
 
 	private BaseFullWebappControllerParts baseFullWebappControllerParts;
 	protected Controller contentCtrl;
@@ -184,6 +189,19 @@ public class BaseFullWebappController extends BasicController implements DTabs, 
 	
 	private final boolean isAdmin;
 	private final int maxTabs = 20;
+	
+	@Autowired
+	private CSPModule cspModule;
+	@Autowired
+	private I18nModule i18nModule;
+	@Autowired
+	private I18nManager i18nManager;
+	@Autowired
+	private UserManager userManager;
+	@Autowired
+	private AnalyticsModule analyticsModule;
+	@Autowired
+	private EdusharingModule edusharingModule;
 	
 	public BaseFullWebappController(UserRequest ureq, BaseFullWebappControllerParts baseFullWebappControllerParts) {
 		// only-use-in-super-call, since we define our own
@@ -203,7 +221,7 @@ public class BaseFullWebappController extends BasicController implements DTabs, 
 		
 		IdentityEnvironment identityEnv = usess.getIdentityEnvironment();
 		if(identityEnv != null && identityEnv.getRoles() != null) {	
-			isAdmin = identityEnv.getRoles().isOLATAdmin();
+			isAdmin = identityEnv.getRoles().isAdministrator();
 		} else {
 			isAdmin = false;
 		}
@@ -265,7 +283,7 @@ public class BaseFullWebappController extends BasicController implements DTabs, 
 		Object fullScreen = Windows.getWindows(ureq).getFullScreen();
 		if(Boolean.TRUE.equals(fullScreen)) {
 			Windows.getWindows(ureq).setFullScreen(null);
-			screenMode.setMode(Mode.full);
+			screenMode.setMode(Mode.full, null);
 		}
 
 		// register for cycle event to be able to adjust the guimessage place
@@ -299,14 +317,21 @@ public class BaseFullWebappController extends BasicController implements DTabs, 
 	}
 	
 	private void initializeBase(UserRequest ureq, WindowManager winman, ComponentCollection mainPanel) {
+		UserSession usess = ureq.getUserSession();
+		
 		// component-id of mainPanel for the window id
 		mainVc.contextPut("o_winid", mainPanel.getDispatchID());
 		
-		BaseSecurityModule securityModule = CoreSpringFactory.getImpl(BaseSecurityModule.class);
-		mainVc.contextPut("enforceTopFrame", securityModule.isForceTopFrame());
+		mainVc.contextPut("enforceTopFrame", cspModule.isForceTopFrame());
 
 		// add optional css classes
 		mainVc.contextPut("bodyCssClasses", bodyCssClasses);
+		
+		// add page width css. Init empty on login (full page state not persisted)
+		mainVc.contextPut("pageSizeCss", "");
+		
+		// business path set with a full page refresh
+		mainVc.contextPut("startBusinessPath", "");
 
 		Window w = wbo.getWindow();
 
@@ -325,15 +350,41 @@ public class BaseFullWebappController extends BasicController implements DTabs, 
 		
 		// the current language; used e.g. by screenreaders
 		mainVc.contextPut("lang", ureq.getLocale().toString());
+		
+		// some user properties
+		if (ureq.getUserSession().isAuthenticated()) {
+			Identity ident = ureq.getIdentity();
+			StringBuilder sb = new StringBuilder();
+			sb.append("{ identity : ").append( ident.getKey());
+			User user = ident.getUser();
+			List<UserPropertyHandler> userPropertyHandlers = userManager.getUserPropertyHandlersFor(USER_PROPS_ID, usess.getRoles().isAdministrator());
+			for (UserPropertyHandler userPropertyHandler : userPropertyHandlers) {
+				String escapedValue = StringHelper.escapeJavaScript(userPropertyHandler.getUserProperty(user, getLocale()));
+				sb.append(", ").append(userPropertyHandler.getName()).append(" : \"").append(escapedValue).append("\"");				
+			}
+			sb.append("}");
+			mainVc.contextPut("userJSON", sb);
+		}
 
 		// the current GUI theme and the global settings that contains the
 		// font-size. both are pushed as objects so that window.dirty always reads
 		// out the correct value
 		mainVc.contextPut("theme", w.getGuiTheme());
 		mainVc.contextPut("globalSettings", winman.getGlobalSettings());
-		// also add the optional theme javascript 
-		addThemeJS();
-
+		
+		// Add JS analytics code, e.g. for google analytics
+		if (analyticsModule.isAnalyticsEnabled()) {
+			AnalyticsSPI analyticsSPI = analyticsModule.getAnalyticsProvider();
+			if(analyticsSPI != null) {
+				mainVc.contextPut("analytics",analyticsSPI.analyticsInitPageJavaScript());
+			}
+		}
+		
+		// Enable edu-sharing html snippet replacement
+		if (edusharingModule.isEnabled()) {
+			mainVc.contextPut("edusharingEnabled", Boolean.TRUE);
+		}
+		
 		// content panel
 		contentPanel = new Panel("olatContentPanel");
 		mainVc.put("olatContentPanel", contentPanel);
@@ -350,14 +401,14 @@ public class BaseFullWebappController extends BasicController implements DTabs, 
 		// will start the translation tool in translation mode, if the overlay
 		// feature is enabled it will start in customizing mode
 		// fxdiff: allow user-managers to use the inline translation also.
-		if (ureq.getUserSession().isAuthenticated()
-				&& (ureq.getUserSession().getRoles().isOLATAdmin() || ureq.getUserSession().getRoles().isUserManager())
-				&& (I18nModule.isTransToolEnabled() || I18nModule.isOverlayEnabled())) {
+		if (usess.isAuthenticated()
+				&& (usess.getRoles().isAdministrator() || usess.getRoles().isSystemAdmin())
+				&& (i18nModule.isTransToolEnabled() || i18nModule.isOverlayEnabled())) {
 			inlineTranslationC = wbo.createInlineTranslationDispatcherController(ureq, getWindowControl());
-			Preferences guiPrefs = ureq.getUserSession().getGuiPreferences();
+			Preferences guiPrefs = usess.getGuiPreferences();
 			Boolean isInlineTranslationEnabled = (Boolean) guiPrefs.get(I18nModule.class, I18nModule.GUI_PREFS_INLINE_TRANSLATION_ENABLED,
 					Boolean.FALSE);
-			I18nManager.getInstance().setMarkLocalizedStringsEnabled(ureq.getUserSession(), isInlineTranslationEnabled);
+			i18nManager.setMarkLocalizedStringsEnabled(usess, isInlineTranslationEnabled);
 			mainVc.put("inlineTranslation", inlineTranslationC.getInitialComponent());
 		}
 
@@ -367,11 +418,6 @@ public class BaseFullWebappController extends BasicController implements DTabs, 
 			mainVc.put("development", developmentC.getInitialComponent());
 		}
 
-		// attach AJAX javascript console
-		jsLoggerC = new JavaScriptTracingController(ureq, getWindowControl());
-		// the js logger provides only a header element, nevertheless we need to
-		// put it into the main velocity container.
-		mainVc.put("jsLoggerC", jsLoggerC.getInitialComponent());
 		// put the global js translator mapper path into the main window
 		mainVc.contextPut("jsTranslationMapperPath", BaseChiefController.jsTranslationMapperPath);
 
@@ -434,7 +480,7 @@ public class BaseFullWebappController extends BasicController implements DTabs, 
 		// -- sites -- by definition the first site is activated at the beginning
 		userTools = new HomeSite(null);
 		sites = baseFullWebappControllerParts.getSiteInstances(ureq, getWindowControl());
-		if (sites != null && sites.size() == 0) {
+		if (sites != null && sites.isEmpty()) {
 			sites = null;
 		}
 		
@@ -571,22 +617,6 @@ public class BaseFullWebappController extends BasicController implements DTabs, 
 			mainVc.setDirty(true);
 		}
 	}
-
-	/**
-	 * adds the theme custom js-code to the mainVc
-	 */
-	private void addThemeJS() {
-		Theme currentTheme = getWindowControl().getWindowBackOffice().getWindow().getGuiTheme();
-		if (currentTheme.hasCustomJS()) {
-			String relPath = currentTheme.getRelPathToCustomJS();
-			CustomJSComponent customJS = new CustomJSComponent("customThemejs", new String[] { relPath });
-			if (isLogDebugEnabled()) {
-				logDebug("injecting custom javascript from current OLAT-Theme", relPath);
-			}
-			// no need to wrap in panel, will never change
-			mainVc.put(customJS.getComponentName(), customJS);
-		}
-	}
 	
 	@Override
 	protected void event(UserRequest ureq, Component source, Event event) {
@@ -637,6 +667,16 @@ public class BaseFullWebappController extends BasicController implements DTabs, 
 					back(ureq, point);
 				}
 			}
+		} else if (source == mainVc) {
+			// Set CSS on body to maintain user selected page width. 
+			// Add it to velocity just in case of a full page reload. The CSS class has already been added via JS in the user browser!
+			if ("width.full".equals(event.getCommand())) {
+				mainVc.contextPut("pageSizeCss", "o_width_full");
+				mainVc.setDirty(false);
+			} else if ("width.standard".equals(event.getCommand())) {
+				mainVc.contextPut("pageSizeCss", "");			
+				mainVc.setDirty(false);
+			}
 		}
 	}
 	
@@ -644,7 +684,7 @@ public class BaseFullWebappController extends BasicController implements DTabs, 
 		List<ContextEntry> entries = cstate.getEntries();
 		if(entries.isEmpty()) return;
 		
-		entries = new ArrayList<ContextEntry>(entries);
+		entries = new ArrayList<>(entries);
 		
 		ContextEntry state = entries.remove(0);
 		if(state == null) return;//no red screen for this
@@ -753,10 +793,6 @@ public class BaseFullWebappController extends BasicController implements DTabs, 
 			developmentC.dispose();
 			developmentC = null;
 		}
-		if (jsLoggerC != null) {
-			jsLoggerC.dispose();
-			jsLoggerC = null;
-		}
 
 		//deregister for assessment mode
 		CoordinatorManager.getInstance().getCoordinator().getEventBus()
@@ -830,7 +866,7 @@ public class BaseFullWebappController extends BasicController implements DTabs, 
 		setGuiStack(gs);
 		NavElement navEl = s.getNavElement();
 		if(navEl != null) {
-			setWindowTitle(navEl.getTitle());
+			getWindow().setTitle(getTranslator(), navEl.getTitle());
 			setBodyDataResource("site", s.getClass().getSimpleName(), null);
 		}
 		// update marking of active site/tab
@@ -850,7 +886,7 @@ public class BaseFullWebappController extends BasicController implements DTabs, 
 		setCurrent(null, dtabi);
 		setGuiStack(dtabi.getGuiStackHandle());
 		// set description as page title, getTitel() might contain trucated values
-		setWindowTitle(dtabi.getNavElement().getDescription());
+		getWindow().setTitle(getTranslator(), dtabi.getNavElement().getDescription());
 		// set data-* values on body for css and javascript customizations
 		OLATResourceable ores = dtabi.getOLATResourceable();
 		String restype = (ores == null ? null : ores.getResourceableTypeName());
@@ -863,18 +899,6 @@ public class BaseFullWebappController extends BasicController implements DTabs, 
 		navTabsVc.setDirty(true);
 		// add css for this tab
 		addCurrentCustomCSSToView(dtabi.getCustomCSS());
-	}
-
-	private void setWindowTitle(String newTitle) {
-		StringBuilder sb = new StringBuilder();
-		sb.append("document.title = \"");
-		sb.append(Formatter.escapeDoubleQuotes(translate("page.appname") + " - " + newTitle));
-		sb.append("\";");
-		JSCommand jsc = new JSCommand(sb.toString());
-		WindowControl wControl = getWindowControl();
-		if (wControl != null && wControl.getWindowBackOffice() != null) {
-			wControl.getWindowBackOffice().sendCommandTo(jsc);			
-		}
 	}
 
 	/**
@@ -958,21 +982,61 @@ public class BaseFullWebappController extends BasicController implements DTabs, 
 	
 	@Override
 	public boolean wishReload(UserRequest ureq, boolean erase) {
+		if(Window.NO_RESPONSE_VALUE_MARKER.equals(ureq.getParameter(Window.NO_RESPONSE_PARAMETER_MARKER))) {
+			return false;// background request cannot change screen size, need to wait async
+		}
+
+		boolean wishFullScreen = getScreenMode().isWishFullScreen();
 		boolean screen = getScreenMode().wishScreenModeSwitch(erase);
-		boolean r = (reload == null ? false : reload.booleanValue());
+		if(screen && StringHelper.containsNonWhitespace(getScreenMode().getBusinessPath())) {
+			String businessPath;
+			if(ureq.getUserSession().isAuthenticated()) {
+				businessPath = BusinessControlFactory.getInstance()
+						.getAuthenticatedURLFromBusinessPathString(getScreenMode().getBusinessPath());
+			} else {
+				businessPath = BusinessControlFactory.getInstance()
+						.getURLFromBusinessPathString(getScreenMode().getBusinessPath());
+			}
+			mainVc.getContext().put("startBusinessPath", businessPath);
+		}
+
+		if(screen && StringHelper.containsNonWhitespace(getScreenMode().getFullScreenBodyClass())) {
+			if(wishFullScreen) {
+				bodyCssClasses.add(getScreenMode().getFullScreenBodyClass());
+			} else {
+				bodyCssClasses.remove(getScreenMode().getFullScreenBodyClass());
+			}
+		}
+		
+		boolean r = reload != null && reload.booleanValue();
 		if(erase && reload != null) {
 			reload = null;
 		}
 		boolean l = checkAssessmentGuard(ureq, lockMode);
-
 		return l || r || screen;
 	}
 
 	@Override
 	public boolean wishAsyncReload(UserRequest ureq, boolean erase) {
+		boolean wishFullScreen = getScreenMode().isWishFullScreen();
 		boolean screen = getScreenMode().wishScreenModeSwitch(erase);
+		
+		if(screen && StringHelper.containsNonWhitespace(getScreenMode().getFullScreenBodyClass())) {
+			if(wishFullScreen) {
+				bodyCssClasses.add(getScreenMode().getFullScreenBodyClass());
+			} else {
+				bodyCssClasses.remove(getScreenMode().getFullScreenBodyClass());
+			}
+		}
+		
 		boolean l = checkAssessmentGuard(ureq, lockMode);
 		return screen || l; 
+	}
+
+	@Override
+	public void resetReload() {
+		getScreenMode().reset();
+		reload = null;
 	}
 
 	@Override
@@ -1022,6 +1086,7 @@ public class BaseFullWebappController extends BasicController implements DTabs, 
 		}
 	}
 
+	@Override
 	public void removeDTab(UserRequest ureq, DTab delt) {
 		// remove from tab list and mapper table
 		synchronized (dtabs) {//o_clusterOK dtabs are per user session only - user session is always in the same vm
@@ -1198,6 +1263,23 @@ public class BaseFullWebappController extends BasicController implements DTabs, 
 		return true;
 	}
 	
+	@Override
+	public void updateDTabTitle(OLATResourceable ores, String newTitle) {
+		DTab dTab = getDTab(ores);
+		if (dTab != null) {
+			dTab.getNavElement().setTitle(newTitle);
+			// search all dtab links and find the one with the correct dtab as user object
+			for (int i = 0; i <= dtabCreateCounter; i++) {
+				Link link = (Link)navTabsVc.getComponent("a" + i);
+				if (link != null && dTab.equals(link.getUserObject())) {
+					// correct link found - updte titel and we are done
+					link.setCustomDisplayText(newTitle);
+					return;
+				}				
+			}			
+		}
+	}
+	
 	/**
 	 * Activating a tab is like focusing a new window - we need to adjust the
 	 * guipath since e.g. the button triggering the activation is not
@@ -1244,7 +1326,7 @@ public class BaseFullWebappController extends BasicController implements DTabs, 
 	public void activateStatic(UserRequest ureq, String className, List<ContextEntry> entries) {
 		if(className != null && className.endsWith("HomeSite")) {
 			activateSite(userTools, ureq, entries, false);
-		} else {
+		} else if(sites != null) {
 			for (Iterator<SiteInstance> it_sites = sites.iterator(); it_sites.hasNext();) {
 				SiteInstance site = it_sites.next();
 				String cName = site.getClass().getName();
@@ -1316,6 +1398,9 @@ public class BaseFullWebappController extends BasicController implements DTabs, 
 				currentMsgHolder.setContent(guimsgPanel);
 				currentMsgHolder.setDirty(guimsgPanel.isDirty());
 			}
+		} else if(event == Window.AFTER_INLINE_RENDERING) {
+			// don't make the panel dirty
+			mainVc.getContext().put("startBusinessPath", "");
 		} else if(event instanceof LanguageChangedEvent){
 			LanguageChangedEvent lce = (LanguageChangedEvent)event;
 			UserRequest ureq = lce.getCurrentUreq();
@@ -1449,7 +1534,7 @@ public class BaseFullWebappController extends BasicController implements DTabs, 
 		if(isAdmin) {
 			lock = false;
 		} else if(lockResource == null) {
-			logAudit("Async lock resource for user: " + getIdentity().getName() + " (" + mode.getResource() + ")", null);
+			logAudit("Async lock resource for identity: " + getIdentity().getKey() + " (" + mode.getResource() + ")");
 			lockResource(mode.getResource());
 			lock = true;
 			lockMode = mode;
@@ -1471,7 +1556,7 @@ public class BaseFullWebappController extends BasicController implements DTabs, 
 	private boolean asyncUnlockResource(TransientAssessmentMode mode) {
 		boolean unlock;
 		if(lockResource != null && lockResource.getResourceableId().equals(mode.getResource().getResourceableId())) {
-			logAudit("Async unlock resource for user: " + getIdentity().getName() + " (" + mode.getResource() + ")", null);
+			logAudit("Async unlock resource for identity: " + getIdentity().getKey() + " (" + mode.getResource() + ")");
 			unlockResource();
 			if(lockMode != null) {
 				//check if there is a locked resource first
@@ -1566,21 +1651,6 @@ public class BaseFullWebappController extends BasicController implements DTabs, 
 		return canClose;
 	}
 	
-	@Override
-	public String getWindowTitle() {
-		String title = translate("page.appname");
-		if(siteAndTabs.size() > 0) {
-			TabState state = siteAndTabs.get(siteAndTabs.size() - 1);
-			if(state != null) {
-				String tabTitle = state.getTitle();
-				if(StringHelper.containsNonWhitespace(tabTitle)) {
-				title += " - " + tabTitle;
-				}
-			}
-		}
-		return title;
-	}
-	
 	private void setCurrent(SiteInstance site, DTab tab) {
 		curSite = site;
 		curDTab = tab;
@@ -1655,7 +1725,7 @@ public class BaseFullWebappController extends BasicController implements DTabs, 
 		}
 	}
 	
-	private static class TabState {
+	public static class TabState {
 		private final DTab dtab;
 		private final SiteInstance site;
 		

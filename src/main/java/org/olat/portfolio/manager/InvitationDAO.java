@@ -29,13 +29,14 @@ import javax.persistence.TypedQuery;
 
 import org.olat.admin.user.delete.service.UserDeletionManager;
 import org.olat.basesecurity.BaseSecurity;
-import org.olat.basesecurity.Constants;
 import org.olat.basesecurity.Group;
 import org.olat.basesecurity.GroupRoles;
 import org.olat.basesecurity.IdentityRef;
 import org.olat.basesecurity.Invitation;
-import org.olat.basesecurity.SecurityGroup;
+import org.olat.basesecurity.OrganisationRoles;
+import org.olat.basesecurity.OrganisationService;
 import org.olat.basesecurity.manager.GroupDAO;
+import org.olat.basesecurity.manager.OrganisationDAO;
 import org.olat.core.commons.persistence.DB;
 import org.olat.core.id.Identity;
 import org.olat.core.id.User;
@@ -66,6 +67,12 @@ public class InvitationDAO {
 	private UserManager userManager;
 	@Autowired
 	private BaseSecurity securityManager;
+	@Autowired
+	private OrganisationDAO organisationDao;
+	@Autowired
+	private UserDeletionManager userDeletionManager;
+	@Autowired
+	private OrganisationService organisationService;
 	
 	public Invitation createInvitation() {
 		InvitationImpl invitation = new InvitationImpl();
@@ -106,30 +113,45 @@ public class InvitationDAO {
 	}
 	
 	public Identity createIdentityFrom(Invitation invitation, Locale locale) {
+		if(invitation.getIdentity() != null) {
+			return securityManager.loadIdentityByKey(invitation.getIdentity().getKey());
+		}
+		
 		String tempUsername = UUID.randomUUID().toString();
 		User user = userManager.createUser(invitation.getFirstName(), invitation.getLastName(), invitation.getMail());
 		user.getPreferences().setLanguage(locale.toString());
 		Identity invitee = securityManager.createAndPersistIdentityAndUser(tempUsername, null, user, null, null);
 		groupDao.addMembershipTwoWay(invitation.getBaseGroup(), invitee, GroupRoles.invitee.name());
+		organisationService.addMember(invitee, OrganisationRoles.invitee);
 		return invitee;
 	}
 	
 	public Identity loadOrCreateIdentityAndPersistInvitation(Invitation invitation, Group group, Locale locale) {
+		// create identity only if such a user does not already exist
+
+		Identity invitee;
+		if(invitation.getIdentity() != null) {
+			invitee = invitation.getIdentity();
+		} else {
+			invitee = userManager.findUniqueIdentityByEmail(invitation.getMail());
+			if (invitee == null) {
+				String tempUsername = UUID.randomUUID().toString();
+				User user = userManager.createUser(invitation.getFirstName(), invitation.getLastName(), invitation.getMail());
+				user.getPreferences().setLanguage(locale.toString());
+				invitee = securityManager.createAndPersistIdentityAndUser(tempUsername, null, user, null, null, null);
+			}
+		}
+		
+		// create the invitation
 		group = groupDao.loadGroup(group.getKey());
 		((InvitationImpl)invitation).setCreationDate(new Date());
 		((InvitationImpl)invitation).setBaseGroup(group);
+		((InvitationImpl)invitation).setIdentity(invitee);
 		dbInstance.getCurrentEntityManager().persist(invitation);
 
-		// create identity only if such a user does not already exist
-		Identity invitee = userManager.findIdentityByEmail(invitation.getMail());
-		if (invitee == null) {
-			String tempUsername = UUID.randomUUID().toString();
-			User user = userManager.createUser(invitation.getFirstName(), invitation.getLastName(), invitation.getMail());
-			user.getPreferences().setLanguage(locale.toString());
-			invitee = securityManager.createAndPersistIdentityAndUser(tempUsername, null, user, null, null, null);
-		}
 		// add invitee to the security group of that portfolio element
-		groupDao.addMembershipTwoWay(group, invitee, GroupRoles.invitee.name());			
+		groupDao.addMembershipTwoWay(group, invitee, GroupRoles.invitee.name());
+		organisationService.addMember(invitee, OrganisationRoles.invitee);			
 		return invitee;
 	}
 	
@@ -154,20 +176,6 @@ public class InvitationDAO {
 	      .append("   where binder.baseGroup.key=baseGroup.key")
 	      .append("))");
 
-		/*
-		StringBuilder sb = new StringBuilder();
-		sb.append("select count(relation) from structuretogroup as relation ")
-		  .append(" inner join relation.group as baseGroup")
-	      .append(" where exists (select invitation.key from binvitation as invitation where ")
-	      .append("  invitation.baseGroup=baseGroup and invitation.token=:token")
-	      .append(" )");
-		  
-		if(atDate != null) {
-			sb.append(" and (relation.validFrom is null or relation.validFrom<=:date)")
-			  .append(" and (relation.validTo is null or relation.validTo>=:date)");
-		}
-		*/
-
 		TypedQuery<Long> query = dbInstance.getCurrentEntityManager()
 				.createQuery(sb.toString(), Long.class)
 				.setParameter("token", token);
@@ -180,6 +188,24 @@ public class InvitationDAO {
 				.setMaxResults(1)
 				.getResultList();
 	    return keys == null || keys.isEmpty() || keys.get(0) == null ? false : keys.get(0).intValue() > 0;
+	}
+	
+	/**
+	 * Find an invitation by its security token
+	 * @param token
+	 * @return The invitation or null if not found
+	 */
+	public Invitation loadByKey(Long key) {
+		StringBuilder sb = new StringBuilder();
+		sb.append("select invitation from binvitation as invitation ")
+		  .append(" inner join fetch invitation.baseGroup bGroup")
+		  .append(" where invitation.key=:key");
+
+		List<Invitation> invitations = dbInstance.getCurrentEntityManager()
+			.createQuery(sb.toString(), Invitation.class)
+			.setParameter("key", key)
+			.getResultList();
+	    return invitations.isEmpty() ? null : invitations.get(0);
 	}
 	
 	/**
@@ -237,8 +263,9 @@ public class InvitationDAO {
 	 */
 	public Invitation findInvitation(String token) {
 		StringBuilder sb = new StringBuilder();
-		sb.append("select invitation from binvitation as invitation ")
+		sb.append("select invitation from binvitation as invitation")
 		  .append(" inner join fetch invitation.baseGroup bGroup")
+		  .append(" left join fetch invitation.identity ident")
 		  .append(" where invitation.token=:token");
 
 		List<Invitation> invitations = dbInstance.getCurrentEntityManager()
@@ -303,7 +330,7 @@ public class InvitationDAO {
 		cal.add(Calendar.HOUR, -6);
 		Date dateLimit = cal.getTime();
 
-		StringBuilder sb = new StringBuilder();
+		StringBuilder sb = new StringBuilder(512);
 		sb.append("select invitation from ").append(InvitationImpl.class.getName()).append(" as invitation ")
 		  .append(" inner join invitation.baseGroup baseGroup ")
 		  .append(" where invitation.creationDate<:dateLimit")//someone can create an invitation but not add it to a policy within millisecond
@@ -325,21 +352,22 @@ public class InvitationDAO {
 			return;
 		}
 	  
-		SecurityGroup olatUserSecGroup = securityManager.findSecurityGroupByName(Constants.GROUP_OLATUSERS);
 		for(Invitation invitation:oldInvitations) {
 			List<Identity> identities = groupDao.getMembers(invitation.getBaseGroup(), GroupRoles.invitee.name());
 			//normally only one identity
 			for(Identity identity:identities) {
 				if(identity.getStatus().compareTo(Identity.STATUS_VISIBLE_LIMIT) >= 0) {
-	  			//already deleted
-				} else if(securityManager.isIdentityInSecurityGroup(identity, olatUserSecGroup)) {
-	  			//out of scope
+					//already deleted
+				} else if(organisationDao.hasAnyRole(identity, OrganisationRoles.invitee.name())) {
+					//out of scope
 				} else {
-	  			//delete user
-					UserDeletionManager.getInstance().deleteIdentity(identity);
+					//delete user
+					userDeletionManager.deleteIdentity(identity, null);
 				}
 			}
-			dbInstance.getCurrentEntityManager().remove(invitation);
+			Invitation invitationRef = dbInstance.getCurrentEntityManager()
+				.getReference(InvitationImpl.class, invitation.getKey());
+			dbInstance.getCurrentEntityManager().remove(invitationRef);
 			dbInstance.commit();
 		}
 	}

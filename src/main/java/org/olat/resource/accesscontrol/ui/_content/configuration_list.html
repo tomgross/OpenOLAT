@@ -2,7 +2,7 @@
 	#foreach($confController in $confControllers)
 		#set($css = $confController.getLink().getMethod().getMethodCssClass())
 		#set($desc = $confController.getLink().getOffer().getDescription())
-		<div class="o_block_bottom">
+		<div class="o_block_bottom o_ac_method clearfix">
 			<label id="lab_${confController.link.key}" onclick="o_popoverWithTitle('lab_${confController.link.key}','desc_${confController.link.key}','$r.translate("offer.description")','top').popover('show');">
 				<i class="o_icon ${css}_icon o_icon-lg"> </i> ${confController.name}#if($confController.infos) <span class="o_ac_infos">$r.escapeHtml($confController.infos)</span>#end</label>
 			#if($confController.dates && !$confController.dates.empty)
@@ -14,11 +14,11 @@
 				<div id="desc_${confController.link.key}" style="display:none;"><div>$r.xssScan($desc)</div></div>
 			#end
 			<div class="pull-right">
-			#if($r.available("edit_$confController.link.key")) 
-				$r.render("edit_$confController.link.key") 
+			#if($r.available($confController.editButton.component.componentName)) 
+				$r.render($confController.editButton) 
 			#end
-			#if($r.available("del_$confController.link.key")) 
-				$r.render("del_$confController.link.key") 
+			#if($r.available($confController.deleteButton.component.componentName)) 
+				$r.render($confController.deleteButton) 
 			#end
 			</div>
 		</div>

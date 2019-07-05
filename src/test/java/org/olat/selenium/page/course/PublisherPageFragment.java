@@ -21,13 +21,12 @@ package org.olat.selenium.page.course;
 
 import java.util.List;
 
-import org.jboss.arquillian.drone.api.annotation.Drone;
 import org.junit.Assert;
 import org.olat.selenium.page.graphene.OOGraphene;
+import org.olat.selenium.page.repository.UserAccess;
 import org.openqa.selenium.By;
 import org.openqa.selenium.WebDriver;
 import org.openqa.selenium.WebElement;
-import org.openqa.selenium.support.FindBy;
 import org.openqa.selenium.support.ui.Select;
 
 /**
@@ -46,39 +45,48 @@ public class PublisherPageFragment {
 	public static final By selectAccessBy = By.cssSelector("div.o_sel_course_publish_wizard select");
 	public static final By selectCatalogYesNoBy = By.cssSelector("div.o_sel_course_publish_wizard select");
 	
-	@Drone
-	private WebDriver browser;
+	private final WebDriver browser;
 	
-	@FindBy(className="o_sel_course_publish_wizard")
-	private WebElement publishBody;
+	public PublisherPageFragment(WebDriver browser) {
+		this.browser = browser;
+	}
 	
 	public PublisherPageFragment assertOnPublisher() {
-		Assert.assertTrue(publishBody.isDisplayed());
+		OOGraphene.waitModalWizard(browser);
+		By publishWizardBy = By.className("o_sel_course_publish_wizard");
+		OOGraphene.waitElement(publishWizardBy, 5, browser);
 		return this;
 	}
-	
 
 	public void quickPublish() {
-		quickPublish(Access.guests);
+		quickPublish(UserAccess.guest);
 	}
 	
-	public void quickPublish(Access access) {
+	public void quickPublish(UserAccess access) {
 		assertOnPublisher()
-			.next()
+			.nextSelectNodes()
 			.selectAccess(access)
-			.next()
+			.nextAccess()
 			.selectCatalog(false)
-			.next() // -> no problem found
+			.nextCatalog() // -> no problem found
 			.finish();
 	}
 	
-	public PublisherPageFragment next() {
-		WebElement next = browser.findElement(nextBy);
-		Assert.assertTrue(next.isDisplayed());
-		Assert.assertTrue(next.isEnabled());
-		next.click();
-		OOGraphene.waitBusy(browser);
-		OOGraphene.closeBlueMessageWindow(browser);
+	public PublisherPageFragment nextSelectNodes() {
+		OOGraphene.nextStep(browser);
+		OOGraphene.waitElement(By.cssSelector("fieldset.o_sel_repo_access_configuration"), 5, browser);
+		return this;
+	}
+	
+	public PublisherPageFragment nextAccess() {
+		OOGraphene.nextStep(browser);
+		OOGraphene.waitElement(By.cssSelector("div.o_course_editor_publish"), 5, browser);
+		return this;
+	}
+	
+	public PublisherPageFragment nextCatalog() {
+		OOGraphene.nextStep(browser);
+		OOGraphene.waitElement(By.cssSelector("div.o_sel_publish_warnings"), 5, browser);
 		return this;
 	}
 	
@@ -92,15 +100,45 @@ public class PublisherPageFragment {
 		return this;
 	}
 	
-	public PublisherPageFragment selectAccess(Access access) {
-		WebElement select = browser.findElement(selectAccessBy);
-		new Select(select).selectByValue(access.getValue());
+	public PublisherPageFragment selectAccess(UserAccess access) {
+		By publishStatusBy = By.id("o_fiopublishedStatus_SELBOX");
+		OOGraphene.scrollTo(publishStatusBy, browser);
+		WebElement publishStatusEl = browser.findElement(publishStatusBy);
+		Select publishStatusSelect = new Select(publishStatusEl);
+		publishStatusSelect.selectByValue("published");
+
+		if(access == UserAccess.registred || access == UserAccess.guest) {
+			By allUsersBy = By.xpath("//div[@id='o_coentry_access_type']/div/label/input[@name='entry.access.type' and @value='shared']");
+			browser.findElement(allUsersBy).click();
+			OOGraphene.waitBusy(browser);
+			
+			By guestsBy = By.xpath("//div[contains(@class,'o_sel_repositoryentry_access_guest')]//label[input[@name='entry.access.guest' and @value='on']]");
+			OOGraphene.waitElement(guestsBy, browser);
+			
+			if(access == UserAccess.guest) {
+				WebElement guestsEl = browser.findElement(guestsBy);
+				OOGraphene.check(guestsEl, Boolean.TRUE);
+			}
+		} else if(access == UserAccess.membersOnly) {
+			By allUsersBy = By.xpath("//div[@id='o_coentry_access_type']/div/label/input[@name='entry.access.type' and @value='private']");
+			browser.findElement(allUsersBy).click();
+			OOGraphene.waitBusy(browser);
+		} else if(access == UserAccess.booking) {
+			By allUsersBy = By.xpath("//div[@id='o_coentry_access_type']/div/label/input[@name='entry.access.type' and @value='private']");
+			browser.findElement(allUsersBy).click();
+			OOGraphene.waitBusy(browser);
+			
+			By accessConfigurationBy = By.cssSelector("fieldset.o_ac_configuration");
+			OOGraphene.waitElement(accessConfigurationBy, browser);
+		}
 		return this;
 	}
 	
 	public PublisherPageFragment selectCatalog(boolean access) {
+		OOGraphene.waitElement(selectCatalogYesNoBy, 5, browser);
 		WebElement select = browser.findElement(selectCatalogYesNoBy);
 		new Select(select).selectByValue(access ? "yes" : "no");
+		OOGraphene.waitBusy(browser);
 		return this;
 	}
 	

@@ -33,7 +33,7 @@ import org.apache.velocity.exception.ParseErrorException;
 import org.apache.velocity.exception.ResourceNotFoundException;
 import org.olat.core.configuration.PreWarm;
 import org.olat.core.gui.render.StringOutput;
-import org.olat.core.logging.OLog;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.CodeHelper;
 import org.olat.core.util.WebappHelper;
@@ -47,7 +47,7 @@ import org.springframework.stereotype.Service;
  */
 @Service
 public class VelocityTemplatesPreWarm implements PreWarm {
-	private static final OLog log = Tracing.createLoggerFor(VelocityTemplatesPreWarm.class);
+	private static final Logger log = Tracing.createLoggerFor(VelocityTemplatesPreWarm.class);
 
 	@Override
 	public void run() {
@@ -59,20 +59,17 @@ public class VelocityTemplatesPreWarm implements PreWarm {
 		final File root = new File(WebappHelper.getContextRoot(), "WEB-INF/classes");
 		final Path fPath = root.toPath();
 		try {
-			if(Files.exists(fPath)) {
+			if(fPath.toFile().exists()) {
 				Files.walkFileTree(fPath, new SimpleFileVisitor<Path>() {
 					@Override
 					public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) {
-						try {
+						try(StringOutput writer = new StringOutput()) {
 							String path = fPath.relativize(file).toString();
 							if(path.endsWith(".html") && path.contains("/_content/")) {
-								StringOutput writer = new StringOutput();
 								VelocityHelper.getInstance().mergeContent(path, context, writer, null);
 								numOfTemplates.incrementAndGet();
 							}
-						} catch (ResourceNotFoundException e) {
-							log.error("", e);
-						} catch (ParseErrorException e) {
+						} catch (IOException | ResourceNotFoundException | ParseErrorException e) {
 							log.error("", e);
 						}
 						return FileVisitResult.CONTINUE;

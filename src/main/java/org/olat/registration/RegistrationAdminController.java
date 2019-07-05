@@ -23,7 +23,8 @@ package org.olat.registration;
 import java.util.ArrayList;
 import java.util.List;
 
-import org.olat.core.CoreSpringFactory;
+import org.olat.basesecurity.OrganisationService;
+import org.olat.basesecurity.OrganisationStatus;
 import org.olat.core.gui.UserRequest;
 import org.olat.core.gui.components.form.ValidationError;
 import org.olat.core.gui.components.form.flexible.FormItem;
@@ -38,10 +39,14 @@ import org.olat.core.gui.control.Controller;
 import org.olat.core.gui.control.WindowControl;
 import org.olat.core.gui.translator.Translator;
 import org.olat.core.helpers.Settings;
+import org.olat.core.id.Organisation;
+import org.olat.core.id.UserConstants;
 import org.olat.core.util.StringHelper;
+import org.olat.core.util.mail.MailHelper;
 import org.olat.user.UserPropertiesConfig;
 import org.olat.user.propertyhandlers.Generic127CharTextPropertyHandler;
 import org.olat.user.propertyhandlers.UserPropertyHandler;
+import org.springframework.beans.factory.annotation.Autowired;
 
 /**
  * Admin panel to configure the registration settings: should link appear on the login page...
@@ -49,42 +54,63 @@ import org.olat.user.propertyhandlers.UserPropertyHandler;
  * @author srosse, stephane.rosse@frentix.com, http://www.frentix.com
  */
 public class RegistrationAdminController extends FormBasicController {
-	
+
+	private SingleSelection organisationsEl;
 	private MultipleSelectionElement registrationElement;
 	private MultipleSelectionElement registrationLinkElement;
 	private MultipleSelectionElement registrationLoginElement;
 	private MultipleSelectionElement staticPropElement;
 	private SingleSelection propertyElement;
+	private SingleSelection pendingRegistrationStatusEl;
+	private TextElement pendingRegistrationNotificationEl;
+	private PropertyNameValueElements pendingProperty1Els;
+	private PropertyNameValueElements pendingProperty2Els;
+	private PropertyNameValueElements pendingProperty3Els;
+	private PropertyNameValueElements pendingProperty4Els;
+	private PropertyNameValueElements pendingProperty5Els;
 	private TextElement propertyValueElement;
 	private TextElement exampleElement;
 	private TextElement domainListElement;
+	private TextElement validUntilGuiEl;
+	private TextElement validUntilRestEl;
 	private FormLayoutContainer domainsContainer;
+	private FormLayoutContainer pendingPropContainer;
 	private FormLayoutContainer staticPropContainer;
 	
-	private static final String[] enableRegistrationKeys = new String[]{ "on" };
-	private static final String[] enableRegistrationValues = new String[1];
-	private String[] propertyKeys, propertyValues;
+
+	private static final String[] pendingRegistrationKeys = new String[] { 
+			RegistrationPendingStatus.active.name(),
+			RegistrationPendingStatus.pending.name(),
+			RegistrationPendingStatus.pendingMatchingProperties.name()
+		};
 	
-	private final RegistrationModule registrationModule;
-	private final RegistrationManager registrationManager;
-	private final UserPropertiesConfig userPropertiesConfig;
+	private static final String[] enableRegistrationKeys = new String[]{ "on" };
+	private final String[] propertyKeys;
+	private final String[] propertyValues;
+	private final String[] pendingPropertyKeys;
+	private final String[] pendingPropertyValues;
+	
+	@Autowired
+	private RegistrationModule registrationModule;
+	@Autowired
+	private RegistrationManager registrationManager;
+	@Autowired
+	private OrganisationService organisationService;
+	@Autowired
+	private UserPropertiesConfig userPropertiesConfig;
 	private final Translator userPropTranslator;
 	
 	public RegistrationAdminController(UserRequest ureq, WindowControl wControl) {
 		super(ureq, wControl, "admin");
 		
-		registrationModule = CoreSpringFactory.getImpl(RegistrationModule.class);
-		registrationManager = CoreSpringFactory.getImpl(RegistrationManager.class);
-		userPropertiesConfig = CoreSpringFactory.getImpl(UserPropertiesConfig.class);
 		//decorate the translator
 		userPropTranslator = userPropertiesConfig.getTranslator(getTranslator());
 
-		enableRegistrationValues[0] = translate("admin.enableRegistration.on");
-		
 		List<UserPropertyHandler> allPropertyHandlers = userPropertiesConfig.getAllUserPropertyHandlers();
-		List<UserPropertyHandler> propertyHandlers = new ArrayList<UserPropertyHandler>(allPropertyHandlers.size());
+		List<UserPropertyHandler> propertyHandlers = new ArrayList<>(allPropertyHandlers.size());
 		for(UserPropertyHandler handler:allPropertyHandlers) {
-			if(handler instanceof Generic127CharTextPropertyHandler) {
+			if(handler instanceof Generic127CharTextPropertyHandler
+					&& !UserConstants.USERNAME.equals(handler.getName())) {
 				propertyHandlers.add(handler);
 			}
 		}
@@ -99,11 +125,22 @@ public class RegistrationAdminController extends FormBasicController {
 			propertyValues[1 + count++] = userPropTranslator.translate(propertyHandler.i18nFormElementLabelKey());
 		}
 		
+		pendingPropertyKeys = new String[allPropertyHandlers.size() + 1];
+		pendingPropertyValues = new String[allPropertyHandlers.size() + 1];
+		count = 0;
+		pendingPropertyKeys[0] = "-";
+		pendingPropertyValues[0] = "";
+		for(UserPropertyHandler propertyHandler:allPropertyHandlers) {
+			pendingPropertyKeys[1 + count] = propertyHandler.getName();
+			pendingPropertyValues[1 + count++] = userPropTranslator.translate(propertyHandler.i18nFormElementLabelKey());
+		}
+		
 		initForm(ureq);
 	}
 
 	@Override
 	protected void initForm(FormItemContainer formLayout, Controller listener, UserRequest ureq) {
+		String[] enableRegistrationValues = new String[] { translate("admin.enableRegistration.on") };
 
 		//settings
 		FormLayoutContainer settingsContainer = FormLayoutContainer.createDefaultFormLayout("settings", getTranslator());
@@ -123,10 +160,34 @@ public class RegistrationAdminController extends FormBasicController {
 		registrationLinkElement.addActionListener(FormEvent.ONCHANGE);
 		registrationLinkElement.select("on", registrationModule.isSelfRegistrationLinkEnabled());
 		
-		String example = generateExampleCode();
-		exampleElement = uifactory.addTextAreaElement("registration.link.example", "admin.registrationLinkExample", 64000, 4, 65, true, example, settingsContainer);
+		initOrganisationsEl(settingsContainer);
 		
+		validUntilGuiEl = uifactory.addTextElement("admin.registration.valid.until.gui", 20, registrationModule.getValidUntilHoursGui().toString(), settingsContainer);
+		validUntilGuiEl.setMandatory(true);
+		validUntilRestEl = uifactory.addTextElement("admin.registration.valid.until.rest", 20, registrationModule.getValidUntilHoursRest().toString(), settingsContainer);
+		validUntilRestEl.setMandatory(true);
+		
+		String example = generateExampleCode();
+		exampleElement = uifactory.addTextAreaElement("registration.link.example", "admin.registrationLinkExample", 64000, 4, 65, true, false, example, settingsContainer);
+		
+		// pedning status
+		initPendingPropForm(formLayout);
 		//domain configuration
+		initDomainForm(formLayout);
+		//static property
+		initStaticPropForm(formLayout, enableRegistrationValues);
+		//static property
+		initRemoteLogin(formLayout);
+		
+		FormLayoutContainer buttonGroupLayout = FormLayoutContainer.createButtonLayout("buttons", getTranslator());
+		buttonGroupLayout.setRootForm(mainForm);
+		uifactory.addFormSubmitButton("save", buttonGroupLayout);
+		formLayout.add(buttonGroupLayout);
+		
+		updateUI();	
+	}
+	
+	private void initDomainForm(FormItemContainer formLayout) {
 		domainsContainer = FormLayoutContainer.createDefaultFormLayout("domains", getTranslator());
 		domainsContainer.setRootForm(mainForm);
 		domainsContainer.setFormTitle(translate("admin.registration.domains.title"));
@@ -134,9 +195,56 @@ public class RegistrationAdminController extends FormBasicController {
 		
 		uifactory.addStaticTextElement("admin.registration.domains.error", null, translate("admin.registration.domains.desc"), domainsContainer);
 		String domainsList = registrationModule.getDomainListRaw();
-		domainListElement = uifactory.addTextAreaElement("registration.domain.list", "admin.registration.domains", 64000, 10, 65, true, domainsList, domainsContainer);
+		domainListElement = uifactory.addTextAreaElement("registration.domain.list", "admin.registration.domains", 64000, 10, 65, true, false, domainsList, domainsContainer);
+	}
+	
+	private void initPendingPropForm(FormItemContainer formLayout) {
+		pendingPropContainer = FormLayoutContainer.createDefaultFormLayout("propertiespending", getTranslator());
+		pendingPropContainer.setRootForm(mainForm);
+		pendingPropContainer.setFormTitle(translate("admin.registration.pending.status"));
+		formLayout.add(pendingPropContainer);
+		
+		String[] pendingRegistrationValues = new String[] {
+				translate("registration.pending.status.active"),
+				translate("registration.pending.status.pending"),
+				translate("registration.pending.status.pending.props")
+			};
+		pendingRegistrationStatusEl = uifactory.addDropdownSingleselect("registration.pending.status", pendingPropContainer, pendingRegistrationKeys, pendingRegistrationValues);
+		pendingRegistrationStatusEl.select(registrationModule.getRegistrationPendingStatus().name(), true);
+		pendingRegistrationStatusEl.addActionListener(FormEvent.ONCHANGE);
+	
+		pendingProperty1Els = initPendingProperty(1, registrationModule.getRegistrationPendingPropertyName1(), registrationModule.getRegistrationPendingPropertyValue1(), pendingPropContainer);
+		pendingProperty2Els = initPendingProperty(2, registrationModule.getRegistrationPendingPropertyName2(), registrationModule.getRegistrationPendingPropertyValue2(), pendingPropContainer);
+		pendingProperty3Els = initPendingProperty(3, registrationModule.getRegistrationPendingPropertyName3(), registrationModule.getRegistrationPendingPropertyValue3(), pendingPropContainer);
+		pendingProperty4Els = initPendingProperty(4, registrationModule.getRegistrationPendingPropertyName4(), registrationModule.getRegistrationPendingPropertyValue4(), pendingPropContainer);
+		pendingProperty5Els = initPendingProperty(5, registrationModule.getRegistrationPendingPropertyName5(), registrationModule.getRegistrationPendingPropertyValue5(), pendingPropContainer);
 
-		//static property
+		String email = "";
+		if(registrationModule.isRegistrationNotificationEmailEnabled()) {
+			email = registrationModule.getRegistrationNotificationEmail();
+		}
+		pendingRegistrationNotificationEl = uifactory.addTextElement("registration.pending.notification.mail", 2048, email, pendingPropContainer);
+	}
+	
+	private PropertyNameValueElements initPendingProperty(int pos, String propName, String propValue, FormLayoutContainer formLayout) {
+		SingleSelection pendingPropertyNameEl = uifactory.addDropdownSingleselect("registration.pending.prop.name" + pos, formLayout, pendingPropertyKeys, pendingPropertyValues);
+		boolean found = false;
+		for(int i=pendingPropertyKeys.length; i-->0; ) {
+			if(pendingPropertyKeys[i].equals(propName)) {
+				pendingPropertyNameEl.select(pendingPropertyKeys[i], true);
+				found = true;
+				break;
+			}
+		}
+		if(!found) {
+			pendingPropertyNameEl.select(pendingPropertyKeys[0], true);
+		}
+
+		TextElement pendingPropertyValueEl = uifactory.addTextElement("registration.pending.prop.value" + pos, 2048, propValue, formLayout);
+		return new PropertyNameValueElements(pendingPropertyNameEl, pendingPropertyValueEl);
+	}
+	
+	private void initStaticPropForm(FormItemContainer formLayout, String[] enableRegistrationValues) {
 		staticPropContainer = FormLayoutContainer.createDefaultFormLayout("propertiesmapping", getTranslator());
 		staticPropContainer.setRootForm(mainForm);
 		staticPropContainer.setFormTitle(translate("admin.registration.staticprop.title"));
@@ -158,22 +266,37 @@ public class RegistrationAdminController extends FormBasicController {
 		
 		String propertyValue = registrationModule.getStaticPropertyMappingValue();
 		propertyValueElement = uifactory.addTextElement("admin.registration.prop.value", "admin.registration.propertyValue", 255, propertyValue, staticPropContainer);
-		
-		//static property
+	}
+	
+	private void initRemoteLogin(FormItemContainer formLayout) {
 		FormLayoutContainer remoteLoginContainerContainer = FormLayoutContainer.createDefaultFormLayout("remotelogin", getTranslator());
 		remoteLoginContainerContainer.setRootForm(mainForm);
 		remoteLoginContainerContainer.setFormTitle(translate("remote.login.title"));
 		formLayout.add(remoteLoginContainerContainer);
 		
 		String remoteExample = generateRemoteLoginExampleCode();
-		uifactory.addTextAreaElement("remotelogin.example", "admin.registrationLinkExample", 64000, 4, 65, true, remoteExample, remoteLoginContainerContainer);
+		uifactory.addTextAreaElement("remotelogin.example", "admin.registrationLinkExample", 64000, 4, 65, true, false, remoteExample, remoteLoginContainerContainer);
+	}
+	
+	private void initOrganisationsEl(FormLayoutContainer formLayout) {
+		List<Organisation> organisations = organisationService.getOrganisations(OrganisationStatus.notDelete());
+		Organisation registrationOrg = registrationManager.getOrganisationForRegistration();
+		String registrationOrgKey = registrationOrg.getKey().toString();
 		
-		FormLayoutContainer buttonGroupLayout = FormLayoutContainer.createButtonLayout("buttons", getTranslator());
-		buttonGroupLayout.setRootForm(mainForm);
-		uifactory.addFormSubmitButton("save", buttonGroupLayout);
-		formLayout.add(buttonGroupLayout);
-		
-		updateUI();	
+		String[] theKeys = new String[organisations.size()];
+		String[] theValues = new String[organisations.size()];
+		for(int i=organisations.size(); i-->0; ) {
+			Organisation organisation = organisations.get(i);
+			theKeys[i] = organisation.getKey().toString();
+			theValues[i] = organisation.getDisplayName();
+		}
+		organisationsEl = uifactory.addDropdownSingleselect("organisations", "admin.registrationOrganisation", formLayout, theKeys, theValues);
+		for(int i=theKeys.length; i-->0; ) {
+			if(theKeys[i].equals(registrationOrgKey)) {
+				organisationsEl.select(theKeys[i], true);
+				break;
+			}
+		}
 	}
 	
 	@Override
@@ -196,6 +319,8 @@ public class RegistrationAdminController extends FormBasicController {
 		} else if (source == staticPropElement) {
 			registrationModule.setStaticPropertyMappingEnabled(staticPropElement.isSelected(0));
 			updateUI();
+		} else if(source == pendingRegistrationStatusEl) {
+			updateUI();
 		}
 		
 		super.formInnerEvent(ureq, source, event);
@@ -205,12 +330,28 @@ public class RegistrationAdminController extends FormBasicController {
 		boolean  enableMain = registrationElement.isSelected(0);
 		registrationLinkElement.setEnabled(enableMain);
 		registrationLoginElement.setEnabled(enableMain);
+		organisationsEl.setEnabled(enableMain);
 		
 		boolean example = enableMain && registrationLinkElement.isSelected(0);
 		exampleElement.setVisible(example);
 		
 		boolean enableDomains = enableMain && (registrationLinkElement.isSelected(0) || registrationLoginElement.isSelected(0));
 		domainsContainer.setVisible(enableDomains);
+		
+		pendingPropContainer.setVisible(enableMain);
+		if(enableMain) {
+			String selectedStatus = pendingRegistrationStatusEl.getSelectedKey();
+			boolean useProps = RegistrationPendingStatus.pendingMatchingProperties.name().equals(selectedStatus);
+			pendingProperty1Els.setVisible(useProps);
+			pendingProperty2Els.setVisible(useProps);
+			pendingProperty3Els.setVisible(useProps);
+			pendingProperty4Els.setVisible(useProps);
+			pendingProperty5Els.setVisible(useProps);
+
+			boolean mail = RegistrationPendingStatus.pendingMatchingProperties.name().equals(selectedStatus)
+					|| RegistrationPendingStatus.pending.name().equals(selectedStatus);
+			pendingRegistrationNotificationEl.setVisible(mail);
+		}
 		
 		//static prop
 		boolean enableProps = enableMain && (registrationLinkElement.isSelected(0) || registrationLoginElement.isSelected(0));
@@ -222,7 +363,18 @@ public class RegistrationAdminController extends FormBasicController {
 
 	@Override
 	protected boolean validateFormLogic(UserRequest ureq) {
-		boolean allOk = true;
+		boolean allOk = super.validateFormLogic(ureq);
+		
+		allOk &= validateInteger(validUntilGuiEl, 1);
+		allOk &= validateInteger(validUntilRestEl, 1);
+		
+		allOk &= validatePropertyNameValuePair(pendingProperty1Els);
+		allOk &= validatePropertyNameValuePair(pendingProperty2Els);
+		allOk &= validatePropertyNameValuePair(pendingProperty3Els);
+		allOk &= validatePropertyNameValuePair(pendingProperty4Els);
+		allOk &= validatePropertyNameValuePair(pendingProperty5Els);
+		
+		allOk &= validateEmail(pendingRegistrationNotificationEl);
 		
 		String whiteList = domainListElement.getValue();
 		domainListElement.clearError();
@@ -255,8 +407,74 @@ public class RegistrationAdminController extends FormBasicController {
 				}
 			}
 		}
+		
+		organisationsEl.clearError();
+		if(organisationsEl.isEnabled() && !organisationsEl.isOneSelected()) {
+			organisationsEl.setErrorKey("form.legende.mandatory", null);
+			allOk &= false;
+		}
 
-		return allOk && super.validateFormLogic(ureq);
+		return allOk;
+	}
+	
+	private boolean validateEmail(TextElement el) {
+		boolean allOk = true;
+		
+		el.clearError();
+		if(StringHelper.containsNonWhitespace(el.getValue())) {
+			String[] emails = el.getValue().split("[,]");
+			for(String email:emails) {
+				if(!MailHelper.isValidEmailAddress(email)) {
+					el.setErrorKey("email.address.notregular", null);
+					allOk &= false;
+					break;
+				}
+			}
+		}
+
+		return allOk;
+	}
+	
+	private boolean validatePropertyNameValuePair(PropertyNameValueElements nameValueEls) {
+		boolean allOk = true;
+		
+		SingleSelection nameEl = nameValueEls.getPropertyNameEl();
+		TextElement valueEl = nameValueEls.getPropertyValueEl();
+		
+		nameEl.clearError();
+		valueEl.clearError();
+		if(!nameEl.isOneSelected()) {
+			nameEl.setErrorKey("form.legende.mandatory", null);
+			allOk &= false;
+		} else if(!nameEl.getSelectedKey().equals(propertyKeys[0])
+				&& !StringHelper.containsNonWhitespace(valueEl.getValue())) {
+			valueEl.setErrorKey("form.legende.mandatory", null);
+			allOk &= false;
+		}
+
+		return allOk;
+	}
+	
+	private boolean validateInteger(TextElement el, int min) {
+		boolean allOk = true;
+		el.clearError();
+		String val = el.getValue();
+		if(StringHelper.containsNonWhitespace(val)) {	
+			try {
+				double value = Integer.parseInt(val);
+				if(min > value) {
+					el.setErrorKey("error.wrong.int", null);
+					allOk = false;
+				}
+			} catch (NumberFormatException e) {
+				el.setErrorKey("error.wrong.int", null);
+				allOk = false;
+			}
+		} else {
+			el.setErrorKey("error.wrong.int", null);
+			allOk = false;
+		}
+		return allOk;	
 	}
 
 	@Override
@@ -264,6 +482,32 @@ public class RegistrationAdminController extends FormBasicController {
 		registrationModule.setSelfRegistrationEnabled(registrationElement.isSelected(0));
 		registrationModule.setSelfRegistrationLinkEnabled(registrationLinkElement.isSelected(0));
 		registrationModule.setSelfRegistrationLoginEnabled(registrationLoginElement.isSelected(0));
+		
+		if(organisationsEl.isOneSelected()) {
+			registrationModule.setselfRegistrationOrganisationKey(organisationsEl.getSelectedKey());
+		}
+		if(pendingRegistrationStatusEl.isOneSelected()) {
+			registrationModule.setRegistrationPendingStatus(RegistrationPendingStatus.valueOf(pendingRegistrationStatusEl.getSelectedKey()));
+		}
+		
+		registrationModule.setRegistrationPendingProperty1(pendingProperty1Els.getName(), pendingProperty1Els.getValue());
+		registrationModule.setRegistrationPendingProperty2(pendingProperty2Els.getName(), pendingProperty2Els.getValue());
+		registrationModule.setRegistrationPendingProperty3(pendingProperty3Els.getName(), pendingProperty3Els.getValue());
+		registrationModule.setRegistrationPendingProperty4(pendingProperty4Els.getName(), pendingProperty4Els.getValue());
+		registrationModule.setRegistrationPendingProperty5(pendingProperty5Els.getName(), pendingProperty5Els.getValue());
+		
+		String notificationEmail = pendingRegistrationNotificationEl.getValue();
+		if(StringHelper.containsNonWhitespace(notificationEmail)) {
+			registrationModule.setRegistrationNotificationEmailEnabled(true);
+			registrationModule.setRegistrationNotificationEmail(notificationEmail);
+		} else {
+			registrationModule.setRegistrationNotificationEmailEnabled(false);
+		}
+		
+		Integer validUntilHoursGui = Integer.parseInt(validUntilGuiEl.getValue());
+		registrationModule.setValidUntilHoursGui(validUntilHoursGui);
+		Integer validUntilHoursRest = Integer.parseInt(validUntilRestEl.getValue());
+		registrationModule.setValidUntilHoursRest(validUntilHoursRest);
 		
 		String domains = domainListElement.getValue();
 		registrationModule.setDomainListRaw(domains);
@@ -297,5 +541,41 @@ public class RegistrationAdminController extends FormBasicController {
 		    .append("  <input type=\"submit\" value=\"Login\">\n")
 		    .append("</form>");
 		return code.toString();
+	}
+	
+	public class PropertyNameValueElements {
+		
+		private final SingleSelection propertyNameEl;
+		private final TextElement propertyValueEl;
+		
+		public PropertyNameValueElements(SingleSelection propertyNameEl, TextElement propertyValueEl) {
+			this.propertyNameEl = propertyNameEl;
+			this.propertyValueEl = propertyValueEl;
+		}
+
+		public SingleSelection getPropertyNameEl() {
+			return propertyNameEl;
+		}
+
+		public TextElement getPropertyValueEl() {
+			return propertyValueEl;
+		}
+		
+		public void setVisible(boolean visible) {
+			propertyNameEl.setVisible(visible);
+			propertyValueEl.setVisible(visible);
+		}
+		
+		public String getName() {
+			String key = propertyNameEl.getSelectedKey();
+			if(propertyKeys[0].equals(key)) {
+				key = "";
+			}
+			return key;
+		}
+		
+		public String getValue() {
+			return propertyValueEl.getValue();
+		}
 	}
 }

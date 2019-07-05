@@ -26,7 +26,6 @@ import java.util.List;
 import javax.persistence.EntityNotFoundException;
 
 import org.olat.core.commons.persistence.DB;
-import org.olat.modules.video.VideoManager;
 import org.olat.modules.video.VideoTranscoding;
 import org.olat.modules.video.model.TranscodingCount;
 import org.olat.modules.video.model.VideoTranscodingImpl;
@@ -47,8 +46,6 @@ public class VideoTranscodingDAO {
 
 	@Autowired
 	private DB dbInstance;
-	@Autowired 
-	private VideoManager videoManager;
 
 	/**
 	 * Factory method to create and persist new video transcoding objects for a
@@ -140,6 +137,15 @@ public class VideoTranscodingDAO {
 		return dbInstance.getCurrentEntityManager()
 				.createQuery(sb.toString(), VideoTranscoding.class)
 				.getResultList();
+	}
+	
+	public VideoTranscoding getVideoTranscoding(Long key) {
+		String query = "select trans from videotranscoding as trans where trans.key=:transcodingKey";
+		List<VideoTranscoding> transcoding = dbInstance.getCurrentEntityManager()
+				.createQuery(query, VideoTranscoding.class)
+				.setParameter("transcodingKey", key)
+				.getResultList();
+		return transcoding == null || transcoding.isEmpty() ? null : transcoding.get(0);
 	}
 	
 	/**
@@ -243,11 +249,13 @@ public class VideoTranscodingDAO {
 	 */
 	List<VideoTranscoding> getVideoTranscodingsPendingAndInProgress() {
 		StringBuilder sb = new StringBuilder();
-			sb.append("select trans from videotranscoding as trans")
-			.append(" inner join fetch trans.videoResource as res")
-			.append(" where trans.status != 100 and trans.status > -2")//without error codes
-			.append(" order by trans.creationDate asc, trans.id asc");
-		return dbInstance.getCurrentEntityManager().createQuery(sb.toString(), VideoTranscoding.class).getResultList();
+		sb.append("select trans from videotranscoding as trans")
+		  .append(" inner join fetch trans.videoResource as res")
+		  .append(" where trans.status != 100 and trans.status > -2")//without error codes
+		  .append(" order by trans.creationDate asc, trans.id asc");
+		return dbInstance.getCurrentEntityManager()
+				.createQuery(sb.toString(), VideoTranscoding.class)
+				.getResultList();
 	}
 	
 	/**

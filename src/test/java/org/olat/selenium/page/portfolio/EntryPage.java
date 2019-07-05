@@ -43,12 +43,22 @@ public class EntryPage {
 	
 	public EntryPage assertOnPage(String title) {
 		By metaTitleBy = By.xpath("//div[contains(@class,'o_page_lead')]//h2[contains(text(),'" + title + "')]");
-		OOGraphene.waitElement(metaTitleBy, 5, browser);
+		OOGraphene.waitElement(metaTitleBy, browser);
+		return this;
+	}
+	
+	public EntryPage openElementsChooser() {
+		By addBy = By.cssSelector("a.btn.o_sel_add_element_main");
+		OOGraphene.waitElement(addBy, browser);
+		browser.findElement(addBy).click();
+		OOGraphene.waitBusy(browser);
+		By addCalloutBy = By.cssSelector("div.popover div.o_sel_add_element_callout");
+		OOGraphene.waitElement(addCalloutBy, browser);
 		return this;
 	}
 	
 	public EntryPage addTitle(String title) {
-		By addTitleBy = By.cssSelector("a#o_coadd_htitle");
+		By addTitleBy = By.cssSelector("a#o_coadd_el_htitle");
 		browser.findElement(addTitleBy).click();
 		OOGraphene.waitElement(editFragmentBy, 5, browser);
 		OOGraphene.tinymce(title, ".o_page_part.o_page_edit", browser);
@@ -82,13 +92,14 @@ public class EntryPage {
 	}
 	
 	public EntryPage addImage(String title, File image) {
-		By addImageBy = By.cssSelector("a#o_coadd_image");
+		By addImageBy = By.cssSelector("a#o_coadd_el_image");
 		browser.findElement(addImageBy).click();
 		OOGraphene.waitModalDialog(browser);
 		
 		By inputBy = By.cssSelector("fieldset.o_sel_pf_collect_image_form .o_fileinput input[type='file']");
 		OOGraphene.uploadFile(inputBy, image, browser);
-		OOGraphene.waitingALittleLonger();//wait event
+		By previewBy = By.cssSelector("div.o_filepreview>div.o_image>img");
+		OOGraphene.waitElement(previewBy, 5, browser);
 		
 		By titleBy = By.cssSelector("fieldset.o_sel_pf_collect_image_form .o_sel_pf_collect_title input[type='text']");
 		browser.findElement(titleBy).sendKeys(title);
@@ -102,13 +113,18 @@ public class EntryPage {
 	
 	public EntryPage assertOnImage(File image) {
 		String filename = image.getName();
-		By titleBy = By.xpath("//div[contains(@class,'o_image')]//img[contains(@src,'" + filename + "')]");
-		OOGraphene.waitElement(titleBy, 5, browser);
+		int typePos = filename.lastIndexOf('.');
+		if (typePos > 0) {
+			String ending = filename.substring(typePos + 1).toLowerCase();
+			filename = filename.substring(0, typePos + 1).concat(ending);
+		}
+		By titleBy = By.xpath("//figure[@class='o_image']/img[contains(@src,'" + filename + "')]");
+		OOGraphene.waitElement(titleBy, browser);
 		return this;
 	}
 	
 	public EntryPage addDocument(String title, File document) {
-		By addDocumentBy = By.cssSelector("a#o_coadd_bc");
+		By addDocumentBy = By.cssSelector("a#o_coadd_el_bc");
 		browser.findElement(addDocumentBy).click();
 		OOGraphene.waitModalDialog(browser);
 		
@@ -126,15 +142,15 @@ public class EntryPage {
 		return this;
 	}
 	
-	public EntryPage assertOnDocument(File image) {
-		String filename = image.getName();
+	public EntryPage assertOnDocument(File file) {
+		String filename = file.getName();
 		By downloadLinkBy = By.xpath("//div[contains(@class,'o_download')]//a[contains(text(),'" + filename + "')]");
 		OOGraphene.waitElement(downloadLinkBy, 5, browser);
 		return this;
 	}
 	
 	public EntryPage addCitation(String title, String citation) {
-		By addCitationBy = By.cssSelector("a#o_coadd_citation");
+		By addCitationBy = By.cssSelector("a#o_coadd_el_citation");
 		browser.findElement(addCitationBy).click();
 		OOGraphene.waitModalDialog(browser);
 		
@@ -152,7 +168,7 @@ public class EntryPage {
 	}
 	
 	public EntryPage assertOnCitation(String citation) {
-		By citationBy = By.xpath("//blockquote[contains(@class,'o_quote')]/p[contains(text(),'" + citation + "')]");
+		By citationBy = By.xpath("//blockquote[contains(@class,'o_quote')]//p[contains(text(),'" + citation + "')]");
 		OOGraphene.waitElement(citationBy, 5, browser);
 		return this;
 	}
@@ -164,12 +180,12 @@ public class EntryPage {
 	 */
 	public EntryPage publishEntry() {
 		By publishBy = By.cssSelector("a.o_sel_pf_publish_entry");
-		OOGraphene.waitElement(publishBy, 5, browser);
+		OOGraphene.waitElement(publishBy, browser);
 		browser.findElement(publishBy).click();
 		OOGraphene.waitBusy(browser);
 		confirm();
 		By publishedBy = By.cssSelector("div.o_portfolio_status i.o_icon_pf_entry_published");
-		OOGraphene.waitElement(publishedBy, 5, browser);
+		OOGraphene.waitElement(publishedBy, browser);
 		return this;
 	}
 	
@@ -177,7 +193,6 @@ public class EntryPage {
 		By moveToTrashBy = By.cssSelector("a.o_sel_pf_move_page_to_trash");
 		OOGraphene.waitElement(moveToTrashBy, 5, browser);
 		browser.findElement(moveToTrashBy).click();
-		OOGraphene.waitBusy(browser);
 		OOGraphene.waitModalDialog(browser);
 		
 		BinderPage binder = new BinderPage(browser);
@@ -189,7 +204,6 @@ public class EntryPage {
 		By moveToTrashBy = By.cssSelector("a.o_sel_pf_delete_page");
 		OOGraphene.waitElement(moveToTrashBy, 5, browser);
 		browser.findElement(moveToTrashBy).click();
-		OOGraphene.waitBusy(browser);
 		OOGraphene.waitModalDialog(browser);
 		
 		new BinderPage(browser).confirm();
@@ -222,8 +236,9 @@ public class EntryPage {
 	private void confirm() {
 		By confirmButtonBy = By.xpath("//div[contains(@class,'modal-dialo')]//div[contains(@class,'modal-footer')]/a[contains(@onclick,'link_0')]");
 		OOGraphene.waitElement(confirmButtonBy, 5, browser);
-		OOGraphene.waitScrollTop(browser);
+		OOGraphene.waitBusyAndScrollTop(browser);
 		browser.findElement(confirmButtonBy).click();
 		OOGraphene.waitBusy(browser);
+		OOGraphene.waitModalDialogDisappears(browser);
 	}
 }

@@ -44,17 +44,19 @@ import org.olat.core.gui.media.MediaResource;
 import org.olat.core.gui.media.StringMediaResource;
 import org.olat.core.id.Identity;
 import org.olat.core.id.IdentityEnvironment;
-import org.olat.core.logging.OLog;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.StringHelper;
 import org.olat.course.CourseFactory;
 import org.olat.course.ICourse;
+import org.olat.course.assessment.manager.AssessmentNotificationsHandler;
 import org.olat.course.nodes.ScormCourseNode;
 import org.olat.course.nodes.scorm.ScormEditController;
 import org.olat.course.run.scoring.ScoreEvaluation;
 import org.olat.course.run.userview.UserCourseEnvironment;
 import org.olat.course.run.userview.UserCourseEnvironmentImpl;
 import org.olat.modules.ModuleConfiguration;
+import org.olat.modules.assessment.Role;
 import org.olat.user.UserManager;
 
 /**
@@ -65,7 +67,7 @@ import org.olat.user.UserManager;
 public class ScormAPIMapper implements Mapper, ScormAPICallback, Serializable {
 
 	private static final long serialVersionUID = -144400398761676983L;
-	private static final OLog log = Tracing.createLoggerFor(ScormAPIMapper.class);
+	private static final Logger log = Tracing.createLoggerFor(ScormAPIMapper.class);
 	
 	private transient Identity identity;
 	private transient OLATApiAdapter scormAdapter;
@@ -198,33 +200,38 @@ public class ScormAPIMapper implements Mapper, ScormAPICallback, Serializable {
 			if (currentPassed == null || !currentPassed.booleanValue()) {
 				// </OLATEE-27>
 				boolean increment = !attemptsIncremented && finish;
-				ScoreEvaluation sceval = new ScoreEvaluation(new Float(0.0f), Boolean.valueOf(passed));
-				scormNode.updateUserScoreEvaluation(sceval, userCourseEnv, identity, increment);
+				ScoreEvaluation sceval = new ScoreEvaluation(Float.valueOf(0.0f), Boolean.valueOf(passed));
+				scormNode.updateUserScoreEvaluation(sceval, userCourseEnv, identity, increment, Role.user);
 				if(increment) {
 					attemptsIncremented = true;
 				}
 			} else if (!config.getBooleanSafe(ScormEditController.CONFIG_ATTEMPTSDEPENDONSCORE, false)) {
 				boolean increment = !attemptsIncremented && finish;
 				ScoreEvaluation sceval = scormNode.getUserScoreEvaluation(userCourseEnv);
-				scormNode.updateUserScoreEvaluation(sceval, userCourseEnv, identity, increment);
+				scormNode.updateUserScoreEvaluation(sceval, userCourseEnv, identity, increment, Role.user);
 				if(increment) {
 					attemptsIncremented = true;
 				}
 			}
 		} else {
 			boolean increment = !attemptsIncremented && finish;
-			ScoreEvaluation sceval = new ScoreEvaluation(new Float(0.0f), Boolean.valueOf(passed));
-			scormNode.updateUserScoreEvaluation(sceval, userCourseEnv, identity, false);
+			ScoreEvaluation sceval = new ScoreEvaluation(Float.valueOf(0.0f), Boolean.valueOf(passed));
+			scormNode.updateUserScoreEvaluation(sceval, userCourseEnv, identity, false, Role.user);
 			if(increment) {
 				attemptsIncremented = true;
 			}
 		}
+		
+		if(finish) {
+			Long courseId = userCourseEnv.getCourseEnvironment().getCourseResourceableId();
+			CoreSpringFactory.getImpl(AssessmentNotificationsHandler.class).markPublisherNews(identity, courseId);
+		}
 
-		if (log.isDebug()) {
+		if (log.isDebugEnabled()) {
 			String msg = "for scorm node:" + scormNode.getIdent() + " (" + scormNode.getShortTitle() + ") a lmsCommit for scoId "
 					+ olatSahsId + " occured, passed: " + passed
 					+ ", all lesson status now = " + lessonStatusProp.toString();
-			log.debug(msg, null);
+			log.debug(msg);
 		}
 	}
 	
@@ -253,15 +260,15 @@ public class ScormAPIMapper implements Mapper, ScormAPICallback, Serializable {
 			if (score > (currentScore != null ? currentScore : -1f)) {
 				// </OLATEE-27>
 				boolean increment = !attemptsIncremented && finish;
-				ScoreEvaluation sceval = new ScoreEvaluation(new Float(score), Boolean.valueOf(passed));
-				scormNode.updateUserScoreEvaluation(sceval, userCourseEnv, identity, increment);
+				ScoreEvaluation sceval = new ScoreEvaluation(Float.valueOf(score), Boolean.valueOf(passed));
+				scormNode.updateUserScoreEvaluation(sceval, userCourseEnv, identity, increment, Role.user);
 				if(increment) {
 					attemptsIncremented = true;
 				}
 			} else if (!config.getBooleanSafe(ScormEditController.CONFIG_ATTEMPTSDEPENDONSCORE, false)) {
 				boolean increment = !attemptsIncremented && finish;
 				ScoreEvaluation sceval = scormNode.getUserScoreEvaluation(userCourseEnv);
-				scormNode.updateUserScoreEvaluation(sceval, userCourseEnv, identity, increment);
+				scormNode.updateUserScoreEvaluation(sceval, userCourseEnv, identity, increment, Role.user);
 				if(increment) {
 					attemptsIncremented = true;
 				}
@@ -273,18 +280,23 @@ public class ScormAPIMapper implements Mapper, ScormAPICallback, Serializable {
 			}
 			// </OLATEE-27>
 			boolean increment = !attemptsIncremented && finish;
-			ScoreEvaluation sceval = new ScoreEvaluation(new Float(score), Boolean.valueOf(passed));
-			scormNode.updateUserScoreEvaluation(sceval, userCourseEnv, identity, false);
+			ScoreEvaluation sceval = new ScoreEvaluation(Float.valueOf(score), Boolean.valueOf(passed));
+			scormNode.updateUserScoreEvaluation(sceval, userCourseEnv, identity, false, Role.user);
 			if(increment) {
 				attemptsIncremented = true;
 			}
 		}
+		
+		if(finish) {
+			Long courseId = userCourseEnv.getCourseEnvironment().getCourseResourceableId();
+			CoreSpringFactory.getImpl(AssessmentNotificationsHandler.class).markPublisherNews(identity, courseId);
+		}
 
-		if (log.isDebug()) {
+		if (log.isDebugEnabled()) {
 			String msg = "for scorm node:" + scormNode.getIdent() + " (" + scormNode.getShortTitle() + ") a lmsCommit for scoId "
 					+ olatSahsId + " occured, total sum = " + score + ", cutvalue =" + cutval + ", passed: " + passed
 					+ ", all scores now = " + scoProperties.toString();
-			log.debug(msg, null);
+			log.debug(msg);
 		}
 	}
 
@@ -295,7 +307,7 @@ public class ScormAPIMapper implements Mapper, ScormAPICallback, Serializable {
 		String apiCallParamOne = request.getParameter("apiCallParamOne");
 		String apiCallParamTwo = request.getParameter("apiCallParamTwo");
 		
-		if(log.isDebug()) {
+		if(log.isDebugEnabled()) {
 			log.debug("scorm api request by user:"+ identity.getName() +": " + apiCall + "('" + apiCallParamOne + "' , '" + apiCallParamTwo + "')");
 		}
 

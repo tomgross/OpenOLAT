@@ -39,6 +39,7 @@ import org.olat.core.gui.components.form.flexible.impl.elements.table.FlexiColum
 import org.olat.core.gui.components.form.flexible.impl.elements.table.FlexiTableColumnModel;
 import org.olat.core.gui.components.form.flexible.impl.elements.table.FlexiTableComponentDelegate;
 import org.olat.core.gui.components.form.flexible.impl.elements.table.FlexiTableDataModelFactory;
+import org.olat.core.gui.components.form.flexible.impl.elements.table.FlexiTableFilterEvent;
 import org.olat.core.gui.components.form.flexible.impl.elements.table.FlexiTableRendererType;
 import org.olat.core.gui.components.form.flexible.impl.elements.table.FlexiTableSearchEvent;
 import org.olat.core.gui.components.form.flexible.impl.elements.table.SelectionEvent;
@@ -73,6 +74,9 @@ import org.olat.repository.model.SearchMyRepositoryEntryViewParams;
 import org.olat.repository.model.SearchMyRepositoryEntryViewParams.Filter;
 import org.olat.repository.model.SearchMyRepositoryEntryViewParams.OrderBy;
 import org.olat.repository.ui.list.RepositoryEntryRow.Cols;
+import org.olat.repository.ui.RepositoryEntryImageMapper;
+import org.olat.repository.ui.author.TypeRenderer;
+import org.olat.repository.ui.list.RepositoryEntryDataModel.Cols;
 import org.olat.util.logging.activity.LoggingResourceable;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.config.BeanDefinition;
@@ -198,7 +202,8 @@ public class RepositoryEntryListController extends FormBasicController
 		if(!guestOnly) {
 			columnsModel.addFlexiColumnModel(new DefaultFlexiColumnModel(Cols.mark.i18nKey(), Cols.mark.ordinal(), true, OrderBy.favorit.name()));
 		}
-
+		columnsModel.addFlexiColumnModel(new DefaultFlexiColumnModel(true, Cols.type.i18nKey(), Cols.type.ordinal(), true, OrderBy.type.name(),
+				FlexiColumnModel.ALIGNMENT_LEFT, new TypeRenderer()));
 		columnsModel.addFlexiColumnModel(new DefaultFlexiColumnModel(Cols.displayName.i18nKey(), Cols.select.ordinal(),
 				true, OrderBy.displayname.name()));
 		if(repositoryModule.isManagedRepositoryEntries()) {
@@ -246,8 +251,9 @@ public class RepositoryEntryListController extends FormBasicController
 
 		initFilters(tableEl);
 		initSorters(tableEl);
-
-		tableEl.setAndLoadPersistedPreferences(ureq, "re-list-" + name);
+		
+		tableEl.setAndLoadPersistedPreferences(ureq, "re-list-v2-".concat(name));
+		loadFilterPreferences(ureq);
 	}
 
 	/**
@@ -258,6 +264,7 @@ public class RepositoryEntryListController extends FormBasicController
 		List<FlexiTableFilter> filters = new ArrayList<>(16);
 		filters.add(new FlexiTableFilter(translate("filter.show.all"), Filter.showAll.name(), true));
 		filters.add(FlexiTableFilter.SPACER);
+		filters.add(new FlexiTableFilter(translate("filter.only.courses"), Filter.onlyCourses.name()));
 		filters.add(new FlexiTableFilter(translate("filter.current.courses"), Filter.currentCourses.name()));
 		filters.add(new FlexiTableFilter(translate("filter.upcoming.courses"), Filter.upcomingCourses.name()));
 		filters.add(new FlexiTableFilter(translate("filter.old.courses"), Filter.oldCourses.name()));
@@ -300,6 +307,22 @@ public class RepositoryEntryListController extends FormBasicController
 		// OLATNG-244 Change default sorting to creation date
 		options.setDefaultOrderBy(new SortKey(OrderBy.creationDate.name(), false));
 		tableElement.setSortSettings(options);
+	}
+	
+	private void loadFilterPreferences(UserRequest ureq) {
+		FilterPreferences prefs = (FilterPreferences)ureq.getUserSession().getGuiPreferences()
+			.get(RepositoryEntryListController.class, "rev-filters-".concat(name));
+		if(prefs != null && prefs.getSelectedFilters() != null) {
+			for(String selectedFilter:prefs.getSelectedFilters()) {
+				tableEl.setSelectedFilterKey(selectedFilter);
+			}
+		}
+	}
+	
+	private void saveFilterPreferences(UserRequest ureq, List<FlexiTableFilter> filters) {
+		ureq.getUserSession().getGuiPreferences()
+		.putAndSave(RepositoryEntryListController.class, "rev-filters-".concat(name),
+				FilterPreferences.valueOf(filters));
 	}
 
 	@Override
@@ -380,6 +403,9 @@ public class RepositoryEntryListController extends FormBasicController
 				RepositoryEntryListState state = new RepositoryEntryListState();
 				state.setTableState(tableEl.getStateEntry());
 				addToHistory(ureq, state);
+			} else if(event instanceof FlexiTableFilterEvent) {
+				FlexiTableFilterEvent ftfe = (FlexiTableFilterEvent)event;
+				saveFilterPreferences(ureq, ftfe.getFilters());
 			}
 		}
 		super.formInnerEvent(ureq, source, event);
@@ -415,7 +441,7 @@ public class RepositoryEntryListController extends FormBasicController
 				String rowKeyStr = ureq.getParameter("select_row");
 				if(StringHelper.isLong(rowKeyStr)) {
 					try {
-						Long rowKey = new Long(rowKeyStr);
+						Long rowKey = Long.valueOf(rowKeyStr);
 						List<RepositoryEntryRow> rows = model.getObjects();
 						for(RepositoryEntryRow row:rows) {
 							if(row != null && rowKey.equals(row.getKey())) {
@@ -506,6 +532,7 @@ public class RepositoryEntryListController extends FormBasicController
 		searchParams.setAuthor(se.getAuthor());
 		searchParams.setText(se.getDisplayname());
 		searchParams.setMembershipMandatory(se.isMembershipMandatory());
+		searchParams.setClosed(se.getClosed());
 		tableEl.reset(true, true, true);
 		
 		RepositoryEntryListState state = new RepositoryEntryListState();
@@ -514,7 +541,7 @@ public class RepositoryEntryListController extends FormBasicController
 		addToHistory(ureq, state);
 	}
 	
-	protected void doFilter(List<Filter> filters) {
+	private void doFilter(List<Filter> filters) {	
 		dataSource.setFilters(filters);
 		tableEl.reset();
 	}
@@ -598,8 +625,94 @@ public class RepositoryEntryListController extends FormBasicController
 	}
 
 	@Override
+	public void forgeMarkLink(RepositoryEntryRow row) {
+		if(!guestOnly) {
+			FormLink markLink = uifactory.addFormLink("mark_" + row.getKey(), "mark", "", null, null, Link.NONTRANSLATED);
+			markLink.setIconLeftCSS(row.isMarked() ? Mark.MARK_CSS_LARGE : Mark.MARK_ADD_CSS_LARGE);
+			markLink.setTitle(translate(row.isMarked() ? "details.bookmark.remove" : "details.bookmark"));
+			markLink.setUserObject(row);
+			row.setMarkLink(markLink);
+		}
+	}
+	
+	@Override
+	public void forgeSelectLink(RepositoryEntryRow row) {
+		String displayName = StringHelper.escapeHtml(row.getDisplayName());
+		FormLink selectLink = uifactory.addFormLink("select_" + row.getKey(), "select", displayName, null, null, Link.NONTRANSLATED);
+		if(row.isClosed()) {
+			selectLink.setIconLeftCSS("o_icon o_CourseModule_icon_closed");
+		}
+		selectLink.setUserObject(row);
+		row.setSelectLink(selectLink);
+	}
+
+	@Override
+	public void forgeStartLink(RepositoryEntryRow row) {
+		String label;
+		String iconCss;
+		if(row.isBookable() && row.getAccessTypes() != null && !row.getAccessTypes().isEmpty() && !row.isMember()) {
+			label = "book";
+			iconCss = "o_book btn-block";
+		} else {
+			label = "start";
+			iconCss = "o_start btn-block";
+		}
+		FormLink startLink = uifactory.addFormLink("start_" + row.getKey(), "start", label, null, null, Link.LINK);
+		startLink.setUserObject(row);
+		startLink.setCustomEnabledLinkCSS(iconCss);
+		startLink.setIconRightCSS("o_icon o_icon_start");
+		row.setStartLink(startLink);
+	}	
+	
+	@Override
+	public void forgeDetails(RepositoryEntryRow row) {
+		FormLink detailsLink = uifactory.addFormLink("details_" + row.getKey(), "details", "details", null, null, Link.LINK);
+		detailsLink.setCustomEnabledLinkCSS("o_details");
+		detailsLink.setUserObject(row);
+		row.setDetailsLink(detailsLink);
+	}
+
+	@Override
 	public Iterable<Component> getComponents(int row, Object rowObject) {
 		return null;
+	}
+
+	@Override
+	public void forgeRatings(RepositoryEntryRow row) {
+		if(repositoryModule.isRatingEnabled()) {
+			if(guestOnly) {
+				Double averageRating = row.getAverageRating();
+				float averageRatingValue = averageRating == null ? 0f : averageRating.floatValue();
+				RatingFormItem ratingCmp = uifactory.addRatingItem("rat_" + row.getKey(), null,  averageRatingValue, 5, false, null);
+				row.setRatingFormItem(ratingCmp);
+				ratingCmp.setUserObject(row);
+			} else {
+				Integer myRating = row.getMyRating();
+				Double averageRating = row.getAverageRating();
+				long numOfRatings = row.getNumOfRatings();
+		
+				float ratingValue = myRating == null ? 0f : myRating.floatValue();
+				float averageRatingValue = averageRating == null ? 0f : averageRating.floatValue();
+				RatingWithAverageFormItem ratingCmp
+					= new RatingWithAverageFormItem("rat_" + row.getKey(), ratingValue, averageRatingValue, 5, numOfRatings);
+				row.setRatingFormItem(ratingCmp);
+				ratingCmp.setUserObject(row);
+			}
+		}
+	}
+
+	@Override
+	public void forgeComments(RepositoryEntryRow row) {
+		if(repositoryModule.isCommentEnabled()) {
+			long numOfComments = row.getNumOfComments();
+			String title = "(" + numOfComments + ")";
+			FormLink commentsLink = uifactory.addFormLink("comments_" + row.getKey(), "comments", title, null, null, Link.NONTRANSLATED);
+			commentsLink.setUserObject(row);
+			String css = numOfComments > 0 ? "o_icon o_icon_comments o_icon-lg" : "o_icon o_icon_comments_none o_icon-lg";
+			commentsLink.setCustomEnabledLinkCSS("o_comments");
+			commentsLink.setIconLeftCSS(css);
+			row.setCommentsLink(commentsLink);
+		}
 	}
 
 	@Override

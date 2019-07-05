@@ -30,15 +30,15 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import org.olat.basesecurity.BaseSecurityManager;
 import org.olat.basesecurity.GroupRoles;
 import org.olat.basesecurity.SecurityGroup;
+import org.olat.basesecurity.manager.SecurityGroupDAO;
 import org.olat.commons.lifecycle.LifeCycleEntry;
 import org.olat.commons.lifecycle.LifeCycleManager;
 import org.olat.core.CoreSpringFactory;
 import org.olat.core.commons.persistence.PersistentObject;
 import org.olat.core.id.Identity;
-import org.olat.core.logging.OLog;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
 import org.olat.group.BusinessGroup;
 import org.olat.group.BusinessGroupService;
@@ -52,7 +52,7 @@ import org.olat.resource.accesscontrol.manager.ACReservationDAO;
 
 public class ProjectImpl extends PersistentObject implements Project {
 
-	private static final OLog log = Tracing.createLoggerFor(ProjectImpl.class);
+	private static final Logger log = Tracing.createLoggerFor(ProjectImpl.class);
 	
 	private static final long serialVersionUID = 1L;
 
@@ -93,7 +93,7 @@ public class ProjectImpl extends PersistentObject implements Project {
 	 * @param attachmentFileName
 	 * @param projectBroker
 	 */
-	public ProjectImpl(String title, String description, BusinessGroup projectGroup, ProjectBroker projectBroker) {
+	public ProjectImpl(String title, String description, BusinessGroup projectGroup, ProjectBroker projectBroker, SecurityGroup candidateGroup) {
 		this.title = title;
 		this.description = description;
 		this.state = Project.STATE_NOT_ASSIGNED;
@@ -102,7 +102,7 @@ public class ProjectImpl extends PersistentObject implements Project {
 		this.attachmentFileName = "";
 		this.mailNotificationEnabled = true;
 		this.projectBroker = projectBroker;
-		this.candidateGroup = BaseSecurityManager.getInstance().createAndPersistSecurityGroup();
+		this.candidateGroup = candidateGroup;
 	}
 
 
@@ -133,29 +133,35 @@ public class ProjectImpl extends PersistentObject implements Project {
 	 * 
 	 * @return List of Identity objects
 	 */
+	@Override
 	public SecurityGroup getCandidateGroup() {
 		return candidateGroup;
 	}
 
+	@Override
 	public String getState() {
 		return state;
 	}
 
+	@Override
 	public int getSelectedPlaces() {
 		int numOfParticipants = CoreSpringFactory.getImpl(BusinessGroupService.class).countMembers(getProjectGroup(), GroupRoles.participant.name());
-		int numOfCandidates = BaseSecurityManager.getInstance().countIdentitiesOfSecurityGroup(getCandidateGroup());
+		int numOfCandidates = CoreSpringFactory.getImpl(SecurityGroupDAO.class).countIdentitiesOfSecurityGroup(getCandidateGroup());
 		int numOfReservations = CoreSpringFactory.getImpl(ACReservationDAO.class).countReservations(getProjectGroup().getResource());
 		return numOfParticipants + numOfCandidates + numOfReservations;                     
 	}
 
+	@Override
 	public int getMaxMembers() {
 		return maxMembers;
 	}
-	
+
+	@Override
 	public BusinessGroup getProjectGroup() {
 		return projectGroup;
 	}	
-	
+
+	@Override
 	public ProjectBroker getProjectBroker() {
 		return projectBroker;
 	}
@@ -289,13 +295,13 @@ public class ProjectImpl extends PersistentObject implements Project {
 			lifeCycleManager.markTimestampFor(projectEvent.getStartDate(), projectEvent.getEventType().toString(), EVENT_START);
 		} else {
 			lifeCycleManager.deleteTimestampFor(projectEvent.getEventType().toString(), EVENT_START);
-			log.debug("delete timestamp for " + projectEvent.getEventType().toString(), EVENT_START);
+			log.debug(EVENT_START + " delete timestamp for " + projectEvent.getEventType());
 		}
 		if (projectEvent.getEndDate() != null) {
 			lifeCycleManager.markTimestampFor(projectEvent.getEndDate(), projectEvent.getEventType().toString(), EVENT_END);
 		} else {
 			lifeCycleManager.deleteTimestampFor(projectEvent.getEventType().toString(), EVENT_END);
-			log.debug("delete timestamp for " + projectEvent.getEventType().toString(), EVENT_END);
+			log.debug(EVENT_END + "delete timestamp for " + projectEvent.getEventType());
 		}
 
 	}

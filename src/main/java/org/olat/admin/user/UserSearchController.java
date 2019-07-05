@@ -25,19 +25,21 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import org.olat.basesecurity.BaseSecurityManager;
+import org.olat.basesecurity.BaseSecurity;
 import org.olat.basesecurity.BaseSecurityModule;
+import org.olat.basesecurity.IdentityPowerSearchQueries;
+import org.olat.basesecurity.OrganisationRoles;
+import org.olat.basesecurity.OrganisationService;
+import org.olat.basesecurity.SearchIdentityParams;
 import org.olat.basesecurity.events.MultiIdentityChosenEvent;
 import org.olat.basesecurity.events.SingleIdentityChosenEvent;
-import org.olat.core.CoreSpringFactory;
 import org.olat.core.gui.UserRequest;
-import org.olat.core.gui.Windows;
 import org.olat.core.gui.components.Component;
 import org.olat.core.gui.components.form.flexible.FormItem;
 import org.olat.core.gui.components.link.Link;
 import org.olat.core.gui.components.link.LinkFactory;
-import org.olat.core.gui.components.panel.StackedPanel;
 import org.olat.core.gui.components.panel.SimpleStackedPanel;
+import org.olat.core.gui.components.panel.StackedPanel;
 import org.olat.core.gui.components.table.StaticColumnDescriptor;
 import org.olat.core.gui.components.table.Table;
 import org.olat.core.gui.components.table.TableController;
@@ -54,11 +56,14 @@ import org.olat.core.gui.control.generic.ajax.autocompletion.EntriesChosenEvent;
 import org.olat.core.gui.control.generic.ajax.autocompletion.ListProvider;
 import org.olat.core.gui.translator.Translator;
 import org.olat.core.id.Identity;
+import org.olat.core.id.Organisation;
 import org.olat.core.id.Roles;
 import org.olat.core.util.StringHelper;
+import org.olat.core.util.UserSession;
 import org.olat.core.util.Util;
 import org.olat.user.UserManager;
 import org.olat.user.propertyhandlers.UserPropertyHandler;
+import org.springframework.beans.factory.annotation.Autowired;
 
 /**
  * Initial Date:  Jul 29, 2003
@@ -92,12 +97,15 @@ import org.olat.user.propertyhandlers.UserPropertyHandler;
  *         select multiple identities from within the search results.
  */
 public class UserSearchController extends BasicController {
-	// Needs PACKAGE and VELOCITY_ROOT because DeletableUserSearchController extends UserSearchController and re-use translations
+	// Needs PACKAGE and VELOCITY_ROOT because DeletableUserSearchController extends AddUserSearchController and re-use translations
 	private static final String PACKAGE = UserSearchController.class.getPackage().getName();
 	private static final String VELOCITY_ROOT = Util.getPackageVelocityRoot(PACKAGE);
 	
 	private static final String ACTION_SINGLESELECT_CHOOSE = "ssc";
 	private static final String ACTION_MULTISELECT_CHOOSE = "msc";
+	
+	public static final String ACTION_KEY_CHOOSE = "action.choose";
+	public static final String ACTION_KEY_CHOOSE_FINISH = "action.choose.finish";
 	
 	private VelocityContainer myContent;
 	private StackedPanel searchPanel;
@@ -108,20 +116,23 @@ public class UserSearchController extends BasicController {
 	private List<Identity> foundIdentities = new ArrayList<>();
 	private boolean useMultiSelect = false;
 	private Object userObject;
+	public final List<Organisation> searchableOrganisations;
 	
 	private AutoCompleterController autocompleterC;
 	private String actionKeyChoose;
 	private boolean isAdministrativeUser;
 	private Link backLink;
 	
-	private final BaseSecurityModule securityModule;
-
-	public static final String ACTION_KEY_CHOOSE = "action.choose";
-	public static final String ACTION_KEY_CHOOSE_FINISH = "action.choose.finish";
-	
+	@Autowired
+	protected BaseSecurity securityManager;
+	@Autowired
+	protected BaseSecurityModule securityModule;
+	@Autowired
+	protected OrganisationService organisationService;
+	@Autowired
+	private IdentityPowerSearchQueries identitySearchQueries;
 	
 	/**
-	 * fxdiff: FXOLAT-250   we need standard-constructor for use in genericMainController
 	 * 
 	 * @param ureq
 	 * @param wControl
@@ -164,8 +175,7 @@ public class UserSearchController extends BasicController {
 		super(ureq, wControl);
 		this.useMultiSelect = userMultiSelect;
 		this.actionKeyChoose = ACTION_KEY_CHOOSE;
-		securityModule = CoreSpringFactory.getImpl(BaseSecurityModule.class);
-	  // Needs PACKAGE and VELOCITY_ROOT because DeletableUserSearchController extends UserSearchController and re-use translations
+	  // Needs PACKAGE and VELOCITY_ROOT because DeletableUserSearchController extends AddUserSearchController and re-use translations
 		Translator pT = UserManager.getInstance().getPropertyHandlerTranslator(Util.createPackageTranslator(UserSearchController.class, ureq.getLocale()) );	
 		myContent = new VelocityContainer("olatusersearch", VELOCITY_ROOT + "/usersearch.html", pT, this);
 		backLink = LinkFactory.createButton("btn.back", myContent, this);
@@ -174,13 +184,11 @@ public class UserSearchController extends BasicController {
 		searchPanel.addListener(this);
 		myContent.put("usersearchPanel", searchPanel);
 
-		if (ureq.getUserSession()==null) {
-			logError("UserSearchController<init>: session is null!", null);
-		} else if (ureq.getUserSession().getRoles()==null) {
-			logError("UserSearchController<init>: roles is null!", null);
-		}
+		UserSession usess = ureq.getUserSession();
+		searchableOrganisations = organisationService.getOrganisations(getIdentity(), usess.getRoles(),
+				OrganisationRoles.valuesWithoutGuestAndInvitee());
 		
-		Roles roles = ureq.getUserSession().getRoles();
+		Roles roles = usess.getRoles();
 		isAdministrativeUser = securityModule.isUserAllowedAdminProps(roles);
 		searchform = new UserSearchForm(ureq, wControl, isAdministrativeUser, cancelbutton, allowReturnKey);
 		listenTo(searchform);
@@ -190,10 +198,9 @@ public class UserSearchController extends BasicController {
 		myContent.contextPut("showButton","false");
 		
 		boolean autoCompleteAllowed = securityModule.isUserAllowedAutoComplete(roles);
-		boolean ajax = Windows.getWindows(ureq).getWindowManager().isAjaxEnabled();
-		if (ajax && autoCompleteAllowed) {
+		if (autoCompleteAllowed) {
 			// insert a autocompleter search
-			ListProvider provider = new UserSearchListProvider();
+			ListProvider provider = new UserSearchListProvider(searchableOrganisations);
 			autocompleterC = new AutoCompleterController(ureq, getWindowControl(), provider, null, isAdministrativeUser, 60, 3, null);
 			listenTo(autocompleterC);
 			myContent.put("autocompletionsearch", autocompleterC.getInitialComponent());
@@ -215,6 +222,7 @@ public class UserSearchController extends BasicController {
 		this.userObject = userObject;
 	}
 
+	@Override
 	public void event(UserRequest ureq, Component source, Event event) {
 		if (source == backLink) {		
 			myContent.contextPut("noList","false");			
@@ -223,10 +231,7 @@ public class UserSearchController extends BasicController {
 		} 
 	}
 
-	/**
-	 * @see org.olat.core.gui.control.DefaultController#event(org.olat.core.gui.UserRequest,
-	 *      org.olat.core.gui.control.Controller, org.olat.core.gui.control.Event)
-	 */
+	@Override
 	public void event(UserRequest ureq, Controller source, Event event) {
 		if (source == tableCtr) {
 			if (event.getCommand().equals(Table.COMMANDLINK_ROWACTION_CLICKED)) {
@@ -250,7 +255,7 @@ public class UserSearchController extends BasicController {
 				EntriesChosenEvent ece = (EntriesChosenEvent)event;
 				List<String> res = ece.getEntries();
 				// if we get the event, we have a result or an incorrect selection see OLAT-5114 -> check for empty
-				String mySel = res.isEmpty() ? null : (String) res.get(0);
+				String mySel = res.isEmpty() ? null : res.get(0);
 				if (( mySel == null) || mySel.trim().equals("")) {
 					getWindowControl().setWarning(translate("error.search.form.notempty"));
 					return;
@@ -259,7 +264,7 @@ public class UserSearchController extends BasicController {
 				try {
 					key = Long.valueOf(mySel);				
 					if (key > 0) {
-						Identity chosenIdent = BaseSecurityManager.getInstance().loadIdentityByKey(key);
+						Identity chosenIdent = securityManager.loadIdentityByKey(key);
 						// No need to check for null, exception is thrown when identity does not exist which really 
 						// should not happen at all. 
 						// Tell that an identity has been chosen
@@ -273,62 +278,70 @@ public class UserSearchController extends BasicController {
 		} else if (source == searchform) {
 			if (event == Event.DONE_EVENT) {
 				// form validation was ok
-
-				String login = searchform.login.getValue();
-				// build user fields search map
-				Map<String, String> userPropertiesSearch = new HashMap<String, String>();				
-				for (UserPropertyHandler userPropertyHandler : searchform.userPropertyHandlers) {
-					if (userPropertyHandler == null) continue;
-					FormItem ui = searchform.propFormItems.get(userPropertyHandler.getName());
-					String uiValue = userPropertyHandler.getStringValue(ui);
-					if (StringHelper.containsNonWhitespace(uiValue)) {
-						userPropertiesSearch.put(userPropertyHandler.getName(), uiValue);
-						getLogger().info("Search property:" + userPropertyHandler.getName() + "=" + uiValue);
-					}
-				}
-				if (userPropertiesSearch.isEmpty()) userPropertiesSearch = null;
-				
-				tableCtr = new TableController(tableConfig, ureq, getWindowControl(), myContent.getTranslator());
-				listenTo(tableCtr);
-				
-				List<Identity> users = searchUsers(login,	userPropertiesSearch, true);
-				int maxResults = securityModule.getUserSearchMaxResultsValue();
-				if(maxResults > 0 && users.size() > maxResults) {
-					users = users.subList(0, maxResults);
-					showWarning("error.search.maxResults", Integer.toString(maxResults));
-				}
-				if (!users.isEmpty()) {
-					tdm = new UserTableDataModel(users, ureq.getLocale(), isAdministrativeUser);
-					// add the data column descriptors
-					tdm.addColumnDescriptors(tableCtr, null);
-					// add the action columns
-					if (useMultiSelect) {
-						// add multiselect action
-						tableCtr.addMultiSelectAction(this.actionKeyChoose, ACTION_MULTISELECT_CHOOSE);
-					} else {
-						// add single column selec action
-						tableCtr.addColumnDescriptor(new StaticColumnDescriptor(ACTION_SINGLESELECT_CHOOSE, "table.header.action", myContent
-								.getTranslator().translate("action.choose")));
-					}
-					tableCtr.setTableDataModel(tdm);
-					tableCtr.setMultiSelect(useMultiSelect);
-					searchPanel.pushContent(tableCtr.getInitialComponent());
-					myContent.contextPut("showButton","true");
-				} else {
-					getWindowControl().setInfo(translate("error.no.user.found"));
-				}
+				doSearch(ureq);
 			} else if (event == Event.CANCELLED_EVENT) {
 				fireEvent(ureq, Event.CANCELLED_EVENT);
 			}
 		}
-		
 	}
 	
 	/**
 	 * @see org.olat.core.gui.control.DefaultController#doDispose(boolean)
 	 */
+	@Override
 	protected void doDispose() {
 		// Child controllers auto-disposed by basic controller
+	}
+	
+	private void doSearch(UserRequest ureq) {
+		String login = searchform.login.getValue();
+		// build user fields search map
+		Map<String, String> userPropertiesSearch = new HashMap<>();				
+		for (UserPropertyHandler userPropertyHandler : searchform.userPropertyHandlers) {
+			if (userPropertyHandler == null) continue;
+			FormItem ui = searchform.propFormItems.get(userPropertyHandler.getName());
+			String uiValue = userPropertyHandler.getStringValue(ui);
+			if(userPropertyHandler.getName().startsWith("genericCheckboxProperty")) {
+				if(!"false".equals(uiValue)) {
+					userPropertiesSearch.put(userPropertyHandler.getName(), uiValue);
+				}
+			} else if (StringHelper.containsNonWhitespace(uiValue)) {
+				userPropertiesSearch.put(userPropertyHandler.getName(), uiValue);
+			}
+		}
+		if (userPropertiesSearch.isEmpty()) {
+			userPropertiesSearch = null;
+		}
+		
+		tableCtr = new TableController(tableConfig, ureq, getWindowControl(), myContent.getTranslator());
+		listenTo(tableCtr);
+		
+		List<Identity> users = searchUsers(login, userPropertiesSearch, true);
+		int maxResults = securityModule.getUserSearchMaxResultsValue();
+		if(maxResults > 0 && users.size() > maxResults) {
+			users = users.subList(0, maxResults);
+			showWarning("error.search.maxResults", Integer.toString(maxResults));
+		}
+		if (!users.isEmpty()) {
+			tdm = new UserTableDataModel(users, getLocale(), isAdministrativeUser);
+			// add the data column descriptors
+			tdm.addColumnDescriptors(tableCtr, null);
+			// add the action columns
+			if (useMultiSelect) {
+				// add multiselect action
+				tableCtr.addMultiSelectAction(this.actionKeyChoose, ACTION_MULTISELECT_CHOOSE);
+			} else {
+				// add single column selec action
+				tableCtr.addColumnDescriptor(new StaticColumnDescriptor(ACTION_SINGLESELECT_CHOOSE, "table.header.action", myContent
+						.getTranslator().translate("action.choose")));
+			}
+			tableCtr.setTableDataModel(tdm);
+			tableCtr.setMultiSelect(useMultiSelect);
+			searchPanel.pushContent(tableCtr.getInitialComponent());
+			myContent.contextPut("showButton","true");
+		} else {
+			getWindowControl().setInfo(translate("error.no.user.found"));
+		}
 	}
 
 	/**
@@ -340,8 +353,9 @@ public class UserSearchController extends BasicController {
 	protected List<Identity> searchUsers(String login, Map<String, String> userPropertiesSearch, boolean userPropertiesAsIntersectionSearch) {
 		int maxResults = securityModule.getUserSearchMaxResultsValue() > 0 ? securityModule.getUserSearchMaxResultsValue() + 1 : -1;
 		login = (login.equals("") ? null : login);
-		return BaseSecurityManager.getInstance().getVisibleIdentitiesByPowerSearch(login ,
-			userPropertiesSearch, userPropertiesAsIntersectionSearch,	// in normal search fields are intersected
-			null, null, null, null, null, 0, maxResults);
+		SearchIdentityParams params = new SearchIdentityParams(login, userPropertiesSearch, userPropertiesAsIntersectionSearch, null, 
+				null, null, null, null, null, Identity.STATUS_VISIBLE_LIMIT);
+		params.setOrganisations(searchableOrganisations);
+		return identitySearchQueries.getIdentitiesByPowerSearch(params, 0, maxResults);
 	}
 }

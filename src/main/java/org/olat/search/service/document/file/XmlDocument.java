@@ -28,13 +28,13 @@ package org.olat.search.service.document.file;
 import java.io.IOException;
 import java.io.InputStream;
 
+import org.apache.logging.log4j.Logger;
 import org.apache.lucene.document.Document;
 import org.olat.core.gui.util.CSSHelper;
-import org.olat.core.logging.OLog;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.FileUtils;
-import org.olat.core.util.filter.impl.NekoHTMLFilter;
-import org.olat.core.util.filter.impl.NekoHTMLFilter.NekoContent;
+import org.olat.core.util.filter.impl.HtmlFilter;
+import org.olat.core.util.filter.impl.HtmlFilter.HtmlContent;
 import org.olat.core.util.vfs.VFSLeaf;
 import org.olat.search.service.SearchResourceContext;
 
@@ -44,7 +44,7 @@ import org.olat.search.service.SearchResourceContext;
  */
 public class XmlDocument extends FileDocument {
 	private static final long serialVersionUID = -5486191227086694167L;
-	private static final OLog log = Tracing.createLoggerFor(XmlDocument.class);
+	private static final Logger log = Tracing.createLoggerFor(XmlDocument.class);
 
 	public static final String FILE_TYPE = "type.file.html";
 
@@ -57,18 +57,17 @@ public class XmlDocument extends FileDocument {
     htmlDocument.init(leafResourceContext,leaf);
     htmlDocument.setFileType(FILE_TYPE);
 		htmlDocument.setCssIcon(CSSHelper.createFiletypeIconCssClassFor(leaf.getName()));
-		if (log.isDebug() ) log.debug(htmlDocument.toString());
+		if (log.isDebugEnabled() ) log.debug(htmlDocument.toString());
 		return htmlDocument.getLuceneDocument();
 	}
 	
-	//fxdiff FXOLAT-97: index run in infinite loop
 	protected FileContent readContent(VFSLeaf leaf) throws IOException {
 		InputStream is = leaf.getInputStream();
     // Remove all HTML and &nbsp; Tags
-    NekoContent output;
+		HtmlContent output;
 		try {
-			output = new NekoHTMLFilter().filter(is);
-	    if (log.isDebug() ) log.debug("HTML content without tags :" + output);
+			output = new HtmlFilter().filter(is);
+	    if (log.isDebugEnabled() ) log.debug("HTML content without tags :" + output);
 		} catch (Exception e) {
 			throw new IOException(e);
 		} finally {

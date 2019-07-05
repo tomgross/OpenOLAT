@@ -24,6 +24,7 @@ import java.util.List;
 
 import org.olat.core.id.Identity;
 import org.olat.core.id.Roles;
+import org.olat.modules.curriculum.CurriculumRef;
 import org.olat.repository.CatalogEntry;
 
 /**
@@ -48,7 +49,7 @@ public class SearchMyRepositoryEntryViewParams {
 	private List<Filter> filters;
 	private CatalogEntry parentEntry;
 	private List<String> resourceTypes;
-	private List<Long> repoEntryKeys;
+	private List<CurriculumRef> curriculums;
 
 	private String idAndRefs;
 	private String idRefsAndTitle;
@@ -77,12 +78,12 @@ public class SearchMyRepositoryEntryViewParams {
 		this.membershipMandatory = membershipMandatory;
 	}
 
-	public List<Long> getRepoEntryKeys() {
-		return repoEntryKeys;
+	public List<CurriculumRef> getCurriculums() {
+		return curriculums;
 	}
 
-	public void setRepoEntryKeys(List<Long> repoEntryKeys) {
-		this.repoEntryKeys = repoEntryKeys;
+	public void setCurriculums(List<CurriculumRef> curriculums) {
+		this.curriculums = curriculums;
 	}
 
 	public String getIdAndRefs() {
@@ -154,7 +155,7 @@ public class SearchMyRepositoryEntryViewParams {
 	}
 	
 	public boolean isResourceTypesDefined() {
-		return resourceTypes != null && resourceTypes.size() > 0;
+		return resourceTypes != null && !resourceTypes.isEmpty();
 	}
 
 	public List<String> getResourceTypes() {
@@ -167,7 +168,7 @@ public class SearchMyRepositoryEntryViewParams {
 	
 	public void addResourceTypes(String... types) {
 		if(this.resourceTypes == null) {
-			this.resourceTypes = new ArrayList<String>();
+			this.resourceTypes = new ArrayList<>();
 		}
 		if(types != null) {
 			for(String resourceType:types) {
@@ -222,10 +223,12 @@ public class SearchMyRepositoryEntryViewParams {
 		lifecycleSoftkey,
 		lifecycleStart,
 		lifecycleEnd,
+		type
 	}
 	
 	public enum Filter {
 		showAll,
+		onlyCourses,
 		currentCourses,
 		oldCourses,
 		upcomingCourses,

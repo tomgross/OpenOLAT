@@ -31,6 +31,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
 
+import org.apache.logging.log4j.Logger;
 import org.olat.core.commons.fullWebApp.LayoutMain3ColsController;
 import org.olat.core.gui.UserRequest;
 import org.olat.core.gui.components.Component;
@@ -68,7 +69,6 @@ import org.olat.core.gui.control.winmgr.JSCommand;
 import org.olat.core.id.OLATResourceable;
 import org.olat.core.id.context.BusinessControlFactory;
 import org.olat.core.id.context.ContextEntry;
-import org.olat.core.logging.OLog;
 import org.olat.core.logging.Tracing;
 import org.olat.core.logging.activity.ActionType;
 import org.olat.core.logging.activity.CourseLoggingAction;
@@ -92,7 +92,7 @@ import org.olat.course.CourseFactory;
 import org.olat.course.DisposedCourseRestartController;
 import org.olat.course.ICourse;
 import org.olat.course.assessment.AssessmentModeManager;
-import org.olat.course.editor.PublishStepCatalog.CategoryLabel;
+import org.olat.course.folder.CourseContainerOptions;
 import org.olat.course.groupsandrights.CourseGroupManager;
 import org.olat.course.nodes.CourseNode;
 import org.olat.course.nodes.CourseNodeConfiguration;
@@ -188,7 +188,7 @@ public class EditorMainController extends MainLayoutBasicController implements G
 	private final OLATResourceable ores;
 	private RepositoryEntry repoEntry;
 	
-	private static final OLog log = Tracing.createLoggerFor(EditorMainController.class);
+	private static final Logger log = Tracing.createLoggerFor(EditorMainController.class);
 	private final static String RELEASE_LOCK_AT_CATCH_EXCEPTION = "Must release course lock since an exception occured in " + EditorMainController.class;
 	
 	@Autowired
@@ -559,10 +559,6 @@ public class EditorMainController extends MainLayoutBasicController implements G
 		}
 	}
 
-	/**
-	 * @see org.olat.core.gui.control.DefaultController#event(org.olat.core.gui.UserRequest,
-	 *      org.olat.core.gui.control.Controller, org.olat.core.gui.control.Event)
-	 */
 	@Override
 	public void event(UserRequest ureq, Controller source, Event event) {
 		try {
@@ -580,6 +576,11 @@ public class EditorMainController extends MainLayoutBasicController implements G
 				euce.getCourseEditorEnv().validateCourse();
 				StatusDescription[] courseStatus = euce.getCourseEditorEnv().getCourseStatus();
 				updateCourseStatusMessages(ureq.getLocale(), courseStatus);
+				TreeNode node = menuTree.getSelectedNode();
+				if(node instanceof CourseEditorTreeNode) {
+					CourseEditorTreeNode cet = (CourseEditorTreeNode)node;
+					main.contextPut("courseNode", cet.getCourseNode());
+				}
 			}
 		} else if (source == statusCtr) {
 			if (event.getCommand().startsWith(NLS_START_HELP_WIZARD)) {
@@ -1074,7 +1075,7 @@ public class EditorMainController extends MainLayoutBasicController implements G
 		 * callback executed in case wizard is finished.
 		 */
 		StepRunnerCallback finish = new StepRunnerCallback(){
-			
+			@Override
 			public Step execute(UserRequest ureq1, WindowControl wControl1, StepsRunContext runContext) {
 				//all information to do now is within the runContext saved
 				boolean hasChanges = false;
@@ -1090,28 +1091,17 @@ public class EditorMainController extends MainLayoutBasicController implements G
 					}
 				}
 				
-				if (runContext.containsKey("changedaccess")) {
-					// there were changes made to the general course access
-					String newAccessStr = (String) runContext.get("changedaccess");
-					int newAccess;
-					boolean membersOnly = RepositoryEntry.MEMBERS_ONLY.equals(newAccessStr);
-					if(membersOnly) {
-						newAccess = RepositoryEntry.ACC_OWNERS;
-					} else {
-						newAccess = Integer.valueOf(newAccessStr);
-					}
-					
+				if (runContext.containsKey("accessAndProperties")) {
+					CourseAccessAndProperties accessAndProperties = (CourseAccessAndProperties) runContext.get("accessAndProperties");
 					// fires an EntryChangedEvent for repository entry notifying
 					// about modification.
-					publishManager.changeGeneralAccess(getIdentity(), newAccess, membersOnly);
-					hasChanges = true;
+					publishManager.changeAccessAndProperties(getIdentity(), accessAndProperties);
+					hasChanges = true;					
 				}
 				
-				if (runContext.containsKey("catalogChoice")) {
-					String choice = (String) runContext.get("catalogChoice");
-					@SuppressWarnings("unchecked")
-					List<CategoryLabel> categories = (List<CategoryLabel>)runContext.get("categories");
-					publishManager.publishToCatalog(choice, categories);
+				CourseCatalog courseCatalog = (CourseCatalog)runContext.get("categories");
+				if(courseCatalog != null) {
+					publishManager.publishToCatalog(courseCatalog.getChoiceValue(), courseCatalog.getCategoryLabels());
 				}
 				
 				if(publishEvents.getPostPublishingEvents().size() > 0) {
@@ -1142,7 +1132,7 @@ public class EditorMainController extends MainLayoutBasicController implements G
 		removeAsListenerAndDispose(multiSPChooserCtr);
 		removeAsListenerAndDispose(cmc);
 		
-		VFSContainer rootContainer = course.getCourseEnvironment().getCourseFolderContainer();
+		VFSContainer rootContainer = course.getCourseEnvironment().getCourseFolderContainer(CourseContainerOptions.withoutElements());
 		CourseEditorTreeNode selectedNode = (CourseEditorTreeNode)menuTree.getSelectedNode();
 		multiSPChooserCtr = new MultiSPController(ureq, getWindowControl(), rootContainer, ores, selectedNode);
 		listenTo(multiSPChooserCtr);

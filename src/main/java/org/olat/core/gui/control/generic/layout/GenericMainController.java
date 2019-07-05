@@ -35,7 +35,7 @@ import org.olat.core.gui.components.Component;
 import org.olat.core.gui.components.panel.Panel;
 import org.olat.core.gui.components.stack.BreadcrumbPanel;
 import org.olat.core.gui.components.stack.BreadcrumbPanelAware;
-import org.olat.core.gui.components.stack.BreadcrumbedStackedPanel;
+import org.olat.core.gui.components.stack.TooledStackedPanel;
 import org.olat.core.gui.components.tree.GenericTreeModel;
 import org.olat.core.gui.components.tree.GenericTreeNode;
 import org.olat.core.gui.components.tree.MenuTree;
@@ -86,8 +86,8 @@ public abstract class GenericMainController extends MainLayoutBasicController {
 
 	public GenericMainController(UserRequest ureq, WindowControl wControl) {
 		super(ureq, wControl);
-		nodesToAppend = new ArrayList<GenericTreeNode>();
-		nodesToPrepend = new ArrayList<GenericTreeNode>();
+		nodesToAppend = new ArrayList<>();
+		nodesToPrepend = new ArrayList<>();
 		className = this.getClass().getName();
 	}
 
@@ -123,7 +123,8 @@ public abstract class GenericMainController extends MainLayoutBasicController {
 		listenTo(columnLayoutCtr); // auto dispose later
 		
 		//create the stack
-		stackVC = new BreadcrumbedStackedPanel("genericStack", getTranslator(), this);
+		stackVC = new TooledStackedPanel("genericStack", getTranslator(), this);
+		((TooledStackedPanel)stackVC).setToolbarAutoEnabled(true);
 		stackVC.pushController("content", columnLayoutCtr);
 
 		putInitialPanel(stackVC);
@@ -207,7 +208,7 @@ public abstract class GenericMainController extends MainLayoutBasicController {
 		ExtManager extm = ExtManager.getInstance();
 		int j = 0;
 		GenericTreeNode gtnChild;
-		Map<GenericTreeNode, String> subMenuNodes = new LinkedHashMap<GenericTreeNode, String>();
+		Map<GenericTreeNode, String> subMenuNodes = new LinkedHashMap<>();
 		for (Extension anExt : extm.getExtensions()) {
 			// check for sites
 			ActionExtension ae = (ActionExtension) anExt.getExtensionFor(className, ureq);
@@ -248,7 +249,7 @@ public abstract class GenericMainController extends MainLayoutBasicController {
 
 					j++;
 				}else{
-					logInfo("found disabled GenericActionExtension for "+className+" ", ae.toString());
+					logInfo("found disabled GenericActionExtension for " + className);
 				}
 			}
 		}// loop over extensions
@@ -356,7 +357,6 @@ public abstract class GenericMainController extends MainLayoutBasicController {
 	 */
 	protected Controller createController(ActionExtension ae, UserRequest ureq) {
 		// default implementation for simple case where action extension.
-		// fxdiff BAKS-7 Resume function
 		WindowControl bwControl = getWindowControl();
 		if (olatMenuTree.getTreeModel() instanceof GenericTreeModel) {
 			if (ae instanceof Extension) {

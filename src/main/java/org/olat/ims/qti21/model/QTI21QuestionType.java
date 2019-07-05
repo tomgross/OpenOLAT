@@ -21,6 +21,7 @@ package org.olat.ims.qti21.model;
 
 import java.util.List;
 
+import org.olat.core.util.StringHelper;
 import org.olat.ims.qti21.QTI21Constants;
 import org.olat.modules.qpool.QuestionType;
 
@@ -50,6 +51,8 @@ public enum QTI21QuestionType {
 	mc(true, "mc", "o_mi_qtimc", QuestionType.MC),
 	kprim(true, "kprim", "o_mi_qtikprim", QuestionType.KPRIM),
 	match(true, "match", "o_mi_qtimatch", QuestionType.MATCH),
+	matchdraganddrop(true, "matchdraganddrop", "o_mi_qtimatch_draganddrop", QuestionType.MATCHDRAGANDDROP),
+	matchtruefalse(true, "matchtruefalse", "o_mi_qtimatch_truefalse", QuestionType.MATCHTRUEFALSE),
 	fib(true, "fib", "o_mi_qtifib", QuestionType.FIB),
 	numerical(true, "numerical", "o_mi_qtinumerical", QuestionType.NUMERICAL),
 	hotspot(true, "hotspot", "o_mi_qtihotspot", QuestionType.HOTSPOT),
@@ -57,7 +60,7 @@ public enum QTI21QuestionType {
 	upload(true, "upload", "o_mi_qtiupload", QuestionType.UPLOAD),
 	drawing(true, "drawing", "o_mi_qtidrawing", QuestionType.DRAWING),
 	hottext(true, "hottext", "o_mi_qtihottext", QuestionType.HOTTEXT),
-	unkown(false, null, "o_mi_qtiunkown", null);
+	unkown(false, "unkown", "o_mi_qtiunkown", null);
 	
 	private final String prefix;
 	private final boolean editor;
@@ -209,8 +212,14 @@ public enum QTI21QuestionType {
 			ResponseDeclaration responseDeclaration = item.getResponseDeclaration(interaction.getResponseIdentifier());
 			String responseIdentifier = responseDeclaration.getIdentifier().toString();
 			Cardinality cardinalty = responseDeclaration.getCardinality();
-			if(cardinalty.isMultiple()) {
-				if(responseIdentifier.startsWith("KPRIM_")) {
+			if(hasClass(interaction, QTI21Constants.CSS_MATCH_DRAG_AND_DROP)) {
+				return QTI21QuestionType.matchdraganddrop;
+			} else if(hasClass(interaction, QTI21Constants.CSS_MATCH_TRUE_FALSE)) {
+				return QTI21QuestionType.matchtruefalse;
+			} else if(cardinalty.isMultiple()) {
+				if(hasClass(interaction, QTI21Constants.CSS_MATCH_KPRIM)) {
+					return QTI21QuestionType.kprim;
+				} else if(responseIdentifier.startsWith("KPRIM_")) {
 					return QTI21QuestionType.kprim;
 				} else {
 					return QTI21QuestionType.match;
@@ -238,5 +247,28 @@ public enum QTI21QuestionType {
 		} else {
 			return QTI21QuestionType.unkown;
 		}
+	}
+	
+	public static final boolean hasClass(Interaction interaction, String cssClass) {
+		if(interaction == null || cssClass == null) return false;
+		
+		List<String> cssClasses = interaction.getClassAttr();
+		return cssClasses != null && cssClasses.size() > 0 && cssClasses.contains(cssClass);
+	}
+	
+	/**
+	 * 
+	 * @param val The value to identify
+	 * @return The question type if recognize or unkown
+	 */
+	public static final QTI21QuestionType safeValueOf(String val) {
+		if(StringHelper.containsNonWhitespace(val)) {
+			for(QTI21QuestionType type:values()) {
+				if(type.name().equals(val)) {
+					return type;
+				}
+			}
+		}
+		return QTI21QuestionType.unkown;
 	}
 }

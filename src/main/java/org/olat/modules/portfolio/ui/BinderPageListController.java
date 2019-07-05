@@ -27,9 +27,13 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import org.olat.core.commons.fullWebApp.LayoutMain3ColsController;
+import org.olat.core.commons.fullWebApp.popup.BaseFullWebappPopupLayoutFactory;
 import org.olat.core.commons.persistence.SortKey;
+import org.olat.core.commons.services.pdf.PdfModule;
 import org.olat.core.gui.UserRequest;
 import org.olat.core.gui.components.Component;
+import org.olat.core.gui.components.dropdown.Dropdown;
 import org.olat.core.gui.components.form.flexible.FormItem;
 import org.olat.core.gui.components.form.flexible.FormItemContainer;
 import org.olat.core.gui.components.form.flexible.elements.FlexiTableSortOptions;
@@ -41,17 +45,25 @@ import org.olat.core.gui.components.form.flexible.impl.elements.table.FlexiTable
 import org.olat.core.gui.components.form.flexible.impl.elements.table.SelectionEvent;
 import org.olat.core.gui.components.link.Link;
 import org.olat.core.gui.components.link.LinkFactory;
+import org.olat.core.gui.components.link.LinkPopupSettings;
+import org.olat.core.gui.components.stack.PopEvent;
 import org.olat.core.gui.components.stack.TooledStackedPanel;
 import org.olat.core.gui.components.stack.TooledStackedPanel.Align;
+import org.olat.core.gui.components.text.TextComponent;
+import org.olat.core.gui.components.text.TextFactory;
 import org.olat.core.gui.control.Controller;
 import org.olat.core.gui.control.Event;
 import org.olat.core.gui.control.WindowControl;
+import org.olat.core.gui.control.creator.ControllerCreator;
 import org.olat.core.gui.control.generic.closablewrapper.CloseableModalController;
+import org.olat.core.gui.control.generic.spacesaver.ToggleBoxController;
+import org.olat.core.gui.media.MediaResource;
+import org.olat.core.helpers.Settings;
 import org.olat.core.id.Identity;
 import org.olat.core.id.OLATResourceable;
 import org.olat.core.id.context.ContextEntry;
 import org.olat.core.id.context.StateEntry;
-import org.olat.core.logging.activity.ThreadLocalUserActivityLogger;
+import org.olat.core.util.CodeHelper;
 import org.olat.core.util.StringHelper;
 import org.olat.modules.portfolio.AssessmentSection;
 import org.olat.modules.portfolio.Assignment;
@@ -61,13 +73,17 @@ import org.olat.modules.portfolio.BinderSecurityCallback;
 import org.olat.modules.portfolio.Category;
 import org.olat.modules.portfolio.CategoryToElement;
 import org.olat.modules.portfolio.Page;
-import org.olat.modules.portfolio.PortfolioLoggingAction;
+import org.olat.modules.portfolio.PageUserInformations;
 import org.olat.modules.portfolio.PortfolioRoles;
 import org.olat.modules.portfolio.Section;
+import org.olat.modules.portfolio.model.ExtendedMediaRenderingHints;
 import org.olat.modules.portfolio.ui.component.TimelinePoint;
+import org.olat.modules.portfolio.ui.export.ExportBinderAsCPResource;
+import org.olat.modules.portfolio.ui.export.ExportBinderAsPDFResource;
 import org.olat.modules.portfolio.ui.model.PortfolioElementRow;
+import org.olat.modules.portfolio.ui.renderer.SharedPageStatusCellRenderer;
+import org.olat.repository.RepositoryEntry;
 import org.olat.user.UserManager;
-import org.olat.util.logging.activity.LoggingResourceable;
 import org.springframework.beans.factory.annotation.Autowired;
 
 /**
@@ -78,10 +94,13 @@ import org.springframework.beans.factory.annotation.Autowired;
  */
 public class BinderPageListController extends AbstractPageListController {
 	
-	private Link newSectionLink, newEntryLink, newAssignmentLink;
+	private Link newSectionLink, newEntryLink, newAssignmentLink,
+		exportBinderAsCpLink, exportBinderAsPdfLink, printLink;
 	private FormLink newSectionButton, previousSectionLink, nextSectionLink, showAllSectionsLink;
 	
 	private CloseableModalController cmc;
+	private TextComponent summaryComp;
+	private ToggleBoxController summaryCtrl;
 	private SectionEditController newSectionCtrl;
 	private PageMetadataEditController newPageCtrl;
 	private AssignmentEditController newAssignmentCtrl;
@@ -91,13 +110,27 @@ public class BinderPageListController extends AbstractPageListController {
 	private Section filteringSection;
 	
 	@Autowired
+	private PdfModule pdfModule;
+	@Autowired
 	private UserManager userManager;
 	
 	public BinderPageListController(UserRequest ureq, WindowControl wControl, TooledStackedPanel stackPanel,
 			BinderSecurityCallback secCallback, Binder binder, BinderConfiguration config) {
 		super(ureq, wControl, stackPanel, secCallback, config, "binder_pages", true);
 		this.binder = binder;
+		stackPanel.addListener(this);
 		owners = portfolioService.getMembers(binder, PortfolioRoles.owner.name());
+		
+		RepositoryEntry repoEntry = binder.getEntry();
+		if (repoEntry != null) {
+			flc.contextPut("referenceEntryName", repoEntry.getDisplayname());
+			String url = Settings.getServerContextPathURI() + "/url/RepositoryEntry/" + repoEntry.getKey();
+			flc.contextPut("referenceEntryUrl", url);
+		}
+		
+		summaryComp = TextFactory.createTextComponentFromString("summaryCmp" + CodeHelper.getRAMUniqueID(), "", "o_block_large_bottom", false, null);
+		summaryCtrl = new ToggleBoxController(ureq, wControl, getGuiPrefsKey(binder), translate("summary.open"),
+				translate("summary.close"), summaryComp);
 		
 		initForm(ureq);
 		loadModel(ureq, null);
@@ -109,7 +142,42 @@ public class BinderPageListController extends AbstractPageListController {
 	}
 
 	@Override
+	protected String getTimelineSwitchPreferencesName() {
+		return "binder-timeline-switch-" + binder.getKey();
+	}
+	
+	private String getGuiPrefsKey(OLATResourceable binderOres) {
+		return new StringBuilder()
+				.append(binderOres.getResourceableTypeName())
+				.append("::")
+				.append(binderOres.getResourceableId())
+				.toString();
+	}
+
+	@Override
 	public void initTools() {
+		if(secCallback.canExportBinder()) {
+			Dropdown exportTools = new Dropdown("export.binder", "export.binder", false, getTranslator());
+			exportTools.setElementCssClass("o_sel_pf_export_tools");
+			exportTools.setIconCSS("o_icon o_icon_download");
+			stackPanel.addTool(exportTools, Align.left);
+
+			exportBinderAsCpLink = LinkFactory.createToolLink("export.binder.cp", translate("export.binder.cp"), this);
+			exportBinderAsCpLink.setIconLeftCSS("o_icon o_icon_download");
+			exportTools.addComponent(exportBinderAsCpLink);
+			
+			if(pdfModule.isEnabled()) {
+				exportBinderAsPdfLink = LinkFactory.createToolLink("export.binder.pdf", translate("export.binder.pdf"), this);
+				exportBinderAsPdfLink.setIconLeftCSS("o_icon o_filetype_pdf");
+				exportTools.addComponent(exportBinderAsPdfLink);
+			}
+			
+			printLink = LinkFactory.createToolLink("export.binder.onepage", translate("export.binder.onepage"), this);
+			printLink.setIconLeftCSS("o_icon o_icon_print");
+			printLink.setPopup(new LinkPopupSettings(950, 750, "binder"));
+			exportTools.addComponent(printLink);
+		}
+		
 		if(secCallback.canAddSection()) {
 			newSectionLink = LinkFactory.createToolLink("new.section", translate("create.new.section"), this);
 			newSectionLink.setIconLeftCSS("o_icon o_icon-lg o_icon_new_portfolio");
@@ -117,7 +185,7 @@ public class BinderPageListController extends AbstractPageListController {
 			stackPanel.addTool(newSectionLink, Align.right);
 		}
 		
-		if(secCallback.canAddPage(null)) {
+		if(secCallback.canAddPage(null) || secCallback.canInstantianteBinderAssignment()) {
 			newEntryLink = LinkFactory.createToolLink("new.page", translate("create.new.page"), this);
 			newEntryLink.setIconLeftCSS("o_icon o_icon-lg o_icon_new_portfolio");
 			newEntryLink.setElementCssClass("o_sel_pf_new_entry");
@@ -186,6 +254,13 @@ public class BinderPageListController extends AbstractPageListController {
 
 	@Override
 	protected void loadModel(UserRequest ureq, String searchString) {
+		if (StringHelper.containsNonWhitespace(binder.getSummary())) {
+			summaryComp.setText(StringHelper.xssScan(binder.getSummary()));
+			flc.getFormItemComponent().put("summary", summaryCtrl.getInitialComponent());
+		} else {
+			flc.getFormItemComponent().remove("summary");
+		}
+		
 		List<Section> sections = portfolioService.getSections(binder);
 
 		List<CategoryToElement> categorizedElements = portfolioService.getCategorizedSectionsAndPages(binder);
@@ -206,12 +281,12 @@ public class BinderPageListController extends AbstractPageListController {
 		//assessment sections
 		List<AssessmentSection> assessmentSections = portfolioService.getAssessmentSections(binder, getIdentity());
 		Map<Section,AssessmentSection> sectionToAssessmentSectionMap = assessmentSections.stream()
-				.collect(Collectors.toMap(as -> as.getSection(), as -> as));
+				.collect(Collectors.toMap(AssessmentSection::getSection, as -> as));
 
 		List<PortfolioElementRow> rows = new ArrayList<>();
 
 		//assignments
-		List<Assignment> assignments = portfolioService.getAssignments(binder, searchString);
+		List<Assignment> assignments = portfolioService.getSectionsAssignments(binder, searchString);
 		Map<Section,List<Assignment>> sectionToAssignmentMap = new HashMap<>();
 		for(Assignment assignment:assignments) {
 			List<Assignment> assignmentList;
@@ -240,17 +315,29 @@ public class BinderPageListController extends AbstractPageListController {
 				}
 			}
 		}
+		
+		boolean userInfos = secCallback.canPageUserInfosStatus();
+		Map<Long,PageUserInformations> userInfosToPage = new HashMap<>();
+		rowVC.contextPut("userInfos", Boolean.valueOf(userInfos));
+		if(userInfos) {
+			rowVC.contextPut("userInfosRenderer", new SharedPageStatusCellRenderer(getTranslator()));
+			List<PageUserInformations> userInfoList = portfolioService.getPageUserInfos(binder, getIdentity());
+			for(PageUserInformations userInfo:userInfoList) {
+				userInfosToPage.put(userInfo.getPage().getKey(), userInfo);
+			}
+		}
 
 		List<Page> pages = portfolioService.getPages(binder, searchString);
 		for (Page page : pages) {
-			if(!secCallback.canViewElement(page)) {
+			boolean viewElement = secCallback.canViewElement(page);
+			boolean viewTitleElement = viewElement || secCallback.canViewTitleOfElement(page);
+			if(!viewTitleElement) {
 				continue;
 			}
 			
 			Section section = page.getSection();
-
 			PortfolioElementRow pageRow = forgePageRow(ureq, page, sectionToAssessmentSectionMap.get(section),
-					sectionToAssignmentMap.get(section), categorizedElementMap, numberOfCommentsMap);
+					sectionToAssignmentMap.get(section), categorizedElementMap, numberOfCommentsMap, viewElement);
 			rows.add(pageRow);
 			if(secCallback.canAddPage(section)) {
 				FormLink newEntryButton = uifactory.addFormLink("new.entry." + (++counter), "new.entry", "create.new.page", null, flc, Link.BUTTON);
@@ -266,13 +353,20 @@ public class BinderPageListController extends AbstractPageListController {
 				pageRow.setNewAssignmentLink(newAssignmentButton);
 			}
 			
+			if(userInfos) {
+				PageUserInformations infos = userInfosToPage.get(page.getKey());
+				if(infos != null) {
+					pageRow.setUserInfosStatus(infos.getStatus());
+				}
+			}
+			
 			if(section != null) {
 				Set<String> categories = sectionAggregatedCategoriesMap.get(section);
 				if(categories == null) {
 					categories = new HashSet<>();
 					sectionAggregatedCategoriesMap.put(section, categories);
 				}
-				if(pageRow.getPageCategories() != null && pageRow.getPageCategories().size() > 0) {
+				if(pageRow.getPageCategories() != null && !pageRow.getPageCategories().isEmpty()) {
 					categories.addAll(pageRow.getPageCategories());
 				}
 				
@@ -313,11 +407,11 @@ public class BinderPageListController extends AbstractPageListController {
 			flc.remove(newSectionButton);
 		}
 		if(newEntryLink != null && !newEntryLink.isVisible()) {
-			newEntryLink.setVisible(rows.size() > 0);
+			newEntryLink.setVisible(!rows.isEmpty());
 			stackPanel.setDirty(true);
 		}
 		if(newAssignmentLink != null && !newAssignmentLink.isVisible()) {
-			newAssignmentLink.setVisible(rows.size() > 0);
+			newAssignmentLink.setVisible(!rows.isEmpty());
 			stackPanel.setDirty(true);
 		}
 
@@ -341,6 +435,16 @@ public class BinderPageListController extends AbstractPageListController {
 			}
 		}
 		timelineEl.setPoints(points);
+	}
+	
+	@Override
+	protected void doDispose() {
+		if(stackPanel != null) {
+			stackPanel.removeListener(this);
+		}
+		removeAsListenerAndDispose(summaryCtrl);
+		summaryCtrl = null;
+		super.doDispose();
 	}
 
 	@Override
@@ -398,6 +502,16 @@ public class BinderPageListController extends AbstractPageListController {
 				doCreateNewAssignment(ureq);
 			} else {
 				doCreateNewAssignment(ureq, filteringSection);
+			}
+		} else if(exportBinderAsCpLink == source) {
+			doExportBinderAsCP(ureq);
+		} else if(exportBinderAsPdfLink == source) {
+			doExportBinderAsPdf(ureq);
+		} else if(printLink == source) {
+			doPrint(ureq);
+		} else if(stackPanel == source) {
+			if(event instanceof PopEvent && pageCtrl != null && ((PopEvent)event).getController() == pageCtrl && pageCtrl.getSection() != null) {
+				doFilterSection(pageCtrl.getSection());
 			}
 		}
 		super.event(ureq, source, event);
@@ -529,7 +643,7 @@ public class BinderPageListController extends AbstractPageListController {
 	private void doCreateNewPage(UserRequest ureq, Section preSelectedSection) {
 		if(newPageCtrl != null) return;
 		
-		newPageCtrl = new PageMetadataEditController(ureq, getWindowControl(), binder, false, preSelectedSection, true);
+		newPageCtrl = new PageMetadataEditController(ureq, getWindowControl(), secCallback, binder, false, preSelectedSection, true);
 		listenTo(newPageCtrl);
 		
 		String title = translate("create.new.page");
@@ -562,6 +676,38 @@ public class BinderPageListController extends AbstractPageListController {
 		cmc.activate();
 	}
 	
+	private void doExportBinderAsCP(UserRequest ureq) {
+		MediaResource resource = new ExportBinderAsCPResource(binder, ureq, getLocale());
+		ureq.getDispatchResult().setResultingMediaResource(resource);
+	}
+	
+	private void doExportBinderAsPdf(UserRequest ureq) {
+		MediaResource resource = new ExportBinderAsPDFResource(binder, ureq, getLocale());
+		ureq.getDispatchResult().setResultingMediaResource(resource);
+	}
+	
+	private void doPrint(UserRequest ureq) {
+		ControllerCreator ctrlCreator = (lureq, lwControl) -> {
+			BinderOnePageController printCtrl = new BinderOnePageController(lureq, lwControl, binder,
+					ExtendedMediaRenderingHints.toPrint(), true);
+			LayoutMain3ColsController layoutCtr = new LayoutMain3ColsController(lureq, lwControl, printCtrl);
+			layoutCtr.addDisposableChildController(printCtrl); // dispose controller on layout dispose
+			return layoutCtr;				
+		};
+		ControllerCreator layoutCtrlr = BaseFullWebappPopupLayoutFactory.createPrintPopupLayout(ctrlCreator);
+		openInNewBrowserWindow(ureq, layoutCtrlr);
+	}
+	
+	protected void doOpenRow(UserRequest ureq, Page page) {
+		List<PortfolioElementRow> rows = model.getObjects();
+		for(PortfolioElementRow row:rows) {
+			if(page.equals(row.getPage())) {
+				doOpenRow(ureq, row, false);
+				break;
+			}
+		}
+	}
+	
 	@Override
 	protected void doOpenRow(UserRequest ureq, PortfolioElementRow row, boolean newElement) {
 		if(row.isSection()) {
@@ -574,10 +720,7 @@ public class BinderPageListController extends AbstractPageListController {
 	@Override
 	protected Assignment doStartAssignment(UserRequest ureq, PortfolioElementRow row) {
 		if(secCallback.canInstantiateAssignment()) {
-			Assignment startedAssigment = super.doStartAssignment(ureq, row);
-			ThreadLocalUserActivityLogger.log(PortfolioLoggingAction.PORTFOLIO_ASSIGNMENT_STARTED, getClass(),
-					LoggingResourceable.wrap(row.getSection()), LoggingResourceable.wrap(startedAssigment));
-			return startedAssigment;
+			return super.doStartAssignment(ureq, row);
 		} else if(secCallback.canNewAssignment()) {
 			doEditAssignment(ureq, row);
 		}

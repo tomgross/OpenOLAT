@@ -27,6 +27,7 @@ package org.olat.user;
 
 import java.util.Collection;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 import org.olat.basesecurity.IdentityNames;
@@ -34,7 +35,6 @@ import org.olat.basesecurity.IdentityRef;
 import org.olat.core.gui.translator.Translator;
 import org.olat.core.id.Identity;
 import org.olat.core.id.User;
-import org.olat.core.manager.BasicManager;
 import org.olat.user.propertyhandlers.UserPropertyHandler;
 
 /**
@@ -49,12 +49,11 @@ import org.olat.user.propertyhandlers.UserPropertyHandler;
  * 
  * @author Florian Gnaegi, frentix GmbH, http://www.frentix.com
  */
-public abstract class UserManager extends BasicManager {
+public abstract class UserManager {
 	protected static UserManager INSTANCE;
 	
 	// injected by spring configuration
 	protected UserPropertiesConfig userPropertiesConfig;
-	protected UserNameAndPasswordSyntaxChecker userNameAndPasswordSyntaxChecker;
 
 	/**
 	 * Use getInstance method
@@ -69,7 +68,7 @@ public abstract class UserManager extends BasicManager {
 	 * 
 	 * @return Instance of a UserManager
 	 */
-	public static final synchronized UserManager getInstance() {
+	public static final UserManager getInstance() {
 		return INSTANCE;
 	}
 
@@ -84,18 +83,35 @@ public abstract class UserManager extends BasicManager {
 	 */
 	public abstract User createUser(String firstName, String lastName, String eMail);
 
+	/**
+	 * Find all user database keys where the given property name matches the property
+	 * value (exact match)
+	 * 
+	 * @param propName
+	 * @param propValue
+	 * @return
+	 */
 	public abstract List<Long> findUserKeyWithProperty(String propName, String propValue);
 	
-	public abstract Identity findIdentityKeyWithProperty(String propName, String propValue);
+	/**
+	 * Find all identities where the given property name matches the property
+	 * value (exact match)
+	 * 
+	 * @param propName
+	 * @param propValue
+	 * @return The list of identities or NULL if nothing found
+	 */
+	public abstract List<Identity> findIdentitiesWithProperty(String propName, String propValue);
 
 	/**
-	 * Find the identity (and the user) that match the given email address. The
-	 * match is an exact match
+	 * Find the identity by the email address. It is searched by the whole email
+	 * address. If no identity is found or if more then one identity is found, null
+	 * is returned.
 	 * 
-	 * @param email The email search parameter
-	 * @return The identity found for this email or null if not found
+	 * @param email
+	 * @return the found identity or null
 	 */
-	public abstract Identity findIdentityByEmail(String email);
+	public abstract Identity findUniqueIdentityByEmail(String email);
 	
 	/**
 	 * Find the identity (and the user) that match the given email address. The
@@ -107,20 +123,35 @@ public abstract class UserManager extends BasicManager {
 	public abstract List<Identity> findIdentitiesByEmail(List<String> emails);
 
 	/**
-	 * Find user by its email
+	 * Find all visible identities without an email address.
 	 * 
-	 * @param email that has to be searched
-	 * @return User if the user has been found or null if not found
-	 * @deprecated use findIdentityByEmail() instead
-	 */
-	public abstract User findUserByEmail(String email);
-	
-	/**
-	 * Check if a user already used the e-mail address
-	 * @param email
 	 * @return
 	 */
-	public abstract boolean userExist(String email);
+	public abstract List<Identity> findVisibleIdentitiesWithoutEmail();
+	
+	/**
+	 * Find all visible identities with email duplicates.
+	 * 
+	 * @return
+	 */
+	public abstract List<Identity> findVisibleIdentitiesWithEmailDuplicates();
+	
+	/**
+	 * Check if the email of an user can be set or changed to this value.
+	 * 
+	 * @param email
+	 */
+	public abstract boolean isEmailAllowed(String email);
+	
+	/**
+	 * Check if the email of an user can be set or changed to this value. This
+	 * method returns true if the email is the current email or the current
+	 * institutional email of the user as well.
+	 * 
+	 * @param email
+	 * @param user
+	 */
+	public abstract boolean isEmailAllowed(String email, User user);
 
 	/**
 	 * Find user by its key (database primary key)
@@ -145,6 +176,8 @@ public abstract class UserManager extends BasicManager {
 	 * @return true if successful.
 	 */
 	public abstract boolean updateUserFromIdentity(Identity identity);
+	
+	public abstract void clearAllUserProperties(Identity identity);
 
 	/**
 	 * Saves or updates the stringValue of the user's charset property 
@@ -216,17 +249,6 @@ public abstract class UserManager extends BasicManager {
 		return userPropertiesConfig.isUserViewReadOnly(usageIdentifyer, propertyHandler);
 	}
 	
-  // fxdiff: check also for emails in change-workflow
-	public abstract boolean isEmailInUse(String email);
-
-	/**
-	 * Spring setter
-	 * @param userNameAndPasswordSyntaxChecker
-	 */
-	public void setUserNameAndPasswordSyntaxChecker(UserNameAndPasswordSyntaxChecker userNameAndPasswordSyntaxChecker) {
-		this.userNameAndPasswordSyntaxChecker = userNameAndPasswordSyntaxChecker;
-	}
-
 	/**
 	 * Spring setter
 	 * @param userPropertiesConfig
@@ -284,4 +306,42 @@ public abstract class UserManager extends BasicManager {
 	 * @return
 	 */
 	public abstract Map<String,String> getUserDisplayNamesByUserName(Collection<String> usernames);
+	
+	/**
+	 * Return the email address of the user or a placeholder value if the user has no email address.
+	 * 
+	 * @param identity
+	 * @param locale
+	 * @return
+	 */
+	public abstract String getUserDisplayEmail(Identity identity, Locale local);
+	
+	/**
+	 * Return the email address of the user or a placeholder value if the user has no email address.
+	 * 
+	 * @param identity
+	 * @param locale
+	 * @return
+	 */
+	public abstract String getUserDisplayEmail(User user, Locale local);
+	
+	/**
+	 * Return the email address or a placeholder if the value is null.
+	 * 
+	 * @param email
+	 * @param locale 
+	 * @return
+	 * 
+	 */
+	public abstract String getUserDisplayEmail(String email, Locale locale);
+	
+	/**
+	 * This method guarantees to return an email address for the user. If the user
+	 * has no presided email address, one is generated.
+	 * 
+	 * @param user
+	 * @returns 
+	 */
+	public abstract String getEnsuredEmail(User user);
+
 }

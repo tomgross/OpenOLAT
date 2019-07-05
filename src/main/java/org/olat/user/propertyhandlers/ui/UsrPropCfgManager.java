@@ -32,7 +32,7 @@ import java.util.Set;
 
 import org.olat.core.configuration.AbstractSpringModule;
 import org.olat.core.gui.control.Event;
-import org.olat.core.logging.OLog;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.coordinate.CoordinatorManager;
 import org.olat.core.util.event.GenericEventListener;
@@ -60,7 +60,7 @@ import org.springframework.stereotype.Service;
 @Service
 public class UsrPropCfgManager extends AbstractSpringModule implements GenericEventListener {
 
-	private static final OLog log = Tracing.createLoggerFor(UsrPropCfgManager.class);
+	private static final Logger log = Tracing.createLoggerFor(UsrPropCfgManager.class);
 	/*
 	 * these properties (the handlers) cannot be deactivated. OLAT depends on them
 	 */
@@ -171,7 +171,7 @@ public class UsrPropCfgManager extends AbstractSpringModule implements GenericEv
 				// -->set it as active
 				// (note: if you delete persistedProperties-conf-file, all handlers are
 				// "new" and therefore should be active)
-				log.info("UserPropertyHandler "+handler.getName()+" unknown in config, set Property as active.");
+				log.debug("UserPropertyHandler "+handler.getName()+" unknown in config, set Property as active.");
 				cfgObject.setHandlerAsActive(handler, true);
 			}
 		}
@@ -189,7 +189,7 @@ public class UsrPropCfgManager extends AbstractSpringModule implements GenericEv
 			String handlerNameInConfig = props.getProperty(contextName, null);
 			if (handlerNameInConfig == null) {// our config doesn't know this context,
 																				// leave it as is!
-				log.info("UserPropertyUsageContext "+contextName+" unknown in config, leave Context untouched.");
+				log.debug("UserPropertyUsageContext "+contextName+" unknown in config, leave Context untouched.");
 				continue;
 			}
 			// this list from the persistedProperties has the correct order of handlers!

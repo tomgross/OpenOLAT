@@ -51,7 +51,7 @@ import org.olat.core.id.Persistable;
 import org.olat.core.id.Preferences;
 import org.olat.core.id.User;
 import org.olat.core.id.UserConstants;
-import org.olat.core.logging.OLog;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
 import org.olat.user.propertyhandlers.UserPropertyHandler;
 
@@ -79,7 +79,7 @@ import javax.annotation.Nullable;
 public class UserImpl implements Persistable, User {
 
 	private static final long serialVersionUID = -2872102058369727753L;
-	private static final OLog log = Tracing.createLoggerFor(UserImpl.class);
+	private static final Logger log = Tracing.createLoggerFor(UserImpl.class);
 
 	@Id
 	@GeneratedValue(generator = "system-uuid")
@@ -136,8 +136,6 @@ public class UserImpl implements Persistable, User {
 	private String smsTelMobile;
 	@Column(name="u_skype", nullable=true, insertable=true, updatable=true)
 	private String skype;
-	@Column(name="u_msn", nullable=true, insertable=true, updatable=true)
-	private String msn;
 	@Column(name="u_xing", nullable=true, insertable=true, updatable=true)
 	private String xing;
 	@Column(name="u_icq", nullable=true, insertable=true, updatable=true)
@@ -327,6 +325,7 @@ public class UserImpl implements Persistable, User {
 		this.firstName = firstName;
 	}
 
+	@Override
 	public String getLastName() {
 		return lastName;
 	}
@@ -335,12 +334,22 @@ public class UserImpl implements Persistable, User {
 		this.lastName = lastName;
 	}
 
+	@Override
 	public String getEmail() {
 		return email;
 	}
 
 	public void setEmail(String email) {
 		this.email = email;
+	}
+	
+	@Override
+	public String getInstitutionalEmail() {
+		return institutionalEmail;
+	}
+	
+	public void setInstitutionalEmail(String institutionalEmail) {
+		this.institutionalEmail = institutionalEmail;
 	}
 	
 	public boolean isWebdav() {
@@ -383,7 +392,6 @@ public class UserImpl implements Persistable, User {
 			case "smsTelMobile": return smsTelMobile;
 			case "telOffice": return telOffice;
 			case "skype": return skype;
-			case "msn": return msn;
 			case "xing": return xing;
 			case "icq": return icq;
 			case "homepage": return homepage;
@@ -462,7 +470,6 @@ public class UserImpl implements Persistable, User {
 			case "smsTelMobile": smsTelMobile = value; break;
 			case "telOffice": telOffice = value; break;
 			case "skype": skype = value; break;
-			case "msn": msn = value; break;
 			case "xing": xing = value; break;
 			case "icq": icq = value; break;
 			case "homepage": homepage = value; break;

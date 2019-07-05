@@ -30,29 +30,25 @@ import java.io.File;
 import java.util.Collections;
 import java.util.UUID;
 
-import javax.servlet.http.HttpServletRequest;
-
 import org.olat.core.CoreSpringFactory;
 import org.olat.core.commons.services.image.ImageService;
 import org.olat.core.commons.services.image.Size;
 import org.olat.core.commons.services.video.MovieService;
-import org.olat.core.dispatcher.mapper.Mapper;
 import org.olat.core.dispatcher.mapper.MapperService;
 import org.olat.core.dispatcher.mapper.manager.MapperKey;
 import org.olat.core.gui.UserRequest;
 import org.olat.core.gui.components.AbstractComponent;
 import org.olat.core.gui.components.ComponentRenderer;
 import org.olat.core.gui.control.Disposable;
-import org.olat.core.gui.media.MediaResource;
 import org.olat.core.gui.render.ValidationResult;
-import org.olat.core.logging.OLog;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.StringHelper;
 import org.olat.core.util.UserSession;
 import org.olat.core.util.WebappHelper;
 import org.olat.core.util.vfs.LocalFileImpl;
 import org.olat.core.util.vfs.VFSLeaf;
-import org.olat.core.util.vfs.VFSMediaResource;
+import org.olat.core.util.vfs.VFSMediaMapper;
 
 /**
  * Description: <br>
@@ -61,37 +57,41 @@ import org.olat.core.util.vfs.VFSMediaResource;
  */
 public class ImageComponent extends AbstractComponent implements Disposable {
 	private static final ComponentRenderer RENDERER = new ImageRenderer();
-	private static final OLog log = Tracing.createLoggerFor(ImageComponent.class);
+	private static final Logger log = Tracing.createLoggerFor(ImageComponent.class);
 	
 	private VFSLeaf media;
 	private String mimeType;
 
 	private String alt;
+	private String cssClasses;
 	private final MapperKey mapperUrl;
-	private final MediaMapper mapper;
+	private final VFSMediaMapper mapper;
 
 	// optional in case of video: poster image
 	private VFSLeaf poster;
 	private MapperKey posterMapperUrl;
-	private MediaMapper posterMapper;
+	private VFSMediaMapper posterMapper;
 
 	private Size realSize;
 	private Size scaledSize;
 	private float scalingFactor;
+	private boolean divImageWrapper = true;
 	private boolean cropSelectionEnabled = false;
+	
+	private final MapperService mapperService;
 
 	/**
 	 * @param name
 	 */
 	public ImageComponent(UserSession usess, String name) {
 		super(name);
-		mapper = new MediaMapper();
+		mapper = new VFSMediaMapper();
 		String mapperId = UUID.randomUUID().toString();
-		mapperUrl = CoreSpringFactory.getImpl(MapperService.class).register(usess, mapperId, mapper);
+		mapperService = CoreSpringFactory.getImpl(MapperService.class);
+		mapperUrl = mapperService.register(usess, mapperId, mapper);
 		// optional poster frame for videos
-		posterMapper = new MediaMapper();
-		mapperId = UUID.randomUUID().toString();
-		posterMapperUrl = CoreSpringFactory.getImpl(MapperService.class).register(usess, mapperId, posterMapper);		
+		posterMapper = new VFSMediaMapper();
+		posterMapperUrl = mapperService.register(usess, mapperId + "-poster", posterMapper);		
 		// renderer provides own DOM ID
 		setDomReplacementWrapperRequired(false);
 	}
@@ -104,9 +104,14 @@ public class ImageComponent extends AbstractComponent implements Disposable {
 		this.alt = alt;
 	}
 
-	/**
-	 * @see org.olat.core.gui.components.Component#dispatchRequest(org.olat.core.gui.UserRequest)
-	 */
+	public boolean isDivImageWrapper() {
+		return divImageWrapper;
+	}
+
+	public void setDivImageWrapper(boolean divImageWrapper) {
+		this.divImageWrapper = divImageWrapper;
+	}
+
 	@Override
 	protected void doDispatchRequest(UserRequest ureq) {
 		//
@@ -118,6 +123,14 @@ public class ImageComponent extends AbstractComponent implements Disposable {
 	
 	public void setCropSelectionEnabled(boolean enable) {
 		cropSelectionEnabled = enable;
+	}
+
+	public String getCssClasses() {
+		return cssClasses;
+	}
+
+	public void setCssClasses(String cssClasses) {
+		this.cssClasses = cssClasses;
 	}
 
 	/**
@@ -156,10 +169,10 @@ public class ImageComponent extends AbstractComponent implements Disposable {
 	@Override
 	public void dispose() {
 		if(mapper != null) {
-			CoreSpringFactory.getImpl(MapperService.class).cleanUp(Collections.<MapperKey>singletonList(mapperUrl));
+			mapperService.cleanUp(Collections.<MapperKey>singletonList(mapperUrl));
 		}
 		if(posterMapper != null) {
-			CoreSpringFactory.getImpl(MapperService.class).cleanUp(Collections.<MapperKey>singletonList(posterMapperUrl));
+			mapperService.cleanUp(Collections.<MapperKey>singletonList(posterMapperUrl));
 		}
 	}
 
@@ -304,16 +317,4 @@ public class ImageComponent extends AbstractComponent implements Disposable {
 		return null;
 	}
 	
-	private static class MediaMapper implements Mapper {
-		private VFSLeaf mediaFile;
-
-		public void setMediaFile(VFSLeaf mediaFile) {
-			this.mediaFile = mediaFile;
-		}
-
-		@Override
-		public MediaResource handle(String relPath, HttpServletRequest request) {
-			return new VFSMediaResource(mediaFile);
-		}
-	}
 }

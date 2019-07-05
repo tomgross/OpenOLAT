@@ -25,7 +25,6 @@
 
 package org.olat.modules.co;
 
-import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -39,6 +38,7 @@ import org.olat.core.gui.control.generic.messages.MessageUIFactory;
 import org.olat.core.gui.control.generic.modal.DialogBoxController;
 import org.olat.core.gui.control.generic.modal.DialogBoxUIFactory;
 import org.olat.core.id.Identity;
+import org.olat.core.id.Roles;
 import org.olat.core.logging.activity.ThreadLocalUserActivityLogger;
 import org.olat.core.util.StringHelper;
 import org.olat.core.util.mail.ContactList;
@@ -49,8 +49,8 @@ import org.olat.core.util.mail.MailContextImpl;
 import org.olat.core.util.mail.MailHelper;
 import org.olat.core.util.mail.MailLoggingAction;
 import org.olat.core.util.mail.MailManager;
+import org.olat.core.util.mail.MailTemplate;
 import org.olat.core.util.mail.MailerResult;
-import org.olat.user.UserManager;
 import org.springframework.beans.factory.annotation.Autowired;
 
 /**
@@ -77,7 +77,7 @@ import org.springframework.beans.factory.annotation.Autowired;
  * <b>Main Purpose: </b> is to provide an easy interface for <i>contact message
  * creation and sending </i> from within different OLAT bulding blocks.
  * <P>
- * <b>Responsabilites: </b> <br>
+ * <b>Responsibilities: </b> <br>
  * <UL>
  * <LI>supplies a workflow for creating and sending contact messages</LI>
  * <LI>works with the ContactList encapsulating the e-mail addresses in a
@@ -91,30 +91,31 @@ import org.springframework.beans.factory.annotation.Autowired;
  */
 public class ContactFormController extends BasicController {
 
-	private Identity emailFrom;
-	
 	private ContactForm cntctForm;
 	private DialogBoxController noUsersErrorCtr;
-	private List<String> myButtons;
+
+	private Object userObject;
+	private Identity emailFrom;
+	private MailTemplate template;
 	
 	@Autowired
 	private MailManager mailService;
-	@Autowired
-	private UserManager userManager;
 	
 	/**
 	 * 
-	 * @param ureq
-	 * @param windowControl
-	 * @param useDefaultTitle
-	 * @param isCanceable
-	 * @param isReadonly
-	 * @param hasRecipientsEditable
-	 * @param cmsg
+	 * @param ureq The user request
+	 * @param windowControl The window control
+	 * @param isCanceable true if the user can cancel
+	 * @param isReadonly true if the panel is read only and mail cannot be send
+	 * @param hasRecipientsEditable true if the user can edit the recipients
+	 * @param cmsg The message (mandatory)
+	 * @param template A template filled with variables (optional)
 	 */
-	public ContactFormController(UserRequest ureq, WindowControl windowControl, boolean isCanceable, boolean isReadonly, boolean hasRecipientsEditable, ContactMessage cmsg) {
+	public ContactFormController(UserRequest ureq, WindowControl windowControl, boolean isCanceable, boolean isReadonly, boolean hasRecipientsEditable,
+			ContactMessage cmsg, MailTemplate template) {
 		super(ureq, windowControl);
 		
+		this.template = template;
 		//init email form
 		emailFrom = cmsg.getFrom();
 		
@@ -123,30 +124,71 @@ public class ContactFormController extends BasicController {
 		
 		List<ContactList> recipList = cmsg.getEmailToContactLists();
 		boolean hasAtLeastOneAddress = hasAtLeastOneAddress(recipList);
-		cntctForm.setBody(cmsg.getBodyText());
-		cntctForm.setSubject(cmsg.getSubject());
+		if(StringHelper.containsNonWhitespace(cmsg.getBodyText())) {
+			cntctForm.setBody(cmsg.getBodyText());
+		} else if(template != null && StringHelper.containsNonWhitespace(template.getBodyTemplate())) {
+			cntctForm.setBody(template.getBodyTemplate());
+		}
+		
+		if(StringHelper.containsNonWhitespace(cmsg.getSubject())) {
+			cntctForm.setSubject(cmsg.getSubject());
+		} else if(template != null && StringHelper.containsNonWhitespace(template.getSubjectTemplate())) {
+			cntctForm.setSubject(template.getSubjectTemplate());
+		}
 		
 		//init display component
 		init(ureq, hasAtLeastOneAddress, cmsg.getDisabledIdentities());
 	}
 	
+	public Object getUserObject() {
+		return userObject;
+	}
+
+	public void setUserObject(Object userObject) {
+		this.userObject = userObject;
+	}
+	
+	public void setContactFormTitle(String translatedTitle) {
+		if(cntctForm != null) {
+			cntctForm.setFormTranslatedTitle(translatedTitle);
+		}
+	}
+	
+	public void setContactFormDescription(String translatedDescription) {
+		if(cntctForm != null) {
+			cntctForm.setFormTranslatedDescription(translatedDescription);
+		}
+	}
+
 	private boolean hasAtLeastOneAddress(List<ContactList> recipList) {
 		boolean hasAtLeastOneAddress = false;
 		if (recipList != null && recipList.size() > 0 ) {
 			for (ContactList cl: recipList) {
-				if (!hasAtLeastOneAddress && cl != null && cl.getEmailsAsStrings().size() > 0) {
+				if (!hasAtLeastOneAddress && cl != null && cl.hasAddresses()) {
 					hasAtLeastOneAddress = true;
 				}
-				if (cl.getEmailsAsStrings().size() > 0) cntctForm.addEmailTo(cl);
+				if (cl.hasAddresses()) {
+					cntctForm.addEmailTo(cl);
+				}
 			}
 		}
 		return hasAtLeastOneAddress;
 	}
+	
+	public String getSubject() {
+		if(cntctForm != null) {
+			return cntctForm.getSubject();
+		}
+		return null;
+	}
+	
+	public String getBody() {
+		if(cntctForm != null) {
+			return cntctForm.getBody();
+		}
+		return null;
+	}
 
-	/**
-	 * @param useDefaultTitle
-	 * @param hasAtLeastOneAddress
-	 */
 	private void init(UserRequest ureq, boolean hasAtLeastOneAddress, List<Identity> disabledIdentities) {
 		if (hasAtLeastOneAddress) {
 			putInitialPanel(cntctForm.getInitialComponent());	
@@ -155,13 +197,13 @@ public class ContactFormController extends BasicController {
 			listenTo(mCtr);// to be disposed as this controller gets disposed
 			putInitialPanel(mCtr.getInitialComponent());
 		}
-		if(!hasAtLeastOneAddress | disabledIdentities.size() > 0){
+		if(!hasAtLeastOneAddress || !disabledIdentities.isEmpty()){
 			//show error that message can not be sent
-			myButtons = new ArrayList<String>();
+			List<String> myButtons = new ArrayList<>();
 			myButtons.add(translate("back"));
 			String title = "";
 			String message = "";
-			if(disabledIdentities.size() > 0) {
+			if(!disabledIdentities.isEmpty()) {
 				title = MailHelper.getTitleForFailedUsersError(ureq.getLocale());
 				message = MailHelper.getMessageForFailedUsersError(ureq.getLocale(), disabledIdentities);
 			} else {
@@ -172,10 +214,6 @@ public class ContactFormController extends BasicController {
 		}
 	}
 
-	/**
-	 * @see org.olat.core.gui.control.DefaultController#event(org.olat.core.gui.UserRequest,
-	 *      org.olat.core.gui.control.Controller, org.olat.core.gui.control.Event)
-	 */
 	@Override
 	public void event(UserRequest ureq, Controller source, Event event) {
 		if (source == noUsersErrorCtr) {
@@ -199,28 +237,40 @@ public class ContactFormController extends BasicController {
 		}
 	}
 	
+	private MailBundle createBundle(MailerResult result) {
+		MailContext context = new MailContextImpl(getWindowControl().getBusinessControl().getAsString());
+		MailBundle bundle;
+		if(template == null) {
+			bundle = new MailBundle(context);
+			bundle.setContent(cntctForm.getSubject(), cntctForm.getBody(), cntctForm.getAttachments());
+		} else {
+			template.setSubjectTemplate(cntctForm.getSubject());
+			template.setBodyTemplate(cntctForm.getBody());
+			template.setAttachments(cntctForm.getAttachments());
+			bundle = mailService.makeMailBundle(context, null, template, null, null, result);
+		}
+		return bundle;
+	}
+	
 	private void doSend(UserRequest ureq) {
 
-		MailerResult result;
+		MailerResult result = new MailerResult();
 		try {
-			File[] attachments = cntctForm.getAttachments();
-			MailContext context = new MailContextImpl(getWindowControl().getBusinessControl().getAsString());
-			
-			MailBundle bundle = new MailBundle();
-			bundle.setContext(context);
+
+			MailBundle bundle = createBundle(result);
 			if (emailFrom == null) {
-				// in case the user provides his own email in form						
+				// in case the user provides his own email in form
 				bundle.setFrom(cntctForm.getEmailFrom()); 
 			} else {
-				bundle.setFromId(emailFrom);						
+				bundle.setFromId(emailFrom);
 			}
 			bundle.setContactLists(cntctForm.getEmailToContactLists());
-			bundle.setContent(cntctForm.getSubject(), cntctForm.getBody(), attachments);
 			
-			result = mailService.sendMessage(bundle);
+			MailerResult sendResult = mailService.sendMessage(bundle);
+			result.append(sendResult);
+			
 			if(cntctForm.isTcpFrom()) {
-				MailBundle ccBundle = new MailBundle();
-				ccBundle.setContext(context);
+				MailBundle ccBundle = createBundle(result);
 				if (emailFrom == null) {
 					// in case the user provides his own email in form
 					ccBundle.setFrom(cntctForm.getEmailFrom()); 
@@ -229,22 +279,19 @@ public class ContactFormController extends BasicController {
 					ccBundle.setFromId(emailFrom); 
 					ccBundle.setCc(emailFrom);							
 				}
-				ccBundle.setContent(cntctForm.getSubject(), cntctForm.getBody(), attachments);
 				
 				MailerResult ccResult = mailService.sendMessage(ccBundle);
 				result.append(ccResult);
 			}
-			
-			if(result != null) {
-				if (result.isSuccessful()) {
-					showInfo("msg.send.ok");
-					// do logging
-					ThreadLocalUserActivityLogger.log(MailLoggingAction.MAIL_SENT, getClass());
-					fireEvent(ureq, Event.DONE_EVENT);
-				} else {
-					showError(result);
-					fireEvent(ureq, Event.FAILED_EVENT);
-				}
+
+			if (result.isSuccessful()) {
+				showInfo("msg.send.ok");
+				// do logging
+				ThreadLocalUserActivityLogger.log(MailLoggingAction.MAIL_SENT, getClass());
+				fireEvent(ureq, Event.DONE_EVENT);
+			} else {
+				showError(ureq, result);
+				fireEvent(ureq, Event.FAILED_EVENT);
 			}
 		} catch (Exception e) {
 			logError("", e);
@@ -253,26 +300,20 @@ public class ContactFormController extends BasicController {
 		cntctForm.setDisplayOnly(true);
 	}
 	
-	private void showError(MailerResult result) {
+	private void showError(UserRequest ureq, MailerResult result) {
+		StringBuilder errors = new StringBuilder(1024);
+		StringBuilder warnings = new StringBuilder(1024);
+		Roles roles = ureq.getUserSession().getRoles();
+		boolean detailedErrorOutput = roles.isAdministrator() || roles.isSystemAdmin();
+		MailHelper.appendErrorsAndWarnings(result, errors, warnings, detailedErrorOutput, getLocale());
+
 		StringBuilder error = new StringBuilder(1024);
 		error.append(translate("error.msg.send.nok"));
-		if(result != null && (result.getFailedIdentites().size() > 0 || result.getInvalidAddresses().size() > 0)) {
-			error.append("<br />");
-
-			StringBuilder ids = new StringBuilder(1024);
-			for(Identity identity:result.getFailedIdentites()) {
-				if(ids.length() > 0) ids.append(", ");
-				
-				String fullname = userManager.getUserDisplayName(identity);
-				if(StringHelper.containsNonWhitespace(fullname)) {
-					ids.append(fullname);
-				}
-			}
-			for(String invalidAddress:result.getInvalidAddresses()) {
-				if(ids.length() > 0) ids.append(", ");
-				ids.append(invalidAddress);
-			}
-			error.append(translate("error.msg.send.invalid.rcps", new String[]{ ids.toString() }));
+		if(errors.length() > 0) {
+			error.append("<br>").append(errors);
+		}
+		if(warnings.length() > 0) {
+			warnings.append("<br>").append(warnings);
 		}
 		getWindowControl().setError(error.toString());
 	}
@@ -282,9 +323,6 @@ public class ContactFormController extends BasicController {
 		//
 	}
 
-	/**
-	 * @see org.olat.core.gui.control.DefaultController#doDispose(boolean)
-	 */
 	@Override
 	protected void doDispose() {
 		//

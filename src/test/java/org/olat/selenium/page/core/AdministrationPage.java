@@ -23,6 +23,9 @@ import java.util.List;
 
 import org.junit.Assert;
 import org.olat.selenium.page.graphene.OOGraphene;
+import org.olat.selenium.page.lecture.LectureAdminSettingsPage;
+import org.olat.selenium.page.qpool.QuestionPoolAdminPage;
+import org.olat.selenium.page.taxonomy.TaxonomyAdminPage;
 import org.openqa.selenium.By;
 import org.openqa.selenium.WebDriver;
 import org.openqa.selenium.WebElement;
@@ -58,8 +61,22 @@ public class AdministrationPage {
 		return this;
 	}
 	
+	public AdministrationPage selecCoreConfiguration() {
+		By coreConfigurationLinkBy = By.xpath("//div[contains(@class,'o_tree')]//a[contains(@onclick,'sysconfigParent')]");
+		browser.findElement(coreConfigurationLinkBy).click();
+		OOGraphene.waitBusy(browser);
+		return this;
+	}
+	
 	public AdministrationPage selectModules() {
 		By systemLinkby = By.xpath("//div[contains(@class,'o_tree')]//a[contains(@onclick,'modulesParent')]");
+		browser.findElement(systemLinkby).click();
+		OOGraphene.waitBusy(browser);
+		return this;
+	}
+	
+	public AdministrationPage selectAssessment() {
+		By systemLinkby = By.xpath("//div[contains(@class,'o_tree')]//a[contains(@onclick,'eAssessmentParent')]");
 		browser.findElement(systemLinkby).click();
 		OOGraphene.waitBusy(browser);
 		return this;
@@ -91,6 +108,15 @@ public class AdministrationPage {
 		return this;
 	}
 	
+	public LectureAdminSettingsPage openLecturesSettings() {
+		selectModules();
+		
+		By lecturesBy = By.cssSelector(".o_sel_lectures span.o_tree_level_label_leaf>a");
+		browser.findElement(lecturesBy).click();
+		OOGraphene.waitBusy(browser);
+		return new LectureAdminSettingsPage(browser);
+	}
+	
 	public AdministrationPage openGroupSettings() {
 		selectModules();
 		
@@ -101,20 +127,59 @@ public class AdministrationPage {
 	}
 	
 	public AdministrationPage setGroupConfirmationForUser(boolean mandatory) {
-		By membershipConfirmationBy = By.cssSelector("input[name='mandatory.membership'][value='users']");
-		OOGraphene.waitElement(membershipConfirmationBy, 5, browser);
-		WebElement membershipConfirmationEl = browser.findElement(membershipConfirmationBy);
-		OOGraphene.check(membershipConfirmationEl, new Boolean(mandatory));
+		By userConfirmationCheckBy = By.xpath("//label/input[@name='mandatory.membership' and @value='user']");
+		
+		OOGraphene.waitElement(userConfirmationCheckBy, browser);
+		OOGraphene.scrollTo(userConfirmationCheckBy, browser);
+		
+		WebElement userConfirmationCheckEl = browser.findElement(userConfirmationCheckBy);
+		OOGraphene.check(userConfirmationCheckEl, Boolean.valueOf(mandatory));
 		OOGraphene.waitBusy(browser);
 		return this;
 	}
 	
 	public AdministrationPage setGroupConfirmationForAuthor(boolean mandatory) {
-		By membershipConfirmationBy = By.cssSelector("input[name='mandatory.membership'][value='authors']");
-		OOGraphene.waitElement(membershipConfirmationBy, 5, browser);
-		WebElement membershipConfirmationEl = browser.findElement(membershipConfirmationBy);
-		OOGraphene.check(membershipConfirmationEl, new Boolean(mandatory));
+		By authorConfirmationCheckBy = By.xpath("//label/input[@name='mandatory.membership' and @value='author']");
+		
+		OOGraphene.waitElement(authorConfirmationCheckBy, browser);
+		OOGraphene.scrollTo(authorConfirmationCheckBy, browser);
+		
+		WebElement authorConfirmationCheckEl = browser.findElement(authorConfirmationCheckBy);
+		OOGraphene.check(authorConfirmationCheckEl, Boolean.valueOf(mandatory));
 		OOGraphene.waitBusy(browser);
 		return this;
+	}
+	
+	public LicensesAdminstrationPage openLicenses() {
+		selecCoreConfiguration();
+		
+		By licenseBy = By.cssSelector(".o_sel_license span.o_tree_level_label_leaf>a");
+		browser.findElement(licenseBy).click();
+		OOGraphene.waitBusy(browser);
+		
+		By licenseAdminBy = By.cssSelector(".o_sel_license_general");
+		OOGraphene.waitElement(licenseAdminBy, browser);
+		return new LicensesAdminstrationPage(browser);
+	}
+	
+	public QuestionPoolAdminPage openQuestionPool() {
+		selectAssessment();
+		
+		By poolBy = By.cssSelector(".o_sel_qpool span.o_tree_level_label_leaf>a");
+		browser.findElement(poolBy).click();
+		OOGraphene.waitBusy(browser);
+		
+		return new QuestionPoolAdminPage(browser).assertOnConfiguration();
+	}
+	
+	public TaxonomyAdminPage openTaxonomy() {
+		selectModules();
+		
+		By taxonomyBy = By.cssSelector(".o_sel_taxonomy span.o_tree_level_label_leaf>a");
+		OOGraphene.waitElement(taxonomyBy, browser);
+		browser.findElement(taxonomyBy).click();
+		OOGraphene.waitBusy(browser);
+		
+		return new TaxonomyAdminPage(browser).assertOnTaxonomyList();
 	}
 }

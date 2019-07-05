@@ -43,18 +43,23 @@ import org.olat.core.gui.control.WindowControl;
 import org.olat.core.gui.control.controller.BasicController;
 import org.olat.core.gui.control.creator.ControllerCreator;
 import org.olat.core.gui.control.generic.popup.PopupBrowserWindow;
+import org.olat.core.util.i18n.I18nModule;
 import org.olat.login.AboutController;
 import org.springframework.beans.factory.annotation.Autowired;
 
 public class OlatDmzTopNavController extends BasicController implements LockableController {
 	
 	private Link impressumLink, aboutLink;
+	
+	private AboutController aboutCtr;
 	private LanguageChooserController languageChooserC;
 
 	@Autowired
 	private ImpressumModule impressumModule;
 	@Autowired
 	private HelpModule helpModule;
+	@Autowired
+	private I18nModule i18nModule;
 	
 	public OlatDmzTopNavController(UserRequest ureq, WindowControl wControl) {
 		super(ureq, wControl);
@@ -85,11 +90,13 @@ public class OlatDmzTopNavController extends BasicController implements Lockable
 		vc.put("topnav.about", aboutLink);
 
 		//choosing language 
-		languageChooserC = new LanguageChooserController(getWindowControl(), ureq, "_top_nav_dmz_lang_chooser");
-		//DOKU:pb:2008-01 listenTo(languageChooserC); not necessary as LanguageChooser sends a MultiUserEvent
-		//which is catched by the BaseFullWebappController. This one is then 
-		//responsible to recreate the GUI with the new Locale
-		vc.put("languageChooser", languageChooserC.getInitialComponent());
+		if (i18nModule.getEnabledLanguageKeys().size() > 1) {
+			languageChooserC = new LanguageChooserController(getWindowControl(), ureq, "_top_nav_dmz_lang_chooser");
+			//DOKU:pb:2008-01 listenTo(languageChooserC); not necessary as LanguageChooser sends a MultiUserEvent
+			//which is catched by the BaseFullWebappController. This one is then 
+			//responsible to recreate the GUI with the new Locale
+			vc.put("languageChooser", languageChooserC.getInitialComponent());
+		}
 		putInitialPanel(vc);		
 	}
 
@@ -106,19 +113,22 @@ public class OlatDmzTopNavController extends BasicController implements Lockable
 	@Override
 	public void event(UserRequest ureq, Component source, Event event) {
 		if (source == impressumLink) {
-			ControllerCreator impressumControllerCreator = new ControllerCreator() {
-				@Override
-				public Controller createController(UserRequest lureq, WindowControl lwControl) {
-					return new ImpressumDmzMainController(lureq, lwControl);
-				}
-			};
-			PopupBrowserWindow popupBrowserWindow = Windows.getWindows(ureq).getWindowManager().createNewUnauthenticatedPopupWindowFor(ureq, impressumControllerCreator);
-			popupBrowserWindow.open(ureq);
+			doImpressum(ureq);
 		} else if (source == aboutLink) {
-			AboutController aboutCtr = new AboutController(ureq, getWindowControl());
-			listenTo(aboutCtr);
-			aboutCtr.activateAsModalDialog();
+			doAbout(ureq);
 		}
+	}
+	
+	@Override
+	public void event(UserRequest ureq, Controller source, Event event) {
+		if (aboutCtr == source) {
+			cleanUp();
+		}
+	}
+	
+	private void cleanUp() {
+		removeAsListenerAndDispose(aboutCtr);
+		aboutCtr = null;
 	}
 
 	@Override
@@ -127,5 +137,24 @@ public class OlatDmzTopNavController extends BasicController implements Lockable
 			languageChooserC.dispose();
 			languageChooserC = null;
 		}
+	}
+	
+	private void doAbout(UserRequest ureq) {
+		if(aboutCtr != null) return;
+		
+		aboutCtr = new AboutController(ureq, getWindowControl());
+		listenTo(aboutCtr);
+		aboutCtr.activateAsModalDialog();
+	}
+	
+	private void doImpressum(UserRequest ureq) {
+		ControllerCreator impressumControllerCreator = new ControllerCreator() {
+			@Override
+			public Controller createController(UserRequest lureq, WindowControl lwControl) {
+				return new ImpressumDmzMainController(lureq, lwControl);
+			}
+		};
+		PopupBrowserWindow popupBrowserWindow = Windows.getWindows(ureq).getWindowManager().createNewUnauthenticatedPopupWindowFor(ureq, impressumControllerCreator);
+		popupBrowserWindow.open(ureq);
 	}
 }

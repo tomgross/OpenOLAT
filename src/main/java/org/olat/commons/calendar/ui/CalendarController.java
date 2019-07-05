@@ -36,6 +36,8 @@ public interface CalendarController extends Controller {
 
 	public static final String ACTION_CALENDAR_COURSE = "action.calendar.course";
 	public static final String ACTION_CALENDAR_GROUP = "action.calendar.group";
+	public static final String CALLER_LIVE_STREAM = "livestream";
+	public static final String CALLER_CURRICULUM = "curriculum";
 	public static final String CALLER_COURSE = "course";
 	public static final String CALLER_COLLAB = "collab";
 	public static final String CALLER_PROFILE = "profile";
@@ -61,6 +63,22 @@ public interface CalendarController extends Controller {
 	 * @param calendars
 	 */
 	public void setCalendars(List<KalendarRenderWrapper> calendars);
+	
+	/**
+	 * Add additional CSS class to the events which are
+	 * managed or not managed to differentiate them.
+	 * 
+	 * @param differentiate
+	 */
+	public void setDifferentiateManagedEvent(boolean differentiate);
+	
+	/**
+	 * Add additional CSS class to the events which are
+	 * live streams to differentiate them.
+	 * 
+	 * @param differentiate
+	 */
+	public void setDifferentiateLiveStreams(boolean differentiate);
 	
 	/**
 	 * Sets the calendar dirty. The calendar controller should

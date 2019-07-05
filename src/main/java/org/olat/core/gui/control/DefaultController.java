@@ -32,13 +32,12 @@ import java.util.List;
 import java.util.Locale;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import org.checkerframework.checker.initialization.qual.UnderInitialization;
-import org.checkerframework.checker.initialization.qual.UnknownInitialization;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.CoreSpringFactory;
 import org.olat.core.gui.UserRequest;
 import org.olat.core.gui.components.Component;
-import org.olat.core.gui.components.panel.StackedPanel;
 import org.olat.core.gui.components.panel.SimpleStackedPanel;
+import org.olat.core.gui.components.panel.StackedPanel;
 import org.olat.core.gui.components.velocity.VelocityContainer;
 import org.olat.core.gui.translator.Translator;
 import org.olat.core.id.OLATResourceable;
@@ -46,7 +45,6 @@ import org.olat.core.id.context.BusinessControlFactory;
 import org.olat.core.id.context.ContextEntry;
 import org.olat.core.id.context.StateEntry;
 import org.olat.core.logging.AssertException;
-import org.olat.core.logging.OLog;
 import org.olat.core.logging.Tracing;
 import org.olat.core.logging.activity.ILoggingResourceable;
 import org.olat.core.logging.activity.IUserActivityLogger;
@@ -64,7 +62,7 @@ import org.olat.core.util.session.UserSessionManager;
  */
 public abstract class DefaultController implements Controller, ControllerEventListener {
 	private static final String DEFAULTDISPOSED_PAGE = "defaultdisposed";
-	private static final OLog log = Tracing.createLoggerFor(DefaultController.class);
+	private static final Logger log = Tracing.createLoggerFor(DefaultController.class);
 	// for memory watch only.
 	private static AtomicInteger controllerCnt = new AtomicInteger(0);
 	private final Object DISPOSE_LOCK = new Object();
@@ -156,19 +154,23 @@ public abstract class DefaultController implements Controller, ControllerEventLi
 		return getWindowControl();
 	}
 
-	/**
-	 * @see org.olat.core.gui.control.Controller#addControllerListener(org.olat.core.gui.control.ControllerEventListener)
-	 */
 	@Override
 	public void addControllerListener(@UnknownInitialization DefaultController this, @UnknownInitialization ControllerEventListener el) {
 		if (listeners == null) {
-			listeners = new ArrayList<ControllerEventListener>();
+			listeners = new ArrayList<>();
 		}
 		if (!listeners.contains(el)) {
 			listeners.add(el);
 		}
 	}
-	
+
+	@Override
+	public void removeControllerListener(ControllerEventListener el) {
+		if(listeners != null) {
+			listeners.remove(el);
+		}
+	}
+
 	public boolean isControllerListeningTo(ControllerEventListener el) {
 		return listeners != null && listeners.contains(el);
 	}
@@ -188,7 +190,7 @@ public abstract class DefaultController implements Controller, ControllerEventLi
 		if (listeners != null && listeners.size() > 0) {
 			ControllerEventListener[] listenerArr = listeners.toArray(new ControllerEventListener[listeners.size()]);
 			for (ControllerEventListener listener:listenerArr) {
-				if (log.isDebug()) log.debug("Controller event: "+this.getClass().getName()+": fires event to: "+listener.getClass().getName());
+				if (log.isDebugEnabled()) log.debug("Controller event: "+this.getClass().getName()+": fires event to: "+listener.getClass().getName());
 				listener.dispatchEvent(ureq, this, event);
 			}
 		}
@@ -394,7 +396,7 @@ public abstract class DefaultController implements Controller, ControllerEventLi
 			}
 		}
 		// dispose the controller now
-		if (log.isDebug()) {
+		if (log.isDebugEnabled()) {
 			log.debug("now disposing controller: " + this.toString());
 		}
 		
@@ -409,7 +411,7 @@ public abstract class DefaultController implements Controller, ControllerEventLi
 		catch (Exception e) {
 			log.error("error while disposing controller: "+this.getClass().getName(), e);
 		}
-		if (log.isDebug()){
+		if (log.isDebugEnabled()){
 			log.debug("end of: " + this.toString());
 		}
 		//FIXME:pb 2008-04-16 provide a default message controller without always create one?!

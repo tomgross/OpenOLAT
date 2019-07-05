@@ -25,6 +25,10 @@
 
 package org.olat.course.editor;
 
+import java.util.Collections;
+import java.util.List;
+
+import org.olat.basesecurity.OrganisationRoles;
 import org.olat.core.gui.control.WindowControl;
 import org.olat.core.id.IdentityEnvironment;
 import org.olat.core.logging.AssertException;
@@ -33,14 +37,16 @@ import org.olat.course.groupsandrights.CourseGroupManager;
 import org.olat.course.run.environment.CourseEnvironment;
 import org.olat.course.run.scoring.ScoreAccounting;
 import org.olat.course.run.userview.UserCourseEnvironment;
+import org.olat.group.BusinessGroup;
+import org.olat.modules.curriculum.CurriculumElement;
 import org.olat.repository.RepositoryEntry;
 import org.olat.repository.RepositoryManager;
 import org.olat.repository.model.RepositoryEntryLifecycle;
 import org.olat.resource.OLATResource;
 
 /**
- * Description:<br>
- * TODO: patrick Class Description for EditorUserCourseEnvironment
+ * This is the user course environment implementation used
+ * within the course editor.
  * 
  * <P>
  * Initial Date:  Jul 6, 2005 <br>
@@ -61,17 +67,13 @@ public class EditorUserCourseEnvironmentImpl implements UserCourseEnvironment {
 		courseEditorEnv.setConditionInterpreter(ci);
 		sa = new ScoreAccounting(this);
 	}
-	
-	/**
-	 * @see org.olat.course.run.userview.UserCourseEnvironment#getCourseEnvironment()
-	 */
+
+	@Override
 	public CourseEnvironment getCourseEnvironment() {
 		throw new AssertException("should never be called since it is the EDITOR user course environment");
 	}
 
-	/**
-	 * @see org.olat.course.run.userview.UserCourseEnvironment#getCourseEditorEnv()
-	 */
+	@Override
 	public CourseEditorEnv getCourseEditorEnv() {
 		return courseEditorEnv;
 	}
@@ -81,30 +83,28 @@ public class EditorUserCourseEnvironmentImpl implements UserCourseEnvironment {
 		return windowControl;
 	}
 
-	/**
-	 * @see org.olat.course.run.userview.UserCourseEnvironment#getConditionInterpreter()
-	 */
+	@Override
 	public ConditionInterpreter getConditionInterpreter() {
 		return ci;
 	}
 
-	/**
-	 * @see org.olat.course.run.userview.UserCourseEnvironment#getIdentityEnvironment()
-	 */
+	@Override
 	public IdentityEnvironment getIdentityEnvironment() {
 		throw new AssertException("should never be called since it is the EDITOR user course environment");
 	}
 
-	/**
-	 * @see org.olat.course.run.userview.UserCourseEnvironment#getScoreAccounting()
-	 */
+	@Override
 	public ScoreAccounting getScoreAccounting() {
 		return sa;
 	}
 
 	@Override
 	public boolean isIdentityInCourseGroup(Long groupKey) {
-		//TODO OO-502
+		return false;
+	}
+
+	@Override
+	public boolean isInOrganisation(String organisationIdentifier, OrganisationRoles... roles) {
 		return false;
 	}
 
@@ -119,12 +119,22 @@ public class EditorUserCourseEnvironmentImpl implements UserCourseEnvironment {
 	}
 
 	@Override
+	public List<BusinessGroup> getCoachedGroups() {
+		return Collections.emptyList();
+	}
+
+	@Override
+	public List<CurriculumElement> getCoachedCurriculumElements() {
+		return Collections.emptyList();
+	}
+
+	@Override
 	public boolean isParticipant() {
 		return false;
 	}
 
 	@Override
-	public boolean isAdminOfAnyCourse() {
+	public boolean isAdministratorOfAnyCourse() {
 		return false;
 	}
 

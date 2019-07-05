@@ -40,7 +40,8 @@ import org.olat.ims.qti.qpool.QTI12ItemEditorPackage;
 import org.olat.modules.qpool.QPoolItemEditorController;
 import org.olat.modules.qpool.QPoolService;
 import org.olat.modules.qpool.QuestionItem;
-import org.olat.modules.qpool.ui.events.QItemChangeEvent;
+import org.olat.modules.qpool.model.QuestionItemImpl;
+import org.olat.modules.qpool.ui.events.QItemEdited;
 import org.springframework.beans.factory.annotation.Autowired;
 /**
  * 
@@ -57,7 +58,10 @@ public class QTI12EditorController extends BasicController implements QPoolItemE
 	private final QuestionItem qitem;
 	
 	@Autowired
+	private QTIModule qtiModule;
+	@Autowired
 	private QPoolService qpoolService;
+	private Item item;
 
 	public QTI12EditorController(UserRequest ureq, WindowControl wControl, QuestionItem qitem) {
 		super(ureq, wControl);
@@ -70,13 +74,14 @@ public class QTI12EditorController extends BasicController implements QPoolItemE
 		if(leaf == null) {
 			//no data to preview
 		} else {
-			Item item = QTIEditHelper.readItemXml(leaf);
+			item = QTIEditHelper.readItemXml(leaf);
 			if(item != null && !item.isAlient()) {
 				VFSContainer directory = qpoolService.getRootContainer(qitem);
 				String mapperUrl = registerMapper(ureq, new VFSContainerMapper(directory));
 				QTIDocument doc = new QTIDocument();
 				QTIEditorPackage qtiPackage = new QTI12ItemEditorPackage(item, doc, mapperUrl, leaf, directory, this);
-				editorsCtrl = new ItemNodeTabbedFormController(item, qtiPackage, ureq, getWindowControl(), false);
+				editorsCtrl = new ItemNodeTabbedFormController(item, qtiPackage, ureq, getWindowControl(),
+						false, !qtiModule.isEditResourcesEnabled());
 				editorsCtrl.addTabs(mainPanel);
 				listenTo(editorsCtrl);
 			}
@@ -100,7 +105,17 @@ public class QTI12EditorController extends BasicController implements QPoolItemE
 	public void event(Event event) {
 		if(event == Event.CHANGED_EVENT) {
 			UserRequest ureq = new SyntheticUserRequest(getIdentity(), getLocale());
-			fireEvent(ureq, new QItemChangeEvent(qitem));
+			updateQuestionItem(ureq, item);
+		}
+	}
+	
+	private void updateQuestionItem(UserRequest ureq, Item assessmentItem) {
+		if(qitem instanceof QuestionItemImpl && assessmentItem != null) {
+			String title = assessmentItem.getTitle();
+			QuestionItemImpl itemImpl = (QuestionItemImpl)qitem;
+			itemImpl.setTitle(title);
+			qpoolService.updateItem(itemImpl);
+			fireEvent(ureq, new QItemEdited(qitem));
 		}
 	}
 

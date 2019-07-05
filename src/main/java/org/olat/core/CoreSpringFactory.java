@@ -26,9 +26,18 @@
 
 package org.olat.core;
 
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Map.Entry;
+import java.util.concurrent.ConcurrentHashMap;
+
+import javax.servlet.ServletContext;
+
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.AssertException;
 import org.olat.core.logging.OLATRuntimeException;
-import org.olat.core.logging.OLog;
 import org.olat.core.logging.Tracing;
 import org.springframework.beans.factory.BeanFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -63,13 +72,13 @@ import java.util.concurrent.ConcurrentHashMap;
 @Order(Ordered.HIGHEST_PRECEDENCE)
 public class CoreSpringFactory implements ServletContextAware {
 	
-	private static final OLog log = Tracing.createLoggerFor(CoreSpringFactory.class);
+	private static final Logger log = Tracing.createLoggerFor(CoreSpringFactory.class);
 	
 	// Access servletContext only for spring beans admin-functions
 	public static ServletContext servletContext;
-	private static Map<Class<?>, String> idToBeans = new ConcurrentHashMap<Class<?>, String>();
-	private static Provider<BeanFactory> beanFactory;
-
+	private static DefaultListableBeanFactory beanFactory;
+	private static Map<Class<?>, String> idToBeans = new ConcurrentHashMap<>();
+	
 	/**
 	 * [used by spring only]
 	 */
@@ -98,7 +107,11 @@ public class CoreSpringFactory implements ServletContextAware {
 		}
 		return res;
 	}
-
+	
+	public static String resolveProperty(String name) {
+		return beanFactory.resolveEmbeddedValue("${" + name + "}");
+	}
+	
 	public static void autowireObject(Object bean) {
 		ApplicationContext context = WebApplicationContextUtils.getWebApplicationContext(CoreSpringFactory.servletContext);
 		context.getAutowireCapableBeanFactory().autowireBean(bean);

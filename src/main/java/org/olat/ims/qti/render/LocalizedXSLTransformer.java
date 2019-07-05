@@ -37,6 +37,7 @@ import javax.xml.transform.Source;
 import javax.xml.transform.Templates;
 import javax.xml.transform.TransformerConfigurationException;
 import javax.xml.transform.TransformerFactory;
+import javax.xml.transform.TransformerFactoryConfigurationError;
 import javax.xml.transform.sax.SAXSource;
 import javax.xml.transform.stream.StreamResult;
 
@@ -46,18 +47,18 @@ import org.apache.velocity.context.Context;
 import org.apache.velocity.exception.MethodInvocationException;
 import org.apache.velocity.exception.ParseErrorException;
 import org.apache.velocity.exception.ResourceNotFoundException;
-import org.apache.velocity.runtime.RuntimeConstants;
 import org.dom4j.Document;
 import org.dom4j.Element;
 import org.dom4j.dom.DOMDocument;
 import org.dom4j.io.DocumentSource;
+import org.olat.core.CoreSpringFactory;
 import org.olat.core.dispatcher.impl.StaticMediaDispatcher;
 import org.olat.core.gui.translator.Translator;
 import org.olat.core.logging.OLATRuntimeException;
-import org.olat.core.logging.OLog;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.Util;
-import org.olat.core.util.i18n.I18nManager;
+import org.olat.core.util.i18n.I18nModule;
 import org.olat.ims.qti.QTI12ResultDetailsController;
 import org.olat.ims.resources.IMSEntityResolver;
 import org.xml.sax.EntityResolver;
@@ -71,22 +72,19 @@ import org.xml.sax.helpers.XMLReaderFactory;
  * Initial Date: 04.06.2003
  */
 public class LocalizedXSLTransformer {
-	private static ConcurrentHashMap<String, LocalizedXSLTransformer> instanceHash = new ConcurrentHashMap<String, LocalizedXSLTransformer>(5);
-	private static OLog log = Tracing.createLoggerFor(LocalizedXSLTransformer.class);
+	private static ConcurrentHashMap<String, LocalizedXSLTransformer> instanceHash = new ConcurrentHashMap<>(5);
+	private static final Logger log = Tracing.createLoggerFor(LocalizedXSLTransformer.class);
 	private static EntityResolver er = new IMSEntityResolver();
 	private static VelocityEngine velocityEngine;
 	
 	static {
 		// init velocity engine
-		Properties p = null;
+		Properties p = new Properties();
 		try {
 			velocityEngine = new VelocityEngine();
-			p = new Properties();
-			p.setProperty(RuntimeConstants.RUNTIME_LOG_LOGSYSTEM_CLASS, "org.apache.velocity.runtime.log.SimpleLog4JLogSystem");
-			p.setProperty("runtime.log.logsystem.log4j.category", "syslog");
 			velocityEngine.init(p);
 		} catch (Exception e) {
-			throw new OLATRuntimeException("config error with velocity properties::" + p.toString(), e);
+			throw new OLATRuntimeException("config error with velocity properties::" + p, e);
 		}		
 	}
 	
@@ -116,11 +114,12 @@ public class LocalizedXSLTransformer {
 	 */
 	 // cluster_ok only in VM
 	public static LocalizedXSLTransformer getInstance(Locale locale) {
-		LocalizedXSLTransformer instance = instanceHash.get(I18nManager.getInstance().getLocaleKey(locale));
+		I18nModule i18nModule = CoreSpringFactory.getImpl(I18nModule.class);
+		LocalizedXSLTransformer instance = instanceHash.get(i18nModule.getLocaleKey(locale));
 		if (instance == null) {
 			Translator trans = Util.createPackageTranslator(QTI12ResultDetailsController.class, locale);
 			LocalizedXSLTransformer newInstance = new LocalizedXSLTransformer(trans);
-			instance = instanceHash.putIfAbsent(I18nManager.getInstance().getLocaleKey(locale), newInstance); //see javadoc of ConcurrentHashMap
+			instance = instanceHash.putIfAbsent(i18nModule.getLocaleKey(locale), newInstance); //see javadoc of ConcurrentHashMap
 			if(instance == null) { //newInstance was put into the map
 				instance = newInstance;
 			}
@@ -180,7 +179,7 @@ public class LocalizedXSLTransformer {
 			log.error("Could not convert xsl to string!", e);
 		}
 		String replacedOutput = evaluateValue(xslAsString, vcContext);
-		TransformerFactory tfactory = TransformerFactory.newInstance();
+		TransformerFactory tfactory = newTransformerFactory();
 		XMLReader reader;
 		try {
 			reader = XMLReaderFactory.createXMLReader();
@@ -192,6 +191,24 @@ public class LocalizedXSLTransformer {
 		} catch (TransformerConfigurationException e) {
 			throw new OLATRuntimeException("Could not initialize transformer (wrong config)!", e);
 		}
+	}
+	
+	/**
+	 * The method try to find the Xalan implementation of the JDK because the styelsheet
+	 * was with this one develop and not the Saxon XSLT 2.0 or 3.0 engine which lead to
+	 * some compatibility issue with special HTML entity (example: 129).
+	 * 
+	 * @return Try to get the embedded Xalan implementation which is a pure XSLT 1.0 engine.
+	 */
+	private TransformerFactory newTransformerFactory() {
+		TransformerFactory tfactory = null;
+		try {
+			tfactory = TransformerFactory.newInstance("com.sun.org.apache.xalan.internal.xsltc.trax.TransformerFactoryImpl", null);
+		} catch (TransformerFactoryConfigurationError e) {
+			log.error("", e);
+			tfactory = TransformerFactory.newInstance();
+		}
+		return tfactory;
 	}
 
 	/**
@@ -229,7 +246,7 @@ public class LocalizedXSLTransformer {
 	 * @throws IOException
 	 */
 	private static String slurp(InputStream in) throws IOException {
-	   StringBuffer out = new StringBuffer();
+	   StringBuilder out = new StringBuilder();
 	   byte[] b = new byte[4096];
 	   for (int n; (n = in.read(b)) != -1;) {
 	       out.append(new String(b, 0, n));

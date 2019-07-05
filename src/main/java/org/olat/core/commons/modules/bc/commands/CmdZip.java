@@ -34,14 +34,13 @@ import org.olat.core.CoreSpringFactory;
 import org.olat.core.commons.modules.bc.FileSelection;
 import org.olat.core.commons.modules.bc.FolderEvent;
 import org.olat.core.commons.modules.bc.components.FolderComponent;
-import org.olat.core.commons.modules.bc.meta.MetaInfo;
-import org.olat.core.commons.modules.bc.meta.tagged.MetaTagged;
+import org.olat.core.commons.services.vfs.VFSMetadata;
+import org.olat.core.commons.services.vfs.VFSRepositoryService;
 import org.olat.core.gui.UserRequest;
 import org.olat.core.gui.components.form.flexible.FormItemContainer;
 import org.olat.core.gui.components.form.flexible.elements.TextElement;
 import org.olat.core.gui.components.form.flexible.impl.FormBasicController;
 import org.olat.core.gui.components.form.flexible.impl.FormLayoutContainer;
-import org.olat.core.gui.components.velocity.VelocityContainer;
 import org.olat.core.gui.control.Controller;
 import org.olat.core.gui.control.Event;
 import org.olat.core.gui.control.WindowControl;
@@ -53,12 +52,12 @@ import org.olat.core.util.vfs.VFSConstants;
 import org.olat.core.util.vfs.VFSContainer;
 import org.olat.core.util.vfs.VFSItem;
 import org.olat.core.util.vfs.VFSLeaf;
+import org.springframework.beans.factory.annotation.Autowired;
 
 /**
  * 
  * Description:<br>
  * Provides a CreateItemForm and creates a zip file if input valid.
- * TODO: LD: check status to show if an error occured.
  * 
  * <P>
  * Initial Date:  30.01.2008 <br>
@@ -67,11 +66,13 @@ import org.olat.core.util.vfs.VFSLeaf;
 public class CmdZip extends FormBasicController implements FolderCommand {
 	
 	private int status = FolderCommandStatus.STATUS_SUCCESS;	
-	
-	private VelocityContainer mainVC;
+
 	private VFSContainer currentContainer;
 	private FileSelection selection;
 	private TextElement textElement;
+	
+	@Autowired
+	private VFSRepositoryService vfsRepositoryService;
 	
 	protected CmdZip(UserRequest ureq, WindowControl wControl) {
 		super(ureq, wControl);
@@ -95,17 +96,14 @@ public class CmdZip extends FormBasicController implements FolderCommand {
 		if(status == FolderCommandStatus.STATUS_FAILED) {
 			return null;
 		}
-
-		initForm(ureq);
-
-		boolean isSelectionSizeOK = getZipConfig().isItemsSizeOK(getItemSelection());
-		if (!isSelectionSizeOK) {
-			this.showError("zip.selection.too.big");
+		
+		if(selection.getFiles().isEmpty()) {
+			status = FolderCommandStatus.STATUS_FAILED;
+			wControl.setWarning(trans.translate("warning.file.selection.empty"));
 			return null;
 		}
-
-		mainVC = createVelocityContainer("createZipPanel");
-		mainVC.contextPut("fileselection", selection);
+		
+		initForm(ureq);
 		return this;
 	}
 
@@ -166,8 +164,6 @@ public class CmdZip extends FormBasicController implements FolderCommand {
 	}
 	/**
 	 * Creates a zipFile by using ZipUtil and fires Event.DONE_EVENT if successful.
-	 * 
-	 * @see org.olat.core.commons.modules.bc.commands.AbstractCreateItemForm#formOK(org.olat.core.gui.UserRequest)
 	 */
 	@Override
 	protected void formOK(UserRequest ureq) {
@@ -177,25 +173,28 @@ public class CmdZip extends FormBasicController implements FolderCommand {
 		}
 
 		VFSItem zipFile = currentContainer.createChildLeaf(name);
-		if (zipFile == null) {
+		if (!(zipFile instanceof VFSLeaf)) {
 			fireEvent(ureq, Event.FAILED_EVENT);
 			return;				
 		}
-
-		List<VFSItem> vfsFiles = getItemSelection();
-
+		
+		List<VFSItem> vfsFiles = new ArrayList<>();
+		for (String fileName : selection.getFiles()) {
+			VFSItem item = currentContainer.resolve(fileName);
+			if (item != null) {
+				vfsFiles.add(item);
+			}
+		}
 		if (!ZipUtil.zip(vfsFiles, (VFSLeaf)zipFile, true)) {
 			// cleanup zip file
 			zipFile.delete();				
 			status = FolderCommandStatus.STATUS_FAILED;
 			fireEvent(ureq, FolderCommand.FOLDERCOMMAND_FINISHED);
 		} else {
-			if(zipFile instanceof MetaTagged) {
-				MetaInfo info = ((MetaTagged)zipFile).getMetaInfo();
-				if(info != null) {
-					info.setAuthor(ureq.getIdentity());
-					info.write();
-				}
+			if(zipFile.canMeta() == VFSConstants.YES) {
+				VFSMetadata info = zipFile.getMetaInfo();
+				info.setAuthor(ureq.getIdentity());
+				vfsRepositoryService.updateMetadata(info);
 			}
 			
 			fireEvent(ureq, new FolderEvent(FolderEvent.ZIP_EVENT, selection.renderAsHtml()));				

@@ -25,10 +25,8 @@
 
 package org.olat.properties;
 
-import java.io.File;
 import java.util.Collections;
 import java.util.Date;
-import java.util.Iterator;
 import java.util.List;
 
 import javax.persistence.Query;
@@ -40,7 +38,8 @@ import org.olat.core.id.Identity;
 import org.olat.core.commons.persistence.DB;
 import org.olat.core.id.OLATResourceable;
 import org.olat.core.logging.AssertException;
-import org.olat.core.manager.BasicManager;
+import org.apache.logging.log4j.Logger;
+import org.olat.core.logging.Tracing;
 import org.olat.core.util.StringHelper;
 import org.olat.group.BusinessGroup;
 import org.olat.group.BusinessGroupRef;
@@ -55,10 +54,9 @@ import org.springframework.beans.factory.annotation.Autowired;
  * Comment:  
  * 
  */
-public class PropertyManager extends BasicManager implements UserDataDeletable {
+public class PropertyManager implements UserDataDeletable {
 
-	private final DB dbInstance;
-
+	private static final Logger log = Tracing.createLoggerFor(PropertyManager.class);
 	private static PropertyManager INSTANCE;
 
 	@Autowired
@@ -169,7 +167,7 @@ public class PropertyManager extends BasicManager implements UserDataDeletable {
 				.getResultList();
 
 		if (props == null || props.size() != 1) {
-			if(isLogDebugEnabled()) logDebug("Could not find property: " + name);
+			if(log.isDebugEnabled()) log.debug("Could not find property: " + name);
 			return null;
 		}
 		return props.get(0);
@@ -596,7 +594,7 @@ public class PropertyManager extends BasicManager implements UserDataDeletable {
 		
 		List<Property> props = findProperties(identity, grp, resourceable, category, name);
 		if (props == null || props.size() == 0) {
-			if(isLogDebugEnabled()) logDebug("Could not find property: " + name);
+			if(log.isDebugEnabled()) log.debug("Could not find property: " + name);
 			return null;
 		}
 		else if (props.size() > 1) {
@@ -757,24 +755,25 @@ public class PropertyManager extends BasicManager implements UserDataDeletable {
 		return dbInstance.getCurrentEntityManager().createQuery(sb.toString(), String.class).getResultList();
 	}
 
+	@Override
+	public int deleteUserDataPriority() {
+		// delete with low priority
+		return 110;
+	}
 	/**
 	 * Delete all properties of a certain identity.
 	 * @see org.olat.user.UserDataDeletable#deleteUserData(org.olat.core.id.Identity)
 	 */
 	@Override
-	public void deleteUserData(Identity identity, String newDeletedUserName, File archivePath) {
-		List<Property> userProperterties = listProperties(identity, null, null, null, null, null);
-		for (Iterator<Property> iter = userProperterties.iterator(); iter.hasNext(); ) {
-			deleteProperty( iter.next());
-		}
-		if(isLogDebugEnabled()) {
-			logDebug("All properties deleted for identity=" + identity);
+	public void deleteUserData(Identity identity, String newDeletedUserName) {
+		deleteProperties(identity, null, null, null, null);
+		if(log.isDebugEnabled()) {
+			log.debug("All properties deleted for identity=" + identity);
 		}
 	}
 
 	public Property createProperty() {
-		Property p = new Property();
-		return p;
+		return new Property();
 	}
 
 	private boolean and(StringBuilder sb, boolean and) {

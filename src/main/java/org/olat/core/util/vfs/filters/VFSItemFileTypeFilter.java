@@ -20,7 +20,9 @@
 
 package org.olat.core.util.vfs.filters;
 
-import java.util.Hashtable;
+import java.net.URI;
+import java.util.HashMap;
+import java.util.Map;
 
 import org.olat.core.util.vfs.VFSContainer;
 import org.olat.core.util.vfs.VFSItem;
@@ -33,14 +35,19 @@ import org.olat.core.util.vfs.VFSItem;
  * 
  */
 public class VFSItemFileTypeFilter extends VFSItemCompositeFilter {
-	private Hashtable<String, String> fileTypes = new Hashtable<String, String>();
+	
+	private final boolean uriValidation;
+	private final boolean excludeSystemFiles;
+	private Map<String, String> fileTypes = new HashMap<>();
 
 	/**
 	 * Constrtuctor
 	 * 
 	 * @param filetypes
 	 */
-	public VFSItemFileTypeFilter(String[] fileTypes) {
+	public VFSItemFileTypeFilter(String[] fileTypes, boolean excludeSystemFiles, boolean uriValidation) {
+		this.uriValidation = uriValidation;
+		this.excludeSystemFiles = excludeSystemFiles;
 		for (int i = 0; i < fileTypes.length; i++) {
 			addFileType(fileTypes[i]);
 		}
@@ -51,25 +58,37 @@ public class VFSItemFileTypeFilter extends VFSItemCompositeFilter {
 	 */
 	public void addFileType(String fileType) {
 		fileType = fileType.toLowerCase();
-		this.fileTypes.put(fileType, fileType);
+		fileTypes.put(fileType, fileType);
 	}
 
 	/**
 	 * @param fileType
 	 */
 	public void removeFileType(String fileType) {
-		this.fileTypes.remove(fileType.toLowerCase());
+		fileTypes.remove(fileType.toLowerCase());
 	}
 
-	/**
-	 * @see org.olat.core.util.vfs.filters.VFSItemCompositeFilter#acceptFilter(VFSItem)
-	 */
+	@Override
 	public boolean acceptFilter(VFSItem vfsItem) {
 		if (vfsItem instanceof VFSContainer) {
 			return true;			
-		}		
-		String name = vfsItem.getName().toLowerCase();
-		int dotPos = name.lastIndexOf(".");
+		}
+		
+		String name = vfsItem.getName();
+		if(uriValidation) {
+			try {
+				new URI(name).getPath();
+			} catch(Exception e) {
+				return false;
+			}
+		}
+		
+		if(excludeSystemFiles && name.startsWith(".")) {
+			return false;
+		}
+		
+		name = name.toLowerCase();
+		int dotPos = name.lastIndexOf('.');
 		if (dotPos == -1) return false;
 		return fileTypes.containsKey(name.substring(dotPos + 1));
 	}

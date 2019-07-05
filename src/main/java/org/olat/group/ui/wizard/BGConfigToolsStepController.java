@@ -22,6 +22,7 @@ package org.olat.group.ui.wizard;
 import java.util.ArrayList;
 import java.util.List;
 
+import org.olat.admin.quota.QuotaConstants;
 import org.olat.collaboration.CalendarToolSettingsController;
 import org.olat.collaboration.CollaborationTools;
 import org.olat.collaboration.CollaborationToolsFactory;
@@ -40,9 +41,11 @@ import org.olat.core.gui.control.WindowControl;
 import org.olat.core.gui.control.generic.wizard.StepFormBasicController;
 import org.olat.core.gui.control.generic.wizard.StepsEvent;
 import org.olat.core.gui.control.generic.wizard.StepsRunContext;
+import org.olat.core.id.Roles;
 import org.olat.core.util.Util;
 import org.olat.core.util.vfs.Quota;
 import org.olat.core.util.vfs.QuotaManager;
+import org.springframework.beans.factory.annotation.Autowired;
 
 /**
  * 
@@ -53,16 +56,16 @@ public class BGConfigToolsStepController extends StepFormBasicController {
 	private String[] enableKeys = new String[]{"on", "off" };
 	private String[] enableValues = new String[]{"on", "off" };
 
-	private final List<SingleSelection> enableList = new ArrayList<SingleSelection>();
-	private final List<MultipleSelectionElement> toolList = new ArrayList<MultipleSelectionElement>();
+	private final List<SingleSelection> enableList = new ArrayList<>();
+	private final List<MultipleSelectionElement> toolList = new ArrayList<>();
 	
-	private final QuotaManager quotaManager;
+	@Autowired
+	private QuotaManager quotaManager;
 	
 	public BGConfigToolsStepController(UserRequest ureq, WindowControl wControl, Form rootForm,
 			StepsRunContext runContext) {
 		super(ureq, wControl, rootForm, runContext, LAYOUT_DEFAULT, null);
 		setTranslator(Util.createPackageTranslator(CollaborationToolsSettingsController.class, getLocale(), getTranslator()));
-		this.quotaManager = QuotaManager.getInstance();
 		
 		enableValues = new String[]{
 				translate("config.tools.on"), translate("config.tools.off")
@@ -75,6 +78,7 @@ public class BGConfigToolsStepController extends StepFormBasicController {
 		boolean first = true;
 		
 		String containerPage = velocity_root + "/tool_config_container.html";
+		Roles roles = ureq.getUserSession().getRoles();
 		
 		String[] availableTools = CollaborationToolsFactory.getInstance().getAvailableTools().clone();
 		for (String k : availableTools) {
@@ -114,8 +118,8 @@ public class BGConfigToolsStepController extends StepFormBasicController {
 				config.folderCtrl.getInitialFormItem().setVisible(false);
 				
 				//add quota configuration for admin only
-				if(ureq.getUserSession().getRoles().isOLATAdmin()) {
-					Quota quota = quotaManager.createQuota(null, null, null);
+				if(quotaManager.hasMinimalRolesToEditquota(roles)) {
+					Quota quota = quotaManager.createQuota(QuotaConstants.IDENTIFIER_DEFAULT_GROUPS, null, null);
 					config.quotaCtrl = new BGConfigQuotaController(ureq, getWindowControl(), quota, mainForm);
 					config.configContainer.add("quota", config.quotaCtrl.getInitialFormItem());
 					config.quotaCtrl.getInitialFormItem().setVisible(false);
@@ -150,6 +154,7 @@ public class BGConfigToolsStepController extends StepFormBasicController {
 	@Override
 	protected void formOK(UserRequest ureq) {
 		BGConfigBusinessGroup configuration = new BGConfigBusinessGroup();
+		Roles roles = ureq.getUserSession().getRoles();
 		for(MultipleSelectionElement toolEl:toolList) {
 			if(toolEl.isAtLeastSelected(1)) {
 				ToolConfig config = (ToolConfig)toolEl.getUserObject();
@@ -167,7 +172,7 @@ public class BGConfigToolsStepController extends StepFormBasicController {
 				} else if (tool.equals(CollaborationTools.TOOL_FOLDER)) {
 					configuration.setFolderAccess(config.folderCtrl.getFolderAccess());
 					//only admin are allowed to configure quota
-					if(ureq.getUserSession().getRoles().isOLATAdmin() && config.quotaCtrl != null) {
+					if(quotaManager.hasMinimalRolesToEditquota(roles) && config.quotaCtrl != null) {
 						Long quotaKB = config.quotaCtrl.getQuotaKB();
 						Long ulLimit = config.quotaCtrl.getULLimit();
 						Quota quota = quotaManager.createQuota(null, quotaKB, ulLimit);

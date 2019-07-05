@@ -23,6 +23,7 @@ import java.util.Date;
 import java.util.Locale;
 import java.util.Map;
 
+import org.apache.logging.log4j.Logger;
 import org.olat.admin.user.imp.TransientIdentity;
 import org.olat.core.gui.components.form.ValidationError;
 import org.olat.core.gui.components.form.flexible.FormItem;
@@ -31,7 +32,6 @@ import org.olat.core.gui.components.form.flexible.FormUIFactory;
 import org.olat.core.gui.components.form.flexible.elements.TextElement;
 import org.olat.core.id.Identity;
 import org.olat.core.id.User;
-import org.olat.core.logging.OLog;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.StringHelper;
 import org.olat.user.AbstractUserPropertyHandler;
@@ -46,19 +46,16 @@ import org.olat.user.UserImpl;
  */
 public class DateDisplayPropertyHandler extends AbstractUserPropertyHandler {
 
-	private OLog log = Tracing.createLoggerFor(this.getClass());
+	private static final Logger log = Tracing.createLoggerFor(DateDisplayPropertyHandler.class);
 
 	private static final String DATE_TYPE_CR = "creationDateDisplayProperty";
 	private static final String DATE_TYPE_LL = "lastloginDateDisplayProperty";
 
 	@Override
 	public FormItem addFormItem(Locale locale, User user, String usageIdentifyer, boolean isAdministrativeUser, FormItemContainer formItemContainer) {
-
 		Date date = getDateValue(user);
 		String dateString = StringHelper.formatLocaleDate(date.getTime(), locale);
-		FormItem item = FormUIFactory.getInstance().addStaticTextElement(getName(), i18nFormElementLabelKey(), dateString, formItemContainer);
-
-		return item;
+		return FormUIFactory.getInstance().addStaticTextElement(getName(), i18nFormElementLabelKey(), dateString, formItemContainer);
 	}
 
 	/**

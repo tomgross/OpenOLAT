@@ -43,7 +43,7 @@ import org.olat.core.CoreSpringFactory;
 import org.olat.core.configuration.Destroyable;
 import org.olat.core.configuration.Initializable;
 import org.olat.core.helpers.Settings;
-import org.olat.core.logging.OLog;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.StartupException;
 import org.olat.core.logging.Tracing;
 import org.springframework.beans.factory.BeanInitializationException;
@@ -61,7 +61,7 @@ import org.springframework.web.context.ServletContextAware;
  */
 public class WebappHelper implements Initializable, Destroyable, ServletContextAware {
 	
-	private static final OLog log = Tracing.createLoggerFor(WebappHelper.class);
+	private static final Logger log = Tracing.createLoggerFor(WebappHelper.class);
 	private static int nodeId;
 	private static final String bootId = UUID.randomUUID().toString();
 	private static String fullPathToSrc;
@@ -72,10 +72,13 @@ public class WebappHelper implements Initializable, Destroyable, ServletContextA
 	private static String userDataRoot;
 	private static String defaultCharset;
 	private static boolean enforceUtf8Filesystem;
-	private static Map<String, String> mailConfig = new HashMap<String, String>(6);
+	private static Map<String, String> mailConfig = new HashMap<>(6);
 	private static long timeOfServerStartup = System.currentTimeMillis();
 	
 	private static String mathJaxCdn;
+	private static String mathJaxConfig;
+	private static boolean mathJaxMarkers;
+	
 	private static String mobileContext;
 	
 	/** need to set this at least once before the actual request, since we cannot extract it from the servletContext, 
@@ -112,20 +115,15 @@ public class WebappHelper implements Initializable, Destroyable, ServletContextA
 		}
 		servletContextPath = servletContext.getContextPath();
 		
-		try {
-			InputStream meta = servletContext.getResourceAsStream("/META-INF/MANIFEST.MF");
+		try(InputStream meta = servletContext.getResourceAsStream("/META-INF/MANIFEST.MF")) {
 			if(meta != null) {
-				try {
-					Properties props = new Properties();
-					props.load(meta);
-					changeSet = props.getProperty("Build-Change-Set");
-					changeSetDate = props.getProperty("Build-Change-Set-Date");
-					revisionNumber = props.getProperty("Build-Revision-Number");
-					implementationVersion = props.getProperty("Implementation-Version");
-					buildJdk = props.getProperty("Build-Jdk");
-				} catch (IOException e) {
-					log.error("", e);
-				}
+				Properties props = new Properties();
+				props.load(meta);
+				changeSet = props.getProperty("Build-Change-Set");
+				changeSetDate = props.getProperty("Build-Change-Set-Date");
+				revisionNumber = props.getProperty("Build-Revision-Number");
+				implementationVersion = props.getProperty("Implementation-Version");
+				buildJdk = props.getProperty("Build-Jdk");
 			}
 		} catch (Exception e) {
 			log.warn("MANIFEST.MF not found", e);
@@ -148,6 +146,7 @@ public class WebappHelper implements Initializable, Destroyable, ServletContextA
 	 */
 	public void setNodeId(int nodeId) {
 		WebappHelper.nodeId = nodeId;
+		System.setProperty("nodeId", Integer.toString(nodeId));
 	}
 
 	/**
@@ -171,7 +170,7 @@ public class WebappHelper implements Initializable, Destroyable, ServletContextA
 	public void destroy() {
 		log.info("");
 		log.info("*********************************************");
-		log.info("*                SHUTDOWM                    ");
+		log.info("*                SHUTDOWN                    ");
 		log.info("*********************************************");
 		log.info("* Application:   " + applicationName);
 		log.info("* StopTimeStamp: " + new Date());
@@ -304,6 +303,22 @@ public class WebappHelper implements Initializable, Destroyable, ServletContextA
 		WebappHelper.mathJaxCdn = mathJaxCdn;
 	}
 
+	public static String getMathJaxConfig() {
+		return mathJaxConfig;
+	}
+
+	public void setMathJaxConfig(String mathJaxConfig) {
+		WebappHelper.mathJaxConfig = mathJaxConfig;
+	}
+	
+	public static boolean isMathJaxMarkers() {
+		return mathJaxMarkers;
+	}
+	
+	public void setMathJaxMarkers(boolean mathJaxMarkers) {
+		WebappHelper.mathJaxMarkers = mathJaxMarkers;
+	}
+
 	public void setFullPathToSrc(String fullPathToSrc) {
 		File path = new File(fullPathToSrc);
 		if (path.exists()) {
@@ -407,6 +422,7 @@ public class WebappHelper implements Initializable, Destroyable, ServletContextA
 	 *	key="smtpPwd"
 	 *	key="mailSupport"
 	 *  key="mailReplyTo" - default from email address (reply-to)
+	 *  key="mailFromDomain" - own domain of our smtp server where it is allowed to use foreign addresses
 	 *  key="mailFrom" - real from email address
 	 *  key="mailFromName" - plain text name for from address
 	 * @param string
@@ -414,6 +430,10 @@ public class WebappHelper implements Initializable, Destroyable, ServletContextA
 	 */
 	public static String getMailConfig(String key) {
 		return WebappHelper.mailConfig.get(key);
+	}
+
+	public static String setMailConfig(String key, String value) {
+		return WebappHelper.mailConfig.put(key, value);
 	}
 
 	public static boolean isMailHostAuthenticationEnabled() {
@@ -429,7 +449,7 @@ public class WebappHelper implements Initializable, Destroyable, ServletContextA
 	private void testUtf8FileSystem() {
 		File tmpDir = new File(new File(WebappHelper.getUserDataRoot()), "tmp");
 		if (!tmpDir.exists()) tmpDir.mkdir();
-		File writeFile = new File(tmpDir, "UTF-8 test läsÖiç-首页|新");
+		File writeFile = new File(tmpDir, "UTF-8 test läsÖiç-首页f新");
 		if (writeFile.exists()) {
 			// remove exising files first
 			writeFile.delete();
@@ -445,7 +465,7 @@ public class WebappHelper implements Initializable, Destroyable, ServletContextA
 		if(tmpFiles != null){
 			for (int i = 0; i < tmpFiles.length; i++) {
 				File tmpFile = tmpFiles[i];
-				if (tmpFile.getName().equals("UTF-8 test läsÖiç-首页|新")) {
+				if (tmpFile.getName().equals("UTF-8 test läsÖiç-首页f新")) {
 					foundUtf8File = true;
 					break;
 				}

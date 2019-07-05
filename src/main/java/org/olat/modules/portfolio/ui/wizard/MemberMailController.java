@@ -83,6 +83,7 @@ public class MemberMailController extends StepFormBasicController {
 	
 	@Override
 	protected void initForm(FormItemContainer formLayout, Controller listener, UserRequest ureq) {
+		formLayout.setElementCssClass("o_sel_contact_form");
 		sendMailEl = uifactory.addCheckboxesVertical("sendmail", "", formLayout, new String[]{"xx"}, new String[]{translate("mail.sendMail")}, 1);
 		sendMailEl.setElementCssClass("o_pf_sel_send_mail");
 		sendMailEl.select("xx", true);
@@ -92,7 +93,7 @@ public class MemberMailController extends StepFormBasicController {
 		subjectEl.setDisplaySize(60);
 		subjectEl.setMandatory(true);
 	
-		bodyEl = uifactory.addTextAreaElement("bodyElem", "mail.body", -1, 15, 60, true, mailTemplate.getBodyTemplate(), formLayout);
+		bodyEl = uifactory.addTextAreaElement("bodyElem", "mail.body", -1, 15, 60, true, false, mailTemplate.getBodyTemplate(), formLayout);
 		bodyEl.setHelpUrlForManualPage("E-Mail");
 		bodyEl.setMandatory(true);
 	}

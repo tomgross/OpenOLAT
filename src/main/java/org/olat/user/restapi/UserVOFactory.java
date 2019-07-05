@@ -33,18 +33,20 @@ import java.util.Locale;
 
 import org.apache.commons.codec.binary.Base64;
 import org.apache.commons.io.IOUtils;
+import org.olat.core.CoreSpringFactory;
 import org.olat.core.gui.translator.Translator;
 import org.olat.core.id.Identity;
 import org.olat.core.id.User;
 import org.olat.core.id.UserConstants;
-import org.olat.core.util.FileUtils;
+import org.apache.logging.log4j.Logger;
+import org.olat.core.logging.Tracing;
 import org.olat.core.util.Formatter;
 import org.olat.core.util.StringHelper;
 import org.olat.core.util.Util;
 import org.olat.core.util.i18n.I18nModule;
 import org.olat.user.DisplayPortraitManager;
 import org.olat.user.HomePageConfig;
-import org.olat.user.HomePageConfigManagerImpl;
+import org.olat.user.HomePageConfigManager;
 import org.olat.user.UserManager;
 import org.olat.user.propertyhandlers.DatePropertyHandler;
 import org.olat.user.propertyhandlers.GenderPropertyHandler;
@@ -60,7 +62,9 @@ import org.olat.user.propertyhandlers.UserPropertyHandler;
  */
 public class UserVOFactory {
 	
-	public static final String[] keys = new String[] { "male", "female", "-" };
+	private static final Logger log = Tracing.createLoggerFor(UserVOFactory.class);
+	
+	private static final String[] keys = new String[] { "male", "female", "-" };
 	
 	public static UserVO get(Identity identity) {
 		return get(identity, I18nModule.getDefaultLocale(), false, false, false);
@@ -91,24 +95,21 @@ public class UserVOFactory {
 		userVO.setEmail(user.getProperty(UserConstants.EMAIL, null));
 		
 		if(withPortrait) {
-			File portrait = DisplayPortraitManager.getInstance().getSmallPortrait(identity.getName());
+			File portrait = CoreSpringFactory.getImpl(DisplayPortraitManager.class).getSmallPortrait(identity.getName());
 			if(portrait != null && portrait.exists()) {
-				try {
-					InputStream input = new FileInputStream(portrait);
+				try(InputStream input = new FileInputStream(portrait)) {
 					byte[] datas = IOUtils.toByteArray(input);
-					FileUtils.closeSafely(input);
 					byte[] data64 = Base64.encodeBase64(datas);
 					userVO.setPortrait(new String(data64, "UTF8"));
 				} catch (IOException e) {
-					e.printStackTrace();
+					log.error("", e);
 				}
 			}
 		}
 		
-		HomePageConfig hpc = isAdmin ? null : HomePageConfigManagerImpl.getInstance().loadConfigFor(identity.getName());
-		
 		if(allProperties) {
 			UserManager um = UserManager.getInstance();
+			HomePageConfig hpc = isAdmin ? null : CoreSpringFactory.getImpl(HomePageConfigManager.class).loadConfigFor(identity.getName());
 			List<UserPropertyHandler> propertyHandlers = um.getUserPropertyHandlersFor(UserWebService.PROPERTY_HANDLER_IDENTIFIER, false);
 			for (UserPropertyHandler propertyHandler : propertyHandlers) {
 				String propName = propertyHandler.getName();

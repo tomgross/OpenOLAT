@@ -69,14 +69,15 @@ public class SchedulerTest extends OlatTestCase {
 		trigger.afterPropertiesSet();
 		// Schedule job now
 		scheduler.scheduleJob(job, trigger.getObject());
+		
+		sleep(20);//because of cal.add(Calendar.MILLISECOND, 11);
 
-		//check next time
+		//check number of calls to the job
 		org.quartz.Calendar quartzCal = scheduler.getCalendar(trigger.getObject().getCalendarName());
-		sleep(1);
 		Calendar cal = Calendar.getInstance();
 		Date start = cal.getTime();
 		cal.add(Calendar.SECOND, 5);
-		cal.add(Calendar.MILLISECOND, 011);
+		cal.add(Calendar.MILLISECOND, 11);
 		Date end = cal.getTime();
 		Assert.assertEquals(5, TriggerUtils.computeFireTimesBetween((OperableTrigger)trigger.getObject(), quartzCal, start, end).size());
 	}

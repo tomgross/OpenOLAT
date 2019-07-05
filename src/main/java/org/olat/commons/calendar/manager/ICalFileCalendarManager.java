@@ -49,6 +49,7 @@ import java.util.StringTokenizer;
 import java.util.UUID;
 
 import org.apache.commons.lang.RandomStringUtils;
+import org.apache.logging.log4j.Logger;
 import org.olat.basesecurity.IdentityRef;
 import org.olat.commons.calendar.CalendarManagedFlag;
 import org.olat.commons.calendar.CalendarManager;
@@ -66,15 +67,12 @@ import org.olat.commons.calendar.ui.events.CalendarGUIModifiedEvent;
 import org.olat.core.id.Identity;
 import org.olat.core.id.OLATResourceable;
 import org.olat.core.logging.OLATRuntimeException;
-import org.olat.core.logging.OLog;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.CodeHelper;
-import org.olat.core.util.FileUtils;
 import org.olat.core.util.StringHelper;
 import org.olat.core.util.WebappHelper;
 import org.olat.core.util.cache.CacheWrapper;
 import org.olat.core.util.coordinate.CoordinatorManager;
-import org.olat.core.util.coordinate.SyncerCallback;
 import org.olat.core.util.resource.OresHelper;
 import org.olat.course.ICourse;
 import org.olat.group.BusinessGroup;
@@ -120,7 +118,7 @@ import net.fortuna.ical4j.model.property.XProperty;
 @Service
 public class ICalFileCalendarManager implements CalendarManager, InitializingBean {
 
-	private static final OLog log = Tracing.createLoggerFor(ICalFileCalendarManager.class);
+	private static final Logger log = Tracing.createLoggerFor(ICalFileCalendarManager.class);
 
 	private File fStorageBase;
 	// o_clusterOK by:cg 
@@ -256,7 +254,7 @@ public class ICalFileCalendarManager implements CalendarManager, InitializingBea
 	 */
 	@Override
 	public Calendar readCalendar(String type, String calendarID) {
-		if(log.isDebug()) {
+		if(log.isDebugEnabled()) {
 			log.debug("readCalendar from file, type=" + type + "  calendarID=" + calendarID);
 		}
 		
@@ -274,7 +272,7 @@ public class ICalFileCalendarManager implements CalendarManager, InitializingBea
 		} catch (FileNotFoundException fne) {
 			throw new OLATRuntimeException("Not found: " + calendarFile, fne);
 		} catch (Exception e) {
-			throw new OLATRuntimeException("Error parsing calendar file.", e);
+			throw new OLATRuntimeException("Error parsing calendar file: " + calendarFile, e);
 		}
 	}
 
@@ -295,46 +293,50 @@ public class ICalFileCalendarManager implements CalendarManager, InitializingBea
 	@Override
 	public boolean synchronizeCalendarFrom(InputStream in, String source, Kalendar targetCalendar) {
 		try(BufferedReader reader = new BufferedReader(new InputStreamReader(in))) {
-			Calendar calendar = new CalendarBuilder().build(reader);
-			Kalendar tmpKalendar = createKalendar("TEMP", UUID.randomUUID().toString(), calendar);
+			Calendar inCalendar = new CalendarBuilder().build(reader);
+			Kalendar inTmpKalendar = createKalendar("TEMP", UUID.randomUUID().toString(), inCalendar);
+			
+			String targetId = "-" + targetCalendar.getType() + "-" + targetCalendar.getCalendarID() + "-";
 			
 			OLATResourceable calOres = getOresHelperFor(targetCalendar);
-			Boolean updatedSuccessful = CoordinatorManager.getInstance().getCoordinator().getSyncer().doInSync( calOres, new SyncerCallback<Boolean>() {
-				@Override
-				public Boolean execute() {
-					//remove event in target calendar which doesn't exist in stream
-					Collection<KalendarEvent> currentEvents = targetCalendar.getEvents();
-					for(KalendarEvent currentEvent:currentEvents) {
-						if(currentEvent.getExternalSource() != null && source.equals(currentEvent.getExternalSource())) {
-							
-							String eventId = currentEvent.getID();
-							String recurrenceId = currentEvent.getRecurrenceID();
-							if(tmpKalendar.getEvent(eventId, recurrenceId) == null) {
-								targetCalendar.removeEvent(currentEvent);
-							}
+			Boolean updatedSuccessful = CoordinatorManager.getInstance().getCoordinator().getSyncer().doInSync( calOres, () -> {
+				//remove event in target calendar which doesn't exist in stream
+				Collection<KalendarEvent> currentEvents = targetCalendar.getEvents();
+				for(KalendarEvent currentEvent:currentEvents) {
+					if(currentEvent.getExternalSource() != null && source.equals(currentEvent.getExternalSource())) {
+						String eventId = currentEvent.getID();
+						String recurrenceId = currentEvent.getRecurrenceID();
+						if(inTmpKalendar.getEvent(eventId, recurrenceId) == null) {
+							targetCalendar.removeEvent(currentEvent);
+						} else if(eventId.contains(targetId)) {
+							targetCalendar.removeEvent(currentEvent);//don't import myself;
 						}
 					}
-					
-					//
-					for(KalendarEvent event:tmpKalendar.getEvents()) {
-						event.setManagedFlags(new CalendarManagedFlag[]{ CalendarManagedFlag.all } );
-						event.setExternalSource(source);
-						
-						KalendarEvent currentEvent = targetCalendar.getEvent(event.getID(), event.getRecurrenceID());
-						if(currentEvent == null) {
-							targetCalendar.addEvent(event);
-						} else {
-							//need perhaps more refined synchronization per event
-							targetCalendar.addEvent(event);
-						}
-					}
-					
-					boolean successfullyPersist = persistCalendar(targetCalendar);
-					// inform all controller about calendar change for reload
-					CoordinatorManager.getInstance().getCoordinator().getEventBus()
-						.fireEventToListenersOf(new CalendarGUIModifiedEvent(targetCalendar), OresHelper.lookupType(CalendarManager.class));
-					return new Boolean(successfullyPersist);
 				}
+
+				Collection<KalendarEvent> inEvents = inTmpKalendar.getEvents();
+				for(KalendarEvent inEvent:inEvents) {
+					if(inEvent.getID().contains(targetId)) {
+						continue;
+					}
+
+					inEvent.setManagedFlags(new CalendarManagedFlag[]{ CalendarManagedFlag.all } );
+					inEvent.setExternalSource(source);
+					
+					KalendarEvent currentEvent = targetCalendar.getEvent(inEvent.getID(), inEvent.getRecurrenceID());
+					if(currentEvent == null) {
+						targetCalendar.addEvent(inEvent);
+					} else {
+						//need perhaps more refined synchronization per event
+						targetCalendar.addEvent(inEvent);
+					}
+				}
+				
+				boolean successfullyPersist = persistCalendar(targetCalendar);
+				// inform all controller about calendar change for reload
+				CoordinatorManager.getInstance().getCoordinator().getEventBus()
+					.fireEventToListenersOf(new CalendarGUIModifiedEvent(targetCalendar), OresHelper.lookupType(CalendarManager.class));
+				return Boolean.valueOf(successfullyPersist);
 			});
 			
 			return updatedSuccessful.booleanValue();
@@ -354,22 +356,19 @@ public class ICalFileCalendarManager implements CalendarManager, InitializingBea
 	@Override
 	public boolean persistCalendar(Kalendar kalendar) {
 		Calendar calendar = buildCalendar(kalendar);
-		boolean success = writeCalendarFile(calendar,kalendar.getType(), kalendar.getCalendarID());
+		boolean success = writeCalendarFile(calendar, kalendar.getType(), kalendar.getCalendarID());
 		calendarCache.update(getKeyFor(kalendar.getType(), kalendar.getCalendarID()), kalendar);
 		return success;
 	}
 	
 	private boolean writeCalendarFile(Calendar calendar, String calType, String calId) {
 		File fKalendarFile = getCalendarFile(calType, calId);
-		OutputStream os = null;
-		try {
-			os = new BufferedOutputStream(new FileOutputStream(fKalendarFile, false));
+
+		try(OutputStream os = new BufferedOutputStream(new FileOutputStream(fKalendarFile, false))) {
 			CalendarOutputter calOut = new CalendarOutputter(false);
 			calOut.output(calendar, os);
 		} catch (Exception e) {
 			return false;
-		} finally {
-			FileUtils.closeSafely(os);
 		}
 		return true;
 	}
@@ -415,11 +414,18 @@ public class ICalFileCalendarManager implements CalendarManager, InitializingBea
 	}
 	
 	@Override
-	public CalendarUserConfiguration createAggregatedCalendarConfig(Identity identity) {
+	public CalendarUserConfiguration createAggregatedCalendarConfig(String calendarType, Long calendarId, Identity identity) {
 		String token = RandomStringUtils.randomAlphanumeric(6);
-		Kalendar calendar = new Kalendar(identity.getKey().toString(), CalendarManager.TYPE_USER_AGGREGATED);
+		Kalendar calendar = new Kalendar(calendarId.toString(), calendarType);
 		return calendarUserConfigDao.createCalendarUserConfiguration(calendar, identity,
-				token, false, false);
+				token, true, true);
+	}
+
+	@Override
+	public CalendarUserConfiguration createCalendarConfig(Identity identity, Kalendar calendar) {
+		String token = RandomStringUtils.randomAlphanumeric(6);
+		return calendarUserConfigDao.createCalendarUserConfiguration(calendar, identity,
+				token, true, true);
 	}
 
 	@Override
@@ -433,10 +439,15 @@ public class ICalFileCalendarManager implements CalendarManager, InitializingBea
 	}
 
 	@Override
-	public List<CalendarUserConfiguration> getCalendarUserConfigurationsList(IdentityRef identity, String... types) {
-		return calendarUserConfigDao.getCalendarUserConfigurations(identity, types);
+	public List<CalendarUserConfiguration> getCalendarUserConfigurationsList(IdentityRef identity, String type, String calendarId) {
+		return calendarUserConfigDao.getCalendarUserConfigurations(identity, type, calendarId);
 	}
 	
+	@Override
+	public CalendarUserConfiguration getCalendarUserConfiguration(IdentityRef identity, Kalendar calendar) {
+		return calendarUserConfigDao.getCalendarUserConfiguration(identity, calendar.getCalendarID(), calendar.getType());
+	}
+
 	@Override
 	public Map<CalendarKey,CalendarUserConfiguration> getCalendarUserConfigurationsMap(IdentityRef identity, String... types) {
 		List<CalendarUserConfiguration> list = calendarUserConfigDao.getCalendarUserConfigurations(identity, types);
@@ -672,6 +683,11 @@ public class ICalFileCalendarManager implements CalendarManager, InitializingBea
 			}
 		}
 		
+		// video stream
+		if(StringHelper.containsNonWhitespace(kEvent.getLiveStreamUrl())) {
+			vEventProperties.add(new XProperty(ICAL_X_OLAT_VIDEO_STREAM_URL, kEvent.getLiveStreamUrl()));
+		}
+		
 		return vEvent;
 	}
 	
@@ -700,16 +716,25 @@ public class ICalFileCalendarManager implements CalendarManager, InitializingBea
 
 		// check all day event first
 		boolean isAllDay = false;
-		Parameter dateParameter = event.getProperties().getProperty(Property.DTSTART).getParameters().getParameter(Value.DATE.getName());
-		if (dateParameter != null) isAllDay = true;
-
-		if (isAllDay) {
+		Parameter dateParameter = event.getProperties().getProperty(Property.DTSTART)
+				.getParameters().getParameter(Value.DATE.getName());
+		if (dateParameter != null) {
+			isAllDay = true;
+			
 			//Make sure the time of the dates are 00:00 localtime because DATE fields in iCal are GMT 00:00 
 			//Note that start date and end date can have different offset because of daylight saving switch
 			java.util.TimeZone timezone = java.util.GregorianCalendar.getInstance().getTimeZone();
 			start = new Date(start.getTime() - timezone.getOffset(start.getTime()));
-			end   = new Date(end.getTime()   - timezone.getOffset(end.getTime()));
+			end   = new Date(end.getTime() - timezone.getOffset(end.getTime()));
 			
+			// adjust end date: ICal sets end dates to the next day
+			end = new Date(end.getTime() - (1000 * 60 * 60 * 24));
+		} else if(start != null && end != null && (end.getTime() - start.getTime()) == (24 * 60 * 60 * 1000)) {
+			//check that start has no hour, no minute and no second
+			java.util.Calendar cal = java.util.Calendar.getInstance();
+			cal.setTime(start);
+			isAllDay = cal.get(java.util.Calendar.HOUR_OF_DAY) == 0 && cal.get(java.util.Calendar.MINUTE) == 0
+					&& cal.get(java.util.Calendar.SECOND) == 0 && cal.get(java.util.Calendar.MILLISECOND) == 0;
 			// adjust end date: ICal sets end dates to the next day
 			end = new Date(end.getTime() - (1000 * 60 * 60 * 24));
 		}
@@ -769,7 +794,7 @@ public class ICalFileCalendarManager implements CalendarManager, InitializingBea
 		
 		// links if any
 		PropertyList linkProperties = event.getProperties(ICAL_X_OLAT_LINK);
-		List<KalendarEventLink> kalendarEventLinks = new ArrayList<KalendarEventLink>();
+		List<KalendarEventLink> kalendarEventLinks = new ArrayList<>();
 		for (Iterator<?> iter = linkProperties.iterator(); iter.hasNext();) {
 			XProperty linkProperty = (XProperty) iter.next();
 			if (linkProperty != null) {
@@ -844,6 +869,12 @@ public class ICalFileCalendarManager implements CalendarManager, InitializingBea
 			calEvent.setRecurrenceExc(event.getProperty(ICAL_EXDATE).getValue());
 		}
 		
+		// video stream
+		Property liveStreamUrl = event.getProperty(ICAL_X_OLAT_VIDEO_STREAM_URL);
+		if(liveStreamUrl != null) {
+			calEvent.setLiveStreamUrl(liveStreamUrl.getValue());
+		}
+		
 		return calEvent;
 	}
 
@@ -890,7 +921,7 @@ public class ICalFileCalendarManager implements CalendarManager, InitializingBea
 	public KalendarRenderWrapper getPersonalCalendar(Identity identity) {
 		Kalendar cal = getCalendar(CalendarManager.TYPE_USER, identity.getName());
 		String fullName = userManager.getUserDisplayName(identity);
-		KalendarRenderWrapper calendarWrapper = new KalendarRenderWrapper(cal, fullName);
+		KalendarRenderWrapper calendarWrapper = new KalendarRenderWrapper(cal, fullName, null);
 		calendarWrapper.setCssClass(KalendarRenderWrapper.CALENDAR_COLOR_BLUE);
 		calendarWrapper.setVisible(true);
 		return calendarWrapper;
@@ -899,7 +930,7 @@ public class ICalFileCalendarManager implements CalendarManager, InitializingBea
 	@Override
 	public KalendarRenderWrapper getImportedCalendar(Identity identity, String calendarId) {
 		Kalendar cal = getCalendar(CalendarManager.TYPE_USER, calendarId);
-		KalendarRenderWrapper calendarWrapper = new KalendarRenderWrapper(cal, calendarId);
+		KalendarRenderWrapper calendarWrapper = new KalendarRenderWrapper(cal, calendarId, null);
 		calendarWrapper.setCssClass(KalendarRenderWrapper.CALENDAR_COLOR_BLUE);
 		calendarWrapper.setVisible(true);
 		calendarWrapper.setImported(true);
@@ -909,7 +940,7 @@ public class ICalFileCalendarManager implements CalendarManager, InitializingBea
 	@Override
 	public KalendarRenderWrapper getGroupCalendar(BusinessGroup businessGroup) {
 		Kalendar cal = getCalendar(CalendarManager.TYPE_GROUP, businessGroup.getResourceableId().toString());
-		KalendarRenderWrapper calendarWrapper = new KalendarRenderWrapper(cal, businessGroup.getName());
+		KalendarRenderWrapper calendarWrapper = new KalendarRenderWrapper(cal, businessGroup.getName(), null);
 		calendarWrapper.setCssClass(KalendarRenderWrapper.CALENDAR_COLOR_ORANGE);
 		calendarWrapper.setVisible(true);
 		return calendarWrapper;
@@ -918,7 +949,8 @@ public class ICalFileCalendarManager implements CalendarManager, InitializingBea
 	@Override
 	public KalendarRenderWrapper getCourseCalendar(ICourse course) {
 		Kalendar cal = getCalendar(CalendarManager.TYPE_COURSE, course.getResourceableId().toString());
-		KalendarRenderWrapper calendarWrapper = new KalendarRenderWrapper(cal, course.getCourseTitle());
+		String externalRef = course.getCourseEnvironment().getCourseGroupManager().getCourseEntry().getExternalRef();
+		KalendarRenderWrapper calendarWrapper = new KalendarRenderWrapper(cal, course.getCourseTitle(), externalRef);
 		calendarWrapper.setCssClass(KalendarRenderWrapper.CALENDAR_COLOR_GREEN);
 		calendarWrapper.setVisible(true);
 		return calendarWrapper;
@@ -933,7 +965,7 @@ public class ICalFileCalendarManager implements CalendarManager, InitializingBea
 			type = CalendarManager.TYPE_GROUP;
 		}
 		Kalendar cal = getCalendar(type, resource.getResourceableId().toString());
-		KalendarRenderWrapper calendarWrapper = new KalendarRenderWrapper(cal, "To delete");
+		KalendarRenderWrapper calendarWrapper = new KalendarRenderWrapper(cal, "To delete", null);
 		calendarWrapper.setCssClass(KalendarRenderWrapper.CALENDAR_COLOR_GREEN);
 		calendarWrapper.setVisible(true);
 		return calendarWrapper;
@@ -967,51 +999,43 @@ public class ICalFileCalendarManager implements CalendarManager, InitializingBea
 	@Override
 	public boolean addEventTo(final Kalendar cal, final List<KalendarEvent> kalendarEvents) {
 		OLATResourceable calOres = getOresHelperFor(cal);
-		Boolean persistSuccessful = CoordinatorManager.getInstance().getCoordinator().getSyncer().doInSync( calOres, new SyncerCallback<Boolean>() {
-			@Override
-			public Boolean execute() {
-				Kalendar loadedCal = getCalendarFromCache(cal.getType(),cal.getCalendarID());
-				for(KalendarEvent kalendarEvent:kalendarEvents) {
-					loadedCal.addEvent(kalendarEvent);
-				}
-				boolean successfullyPersist = persistCalendar(loadedCal);
-				return new Boolean(successfullyPersist);
+		Boolean persistSuccessful = CoordinatorManager.getInstance().getCoordinator().getSyncer().doInSync( calOres, () -> {
+			Kalendar loadedCal = getCalendarFromCache(cal.getType(),cal.getCalendarID());
+			for(KalendarEvent kalendarEvent:kalendarEvents) {
+				loadedCal.addEvent(kalendarEvent);
+				kalendarEvent.resetImmutableDates();
 			}
+			boolean successfullyPersist = persistCalendar(loadedCal);
+			return Boolean.valueOf(successfullyPersist);
 		});
 		// inform all controller about calendar change for reload
 		CoordinatorManager.getInstance().getCoordinator().getEventBus().fireEventToListenersOf(new CalendarGUIModifiedEvent(cal), OresHelper.lookupType(CalendarManager.class));
 		return persistSuccessful.booleanValue();
 	}
 
-	/**
-	 * @see org.olat.commons.calendar.CalendarManager#removeEventFrom(org.olat.commons.calendar.model.Kalendar, org.olat.commons.calendar.model.KalendarEvent)
-	 */
 	@Override
 	public boolean removeEventFrom(final Kalendar cal, final KalendarEvent kalendarEvent) {
 		OLATResourceable calOres = getOresHelperFor(cal);
-		Boolean removeSuccessful = CoordinatorManager.getInstance().getCoordinator().getSyncer().doInSync( calOres, new SyncerCallback<Boolean>() {
-			@Override
-			public Boolean execute() {
-				String uid = kalendarEvent.getID();
-				String recurrenceId = kalendarEvent.getRecurrenceID();
-				Kalendar loadedCal = getCalendarFromCache(cal.getType(), cal.getCalendarID());
-				if(StringHelper.containsNonWhitespace(recurrenceId)) {
-					loadedCal.removeEvent(kalendarEvent);
-					KalendarEvent rootEvent = loadedCal.getEvent(kalendarEvent.getID(), null);
-					if(rootEvent != null && kalendarEvent instanceof KalendarRecurEvent) {
-						Date recurrenceDate = ((KalendarRecurEvent)kalendarEvent).getOccurenceDate();
-						rootEvent.addRecurrenceExc(recurrenceDate);
-					}
-				} else {
-					for(KalendarEvent kEvent:loadedCal.getEvents()) {
-						if(uid.equals(kEvent.getID())) {
-							loadedCal.removeEvent(kEvent);
-						}
+		Boolean removeSuccessful = CoordinatorManager.getInstance().getCoordinator().getSyncer().doInSync( calOres, () -> {
+			String uid = kalendarEvent.getID();
+			String recurrenceId = kalendarEvent.getRecurrenceID();
+			Kalendar loadedCal = getCalendarFromCache(cal.getType(), cal.getCalendarID());
+			if(StringHelper.containsNonWhitespace(recurrenceId)) {
+				loadedCal.removeEvent(kalendarEvent);
+				KalendarEvent rootEvent = loadedCal.getEvent(kalendarEvent.getID(), null);
+				if(rootEvent != null && kalendarEvent instanceof KalendarRecurEvent) {
+					Date recurrenceDate = ((KalendarRecurEvent)kalendarEvent).getOccurenceDate();
+					rootEvent.addRecurrenceExc(recurrenceDate);
+				}
+			} else {
+				for(KalendarEvent kEvent:loadedCal.getEvents()) {
+					if(uid.equals(kEvent.getID())) {
+						loadedCal.removeEvent(kEvent);
 					}
 				}
-				boolean successfullyPersist = persistCalendar(loadedCal);
-				return new Boolean(successfullyPersist);
 			}
+			boolean successfullyPersist = persistCalendar(loadedCal);
+			return Boolean.valueOf(successfullyPersist);
 		});
 		// inform all controller about calendar change for reload
 		CoordinatorManager.getInstance().getCoordinator().getEventBus().fireEventToListenersOf(new CalendarGUIModifiedEvent(cal), OresHelper.lookupType(CalendarManager.class));
@@ -1021,26 +1045,23 @@ public class ICalFileCalendarManager implements CalendarManager, InitializingBea
 	@Override
 	public boolean removeOccurenceOfEvent(final Kalendar cal, final KalendarRecurEvent kalendarEvent) {
 		OLATResourceable calOres = getOresHelperFor(cal);
-		Boolean removeSuccessful = CoordinatorManager.getInstance().getCoordinator().getSyncer().doInSync(calOres, new SyncerCallback<Boolean>() {
-			@Override
-			public Boolean execute() {
-				String uid = kalendarEvent.getID();
-				Date occurenceDate = kalendarEvent.getBegin();
-		
-				Kalendar loadedCal = getCalendarFromCache(cal.getType(), cal.getCalendarID());
-				KalendarEvent rootEvent = loadedCal.getEvent(kalendarEvent.getID(), null);
-				rootEvent.addRecurrenceExc(kalendarEvent.getBegin());
-				
-				for(KalendarEvent kEvent:loadedCal.getEvents()) {
-					if(uid.equals(kEvent.getID())
-							&& kEvent.getOccurenceDate() != null
-							&& occurenceDate.equals(kEvent.getOccurenceDate())) {
-						loadedCal.removeEvent(kEvent);
-					}
+		Boolean removeSuccessful = CoordinatorManager.getInstance().getCoordinator().getSyncer().doInSync(calOres, () -> {
+			String uid = kalendarEvent.getID();
+			Date occurenceDate = kalendarEvent.getBegin();
+	
+			Kalendar loadedCal = getCalendarFromCache(cal.getType(), cal.getCalendarID());
+			KalendarEvent rootEvent = loadedCal.getEvent(kalendarEvent.getID(), null);
+			rootEvent.addRecurrenceExc(kalendarEvent.getBegin());
+			
+			for(KalendarEvent kEvent:loadedCal.getEvents()) {
+				if(uid.equals(kEvent.getID())
+						&& kEvent.getOccurenceDate() != null
+						&& occurenceDate.equals(kEvent.getOccurenceDate())) {
+					loadedCal.removeEvent(kEvent);
 				}
-				boolean successfullyPersist = persistCalendar(loadedCal);
-				return new Boolean(successfullyPersist);
 			}
+			boolean successfullyPersist = persistCalendar(loadedCal);
+			return Boolean.valueOf(successfullyPersist);
 		});
 		// inform all controller about calendar change for reload
 		CoordinatorManager.getInstance().getCoordinator().getEventBus().fireEventToListenersOf(new CalendarGUIModifiedEvent(cal), OresHelper.lookupType(CalendarManager.class));
@@ -1051,54 +1072,45 @@ public class ICalFileCalendarManager implements CalendarManager, InitializingBea
 	@Override
 	public boolean removeFutureOfEvent(Kalendar cal, KalendarRecurEvent kalendarEvent) {
 		OLATResourceable calOres = getOresHelperFor(cal);
-		Boolean removeSuccessful = CoordinatorManager.getInstance().getCoordinator().getSyncer().doInSync(calOres, new SyncerCallback<Boolean>() {
-			@Override
-			public Boolean execute() {
-				boolean successfullyPersist = false;
-				try {
-					String uid = kalendarEvent.getID();
-					Date occurenceDate = kalendarEvent.getOccurenceDate();
+		Boolean removeSuccessful = CoordinatorManager.getInstance().getCoordinator().getSyncer().doInSync(calOres, () -> {
+			boolean successfullyPersist = false;
+			try {
+				String uid = kalendarEvent.getID();
+				Date occurenceDate = kalendarEvent.getOccurenceDate();
 
-					Kalendar loadedCal = getCalendarFromCache(cal.getType(), cal.getCalendarID());
-					KalendarEvent rootEvent = loadedCal.getEvent(kalendarEvent.getID(), null);
-					String rRule = rootEvent.getRecurrenceRule();
-					
-					Recur recur = new Recur(rRule);
-					recur.setUntil(CalendarUtils.createDate(occurenceDate));
-					RRule rrule = new RRule(recur);
-					rootEvent.setRecurrenceRule(rrule.getValue());
-					
-					for(KalendarEvent kEvent:loadedCal.getEvents()) {
-						if(uid.equals(kEvent.getID())
-								&& StringHelper.containsNonWhitespace(kEvent.getRecurrenceID())
-								&& occurenceDate.before(kEvent.getBegin())) {
-							loadedCal.removeEvent(kEvent);
-						}
+				Kalendar loadedCal = getCalendarFromCache(cal.getType(), cal.getCalendarID());
+				KalendarEvent rootEvent = loadedCal.getEvent(kalendarEvent.getID(), null);
+				String rRule = rootEvent.getRecurrenceRule();
+				
+				Recur recur = new Recur(rRule);
+				recur.setUntil(CalendarUtils.createDate(occurenceDate));
+				RRule rrule = new RRule(recur);
+				rootEvent.setRecurrenceRule(rrule.getValue());
+				
+				for(KalendarEvent kEvent:loadedCal.getEvents()) {
+					if(uid.equals(kEvent.getID())
+							&& StringHelper.containsNonWhitespace(kEvent.getRecurrenceID())
+							&& occurenceDate.before(kEvent.getBegin())) {
+						loadedCal.removeEvent(kEvent);
 					}
-					
-					successfullyPersist = persistCalendar(loadedCal);
-				} catch (ParseException e) {
-					log.error("", e);
 				}
-				return new Boolean(successfullyPersist);
+				
+				successfullyPersist = persistCalendar(loadedCal);
+			} catch (ParseException e) {
+				log.error("", e);
 			}
+			return Boolean.valueOf(successfullyPersist);
 		});
 		// inform all controller about calendar change for reload
 		CoordinatorManager.getInstance().getCoordinator().getEventBus().fireEventToListenersOf(new CalendarGUIModifiedEvent(cal), OresHelper.lookupType(CalendarManager.class));
 		return removeSuccessful.booleanValue();
 	}
 
-	/**
-	 * @see org.olat.commons.calendar.CalendarManager#updateEventFrom(org.olat.commons.calendar.model.Kalendar, org.olat.commons.calendar.model.KalendarEvent)
-	 */
 	@Override
 	public boolean updateEventFrom(final Kalendar cal, final KalendarEvent kalendarEvent) {
 		OLATResourceable calOres = getOresHelperFor(cal);
-		Boolean updatedSuccessful = CoordinatorManager.getInstance().getCoordinator().getSyncer().doInSync( calOres, new SyncerCallback<Boolean>() {
-			@Override
-			public Boolean execute() {
-				return updateEventAlreadyInSync(cal, kalendarEvent);
-			}
+		Boolean updatedSuccessful = CoordinatorManager.getInstance().getCoordinator().getSyncer().doInSync( calOres, () -> {
+			return updateEventAlreadyInSync(cal, kalendarEvent);
 		});
 		return updatedSuccessful.booleanValue();
     }
@@ -1106,19 +1118,16 @@ public class ICalFileCalendarManager implements CalendarManager, InitializingBea
 	@Override
 	public boolean updateEventsFrom(Kalendar cal, List<KalendarEvent> kalendarEvents) {
 		final OLATResourceable calOres = getOresHelperFor(cal);
-		Boolean updatedSuccessful = CoordinatorManager.getInstance().getCoordinator().getSyncer().doInSync( calOres, new SyncerCallback<Boolean>() {
-			@Override
-			public Boolean execute() {
-				Kalendar loadedCal = getCalendarFromCache(cal.getType(), cal.getCalendarID());
-				for(KalendarEvent kalendarEvent:kalendarEvents) {
-					loadedCal.removeEvent(kalendarEvent); // remove old event
-					loadedCal.addEvent(kalendarEvent); // add changed event
-				}
-				boolean successfullyPersist = persistCalendar(loadedCal);
-				// inform all controller about calendar change for reload
-				CoordinatorManager.getInstance().getCoordinator().getEventBus().fireEventToListenersOf(new CalendarGUIModifiedEvent(cal), OresHelper.lookupType(CalendarManager.class));
-				return successfullyPersist;
+		Boolean updatedSuccessful = CoordinatorManager.getInstance().getCoordinator().getSyncer().doInSync( calOres, () -> {
+			Kalendar loadedCal = getCalendarFromCache(cal.getType(), cal.getCalendarID());
+			for(KalendarEvent kalendarEvent:kalendarEvents) {
+				loadedCal.removeEvent(kalendarEvent); // remove old event
+				loadedCal.addEvent(kalendarEvent); // add changed event
 			}
+			boolean successfullyPersist = persistCalendar(loadedCal);
+			// inform all controller about calendar change for reload
+			CoordinatorManager.getInstance().getCoordinator().getEventBus().fireEventToListenersOf(new CalendarGUIModifiedEvent(cal), OresHelper.lookupType(CalendarManager.class));
+			return successfullyPersist;
 		});
 		return updatedSuccessful.booleanValue();
 	}
@@ -1195,6 +1204,7 @@ public class ICalFileCalendarManager implements CalendarManager, InitializingBea
 		}
 
 		reloadedCal.removeEvent(kalendarEvent); // remove old event
+		kalendarEvent.resetImmutableDates();
 		reloadedCal.addEvent(kalendarEvent); // add changed event
 
 		boolean successfullyPersist = persistCalendar(reloadedCal);
@@ -1206,32 +1216,29 @@ public class ICalFileCalendarManager implements CalendarManager, InitializingBea
 	@Override
 	public boolean updateCalendar(final Kalendar cal, final Kalendar importedCal) {
 		OLATResourceable calOres = getOresHelperFor(cal);
-		Boolean updatedSuccessful = CoordinatorManager.getInstance().getCoordinator().getSyncer().doInSync( calOres, new SyncerCallback<Boolean>() {
-			@Override
-			public Boolean execute() {
-				Map<KalendarEventKey,KalendarEvent> uidToEvent = new HashMap<>();
-				for(KalendarEvent event:cal.getEvents()) {
-					if(StringHelper.containsNonWhitespace(event.getID())) {
-						uidToEvent.put(new KalendarEventKey(event), event);
-					}
+		Boolean updatedSuccessful = CoordinatorManager.getInstance().getCoordinator().getSyncer().doInSync( calOres, () -> {
+			Map<KalendarEventKey,KalendarEvent> uidToEvent = new HashMap<>();
+			for(KalendarEvent event:cal.getEvents()) {
+				if(StringHelper.containsNonWhitespace(event.getID())) {
+					uidToEvent.put(new KalendarEventKey(event), event);
 				}
-				
-				Kalendar loadedCal = getCalendarFromCache(cal.getType(), cal.getCalendarID());
-				for(KalendarEvent importedEvent:importedCal.getEvents()) {
-					KalendarEventKey uid = new KalendarEventKey(importedEvent);
-					if(uidToEvent.containsKey(uid)) {
-						loadedCal.removeEvent(importedEvent); // remove old event
-						loadedCal.addEvent(importedEvent); // add changed event
-					} else {
-						loadedCal.addEvent(importedEvent);
-					}
-				}
-				
-				boolean successfullyPersist = persistCalendar(cal);
-				// inform all controller about calendar change for reload
-				CoordinatorManager.getInstance().getCoordinator().getEventBus().fireEventToListenersOf(new CalendarGUIModifiedEvent(cal), OresHelper.lookupType(CalendarManager.class));
-				return new Boolean(successfullyPersist);
 			}
+			
+			Kalendar loadedCal = getCalendarFromCache(cal.getType(), cal.getCalendarID());
+			for(KalendarEvent importedEvent:importedCal.getEvents()) {
+				KalendarEventKey uid = new KalendarEventKey(importedEvent);
+				if(uidToEvent.containsKey(uid)) {
+					loadedCal.removeEvent(importedEvent); // remove old event
+					loadedCal.addEvent(importedEvent); // add changed event
+				} else {
+					loadedCal.addEvent(importedEvent);
+				}
+			}
+			
+			boolean successfullyPersist = persistCalendar(cal);
+			// inform all controller about calendar change for reload
+			CoordinatorManager.getInstance().getCoordinator().getEventBus().fireEventToListenersOf(new CalendarGUIModifiedEvent(cal), OresHelper.lookupType(CalendarManager.class));
+			return Boolean.valueOf(successfullyPersist);
 		});
 		return updatedSuccessful.booleanValue();
 	}
@@ -1342,6 +1349,9 @@ public class ICalFileCalendarManager implements CalendarManager, InitializingBea
 	
 	private final List<KalendarRecurEvent> getRecurringEventsInPeriod(KalendarEvent kEvent, Date periodStart, Date periodEnd, TimeZone userTz) {
 		VEvent vEvent = getVEvent(kEvent);
+		if(vEvent.getEndDate() == null || vEvent.getStartDate().getDate().after(vEvent.getEndDate().getDate())) {
+			return Collections.emptyList();
+		}
 
 		//calculate the events in the specified period
         Period recurringPeriod = new Period(new DateTime(periodStart), new DateTime(periodEnd));

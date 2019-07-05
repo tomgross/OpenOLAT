@@ -8,6 +8,7 @@
 	<bean id="taskExecutorManager" class="org.olat.core.commons.services.taskexecutor.manager.TaskExecutorManagerImpl">
 		<constructor-arg index="0" ref="mpTaskExecutorService" />
 		<constructor-arg index="1" ref="sequentialTaskExecutorService" />
+		<constructor-arg index="2" ref="lowPriorityTaskSpringExecutorService" />
 		<property name="persistentTaskDao" ref="persistentTaskDao"/>
 		<property name="dbInstance" ref="database"/>
 		<property name="scheduler" ref="schedulerFactoryBean"/>
@@ -19,6 +20,10 @@
 	
 	<bean id="sequentialTaskExecutorService" class="org.springframework.core.task.support.ExecutorServiceAdapter">
 		<constructor-arg index="0" ref="sequentialTaskSpringExecutor" />
+	</bean>
+	
+	<bean id="lowPriorityTaskSpringExecutorService" class="org.springframework.core.task.support.ExecutorServiceAdapter">
+		<constructor-arg index="0" ref="lowPriorityTaskSpringExecutor" />
 	</bean>
 
 	<bean id="mpTaskSpringExecutor" class="org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor">
@@ -33,14 +38,20 @@
 		<property name="queueCapacity" value="1000" />
 	</bean>
 	
+	<bean id="lowPriorityTaskSpringExecutor" class="org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor">
+		<property name="corePoolSize" value="2" />
+		<property name="maxPoolSize" value="2" />
+		<property name="queueCapacity" value="1000" />
+	</bean>
+	
 	<!-- Persistent task executor job -->
-	<bean id="taskExecutorTrigger" class="org.springframework.scheduling.quartz.CronTriggerBean">
+	<bean id="taskExecutorTrigger" class="org.springframework.scheduling.quartz.CronTriggerFactoryBean">
 		<property name="jobDetail" ref="taskExecutorJob" />
   		<!--  every day at 1:21 -->
 		<property name="cronExpression" value="10 */5 * * * ?" />
 		<property name="startDelay" value="60000" />
 	</bean>
-	<bean id="taskExecutorJob" class="org.springframework.scheduling.quartz.JobDetailBean" lazy-init="true">
+	<bean id="taskExecutorJob" class="org.springframework.scheduling.quartz.JobDetailFactoryBean" lazy-init="true">
 		<property name="jobClass" value="org.olat.core.commons.services.taskexecutor.manager.ExecutorJob" />
 	</bean>
 

@@ -4,20 +4,20 @@
 	<modelVersion>4.0.0</modelVersion>
 	<groupId>org.openolat</groupId>
 	<artifactId>openolat-lms</artifactId>
-	<version>11.4-SNAPSHOT</version>
+	<version>14.0-SNAPSHOT</version>
 	<packaging>war</packaging>
 	<name>OpenOLAT LMS</name>
-	<url>http://www.openolat.org</url>
+	<url>https://www.openolat.com</url>
 	<description>
-  Welcome to the OpenOLAT (Open Online Learning And Training) Developer Project Site.  This site
+  Welcome to the OpenOLAT (Open Online Learning And Training) Developer Project Site. This site
   contains materials chiefly of concern to developers (e.g., unit testing and SCA output etc.)
-  and is rebuilt periodically on a regular basis.  The site structure is divided between
+  and is rebuilt periodically on a regular basis. The site structure is divided between
   project information (e.g., infrastructure, mailing lists, repositories etc.) and reports
   (e.g., unit testing, SCAs etc.)
   </description>
 	<organization>
 		<name>OpenOLAT</name>
-		<url>http://www.openolat.org</url>
+		<url>https://www.openolat.com</url>
 	</organization>
 	<licenses>
 		<license>
@@ -31,22 +31,22 @@
 		<repository>
 			<id>nexus.openolat</id>
 			<name>OpenOLAT Internal Nexus Release Repository</name>
-			<url>http://nexus.openolat.org/nexus/content/repositories/openolat</url>
+			<url>https://nexus.openolat.org/nexus/content/repositories/openolat</url>
 		</repository>
 		<snapshotRepository>
 			<id>nexus.openolat</id>
 			<name>OpenOLAT Internal Nexus Snapshot Repository</name>
-			<url>http://nexus.openolat.org/nexus/content/repositories/openolat-snapshots</url>
+			<url>https://nexus.openolat.org/nexus/content/repositories/openolat-snapshots</url>
 		</snapshotRepository>
 	</distributionManagement>
 	<issueManagement>
 		<system>JIRA</system>
-		<url>http://jira.openolat.org</url>
+		<url>https://jira.openolat.org</url>
 	</issueManagement>
 	<scm>
-		<connection>scm:hg:http://hg.openolat.org</connection>
-		<developerConnection>scm:hg:http://hg.openolat.org</developerConnection>
-		<url>http://hg.openolat.org</url>
+		<url>https://github.com/OpenOLAT/OpenOLAT</url>
+		<connection>scm:git:git://github.com/OpenOLAT/OpenOLAT.git</connection>
+		<developerConnection>scm:git:git@github.com:OpenOLAT/OpenOLAT.git</developerConnection>
 	</scm>
 	<mailingLists>
 		<mailingList>
@@ -62,18 +62,24 @@
 	<properties>
 		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 		<targetJdk>1.8</targetJdk>
-		<org.springframework.version>3.2.17.RELEASE</org.springframework.version>
-		<org.hibernate.version>5.2.7.Final</org.hibernate.version>
-		<com.sun.jersey.version>1.19.1</com.sun.jersey.version>
-		<jackson.version>1.9.2</jackson.version>
-		<org.mysql.version>5.1.40</org.mysql.version>
-		<org.postgresql.version>9.4.1212</org.postgresql.version>
-		<org.infinispan.version>8.1.0.Final</org.infinispan.version>
-		<lucene.version>4.8.0</lucene.version>
-		<version.selenium>2.53.1</version.selenium>
-		<version.drone>2.0.1.Final</version.drone>
-		<activemq.version>5.11.1</activemq.version>
-		<qtiworks.version>1.0.4</qtiworks.version>
+		<maven.compiler.source>1.8</maven.compiler.source>
+ 		<maven.compiler.target>1.8</maven.compiler.target>
+		<org.springframework.version>5.1.7.RELEASE</org.springframework.version>
+		<org.hibernate.version>5.4.3.Final</org.hibernate.version>
+		<com.sun.jersey.version>1.19.4</com.sun.jersey.version>
+		<apache.cxf>3.3.2</apache.cxf>
+		<apache.pdfbox>2.0.15</apache.pdfbox>
+		<apache.poi>4.1.0</apache.poi>
+		<apache.log4j>2.11.2</apache.log4j>
+		<jackson.version>2.9.9</jackson.version>
+		<org.mysql.version>5.1.46</org.mysql.version>
+		<org.postgresql.version>42.2.5</org.postgresql.version>
+		<org.infinispan.version>9.2.3.Final</org.infinispan.version>
+		<lucene.version>7.7.0</lucene.version>
+		<version.selenium>3.141.59</version.selenium>
+		<version.drone>2.5.1</version.drone>
+		<activemq.version>5.15.9</activemq.version>
+		<qtiworks.version>1.0.17</qtiworks.version>
 
 	    <!-- properties for testing and Q&A -->
 	    <!-- by default no tests are executed so far (April 2011). Use appropriate profiles and properties on the command line -->
@@ -87,8 +93,13 @@
 	    <test.env.db.postgresql.user>postgres</test.env.db.postgresql.user>
 	    <test.env.db.postgresql.pass>postgres</test.env.db.postgresql.pass>
 	    <test.env.db.postgresql.host.port>5432</test.env.db.postgresql.host.port>
+	    <test.env.db.oracle.name>orcl</test.env.db.oracle.name>
+	    <test.env.db.oracle.user>OLATTEST</test.env.db.oracle.user>
+	    <test.env.db.oracle.pass>olat00002</test.env.db.oracle.pass>
+	    <test.env.db.oracle.host.port>1521</test.env.db.oracle.host.port>
 	    <test.env.instance.id>myolat</test.env.instance.id>
 	    <test.env.jmx.rmi.port.0>3000</test.env.jmx.rmi.port.0>
+	    <test.env.webdriver.browser>chrome</test.env.webdriver.browser>
 	    <skipTests>true</skipTests>
 		<skipSeleniumTests>false</skipSeleniumTests>
 	</properties>
@@ -98,8 +109,8 @@
 			<build>
 				<plugins>
 					<plugin>
-						<groupId>com.sun.tools.jxc.maven2</groupId>
-						<artifactId>maven-jaxb-schemagen-plugin</artifactId>
+						<groupId>org.codehaus.mojo</groupId>
+						<artifactId>jaxb2-maven-plugin</artifactId>
 					</plugin>
 					<plugin>
 						<groupId>org.apache.maven.plugins</groupId>
@@ -145,15 +156,12 @@
 											<output>${basedir}/target/bootstrap/bootstrap-openolat.min.js</output>
 											<removeIncluded>false</removeIncluded>
 											<includes>
-												<!-- <include>${basedir}/target/bootstrap/javascripts/bootstrap/affix.min.js</include> -->
 												<include>${basedir}/target/bootstrap/javascripts/bootstrap/alert.min.js</include>
 												<include>${basedir}/target/bootstrap/javascripts/bootstrap/button.min.js</include>
-												<!-- <include>${basedir}/target/bootstrap/javascripts/bootstrap/carousel.min.js</include> -->
 												<include>${basedir}/target/bootstrap/javascripts/bootstrap/collapse.min.js</include>
 												<include>${basedir}/target/bootstrap/javascripts/bootstrap/dropdown.min.js</include>
 												<include>${basedir}/target/bootstrap/javascripts/bootstrap/tab.min.js</include>
 												<include>${basedir}/target/bootstrap/javascripts/bootstrap/transition.min.js</include>
-												<!-- <include>${basedir}/target/bootstrap/javascripts/bootstrap/scrollspy.min.js</include>  -->
 												<include>${basedir}/target/bootstrap/javascripts/bootstrap/modal.min.js</include>
 												<include>${basedir}/target/bootstrap/javascripts/bootstrap/tooltip.min.js</include>
 												<include>${basedir}/target/bootstrap/javascripts/bootstrap/popover.min.js</include>
@@ -161,10 +169,15 @@
 										</aggregation>
 									</aggregations>
 									<excludes>
+										<exclude>**/jw/*</exclude>
+										<exclude>**/dragula/*</exclude>
+										<exclude>**/mediaelementjs/*</exclude>
+										<exclude>**/mediaelementjs/**/*</exclude>
+										<exclude>**/fullcalendar/*</exclude>
 										<exclude>**/sliderpips/jquery-ui-slider-pips.js</exclude>
 									</excludes>
 								</configuration>
-							</execution>														
+							</execution>
 							<execution>
 								<!-- compress movie player in place, don't append to any other file -->
 								<id>compressmovieplayer</id>
@@ -177,17 +190,29 @@
 									<force>true</force>
 									<encoding>UTF-8</encoding>
 									<nocompress>false</nocompress>
-									<outputDirectory>${basedir}/src/main/webapp/static/movie</outputDirectory>
+									<outputDirectory>${basedir}/target/jsmovie</outputDirectory>
 									<sourceDirectory>${basedir}/src/main/webapp/static/movie</sourceDirectory>
 									<excludeResources>true</excludeResources>
+									<aggregations>
+										<aggregation>
+											<output>${basedir}/src/main/webapp/static/movie/player.min.js</output>
+											<removeIncluded>false</removeIncluded>
+											<includes>
+												<include>${basedir}/target/jsmovie/player.min.js</include>
+											</includes>
+										</aggregation>
+									</aggregations>
 									<excludes>
 										<exclude>**/*.min.js</exclude>
-										<exclude>**/mediaelementjs/*</exclude>
-										<exclude>**/sliderpips/jquery-ui-slider-pips.js</exclude>
 										<exclude>**/jw/*</exclude>
+										<exclude>**/dragula/*</exclude>
+										<exclude>**/fullcalendar/*</exclude>
+										<exclude>**/mediaelementjs/*</exclude>
+										<exclude>**/mediaelementjs/**/*</exclude>
+										<exclude>**/sliderpips/jquery-ui-slider-pips.js</exclude>
 									</excludes>
 								</configuration>
-							</execution>							
+							</execution>
 							<execution>
 								<id>compressjs</id>
 								<phase>process-resources</phase>
@@ -209,7 +234,6 @@
 											<includes>
 												<include>${basedir}/target/jquery/jquery/periodic/jquery.periodic.min.js</include>
 												<include>${basedir}/target/jquery/jshashtable-2.1_src.min.js</include>
-												<include>${basedir}/target/jquery/jquery/openolat/jquery.oolog.min.js</include>
 												<include>${basedir}/target/jquery/jquery/openolat/jquery.translator.min.js</include>
 												<include>${basedir}/target/jquery/jquery/openolat/jquery.navbar.min.js</include>
 												<include>${basedir}/target/jquery/jquery/openolat/jquery.bgcarrousel.min.js</include>
@@ -217,6 +241,26 @@
 												<include>${basedir}/target/jquery/functions.min.js</include>
 												<include>${basedir}/target/jquery/jquery/transit/jquery.transit.min.js</include>
 												<include>${basedir}/target/bootstrap/bootstrap-openolat.min.js</include>
+											</includes>
+										</aggregation>
+										<aggregation>
+											<output>${basedir}/src/main/webapp/static/js/jquery/qti/jquery.qti.min.js</output>
+											<removeIncluded>false</removeIncluded>
+											<includes><!-- qtiAutosave, qtiTimer are loaded separately -->
+												<include>${basedir}/target/jquery/jquery/qti/jquery.associate.min.js</include>
+												<include>${basedir}/target/jquery/jquery/qti/jquery.choice.min.js</include>
+												<include>${basedir}/target/jquery/jquery/qti/jquery.gapMatch.min.js</include>
+												<include>${basedir}/target/jquery/jquery/qti/jquery.graphicAssociate.min.js</include>
+												<include>${basedir}/target/jquery/jquery/qti/jquery.graphicGap.min.js</include>
+												<include>${basedir}/target/jquery/jquery/qti/jquery.graphicOrder.min.js</include>
+												<include>${basedir}/target/jquery/jquery/qti/jquery.hotspot.min.js</include>
+												<include>${basedir}/target/jquery/jquery/qti/jquery.hotspot.responsive.min.js</include>
+												<include>${basedir}/target/jquery/jquery/qti/jquery.match.min.js</include>
+												<include>${basedir}/target/jquery/jquery/qti/jquery.match_dnd.min.js</include>
+												<include>${basedir}/target/jquery/jquery/qti/jquery.order.min.js</include>
+												<include>${basedir}/target/jquery/jquery/qti/jquery.positionObject.min.js</include>
+												<include>${basedir}/target/jquery/jquery/qti/jquery.selectPoint.min.js</include>
+												<include>${basedir}/target/jquery/jquery/qti/jquery.slider.min.js</include>
 											</includes>
 										</aggregation>
 										<aggregation>
@@ -241,6 +285,13 @@
 											</includes>
 										</aggregation>
 										<aggregation>
+											<output>${basedir}/src/main/webapp/static/js/tinymce4/tinymce/plugins/olatcharcount/plugin.min.js</output>
+											<removeIncluded>false</removeIncluded>
+											<includes>
+												<include>${basedir}/target/jquery/tinymce4/tinymce/plugins/olatcharcount/plugin.min.js</include>
+											</includes>
+										</aggregation>
+										<aggregation>
 											<output>${basedir}/src/main/webapp/static/js/tinymce4/tinymce/plugins/olatsmileys/plugin.min.js</output>
 											<removeIncluded>false</removeIncluded>
 											<includes>
@@ -252,6 +303,13 @@
 											<removeIncluded>false</removeIncluded>
 											<includes>
 												<include>${basedir}/target/jquery/tinymce4/tinymce/plugins/quotespliter/plugin.min.js</include>
+											</includes>
+										</aggregation>
+										<aggregation>
+											<output>${basedir}/src/main/webapp/static/js/tinymce4/tinymce/plugins/olatedusharing/plugin.min.js</output>
+											<removeIncluded>false</removeIncluded>
+											<includes>
+												<include>${basedir}/target/jquery/tinymce4/tinymce/plugins/olatedusharing/plugin.min.js</include>
 											</includes>
 										</aggregation>
 										<aggregation>
@@ -270,6 +328,11 @@
 										</aggregation>
 									</aggregations>
 									<excludes>
+										<exclude>**/jw/*</exclude>
+										<exclude>**/dragula/*</exclude>
+										<exclude>**/fullcalendar/*</exclude>
+										<exclude>**/mediaelementjs/*</exclude>
+										<exclude>**/mediaelementjs/**/*</exclude>
 										<exclude>**/sliderpips/jquery-ui-slider-pips.js</exclude>
 									</excludes>
 								</configuration>
@@ -298,10 +361,17 @@
 												<include>${basedir}/target/jquery/jquery/cropper/cropper.min.css</include>
 												<include>${basedir}/target/jquery/jquery/sliderpips/jquery-ui-slider-pips.min.css</include>
 												<include>${basedir}/target/jquery/jquery/ui/jquery-ui-1.11.4.custom.min.css</include>
+												<include>${basedir}/src/main/webapp/static/js/dragula/dragula.min.css</include>
 											</includes>
 										</aggregation>
 									</aggregations>
 									<excludes>
+										<exclude>**/jw/*</exclude>
+										<exclude>**/dragula/*</exclude>
+										<exclude>**/fullcalendar/fullcalendar.js</exclude>
+										<exclude>**/fullcalendar/fullcalendar.min.js</exclude>
+										<exclude>**/mediaelementjs/*</exclude>
+										<exclude>**/mediaelementjs/**/*</exclude>
 										<exclude>**/sliderpips/jquery-ui-slider-pips.js</exclude>
 									</excludes>
 								</configuration>
@@ -319,61 +389,62 @@
 			</activation>
 			<dependencies>
 				<dependency>
-					<groupId>log4j</groupId>
-					<artifactId>log4j</artifactId>
-					<version>1.2.17</version>
+					<groupId>org.apache.logging.log4j</groupId>
+					<artifactId>log4j-core</artifactId>
+					<version>${apache.log4j}</version>
 				</dependency>
-				<!-- Jersey for tomcat -->
+				<!-- Apache CXF for tomcat -->
 				<dependency>
-					<groupId>javax.ws.rs</groupId>
-					<artifactId>jsr311-api</artifactId>
-					<version>1.1.1</version>
-				</dependency>
-				<dependency>
-					<groupId>com.sun.jersey</groupId>
-					<artifactId>jersey-server</artifactId>
-					<version>${com.sun.jersey.version}</version>
+					<groupId>org.apache.cxf</groupId>
+					<artifactId>cxf-rt-frontend-jaxws</artifactId>
+					<version>${apache.cxf}</version>
 					<exclusions>
 						<exclusion>
-							<groupId>org.springframework</groupId>
-							<artifactId>spring-core</artifactId>
-						</exclusion>
-						<exclusion>
-							<groupId>org.springframework</groupId>
-							<artifactId>spring</artifactId>
-						</exclusion>
-						<exclusion>
-							<groupId>org.springframework</groupId>
-							<artifactId>spring-beans</artifactId>
-						</exclusion>
-						<exclusion>
-							<groupId>org.springframework</groupId>
-							<artifactId>spring-context</artifactId>
-						</exclusion>
-						<exclusion>
-							<groupId>org.springframework</groupId>
-							<artifactId>spring-web</artifactId>
-						</exclusion>
-						<exclusion>
-							<groupId>org.springframework</groupId>
-							<artifactId>spring-aop</artifactId>
-						</exclusion>
-						<exclusion>
-							<groupId>org.springframework</groupId>
-							<artifactId>spring-jca</artifactId>
+							<groupId>org.apache.ant</groupId>
+							<artifactId>ant</artifactId>
 						</exclusion>
 					</exclusions>
 				</dependency>
 				<dependency>
-					<groupId>com.sun.jersey</groupId>
-					<artifactId>jersey-servlet</artifactId>
-					<version>${com.sun.jersey.version}</version>
+					<groupId>org.apache.cxf</groupId>
+					<artifactId>cxf-rt-frontend-jaxrs</artifactId>
+					<version>${apache.cxf}</version>
+					<exclusions>
+						<exclusion>
+							<groupId>javax.annotation</groupId>
+							<artifactId>javax.annotation-api</artifactId>
+						</exclusion>
+					</exclusions>
 				</dependency>
-				
 				<dependency>
-					<groupId>dom4j</groupId>
+					<groupId>org.apache.cxf</groupId>
+					<artifactId>cxf-rt-transports-http</artifactId>
+					<version>${apache.cxf}</version>
+				</dependency>
+				<dependency>
+					<groupId>org.apache.cxf</groupId>
+					<artifactId>cxf-rt-rs-http-sci</artifactId>
+					<version>${apache.cxf}</version>
+				</dependency>
+				<dependency>
+					<groupId>org.apache.cxf</groupId>
+				    <artifactId>cxf-rt-rs-service-description-openapi-v3</artifactId>
+				    <version>${apache.cxf}</version>
+				</dependency>
+				<dependency>
+				    <groupId>org.webjars</groupId>
+				    <artifactId>swagger-ui</artifactId>
+				    <version>3.22.2</version>
+				</dependency>
+				<dependency>
+				    <groupId>jakarta.xml.ws</groupId>
+				    <artifactId>jakarta.xml.ws-api</artifactId>
+				    <version>2.3.2</version>
+				</dependency>
+				<dependency>
+					<groupId>org.dom4j</groupId>
 					<artifactId>dom4j</artifactId>
-					<version>1.6.1</version>
+					<version>2.1.1</version>
 				</dependency>
 				<dependency>
 					<groupId>org.hibernate</groupId>
@@ -384,6 +455,14 @@
 							<groupId>org.slf4j</groupId>
 							<artifactId>slf4j-log4j12</artifactId>
 						</exclusion>
+						<exclusion>
+							<groupId>javax.activation</groupId>
+							<artifactId>javax.activation-api</artifactId>
+						</exclusion>
+						<exclusion>
+							<groupId>javax.xml.bind</groupId>
+							<artifactId>jaxb-api</artifactId>
+						</exclusion>
 					</exclusions>
 				</dependency>
 				<dependency>
@@ -392,9 +471,9 @@
 					<version>${org.hibernate.version}</version>
 				</dependency>
 				<dependency>
-					<groupId>org.hibernate</groupId>
-					<artifactId>hibernate-infinispan</artifactId>
-					<version>${org.hibernate.version}</version>
+					<groupId>org.infinispan</groupId>
+					<artifactId>infinispan-hibernate-cache-v53</artifactId>
+					<version>${org.infinispan.version}</version>
 				</dependency>
 				<dependency>
 					<groupId>org.hibernate</groupId>
@@ -493,23 +572,6 @@
 						</exclusion>
 					</exclusions>
 				</dependency>
-				<!-- webservice stack -->
-				<dependency>
-	      			<groupId>com.sun.xml.ws</groupId>
-	      			<artifactId>jaxws-rt</artifactId>
-	      			<version>2.2.6</version>
-	      			<exclusions>
-	      				<exclusion>
-	      					<groupId>javax.activation</groupId>
-	      					<artifactId>activation</artifactId>
-	      				</exclusion>
-	      			</exclusions>
-	    		</dependency>
-	    		<dependency>
-	    			<groupId>com.sun.xml.fastinfoset</groupId>
-	    			<artifactId>FastInfoset</artifactId>
-	    			<version>1.2.8</version>
-	    		</dependency>
 			</dependencies>
 			
 			<build>
@@ -546,13 +608,6 @@
 					<scope>provided</scope>
 				</dependency>
 				<dependency>
-					<groupId>com.sun.jersey</groupId>
-					<artifactId>jersey-servlet</artifactId>
-					<version>${com.sun.jersey.version}</version>
-					<scope>test</scope>
-				</dependency>
-
-				<dependency>
 					<groupId>org.apache.geronimo.specs</groupId>
 					<artifactId>geronimo-jms_1.1_spec</artifactId>
 					<version>1.1.1</version>
@@ -575,6 +630,14 @@
 							<groupId>org.slf4j</groupId>
 							<artifactId>slf4j-log4j12</artifactId>
 						</exclusion>
+						<exclusion>
+							<groupId>javax.activation</groupId>
+							<artifactId>javax.activation-api</artifactId>
+						</exclusion>
+						<exclusion>
+							<groupId>javax.xml.bind</groupId>
+							<artifactId>jaxb-api</artifactId>
+						</exclusion>
 					</exclusions>
 				</dependency>
 				<dependency>
@@ -584,9 +647,9 @@
 					<scope>provided</scope>
 				</dependency>
 				<dependency>
-					<groupId>org.hibernate</groupId>
-					<artifactId>hibernate-infinispan</artifactId>
-					<version>${org.hibernate.version}</version>
+					<groupId>org.infinispan</groupId>
+					<artifactId>infinispan-hibernate-cache-v53</artifactId>
+					<version>${org.infinispan.version}</version>
 					<scope>provided</scope>
 				</dependency>
 				
@@ -1059,6 +1122,7 @@
 			<properties>
 				<testFailureIgnore>false</testFailureIgnore>
 				<test.env>oracle</test.env>
+				<skipTests>false</skipTests>
 			</properties>
 			<build>
 				<plugins>
@@ -1099,10 +1163,15 @@
 				</plugins>
 			</build>
 			<dependencies>
+				<!-- 
+				Configure the Oracle maven repository in your .m2/settings.xml file or
+				download the JDBC driver, install it on your local repo with:
+				mvn install:install-file -Dfile=ojdbc8.jar -DgroupId=com.oracle.jdbc -DartifactId=ojdbc8 -Dversion=12.2.0.1.0 -Dpackaging=jar -DcreateChecksum=true
+				 -->
 				<dependency>
-					<groupId>com.oracle</groupId>
-					<artifactId>ojdbc6</artifactId>
-					<version>11.0</version>
+					<groupId>com.oracle.jdbc</groupId>
+					<artifactId>ojdbc8</artifactId>
+					<version>12.2.0.1.0</version>
 					<optional>true</optional>
 				</dependency>
 			</dependencies>
@@ -1119,36 +1188,6 @@
 			</snapshots>
 		</repository>
 		<repository>
-			<id>java.net-Public</id>
-			<name>Java.net repository for Maven</name>
-			<url>https://maven.java.net/content/groups/public/</url>
-			<layout>default</layout>
-		</repository>
-		<repository>
-			<id>jboss-public-repository-group</id>
-			<name>JBoss Public Maven Repository Group</name>
-			<url>https://repository.jboss.org/nexus/content/groups/public</url>
-			<layout>default</layout>
-			<releases>
-				<enabled>true</enabled>
-				<updatePolicy>never</updatePolicy>
-			</releases>
-			<snapshots>
-				<enabled>true</enabled>
-				<updatePolicy>daily</updatePolicy>
-			</snapshots>
-		</repository>
-		<repository>
-			<id>www2.ph.ed.ac.uk</id>
-			<url>http://www2.ph.ed.ac.uk/maven2</url>
-			<snapshots>
-				<enabled>true</enabled>
-			</snapshots>
-			<releases>
-				<enabled>true</enabled>
-			</releases>
-		</repository>	
-		<repository>
 			<id>openolat-repo</id>
 			<name>OpenOLAT Public Maven Repository Group</name>
 			<url>https://nexus.openolat.org/nexus/content/groups/public</url>
@@ -1164,18 +1203,6 @@
 		</repository>
 	</repositories>
 	<pluginRepositories>
-		<pluginRepository>
-			<id>java-net-plugin-repo</id>
-			<name>Java net Maven plugin repository</name>
-			<url>http://download.java.net/maven/2</url>
-			<releases>
-				<enabled>true</enabled>
-			</releases>
-			<snapshots>
-				<enabled>true</enabled>
-				<updatePolicy>daily</updatePolicy>
-			</snapshots>
-		</pluginRepository>
 		<pluginRepository>
 			<id>openolat-plugin-repo</id>
 			<name>OpenOLAT Public Maven Repository Group</name>
@@ -1213,6 +1240,8 @@
 					<exclude>**/*.pdf</exclude>
 					<exclude>**/*.graffle</exclude>
 					<exclude>**/doc-files/**</exclude>
+					<exclude>**/propertyHandlers.jpg</exclude>
+					<exclude>**/package.html</exclude>
 				</excludes>
 			</resource>
 			<resource>
@@ -1221,7 +1250,7 @@
 					values -->
 				<filtering>false</filtering>
 				<excludes>
-					<exclude>log4j.xml</exclude>
+					<exclude>log4j2.xml</exclude>
 				</excludes>
 			</resource>
 		</resources>
@@ -1240,28 +1269,28 @@
 			</testResource>
 		</testResources>
 		<plugins>
-			<!-- Set the build number from mercurial -->
+			<!-- Set the build number from git -->
 			<plugin>
-				<groupId>org.openolat.mojo</groupId>
-				<artifactId>buildnumber-maven-plugin</artifactId>
-				<version>1.2.0</version>
+				<groupId>pl.project13.maven</groupId>
+				<artifactId>git-commit-id-plugin</artifactId>
+				<version>2.2.5</version>
 				<executions>
 					<execution>
-						<phase>validate</phase>
+						<id>get-the-git-infos</id>
 						<goals>
-							<goal>hgchangeset</goal>
+							<goal>revision</goal>
 						</goals>
+						<phase>validate</phase>
 					</execution>
 				</executions>
 				<configuration>
-					<doCheck>true</doCheck>
-					<doUpdate>true</doUpdate>
+					<dotGitDirectory>${project.basedir}/.git</dotGitDirectory>
 				</configuration>
 			</plugin>
 			<plugin>
 				<groupId>org.apache.maven.plugins</groupId>
 				<artifactId>maven-antrun-plugin</artifactId>
-				<version>1.7</version>
+				<version>1.8</version>
 				<executions>
 					<!-- Copy the notice.txt file -->
 					<execution>
@@ -1279,25 +1308,25 @@
 					</execution>
 					<!-- Download tomcat for integration test -->
 					<execution>
-                        <phase>pre-integration-test</phase>
-                        <goals>
-                        	<goal>run</goal>
-                        </goals>
-                        <configuration>
-                            <tasks>
-                                <mkdir dir="${project.build.directory}/downloads" />
-                                <get src="http://nexus.openolat.org/nexus/content/repositories/openolat/org/apache/tomcat/apache-tomcat-arq/8.0.24/apache-tomcat-arq-8.0.24.zip" dest="${project.build.directory}/downloads" verbose="true" skipexisting="true" />
-                                <unzip src="${project.build.directory}/downloads/apache-tomcat-arq-8.0.24.zip" dest="${project.build.directory}/arq-apache-tomcat-8.0.24" />
-                            </tasks>
-                        </configuration>
-                    </execution> 
+						<phase>pre-integration-test</phase>
+						<goals>
+							<goal>run</goal>
+						</goals>
+						<configuration>
+							<target>
+								<mkdir dir="${project.build.directory}/downloads" />
+								<get src="https://nexus.openolat.org/nexus/content/repositories/openolat/org/apache/tomcat/apache-tomcat-arq/8.0.24/apache-tomcat-arq-8.0.24.zip" dest="${project.build.directory}/downloads" verbose="true" skipexisting="true" />
+								<unzip src="${project.build.directory}/downloads/apache-tomcat-arq-8.0.24.zip" dest="${project.build.directory}/arq-apache-tomcat-8.0.24" />
+							</target>
+						</configuration>
+					</execution> 
 				</executions>
 			</plugin>
             <!-- Unit tests -->
 			<plugin>
 				<groupId>org.apache.maven.plugins</groupId>
 				<artifactId>maven-surefire-plugin</artifactId>
-				<version>2.18.1</version>
+				<version>2.22.2</version>
 				<configuration>
 					<encoding>UTF-8</encoding>
 					<skipTests>${skipTests}</skipTests>
@@ -1305,6 +1334,7 @@
 					<systemPropertyVariables>
 						<java.io.tmpdir>${project.build.directory}/olatdata</java.io.tmpdir>
 					</systemPropertyVariables>
+					<trimStackTrace>false</trimStackTrace>
 					<testNGArtifactName>none:none</testNGArtifactName>
 					<includes>
 						<include>org/olat/test/AllTestsJunit4.java</include>
@@ -1316,14 +1346,14 @@
 			<plugin>
 				<groupId>org.apache.maven.plugins</groupId>
 				<artifactId>maven-failsafe-plugin</artifactId>
-				<version>2.18.1</version>
+				<version>2.22.2</version>
 				<configuration>
 					<encoding>UTF-8</encoding>
 					<skipITs>${skipSeleniumTests}</skipITs>
 					<skipTests>${skipSeleniumTests}</skipTests>
 					<reuseForks>false</reuseForks>
 					<argLine>-Xmx512m -Xms256m -Djava.awt.headless=true</argLine>
-					
+					<trimStackTrace>false</trimStackTrace>
 					<systemPropertyVariables>
 						<profile>${test.env}</profile>
 						<test.env.db.name>${test.env.db.name}</test.env.db.name>
@@ -1336,6 +1366,7 @@
 						<test.env.instance.id>${test.env.instance.id}</test.env.instance.id>
 						<test.env.jmx.rmi.port.0>${test.env.jmx.rmi.port.0}</test.env.jmx.rmi.port.0>
 						<arquillian.launch>tomcat-7-managed</arquillian.launch>
+						<webdriver.browser>${test.env.webdriver.browser}</webdriver.browser>
 					</systemPropertyVariables>
 					<testNGArtifactName>none:none</testNGArtifactName>
 					<includes>
@@ -1364,10 +1395,10 @@
 				<plugin>
 					<groupId>org.apache.maven.plugins</groupId>
 					<artifactId>maven-compiler-plugin</artifactId>
-					<version>3.3</version>
+					<version>3.8.1</version>
 					<configuration>
-						<source>1.8</source>
-						<target>1.8</target>
+						<source>${targetJdk}</source>
+						<target>${targetJdk}</target>
 						<encoding>UTF-8</encoding>
 					</configuration>
 				</plugin>
@@ -1375,28 +1406,67 @@
 				<plugin>
 					<groupId>org.apache.maven.plugins</groupId>
 					<artifactId>maven-war-plugin</artifactId>
-					<version>2.6</version>
+					<version>3.2.2</version>
 					<configuration>
+						<!--
 						<attachClasses>true</attachClasses>
+						-->
 						<directory>src/main/java</directory>
 						<archive>
 							<manifest>
 								<addDefaultImplementationEntries>true</addDefaultImplementationEntries>
 							</manifest>
 							<manifestEntries>
-								<Build-Change-Set>${changeSet}</Build-Change-Set>
-								<Build-Change-Set-Date>${changeSetDate}</Build-Change-Set-Date>
-								<Build-Revision-Number>${revisionNumber}</Build-Revision-Number>
+								<Build-Change-Set>${git.commit.id}</Build-Change-Set>
+								<Build-Change-Set-Date>${git.commit.time}</Build-Change-Set-Date>
+								<Build-Revision-Number>${git.commit.id.abbrev}</Build-Revision-Number>
 								<Implementation-Build>${buildNumber}</Implementation-Build>
 							</manifestEntries>
 						</archive>
-						<excludes>**/*.pxm, **/*.psd, **/*.scss, **/*.sh, static/bootstrap/**, **/*.README</excludes>
+						<warSourceExcludes>**/*.pxm, **/*.psd, **/*.sh, static/bootstrap/**, **/*.README</warSourceExcludes>
 						<webResources>
 							<resource>
 								<directory>src/main/webapp</directory>
 								<filtering>false</filtering>
 							</resource>
 						</webResources>
+					</configuration>
+				</plugin>
+				<plugin>
+					<groupId>org.eclipse.m2e</groupId>
+					<artifactId>lifecycle-mapping</artifactId>
+					<version>1.0.0</version>
+					<configuration>
+						<lifecycleMappingMetadata>
+							<pluginExecutions>
+								<pluginExecution>
+									<pluginExecutionFilter>
+										<groupId>org.apache.maven.plugins</groupId>
+										<artifactId>maven-antrun-plugin</artifactId>
+										<versionRange>[1.8,)</versionRange>
+										<goals>
+											<goal>run</goal>
+										</goals>
+									</pluginExecutionFilter>
+									<action>
+										<ignore></ignore>
+									</action>
+								</pluginExecution>
+								<pluginExecution>
+									<pluginExecutionFilter>
+										<groupId>org.codehaus.mojo</groupId>
+										<artifactId>sql-maven-plugin</artifactId>
+										<versionRange>[1.5,)</versionRange>
+										<goals>
+											<goal>execute</goal>
+										</goals>
+									</pluginExecutionFilter>
+									<action>
+										<ignore></ignore>
+									</action>
+								</pluginExecution>
+							</pluginExecutions>
+						</lifecycleMappingMetadata>
 					</configuration>
 				</plugin>
 
@@ -1444,7 +1514,7 @@
 				<plugin>
 					<groupId>org.apache.maven.plugins</groupId>
 					<artifactId>maven-enforcer-plugin</artifactId>
-					<version>1.4</version>
+					<version>3.0.0-M2</version>
 					<executions>
 						<execution>
 							<id>show-versions</id>
@@ -1461,7 +1531,7 @@
 							<configuration>
 								<rules>
 									<requireMavenVersion>
-										<version>2.2+</version>
+										<version>3.0.5</version>
 									</requireMavenVersion>
 									<requireJavaVersion>
 										<version>1.8+</version>
@@ -1474,43 +1544,49 @@
 
 				<!-- start rest api documentation: broken:  mvn javadoc:javadoc -->
 				<plugin>
-					<groupId>com.sun.tools.jxc.maven2</groupId>
-					<artifactId>maven-jaxb-schemagen-plugin</artifactId>
-					<version>1.2</version>
+					<groupId>org.codehaus.mojo</groupId>
+					<artifactId>jaxb2-maven-plugin</artifactId>
+					<version>2.3.1</version>
 					<executions>
 						<execution>
-							<phase>generate-resources</phase>
+							<id>schemagen</id>
 							<goals>
-								<goal>generate</goal>
+								<goal>schemagen</goal>
 							</goals>
 						</execution>
 					</executions>
 					<configuration>
-						<srcdir>${basedir}/src/</srcdir>
-						<includes>
-							<include>org/olat/restapi/**/*VO.java</include>
-							<include>org/olat/user/restapi/**/*VO.java</include>
-							<include>org/olat/modules/fo/restapi/*VO.java</include>
-							<include>org/olat/catalog/restapi/*VO.java</include>
-						</includes>
-						<excludes></excludes>
-						<destdir>${project.build.outputDirectory}</destdir>
+						<sources>
+							<source>src/main/java/org/olat/core/commons/services/notifications/restapi/vo/</source>
+							<source>src/main/java/org/olat/commons/calendar/restapi/</source>
+							<source>src/main/java/org/olat/modules/curriculum/restapi/</source>
+							<source>src/main/java/org/olat/modules/fo/restapi/</source>
+							<source>src/main/java/org/olat/modules/docpool/restapi/</source>
+							<source>src/main/java/org/olat/modules/gotomeeting/restapi/</source>
+							<source>src/main/java/org/olat/modules/taxonomy/restapi/</source>
+							<source>src/main/java/org/olat/modules/vitero/restapi/</source>
+							<source>src/main/java/org/olat/modules/wiki/restapi/vo/</source>
+							<source>src/main/java/org/olat/restapi/system/vo/</source>
+							<source>src/main/java/org/olat/restapi/support/vo/</source>
+							<source>src/main/java/org/olat/registration/restapi/</source>
+							<source>src/main/java/org/olat/user/restapi/</source>
+						</sources>
+						<schemaSourceExcludeFilters>
+                 			<myExcludes implementation="org.codehaus.mojo.jaxb2.shared.filters.pattern.PatternFileFilter">
+		                        <patterns>
+		                            <pattern>jaxb\.index</pattern>
+		                            <pattern>.*WebService.java</pattern>
+		                            <pattern>.*Factory.java</pattern>
+		                            <pattern>.*Examples.java</pattern>
+		                            <pattern>.*DateParam.java</pattern>
+		                            <pattern>.*StatusVO.java</pattern>
+		                            <pattern>.*GoToErrorVO.java</pattern>
+		                        </patterns>
+		                    </myExcludes>
+             			</schemaSourceExcludeFilters>
+						<outputDirectory>${project.build.outputDirectory}</outputDirectory>
 						<verbose>true</verbose>
 					</configuration>
-					<dependencies>
-						<dependency>
-							<groupId>xerces</groupId>
-							<artifactId>xercesImpl</artifactId>
-							<version>2.9.1</version>
-						</dependency>
-						<dependency>
-							<groupId>com.sun</groupId>
-							<artifactId>tools</artifactId>
-							<version>1.7</version>
-							<scope>system</scope>
-							<systemPath>${java.home}/../lib/tools.jar</systemPath>
-						</dependency>
-					</dependencies>
 				</plugin>
 
 				<!-- Javadoc -->
@@ -1532,11 +1608,26 @@
 						<verbose>false</verbose>
 						<show>public</show>
 						<subpackages>
-							org.olat.restapi,org.olat.modules.fo.restapi,
-							org.olat.core.commons.services.notifications.restapi,org.olat.user.restapi,org.olat.course.nodes,
-							org.olat.restapi.system
-					</subpackages>
-
+							org.olat.core.commons.services.notifications.restapi,
+							org.olat.commons.calendar.restapi,
+							org.olat.course.nodes.bc,
+							org.olat.course.nodes.bc,
+							org.olat.course.nodes.co,
+							org.olat.course.nodes.en,
+							org.olat.course.certificate.restapi,
+							org.olat.course.db.restapi,
+							org.olat.modules.curriculum.restapi,
+							org.olat.modules.docpool.restapi,
+							org.olat.modules.fo.restapi,
+							org.olat.modules.gotomeeting.restapi,
+							org.olat.modules.openmeetings.restapi,
+							org.olat.modules.taxonomy.restapi,
+							org.olat.modules.vitero.restapi,
+							org.olat.modules.wiki.restapi,
+							org.olat.registration.restapi,
+							org.olat.restapi,
+							org.olat.user.restapi
+						</subpackages>
 						<doclet>com.sun.jersey.wadl.resourcedoc.ResourceDoclet</doclet>
 						<docletArtifacts>
 							<docletArtifact>
@@ -1554,7 +1645,7 @@
 							<docletArtifact>
 								<groupId>xerces</groupId>
 								<artifactId>xercesImpl</artifactId>
-								<version>2.9.1</version>
+								<version>2.12.0</version>
 							</docletArtifact>
 						</docletArtifacts>
 						<additionalparam>-output
@@ -1581,7 +1672,26 @@
 						<formatWadlFile>true</formatWadlFile>
 						<baseUri>http://www.example.com</baseUri>
 						<packagesResourceConfig>
-							<param>org.olat.restapi;org.olat.core.commons.services.notifications.restapi;org.olat.modules.fo.restapi;org.olat.user.restapi;org.olat.course.nodes</param>
+							<param>
+								org.olat.core.commons.services.notifications.restapi;
+								org.olat.commons.calendar.restapi;
+								org.olat.course.nodes.bc;
+								org.olat.course.nodes.co;
+								org.olat.course.nodes.en;
+								org.olat.course.certificate.restapi;
+								org.olat.course.db.restapi;
+								org.olat.modules.curriculum.restapi;
+								org.olat.modules.fo.restapi;
+								org.olat.modules.docpool.restapi;
+								org.olat.modules.gotomeeting.restapi;
+								org.olat.modules.openmeetings.restapi;
+								org.olat.modules.taxonomy.restapi;
+								org.olat.modules.vitero.restapi;
+								org.olat.modules.wiki.restapi;
+								org.olat.registration.restapi;
+								org.olat.restapi;
+								org.olat.user.restapi;
+							</param>
 						</packagesResourceConfig>
 						<wadlGenerators>
 							<wadlGeneratorDescription>
@@ -1613,11 +1723,19 @@
 							</wadlGeneratorDescription>
 						</wadlGenerators>
 					</configuration>
+					<dependencies>
+						<dependency>
+							<groupId>xerces</groupId>
+							<artifactId>xercesImpl</artifactId>
+							<version>2.12.0</version>
+						</dependency>
+					</dependencies>
 				</plugin>
 
 				<plugin>
 					<groupId>org.codehaus.mojo</groupId>
 					<artifactId>xml-maven-plugin</artifactId>
+					<version>1.0.1</version>
 					<executions>
 						<execution>
 							<id>xslt: ${project.build.outputDirectory}/application.html</id>
@@ -1648,14 +1766,36 @@
 					<dependencies>
 						<dependency>
 							<groupId>net.sf.saxon</groupId>
-							<artifactId>saxon</artifactId>
-							<version>8.7</version>
+							<artifactId>saxon9</artifactId>
+							<version>9.1.0.8</version>
 						</dependency>
 					</dependencies>
 				</plugin>
 
 				<!-- end rest api documentation -->
-
+				
+				<!-- Dependency checks -->
+				<plugin>
+					<groupId>org.owasp</groupId>
+					<artifactId>dependency-check-maven</artifactId>
+					<version>4.0.0</version>
+					<executions>
+						<execution>
+							<goals>
+								<goal>check</goal>
+							</goals>
+						</execution>
+					</executions>
+				</plugin>
+				
+				<plugin>
+					<groupId>org.codehaus.mojo</groupId>
+					<artifactId>versions-maven-plugin</artifactId>
+					<version>2.7</version>
+					<configuration>
+						<rulesUri>file://${basedir}/scripts/version-rules.xml</rulesUri>
+					</configuration>
+				</plugin>
 			</plugins>
 		</pluginManagement>
 	</build>
@@ -1698,39 +1838,19 @@
 				</exclusion>
 			</exclusions>
 		</dependency>
-	    <!-- <OLATCE-1322> -->
-	    <dependency>
-	      <groupId>com.sun.xml.ws</groupId>
-	      <artifactId>jaxws-rt</artifactId>
-	      <version>2.2.6</version>
-	      <scope>test</scope>
-	      <exclusions>
-	      	<exclusion>
-				<groupId>javax.activation</groupId>
-				<artifactId>activation</artifactId>
-	      	</exclusion>
-	      </exclusions>
-	    </dependency>
-	    <dependency>
-	    	<groupId>com.sun.xml.fastinfoset</groupId>
-	    	<artifactId>FastInfoset</artifactId>
-	    	<version>1.2.8</version>
-	    	<scope>test</scope>
-	    </dependency>
-	    <!-- </OLATCE-1322> -->
 		<dependency>
 			<!-- Used by SCORM implementation -->
-			<groupId>org.beanshell</groupId>
-			<artifactId>bsh-core</artifactId>
-			<version>2.0b4</version>
+			<groupId>org.apache-extras.beanshell</groupId>
+			<artifactId>bsh</artifactId>
+			<version>2.0b6</version>
 		</dependency>
 		<dependency>
 			<groupId>commons-codec</groupId>
 			<artifactId>commons-codec</artifactId>
-			<version>1.4</version>
+			<version>1.12</version>
 		</dependency>
 		<dependency>
-			<!-- Used by at least velocity engine -->
+			<!-- Used by at least commons-validator -->
 			<groupId>commons-collections</groupId>
 			<artifactId>commons-collections</artifactId>
 			<version>3.2.2</version>
@@ -1739,7 +1859,7 @@
 			<!-- Used by email address validator -->
 			<groupId>commons-validator</groupId>
 			<artifactId>commons-validator</artifactId>
-			<version>1.5.0</version>
+			<version>1.6</version>
 			<exclusions>
 				<exclusion>
 					<groupId>commons-logging</groupId>
@@ -1759,7 +1879,7 @@
 			<!-- Used by at least commons-fileupload, webdriver -->
 			<groupId>commons-io</groupId>
 			<artifactId>commons-io</artifactId>
-			<version>2.4</version>
+			<version>2.6</version>
 		</dependency>
 		<dependency>
 			<groupId>org.jcodec</groupId>
@@ -1788,45 +1908,51 @@
 				</exclusion>
 			</exclusions>
 		</dependency>
-		<dependency><!-- Velocity dependency -->
-			<groupId>oro</groupId>
-			<artifactId>oro</artifactId>
-			<version>2.0.8</version>
-		</dependency>
 		<dependency>
 			<groupId>org.openolat.jamwiki</groupId>
 			<artifactId>jamwiki-core</artifactId>
-			<version>1.0.0</version>
-		</dependency>
-		<dependency>
-			<groupId>opensaml</groupId>
-			<artifactId>opensaml</artifactId>
-			<version>1.1</version>
+			<version>1.0.1</version>
 		</dependency>
 		<dependency>
 			<groupId>org.openolat</groupId>
 			<artifactId>openmeetingws</artifactId>
-			<version>2.1.1</version>
+			<version>3.0.8</version>
 		</dependency>
 		<dependency>
 			<groupId>org.openolat</groupId>
 			<artifactId>viterows</artifactId>
-			<version>6.0</version>
+			<version>9.1.1</version>
+		</dependency>
+		<dependency>
+			<groupId>org.openolat</groupId>
+			<artifactId>edusharingws</artifactId>
+			<version>4.1.0</version>
 		</dependency>
 		<dependency>
 			<groupId>org.apache.poi</groupId>
 			<artifactId>poi</artifactId>
-			<version>3.14</version>
+			<version>${apache.poi}</version>
 		</dependency>
 		<dependency>
 			<groupId>org.apache.poi</groupId>
 			<artifactId>poi-scratchpad</artifactId>
-			<version>3.14</version>
+			<version>${apache.poi}</version>
 		</dependency>
 		<dependency>
 			<groupId>org.apache.pdfbox</groupId>
 			<artifactId>pdfbox</artifactId>
-			<version>1.8.12</version>
+			<version>${apache.pdfbox}</version>
+			<exclusions>
+				<exclusion>
+					<groupId>commons-logging</groupId>
+					<artifactId>commons-logging</artifactId>
+				</exclusion>
+			</exclusions>
+		</dependency>
+		<dependency>
+			<groupId>org.apache.pdfbox</groupId>
+			<artifactId>xmpbox</artifactId>
+			<version>${apache.pdfbox}</version>
 			<exclusions>
 				<exclusion>
 					<groupId>commons-logging</groupId>
@@ -1836,23 +1962,40 @@
 		</dependency>
 		<dependency>
 			<groupId>org.bouncycastle</groupId>
-			<artifactId>bcmail-jdk15</artifactId>
-			<version>1.46</version>
+			<artifactId>bcmail-jdk15on</artifactId>
+			<version>1.62</version>
 		</dependency>
 		<dependency>
 			<groupId>org.bouncycastle</groupId>
-			<artifactId>bcprov-jdk15</artifactId>
-			<version>1.46</version>
+			<artifactId>bcprov-jdk15on</artifactId>
+			<version>1.62</version>
 		</dependency>
 		<dependency>
-			<groupId>org.scribe</groupId>
-			<artifactId>scribe</artifactId>
-			<version>1.3.5</version>
+		    <groupId>com.github.scribejava</groupId>
+		    <artifactId>scribejava-apis</artifactId>
+		    <version>6.5.1</version>
+		</dependency>
+		<dependency>
+			<groupId>io.jsonwebtoken</groupId>
+			<artifactId>jjwt-api</artifactId>
+			<version>0.10.6</version>
+		</dependency>
+		<dependency>
+			<groupId>io.jsonwebtoken</groupId>
+			<artifactId>jjwt-impl</artifactId>
+			<version>0.10.6</version>
+			 <scope>runtime</scope>
+		</dependency>
+		<dependency>
+			<groupId>io.jsonwebtoken</groupId>
+			<artifactId>jjwt-jackson</artifactId>
+			<version>0.10.6</version>
+			<scope>runtime</scope>
 		</dependency>
 		<dependency>
 			<groupId>jaxen</groupId>
 			<artifactId>jaxen</artifactId>
-			<version>1.1.4</version>
+			<version>1.2.0</version>
 			<exclusions>
 				<exclusion>
 					<groupId>com.ibm.icu</groupId>
@@ -1876,8 +2019,8 @@
 		<dependency>
 			<groupId>fmath</groupId>
 			<artifactId>fmath-latex-mathml</artifactId>
-			<version>0.5</version>
-			<!--  need org.jdom 1.1.3, jaxen 1.1.4 and commons-codec -->
+			<version>3.1</version>
+			<!-- need org.jdom2 2.0.6 -->
 		</dependency>
 		<dependency>
 			<groupId>jgrapht</groupId>
@@ -1911,12 +2054,6 @@
 			<groupId>org.openolat.qtiworks</groupId>
 			<artifactId>qtiworks-jqtiplus</artifactId>
 			<version>${qtiworks.version}</version>
-			<exclusions>
-				<exclusion>
-					<groupId>ch.qos.logback</groupId>
-					<artifactId>logback-classic</artifactId>
-				</exclusion>
-			</exclusions>
 		</dependency>
 		<dependency>
 			<groupId>org.openolat.qtiworks</groupId>
@@ -1924,34 +2061,16 @@
 			<version>${qtiworks.version}</version>
 			<type>test-jar</type>
 			<scope>test</scope>
-			<exclusions>
-				<exclusion>
-					<groupId>ch.qos.logback</groupId>
-					<artifactId>logback-classic</artifactId>
-				</exclusion>
-			</exclusions>
 		</dependency>
 		<dependency>
 			<groupId>org.openolat.qtiworks</groupId>
 			<artifactId>qtiworks-mathassess</artifactId>
 			<version>${qtiworks.version}</version>
-			<exclusions>
-				<exclusion>
-					<groupId>ch.qos.logback</groupId>
-					<artifactId>logback-classic</artifactId>
-				</exclusion>
-			</exclusions>
 		</dependency>
 		<dependency>
 			<groupId>org.openolat.qtiworks</groupId>
 			<artifactId>qtiworks-mathassess-glue</artifactId>
 			<version>${qtiworks.version}</version>
-			<exclusions>
-				<exclusion>
-					<groupId>ch.qos.logback</groupId>
-					<artifactId>logback-classic</artifactId>
-				</exclusion>
-			</exclusions>
 		</dependency>
 		<dependency>
 			<groupId>org.openolat.qtiworks</groupId>
@@ -1959,24 +2078,12 @@
 			<version>${qtiworks.version}</version>
 			<type>test-jar</type>
 			<scope>test</scope>
-			<exclusions>
-				<exclusion>
-					<groupId>ch.qos.logback</groupId>
-					<artifactId>logback-classic</artifactId>
-				</exclusion>
-			</exclusions>
 		</dependency>
 		<dependency>
 			<groupId>org.openolat.qtiworks</groupId>
 			<artifactId>qtiworks-samples</artifactId>
 			<version>${qtiworks.version}</version>
 			<scope>test</scope>
-			<exclusions>
-				<exclusion>
-					<groupId>ch.qos.logback</groupId>
-					<artifactId>logback-classic</artifactId>
-				</exclusion>
-			</exclusions>
 		</dependency>
 		<dependency>
 			<groupId>org.openolat.qtiworks</groupId>
@@ -1984,23 +2091,17 @@
 			<version>${qtiworks.version}</version>
 			<type>test-jar</type>
 			<scope>test</scope>
-			<exclusions>
-				<exclusion>
-					<groupId>ch.qos.logback</groupId>
-					<artifactId>logback-classic</artifactId>
-				</exclusion>
-			</exclusions>
 		</dependency>
 		<!-- End dependency to qtiworks -->
 		<dependency>
 			<groupId>org.openolat.imscp</groupId>
 			<artifactId>manifest</artifactId>
-			<version>1.3.0</version>
+			<version>1.4.3</version>
 		</dependency>
 		<dependency>
-			<groupId>rome</groupId>
+			<groupId>com.rometools</groupId>
 			<artifactId>rome</artifactId>
-			<version>1.0</version>
+			<version>1.7.2</version>
 			<exclusions>
 				<exclusion>
 					<groupId>jdom</groupId>
@@ -2024,29 +2125,39 @@
 		<dependency>
 			<groupId>org.slf4j</groupId>
 			<artifactId>slf4j-api</artifactId>
-			<version>1.5.11</version>
+			<version>1.7.26</version>
 		</dependency>
 		<dependency>
-			<groupId>org.slf4j</groupId>
-			<artifactId>slf4j-log4j12</artifactId>
-			<version>1.5.11</version>
+			<groupId>org.apache.logging.log4j</groupId>
+    		<artifactId>log4j-api</artifactId>
+			<version>${apache.log4j}</version>
 		</dependency>
 		<dependency>
-			<groupId>org.slf4j</groupId>
-			<artifactId>jul-to-slf4j</artifactId>
-			<version>1.5.8</version>
+			<groupId>org.apache.logging.log4j</groupId>
+			<artifactId>log4j-jul</artifactId>
+			<version>${apache.log4j}</version>
+		</dependency>
+		<dependency>
+			<groupId>org.apache.logging.log4j</groupId>
+			<artifactId>log4j-slf4j-impl</artifactId>
+			<version>${apache.log4j}</version>
 		</dependency>
 		<!-- Replace commons-logging -->
 		<dependency>
-			<groupId>org.slf4j</groupId>
-			<artifactId>jcl-over-slf4j</artifactId>
-			<version>1.5.8</version>
+			<groupId>org.apache.logging.log4j</groupId>
+			<artifactId>log4j-jcl</artifactId>
+			<version>${apache.log4j}</version>
 		</dependency>
 		<dependency>
-			<groupId>log4j</groupId>
-			<artifactId>log4j</artifactId>
-			<version>1.2.17</version>
+			<groupId>org.apache.logging.log4j</groupId>
+			<artifactId>log4j-core</artifactId>
+			<version>${apache.log4j}</version>
 			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>com.lmax</groupId>
+			<artifactId>disruptor</artifactId>
+			<version>3.4.2</version>
 		</dependency>
 
 		<!-- basic LTI stuff for lti demo: http://www.imsglobal.org/toolsinteroperability2.cfm -->
@@ -2068,16 +2179,22 @@
 			<version>1.1.1</version>
 			<scope>test</scope>
 		</dependency>
+		<dependency>
+		    <groupId>jakarta.xml.ws</groupId>
+		    <artifactId>jakarta.xml.ws-api</artifactId>
+		    <version>2.3.2</version>
+			<scope>test</scope>
+		</dependency>
 		<!-- core dependencies -->
 		<dependency>
-			<groupId>net.sourceforge.nekohtml</groupId>
-			<artifactId>nekohtml</artifactId>
-			<version>1.9.21</version>
+			<groupId>nu.validator</groupId>
+			<artifactId>htmlparser</artifactId>
+			<version>1.4.13</version>
 		</dependency>
 		<dependency>
-			<groupId>org.owasp.antisamy</groupId>
-			<artifactId>antisamy</artifactId>
-			<version>1.5.2</version>
+			<groupId>com.googlecode.owasp-java-html-sanitizer</groupId>
+			<artifactId>owasp-java-html-sanitizer</artifactId>
+			<version>20190503.1</version>
 		</dependency>
 		<dependency>
 			<groupId>org.w3c.css</groupId>
@@ -2087,12 +2204,22 @@
 		<dependency>
 			<groupId>org.apache.xmlgraphics</groupId>
 			<artifactId>batik-css</artifactId>
-			<version>1.7</version>
+			<version>1.11</version>
+			<exclusions>
+				<exclusion>
+					<groupId>xml-apis</groupId>
+					<artifactId>xml-apis-ext</artifactId>
+				</exclusion>
+				<exclusion>
+					<groupId>commons-logging</groupId>
+					<artifactId>commons-logging</artifactId>
+				</exclusion>
+			</exclusions>
 		</dependency>
 		<dependency>
 			<groupId>org.apache.xmlgraphics</groupId>
 			<artifactId>batik-util</artifactId>
-			<version>1.7</version>
+			<version>1.11</version>
 		</dependency>
 		<dependency>
 			<groupId>de.java2html</groupId>
@@ -2113,12 +2240,12 @@
 		<dependency>
 			<groupId>org.apache.httpcomponents</groupId>
 			<artifactId>httpcore</artifactId>
-			<version>4.3.3</version>
+			<version>4.4.11</version>
 		</dependency>
 		<dependency>
 			<groupId>org.apache.httpcomponents</groupId>
 			<artifactId>httpclient</artifactId>
-			<version>4.3.3</version>
+			<version>4.5.8</version>
 			<exclusions>
 				<exclusion>
 					<groupId>commons-logging</groupId>
@@ -2129,13 +2256,32 @@
 		<dependency>
 			<groupId>org.apache.httpcomponents</groupId>
 			<artifactId>httpmime</artifactId>
-			<version>4.3.3</version>
+			<version>4.5.8</version>
 		</dependency>
 		<dependency>
-			<!-- Used by at least ical4j, velocity, basiclti -->
 			<groupId>commons-lang</groupId>
 			<artifactId>commons-lang</artifactId>
 			<version>2.6</version>
+		</dependency>
+		<dependency>
+			<groupId>org.apache.commons</groupId>
+			<artifactId>commons-text</artifactId>
+			<version>1.6</version>
+		</dependency>
+		<dependency>
+			<groupId>com.opencsv</groupId>
+			<artifactId>opencsv</artifactId>
+			<version>4.6</version>
+			<exclusions>
+				<exclusion>
+					<groupId>commons-logging</groupId>
+					<artifactId>commons-logging</artifactId>
+				</exclusion>
+				<exclusion>
+					<groupId>commons-beanutils</groupId>
+					<artifactId>commons-beanutils</artifactId>
+				</exclusion>
+			</exclusions>
 		</dependency>
 		<dependency>
 			<groupId>org.infinispan</groupId>
@@ -2179,6 +2325,14 @@
 					<groupId>org.slf4j</groupId>
 					<artifactId>slf4j-log4j12</artifactId>
 				</exclusion>
+				<exclusion>
+					<groupId>javax.activation</groupId>
+					<artifactId>javax.activation-api</artifactId>
+				</exclusion>
+				<exclusion>
+					<groupId>javax.xml.bind</groupId>
+					<artifactId>jaxb-api</artifactId>
+				</exclusion>
 			</exclusions>
 		</dependency>
 		<dependency>
@@ -2188,9 +2342,9 @@
 			<scope>test</scope>
 		</dependency>
 		<dependency>
-			<groupId>org.hibernate</groupId>
-			<artifactId>hibernate-infinispan</artifactId>
-			<version>${org.hibernate.version}</version>
+			<groupId>org.infinispan</groupId>
+			<artifactId>infinispan-hibernate-cache-v53</artifactId>
+			<version>${org.infinispan.version}</version>
 			<scope>test</scope>
 		</dependency>
 		<dependency>
@@ -2201,8 +2355,8 @@
 		</dependency>
 		<dependency>
 			<groupId>org.apache.velocity</groupId>
-			<artifactId>velocity</artifactId>
-			<version>1.7</version>
+			<artifactId>velocity-engine-core</artifactId>
+			<version>2.1</version>
 		</dependency>
 		<dependency>
 			<groupId>org.json</groupId>
@@ -2218,41 +2372,23 @@
 		<dependency>
 			<groupId>org.quartz-scheduler</groupId>
 			<artifactId>quartz</artifactId>
-			<version>1.8.6</version>
+			<version>2.2.3</version>
+			<exclusions>
+				<exclusion>
+					<groupId>c3p0</groupId>
+					<artifactId>c3p0</artifactId>
+				</exclusion>
+			</exclusions>
 		</dependency>
 		<dependency>
 			<groupId>com.thoughtworks.xstream</groupId>
 			<artifactId>xstream</artifactId>
-			<version>1.4.9</version>
+			<version>1.4.11.1</version>
 		</dependency>
 		<dependency>
-			<groupId>xerces</groupId>
-			<artifactId>xercesImpl</artifactId>
-			<version>2.11.0</version>
-			<!-- prevents duplicate -->
-			<exclusions>
-  				<exclusion>
-  					<groupId>xerces</groupId>
-					<artifactId>xmlParserAPIs</artifactId>
-  				</exclusion>
-  			</exclusions>
-		</dependency>
-		<dependency>
-			<groupId>xml-apis</groupId>
-			<artifactId>xml-apis</artifactId>
-			<version>1.3.04</version>
-		</dependency>
-		<dependency>
-			<groupId>javax.mail</groupId>
-			<artifactId>mail</artifactId>
-			<version>1.4.7</version>
-			<!-- fxdiff: FXOLAT-243 included in JDK 1.6 -->
-			<exclusions>
-				<exclusion>
-					<groupId>javax.activation</groupId>
-					<artifactId>activation</artifactId>
-				</exclusion>
-			</exclusions>			
+			<groupId>com.sun.mail</groupId>
+			<artifactId>jakarta.mail</artifactId>
+			<version>1.6.3</version>		
 		</dependency>
 		<dependency>
 			<groupId>com.neemsoft</groupId>
@@ -2295,9 +2431,9 @@
 			<artifactId>spring-core</artifactId>
 			<version>${org.springframework.version}</version>
 			<exclusions>
-				<exclusion>
-					<groupId>commons-logging</groupId>
-					<artifactId>commons-logging</artifactId>
+				<exclusion><!-- use jlc-over-slfj because we still use log4j version 1.2 -->
+					<groupId>org.springframework</groupId>
+					<artifactId>spring-jcl</artifactId>
 				</exclusion>
 			</exclusions>
 		</dependency>
@@ -2310,23 +2446,11 @@
 			<groupId>org.springframework</groupId>
 			<artifactId>spring-beans</artifactId>
 			<version>${org.springframework.version}</version>
-			<exclusions>
-				<exclusion>
-					<groupId>commons-logging</groupId>
-					<artifactId>commons-logging</artifactId>
-				</exclusion>
-			</exclusions>
 		</dependency>
 		<dependency>
 			<groupId>org.springframework</groupId>
 			<artifactId>spring-context</artifactId>
 			<version>${org.springframework.version}</version>
-			<exclusions>
-				<exclusion>
-					<groupId>commons-logging</groupId>
-					<artifactId>commons-logging</artifactId>
-				</exclusion>
-			</exclusions>
 		</dependency>
 		<dependency>
 			<groupId>org.springframework</groupId>
@@ -2356,35 +2480,28 @@
 			</exclusions>
 		</dependency>
 		<!-- end Spring dependencies -->
-		<!-- Start Jersey dependency -->
+		<!-- Start Apache CXF dependency and Active MQ Broker -->
 		<dependency>
-			<groupId>javax.ws.rs</groupId>
-			<artifactId>jsr311-api</artifactId>
-			<version>1.1.1</version>
-			<scope>test</scope>
-		</dependency>
-
-		<dependency>
-			<groupId>org.codehaus.jackson</groupId>
-			<artifactId>jackson-core-asl</artifactId>
-			<version>${jackson.version}</version>
-		</dependency>
-		<dependency>
-			<groupId>org.codehaus.jackson</groupId>
-			<artifactId>jackson-mapper-asl</artifactId>
-			<version>${jackson.version}</version>
-		</dependency>
-		<dependency>
-			<groupId>org.codehaus.jackson</groupId>
-			<artifactId>jackson-jaxrs</artifactId>
-			<version>${jackson.version}</version>
-		</dependency>
-		<dependency>
-			<groupId>org.codehaus.jackson</groupId>
-			<artifactId>jackson-xc</artifactId>
-			<version>${jackson.version}</version>
-		</dependency>
-		<!-- end jersey -->
+            <groupId>com.fasterxml.jackson.jaxrs</groupId>
+            <artifactId>jackson-jaxrs-json-provider</artifactId>
+            <version>${jackson.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-annotations</artifactId>
+            <version>${jackson.version}</version>
+        </dependency>
+        <dependency>
+        	<groupId>com.fasterxml.jackson.core</groupId>
+        	<artifactId>jackson-databind</artifactId>
+            <version>${jackson.version}</version>
+        </dependency>
+        <dependency>
+        	<groupId>com.fasterxml.jackson.dataformat</groupId>
+        	<artifactId>jackson-dataformat-yaml</artifactId>
+            <version>${jackson.version}</version>
+        </dependency>
+		<!-- end Apache CXF dependency and Active MQ Broker -->
 		
 		<!-- paypal -->
 		<dependency>
@@ -2404,45 +2521,57 @@
 		<dependency>
 			<groupId>org.assertj</groupId>
 			<artifactId>assertj-core</artifactId>
-			<version>3.6.1</version>
+			<version>3.12.2</version>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>org.mockito</groupId>
+			<artifactId>mockito-core</artifactId>
+			<version>2.7.22</version>
 			<scope>test</scope>
 		</dependency>
 		<dependency>
 			<groupId>xmlunit</groupId>
 			<artifactId>xmlunit</artifactId>
-			<version>1.5</version>
+			<version>1.6</version>
 			<scope>test</scope>
 		</dependency>
 		<dependency>
 		    <groupId>io.undertow</groupId>
 		    <artifactId>undertow-core</artifactId>
-		    <version>1.2.9.Final</version>
+		    <version>2.0.21.Final</version>
 			<scope>test</scope>
 		</dependency>
 		<dependency>
 		    <groupId>io.undertow</groupId>
 		    <artifactId>undertow-servlet</artifactId>
-		    <version>1.2.9.Final</version>
+		    <version>2.0.21.Final</version>
 			<scope>test</scope>
 		</dependency>
 		<dependency>
 			<groupId>org.zapodot</groupId>
 			<artifactId>embedded-ldap-junit</artifactId>
-			<version>0.5.2</version>
+			<version>0.7</version>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>com.github.kirviq</groupId>
+			<artifactId>dumbster</artifactId>
+			<version>1.7.1</version>
 			<scope>test</scope>
 		</dependency>
     
 		<!-- Start test dependencies for Arquillian and Selenium -->
-    	<dependency>
+		<dependency>
 			<groupId>org.jboss.arquillian.junit</groupId>
 			<artifactId>arquillian-junit-container</artifactId>
 			<scope>test</scope>
 		</dependency>
 		<dependency>
-        	<groupId>org.jboss.arquillian.container</groupId>
-        	<artifactId>arquillian-tomcat-managed-7</artifactId>
-        	<version>1.0.0.CR9</version>
-        	<scope>test</scope>
+			<groupId>org.jboss.arquillian.container</groupId>
+			<artifactId>arquillian-tomcat-managed-7</artifactId>
+			<version>1.1.0.Final</version>
+		<scope>test</scope>
       	</dependency>
 		<dependency>
 			<groupId>org.jboss.arquillian.extension</groupId>
@@ -2451,66 +2580,105 @@
 		</dependency>
 		<dependency>
 			<groupId>org.jboss.arquillian.extension</groupId>
-			<artifactId>arquillian-drone-selenium-server</artifactId>
+			<artifactId>arquillian-drone-webdriver</artifactId>
 			<scope>test</scope>
 		</dependency>
 		<dependency>
-            <groupId>org.jboss.arquillian.extension</groupId>
-            <artifactId>arquillian-drone-webdriver-depchain</artifactId>
-            <version>${version.drone}</version>
-            <type>pom</type>
-            <scope>test</scope>
-            <exclusions>
-            	<exclusion>
-					<groupId>org.seleniumhq.selenium</groupId>
-					<artifactId>selenium-htmlunit-driver</artifactId>
-            	</exclusion>
-            	<exclusion>
-					<groupId>org.seleniumhq.selenium</groupId>
-					<artifactId>htmlunit-driver</artifactId>
-            	</exclusion>
-            	<exclusion>
-					<groupId>com.opera</groupId>
-					<artifactId>operadriver</artifactId>
-            	</exclusion>
-            	<exclusion>
-					<groupId>org.jboss.arquillian.extension</groupId>
-					<artifactId>arquillian-phantom-driver</artifactId>
-            	</exclusion>
-            	<exclusion>
-					<groupId>org.seleniumhq.selenium</groupId>
-					<artifactId>selenium-chrome-driver</artifactId>
-            	</exclusion>
-            </exclusions>
-        </dependency>
+			<groupId>org.eu.ingwar.tools</groupId>
+			<artifactId>arquillian-suite-extension</artifactId>
+			<version>1.2.0</version>
+			<scope>test</scope>
+		</dependency>
 		<dependency>
-			<groupId>org.jboss.arquillian.graphene</groupId>
-			<artifactId>graphene-webdriver</artifactId>
-			<version>2.1.0.Final</version>
-			<type>pom</type>
+			<groupId>com.google.code.gson</groupId>
+			<artifactId>gson</artifactId>
+			<version>2.8.5</version>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>com.google.guava</groupId>
+			<artifactId>guava</artifactId>
+			<version>27.1-jre</version>
+		</dependency>
+		<!--  selenium first -->
+		<dependency>
+			<groupId>org.seleniumhq.selenium</groupId>
+			<artifactId>selenium-server</artifactId>
+			<version>${version.selenium}</version>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>org.seleniumhq.selenium</groupId>
+			<artifactId>selenium-api</artifactId>
+			<version>${version.selenium}</version>
 			<scope>test</scope>
 		</dependency>
 		<dependency>
 			<groupId>org.seleniumhq.selenium</groupId>
 			<artifactId>selenium-java</artifactId>
+			<version>${version.selenium}</version>
 			<scope>test</scope>
-			<exclusions>
-				<exclusion>
-					<groupId>commons-logging</groupId>
-					<artifactId>commons-logging</artifactId>
-				</exclusion>
-			</exclusions>
 		</dependency>
 		<dependency>
 			<groupId>org.seleniumhq.selenium</groupId>
-			<artifactId>selenium-server</artifactId>
+			<artifactId>selenium-support</artifactId>
+			<version>${version.selenium}</version>
 			<scope>test</scope>
-			<exclusions>
-				<exclusion>
-					<groupId>org.mortbay.jetty</groupId>
-					<artifactId>servlet-api-2.5</artifactId>
-				</exclusion>
-			</exclusions>
+		</dependency>
+		<dependency>
+			<groupId>org.seleniumhq.selenium</groupId>
+			<artifactId>selenium-leg-rc</artifactId>
+			<version>${version.selenium}</version>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>org.seleniumhq.selenium</groupId>
+			<artifactId>lift</artifactId>
+			<version>${version.selenium}</version>
+			<scope>test</scope>
+		</dependency>
+		<!-- Driver -->
+		<dependency>
+			<groupId>org.seleniumhq.selenium</groupId>
+			<artifactId>selenium-chrome-driver</artifactId>
+			<version>${version.selenium}</version>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>org.seleniumhq.selenium</groupId>
+			<artifactId>selenium-edge-driver</artifactId>
+			<version>${version.selenium}</version>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>org.seleniumhq.selenium</groupId>
+			<artifactId>selenium-firefox-driver</artifactId>
+			<version>${version.selenium}</version>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>org.seleniumhq.selenium</groupId>
+			<artifactId>selenium-ie-driver</artifactId>
+			<version>${version.selenium}</version>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>org.seleniumhq.selenium</groupId>
+			<artifactId>selenium-opera-driver</artifactId>
+			<version>${version.selenium}</version>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>org.seleniumhq.selenium</groupId>
+			<artifactId>selenium-remote-driver</artifactId>
+			<version>${version.selenium}</version>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>org.seleniumhq.selenium</groupId>
+			<artifactId>selenium-safari-driver</artifactId>
+			<version>${version.selenium}</version>
+			<scope>test</scope>
 		</dependency>
 		<!-- End test dependencies -->
 	</dependencies>
@@ -2518,16 +2686,9 @@
 	<dependencyManagement>
 		<dependencies>
 			<dependency>
-				<groupId>org.jboss.arquillian.selenium</groupId>
-				<artifactId>selenium-bom</artifactId>
-				<version>${version.selenium}</version>
-				<type>pom</type>
-				<scope>import</scope>
-			</dependency>
-			<dependency>
 				<groupId>org.jboss.arquillian</groupId>
 				<artifactId>arquillian-bom</artifactId>
-				<version>1.1.12.Final</version>
+				<version>1.4.1.Final</version>
 				<scope>import</scope>
 				<type>pom</type>
 			</dependency>
@@ -2556,13 +2717,13 @@
 			<plugin>
 				<groupId>org.apache.maven.plugins</groupId>
 				<artifactId>maven-surefire-report-plugin</artifactId>
-				<version>2.18.1</version>
+				<version>2.22.2</version>
 			</plugin>
 		</plugins>
 	</reporting>
 	
 	<ciManagement>
-		<system>Hudson</system>
-		<url>http://jenkins.frentix.com</url>
+		<system>Jenkins</system>
+		<url>https://jenkins.frentix.com</url>
 	</ciManagement>
 </project>

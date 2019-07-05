@@ -24,9 +24,9 @@ import static org.olat.ims.qti21.model.xml.QtiNodesExtractor.extractIdentifiersF
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.OutputStream;
 import java.io.StringReader;
 import java.net.URI;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -39,16 +39,20 @@ import java.util.zip.ZipOutputStream;
 
 import javax.servlet.http.HttpServletResponse;
 
-import org.apache.commons.io.IOUtils;
-import org.cyberneko.html.parsers.SAXParser;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.gui.media.MediaResource;
 import org.olat.core.gui.translator.Translator;
-import org.olat.core.logging.OLog;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.StringHelper;
 import org.olat.core.util.Util;
+import org.olat.core.util.io.ShieldOutputStream;
 import org.olat.core.util.openxml.HTMLToOpenXMLHandler;
+import org.olat.core.util.openxml.OpenXMLConstants;
 import org.olat.core.util.openxml.OpenXMLDocument;
+import org.olat.core.util.openxml.OpenXMLDocument.Border;
+import org.olat.core.util.openxml.OpenXMLDocument.Columns;
+import org.olat.core.util.openxml.OpenXMLDocument.Indent;
+import org.olat.core.util.openxml.OpenXMLDocument.Spacing;
 import org.olat.core.util.openxml.OpenXMLDocument.Style;
 import org.olat.core.util.openxml.OpenXMLDocument.Unit;
 import org.olat.core.util.openxml.OpenXMLDocumentWriter;
@@ -61,7 +65,6 @@ import org.olat.ims.qti21.QTI21Constants;
 import org.olat.ims.qti21.manager.CorrectResponsesUtil;
 import org.olat.ims.qti21.model.QTI21QuestionType;
 import org.olat.ims.qti21.model.xml.AssessmentHtmlBuilder;
-import org.olat.ims.qti21.model.xml.AssessmentTestBuilder;
 import org.olat.ims.qti21.model.xml.QtiNodesExtractor;
 import org.olat.ims.qti21.model.xml.interactions.FIBAssessmentItemBuilder;
 import org.olat.ims.qti21.model.xml.interactions.FIBAssessmentItemBuilder.NumericalEntry;
@@ -75,6 +78,7 @@ import org.xml.sax.Attributes;
 import org.xml.sax.InputSource;
 import org.xml.sax.SAXException;
 
+import nu.validator.htmlparser.sax.HtmlParser;
 import uk.ac.ed.ph.jqtiplus.attribute.Attribute;
 import uk.ac.ed.ph.jqtiplus.node.QtiNode;
 import uk.ac.ed.ph.jqtiplus.node.content.basic.Block;
@@ -124,25 +128,33 @@ import uk.ac.ed.ph.jqtiplus.value.SingleValue;
  */
 public class QTI21WordExport implements MediaResource {
 	
-	private final static OLog log = Tracing.createLoggerFor(QTIWordExport.class);
+	private static final Logger log = Tracing.createLoggerFor(QTIWordExport.class);
 	
 	private String encoding;
 	private ResolvedAssessmentTest resolvedAssessmentTest;
-	private VFSContainer mediaContainer;
-	private Locale locale;
+	private final File mediaDir;
+	private final VFSContainer mediaContainer;
+	private final Locale locale;
 	private final CountDownLatch latch;
 	private final AssessmentHtmlBuilder htmlBuilder;
 	
-	public QTI21WordExport(ResolvedAssessmentTest resolvedAssessmentTest, VFSContainer mediaContainer,
+	public QTI21WordExport(ResolvedAssessmentTest resolvedAssessmentTest,
+			VFSContainer mediaContainer, File mediaDir,
 			Locale locale, String encoding, CountDownLatch latch) {
 		this.encoding = encoding;
 		this.locale = locale;
 		this.resolvedAssessmentTest = resolvedAssessmentTest;
 		this.latch = latch;
+		this.mediaDir = mediaDir;
 		this.mediaContainer = mediaContainer;
 		htmlBuilder = new AssessmentHtmlBuilder();
 	}
 	
+	@Override
+	public long getCacheControlDuration() {
+		return 0;
+	}
+
 	@Override
 	public boolean acceptRanges() {
 		return false;
@@ -180,19 +192,16 @@ public class QTI21WordExport implements MediaResource {
 		} catch (Exception e) {
 			log.error("", e);
 		}
+		
+		AssessmentTest assessmentTest = resolvedAssessmentTest.getRootNodeLookup().extractIfSuccessful();
+		String label = assessmentTest.getTitle();
+		String secureLabel = StringHelper.transformDisplayNameToFileSystemName(label);
 
-		ZipOutputStream zout = null;
-		try {
-			AssessmentTest assessmentTest = resolvedAssessmentTest.getRootNodeLookup().extractIfSuccessful();
-			
-			String label = assessmentTest.getTitle();
-			String secureLabel = StringHelper.transformDisplayNameToFileSystemName(label);
+		String file = secureLabel + ".zip";
+		hres.setHeader("Content-Disposition", "attachment; filename*=UTF-8''" + StringHelper.urlEncodeUTF8(file));			
+		hres.setHeader("Content-Description", StringHelper.urlEncodeUTF8(label));
 
-			String file = secureLabel + ".zip";
-			hres.setHeader("Content-Disposition", "attachment; filename*=UTF-8''" + StringHelper.urlEncodeUTF8(file));			
-			hres.setHeader("Content-Description", StringHelper.urlEncodeUTF8(label));
-			
-			zout = new ZipOutputStream(hres.getOutputStream());
+		try(ZipOutputStream zout = new ZipOutputStream(hres.getOutputStream())) {
 			zout.setLevel(9);
 
 			ZipEntry test = new ZipEntry(secureLabel + ".docx");
@@ -209,13 +218,14 @@ public class QTI21WordExport implements MediaResource {
 			log.error("", e);
 		} finally {
 			latch.countDown();
-			IOUtils.closeQuietly(zout);
 		}
 	}
 	
-	private void exportTest(AssessmentTest assessmentTest, String header, OutputStream out, boolean withResponses) {
-		ZipOutputStream zout = null;
-		try {
+	private void exportTest(AssessmentTest assessmentTest, String header, ZipOutputStream out, boolean withResponses) {
+		try(ShieldOutputStream sout = new ShieldOutputStream(out);
+				ZipOutputStream zout = new ZipOutputStream(sout)) {
+			zout.setLevel(9);
+			
 			OpenXMLDocument document = new OpenXMLDocument();
 			document.setMediaContainer(mediaContainer);
 			document.setDocumentHeader(header);
@@ -232,21 +242,10 @@ public class QTI21WordExport implements MediaResource {
 				}
 			}
 
-			zout = new ZipOutputStream(out);
-			zout.setLevel(9);
-			
 			OpenXMLDocumentWriter writer = new OpenXMLDocumentWriter();
 			writer.createDocument(zout, document);
 		} catch (Exception e) {
 			log.error("", e);
-		} finally {
-			if(zout != null) {
-				try {
-					zout.finish();
-				} catch (IOException e) {
-					log.error("", e);
-				}
-			}
 		}
 	}
 
@@ -277,7 +276,7 @@ public class QTI21WordExport implements MediaResource {
 				ResolvedAssessmentItem resolvedAssessmentItem = resolvedAssessmentTest.getResolvedAssessmentItem(itemRef);
 				AssessmentItem assessmentItem = resolvedAssessmentItem.getRootNodeLookup().extractIfSuccessful();
 				URI itemUri = resolvedAssessmentTest.getSystemIdByItemRefMap().get(itemRef);
-				renderAssessmentItem(assessmentItem, new File(itemUri), document, withResponses, translator, htmlBuilder);
+				renderAssessmentItem(assessmentItem, new File(itemUri), mediaDir, document, withResponses, translator, htmlBuilder);
 				document.appendPageBreak();
 			}
 		}
@@ -293,10 +292,10 @@ public class QTI21WordExport implements MediaResource {
 				// pass rule
 				if(outcomeRule instanceof OutcomeCondition) {
 					OutcomeCondition outcomeCondition = (OutcomeCondition)outcomeRule;
-					boolean findIf = AssessmentTestBuilder.findSetOutcomeValue(outcomeCondition.getOutcomeIf(), QTI21Constants.PASS_IDENTIFIER);
-					boolean findElse = AssessmentTestBuilder.findSetOutcomeValue(outcomeCondition.getOutcomeElse(), QTI21Constants.PASS_IDENTIFIER);
+					boolean findIf = QtiNodesExtractor.findSetOutcomeValue(outcomeCondition.getOutcomeIf(), QTI21Constants.PASS_IDENTIFIER);
+					boolean findElse = QtiNodesExtractor.findSetOutcomeValue(outcomeCondition.getOutcomeElse(), QTI21Constants.PASS_IDENTIFIER);
 					if(findIf && findElse) {
-						Double cutValue = AssessmentTestBuilder.extractCutValue(outcomeCondition.getOutcomeIf());
+						Double cutValue = QtiNodesExtractor.extractCutValue(outcomeCondition.getOutcomeIf());
 						String cutValueLabel = translator.translate("cut.value");
 						document.appendText(cutValueLabel + ": " + AssessmentHelper.getRoundedScore(cutValue), true);
 					}
@@ -305,7 +304,7 @@ public class QTI21WordExport implements MediaResource {
 		}
 	}
 	
-	public static void renderAssessmentItem(AssessmentItem item, File itemFile, OpenXMLDocument document,
+	public static void renderAssessmentItem(AssessmentItem item, File itemFile, File mediaDir, OpenXMLDocument document,
 			boolean withResponses, Translator translator, AssessmentHtmlBuilder htmlBuilder) {
 		StringBuilder addText = new StringBuilder();
 		
@@ -341,7 +340,7 @@ public class QTI21WordExport implements MediaResource {
 
 		List<Block> itemBodyBlocks = item.getItemBody().getBlocks();
 		String html = htmlBuilder.blocksString(itemBodyBlocks);
-		document.appendHtmlText(html, true, new QTI21AndHTMLToOpenXMLHandler(document, item, itemFile, withResponses, htmlBuilder, translator));
+		document.appendHtmlText(html, true, new QTI21AndHTMLToOpenXMLHandler(document, item, itemFile, mediaDir, withResponses, htmlBuilder, translator));
 	
 		if(withResponses && (type == QTI21QuestionType.essay || type == QTI21QuestionType.upload || type == QTI21QuestionType.drawing)) {
 			renderCorrectSolutionForWord(item, document, translator, htmlBuilder);
@@ -385,13 +384,21 @@ public class QTI21WordExport implements MediaResource {
 		private boolean renderElement = true;
 
 		public QTI21AndHTMLToOpenXMLHandler(OpenXMLDocument document, AssessmentItem assessmentItem,
-				File itemFile, boolean withResponses, AssessmentHtmlBuilder htmlBuilder, Translator translator) {
+				File itemFile, File mediaDir, boolean withResponses, AssessmentHtmlBuilder htmlBuilder, Translator translator) {
 			super(document);
 			this.itemFile = itemFile;
 			this.withResponses = withResponses;
 			this.assessmentItem = assessmentItem;
 			this.htmlBuilder = htmlBuilder;
 			this.translator = translator;
+			
+			if(mediaDir.equals(itemFile.getParentFile())) {
+				relPath = "";
+			} else {
+				Path relativePath = mediaDir.toPath().relativize(itemFile.getParentFile().toPath());
+				String relativePathString = relativePath.toString();
+				relPath = relativePathString.concat("/");
+			}
 		}
 		
 		@Override
@@ -403,8 +410,9 @@ public class QTI21WordExport implements MediaResource {
 					responseIdentifier = attributes.getValue("responseidentifier");
 					break;
 				case "simplechoice":
+					Table currentTable = getCurrentTable();
 					if(currentTable == null) {
-						startTable();
+						currentTable = startTable();
 					}
 					currentTable.addRowEl();
 					currentTable.addCellEl(factory.createTableCell("E9EAF2", 4560, Unit.pct), 1);
@@ -412,6 +420,9 @@ public class QTI21WordExport implements MediaResource {
 					break;
 				case "textentryinteraction":
 					startTextEntryInteraction(tag, attributes);
+					flushText();
+					Style[] currentStyles = popStyle(tag);
+					unsetTextPreferences(currentStyles);
 					break;
 				case "extendedtextinteraction":
 					startExtendedTextInteraction(attributes);
@@ -468,6 +479,11 @@ public class QTI21WordExport implements MediaResource {
 				case "simpleassociablechoice":
 					//do nothing
 					break;
+				case "div":
+				case "p":
+					trimTextBuffer();
+					super.startElement(uri, localName, qName, attributes);
+					break;
 				default: {
 					if(renderElement) {
 						super.startElement(uri, localName, qName, attributes);
@@ -494,7 +510,7 @@ public class QTI21WordExport implements MediaResource {
 					endSimpleChoice();
 					break;
 				case "textentryinteraction":
-					//auto closing tag
+					break;
 				case "extendedtextinteraction":
 					//auto closing tag
 				case "hotspotinteraction":
@@ -522,7 +538,7 @@ public class QTI21WordExport implements MediaResource {
 		
 		private void endSimpleChoice() {
 			Element checkboxCell = factory.createTableCell(null, 369, Unit.pct);
-			Node checkboxNode = currentTable.addCellEl(checkboxCell, 1);
+			Node checkboxNode = getCurrentTable().addCellEl(checkboxCell, 1);
 			
 			boolean checked = false;
 			if(withResponses) {
@@ -664,14 +680,375 @@ public class QTI21WordExport implements MediaResource {
 		}
 		
 		private void startMatch(MatchInteraction matchInteraction) {
+			List<String> cssClasses = matchInteraction.getClassAttr();
+			if(cssClasses != null && cssClasses.contains(QTI21Constants.CSS_MATCH_DRAG_AND_DROP)) {
+				if(hasClass(matchInteraction, QTI21Constants.CSS_MATCH_SOURCE_TOP)
+						|| hasClass(matchInteraction, QTI21Constants.CSS_MATCH_SOURCE_BOTTOM)) {
+					startMatchDragAndDropHorizontal(matchInteraction);
+				} else {
+					startMatchDragAndDropVertical(matchInteraction);
+				}
+			} else if(cssClasses != null && cssClasses.contains(QTI21Constants.CSS_MATCH_TRUE_FALSE)) {
+				startMatchTrueFalse(matchInteraction);
+			} else {
+				startMatchMatrix(matchInteraction);
+			}
+		}
+		
+
+		private void startMatchDragAndDropHorizontal(MatchInteraction matchInteraction) {
+			SimpleMatchSet sourcesMatchSet = matchInteraction.getSimpleMatchSets().get(0);
+			SimpleMatchSet targetsMatchSet = matchInteraction.getSimpleMatchSets().get(1);
+			List<SimpleAssociableChoice> sourcesAssociableChoices = sourcesMatchSet.getSimpleAssociableChoices();
+			List<SimpleAssociableChoice> targetsAssociableChoices = targetsMatchSet.getSimpleAssociableChoices();
+			if(hasClass(matchInteraction, QTI21Constants.CSS_MATCH_SOURCE_BOTTOM)) {
+				appendMatchTargetsHorizontal(targetsAssociableChoices, sourcesAssociableChoices, matchInteraction);
+				appendParagraph(new Spacing(20,20));
+				appendMatchSourcesHorizontal(sourcesAssociableChoices);
+			} else {
+				appendMatchSourcesHorizontal(sourcesAssociableChoices);
+				appendParagraph(new Spacing(20,20));
+				appendMatchTargetsHorizontal(targetsAssociableChoices, sourcesAssociableChoices, matchInteraction);
+			}
+		}
+		
+		private void appendMatchSourcesHorizontal(List<SimpleAssociableChoice> choices) {
+			String backgroundColor = "FFFFFF";
+			Border sourceBorder = new Border(0, 6, "E9EAF2");
+			
+			startTable(Columns.valueOf(OpenXMLConstants.TABLE_FULL_WIDTH_DXA));
+			getCurrentTable().addRowEl();
+			createCellHeader(translator.translate("form.imd.layout.match.sources"), OpenXMLConstants.TABLE_FULL_WIDTH_DXA, 10);
+			getCurrentTable().closeRow();
+	
+			for(SimpleAssociableChoice choice:choices) {
+				getCurrentTable().addRowEl();
+				Element cell = factory.createTableCell(backgroundColor, sourceBorder, OpenXMLConstants.TABLE_FULL_WIDTH_PCT - 10, Unit.pct);
+				Node contentCell = getCurrentTable().addCellEl(cell, 1);
+				
+				String html = htmlBuilder.flowStaticString(choice.getFlowStatics());
+				List<Node> nodes = appendHtmlText(html, factory.createParagraphEl(), 7.5);
+				if(nodes.size() == 0) {
+					contentCell.appendChild(factory.createParagraphEl());
+				} else {
+					for(Node node:nodes) {
+						contentCell.appendChild(node);
+					}
+					contentCell.appendChild(factory.createParagraphEl());
+				}
+				getCurrentTable().closeRow();
+			}
+			endTable();
+		}
+
+		private void appendMatchTargetsHorizontal(List<SimpleAssociableChoice> targetChoices, List<SimpleAssociableChoice> sourceChoices,
+				MatchInteraction matchInteraction) {
+			
+			String backgroundColor = "E9EAF2";
+			String dropBackgroundColor = "FFFFFF";
+			Border targetBorder = new Border(0, 6, "E9EAF2");
+			Border dropBorder = new Border(0, 6, "EEEEEE");
+			int columnWidthPct = OpenXMLConstants.TABLE_FULL_WIDTH_PCT;
+
+			startTable(Columns.valueOf(OpenXMLConstants.TABLE_FULL_WIDTH_DXA));
+			getCurrentTable().addRowEl();
+			createCellHeader(translator.translate("form.imd.layout.match.targets.short"), OpenXMLConstants.TABLE_FULL_WIDTH_DXA, 10);
+			getCurrentTable().closeRow();
+			
+			for(SimpleAssociableChoice choice:targetChoices) {
+				getCurrentTable().addRowEl();
+				Node contentCell = getCurrentTable().addCellEl(factory.createTableCell(backgroundColor, targetBorder, columnWidthPct - 10, Unit.pct), 1);
+				
+				String html = htmlBuilder.flowStaticString(choice.getFlowStatics());
+				List<Node> nodes = appendHtmlText(html, factory.createParagraphEl(), 7.5);
+				for(Node node:nodes) {
+					contentCell.appendChild(node);
+				}
+
+				// add the drop panels
+				Element wrapEl = factory.createParagraphEl();
+				HTMLToOpenXMLHandler dropTable = new HTMLToOpenXMLHandler(factory, relPath, wrapEl, false);
+				dropTable.setMaxWidthCm(7);
+				dropTable.startTable(Columns.valueOf(columnWidthPct - 50));
+				if(withResponses) {
+					for(SimpleAssociableChoice sourceChoice:sourceChoices) {
+						boolean correct = isCorrectMatchResponse(sourceChoice.getIdentifier(), choice.getIdentifier(), matchInteraction);
+						if(correct) {
+							dropTable.startCurrentTableRow();
+							Node answerCell = dropTable.addCell(factory.createTableCell(dropBackgroundColor, targetBorder, columnWidthPct - 10, Unit.pct));
+							String answerHtml = htmlBuilder.flowStaticString(sourceChoice.getFlowStatics());
+							List<Node> answerNodes = appendHtmlText(answerHtml, factory.createParagraphEl(), 7.5);
+							if(answerNodes.size() == 0) {
+								answerCell.appendChild(factory.createParagraphEl());
+							} else {
+								for(Node answerNode:answerNodes) {
+									answerCell.appendChild(answerNode);
+								}
+							}
+							dropTable.closeCurrentTableRow();
+						}
+					}
+				} else {
+					dropTable.startCurrentTableRow();
+					Node dropCell = dropTable.addCell(factory.createTableCell(dropBackgroundColor, dropBorder, columnWidthPct - 10, Unit.pct));
+					dropCell.appendChild(factory.createParagraphEl());
+					dropCell.appendChild(factory.createParagraphEl());
+					dropCell.appendChild(factory.createParagraphEl());
+					dropTable.closeCurrentTableRow();
+				}
+				dropTable.endTable();
+
+				List<Node> dropNodes = dropTable.getContent();
+				for(Node dropNode:dropNodes) {
+					contentCell.appendChild(dropNode);
+				}
+				contentCell.appendChild(factory.createParagraphEl());
+				getCurrentTable().closeRow();
+			}
+			endTable();
+		}
+		
+		private void startMatchTrueFalse(MatchInteraction matchInteraction) {
 			SimpleMatchSet questionMatchSetVertical = matchInteraction.getSimpleMatchSets().get(0);
 			SimpleMatchSet questionMatchSetHorizontal = matchInteraction.getSimpleMatchSets().get(1);
 			List<SimpleAssociableChoice> horizontalAssociableChoices = questionMatchSetHorizontal.getSimpleAssociableChoices();
 			List<SimpleAssociableChoice> verticalAssociableChoices = questionMatchSetVertical.getSimpleAssociableChoices();
 			
 			// calculate the width of the table () and of its columns
-			int tableWidthDxa = 11294;
-			int tableWidthPct = 4858;
+			int tableWidthDxa = OpenXMLConstants.TABLE_FULL_WIDTH_DXA;
+			int tableWidthPct = OpenXMLConstants.TABLE_FULL_WIDTH_PCT;
+			int halfTableWidthDxa = tableWidthDxa / 2;
+			int halfTableWidthPct = tableWidthPct / 2;
+
+			int numOfColumns = horizontalAssociableChoices.size();
+			int columnWidthDxa = halfTableWidthDxa / numOfColumns;
+			int columnWidthPct = halfTableWidthPct / numOfColumns;
+			
+			Integer[] columnsWidth = new Integer[numOfColumns + 1];
+			for(int i=numOfColumns; i-->0; ) {
+				columnsWidth[i] = columnWidthDxa;
+			}
+			columnsWidth[numOfColumns] = halfTableWidthDxa;
+			startTable(Columns.valueOf(columnsWidth));
+
+			getCurrentTable().addRowEl();
+			
+			// horizontal headers
+			for(SimpleAssociableChoice choice:horizontalAssociableChoices) {
+				Element answerCell = getCurrentTable().addCellEl(factory.createTableCell("E9EAF2", columnWidthPct, Unit.pct), 1);
+				appendSimpleAssociableChoice(choice, answerCell);
+			}
+			// white corner
+			Node emptyCell = getCurrentTable().addCellEl(factory.createTableCell(null, halfTableWidthDxa, Unit.dxa), 1);
+			emptyCell.appendChild(factory.createParagraphEl(""));		
+			getCurrentTable().closeRow();
+
+			for(SimpleAssociableChoice choice:verticalAssociableChoices) {
+				getCurrentTable().addRowEl();
+				//checkbox
+				for(SimpleAssociableChoice horizontalChoice:horizontalAssociableChoices) {
+					boolean correct = isCorrectMatchResponse(choice.getIdentifier(), horizontalChoice.getIdentifier(), matchInteraction);
+					appendMatchCheckBox(correct, columnWidthPct, factory);
+				}
+				//answer
+				Element answerCell = getCurrentTable().addCellEl(factory.createTableCell("E9EAF2", halfTableWidthPct, Unit.pct), 1);
+				appendSimpleAssociableChoice(choice, answerCell) ;
+				
+				getCurrentTable().closeRow();
+			}
+			
+			endTable();
+		}
+		
+		/**
+		 * The sources are in one column, the targets are in the second.
+		 * @param matchInteraction
+		 */
+		private void startMatchDragAndDropVertical(MatchInteraction matchInteraction) {
+			SimpleMatchSet sourcesMatchSet = matchInteraction.getSimpleMatchSets().get(0);
+			SimpleMatchSet targetsMatchSet = matchInteraction.getSimpleMatchSets().get(1);
+			List<SimpleAssociableChoice> sourcesAssociableChoices = sourcesMatchSet.getSimpleAssociableChoices();
+			List<SimpleAssociableChoice> targetsAssociableChoices = targetsMatchSet.getSimpleAssociableChoices();
+
+			// calculate the width of the table () and of its columns
+			int tableWidthDxa = OpenXMLConstants.TABLE_FULL_WIDTH_DXA;
+			int tableWidthPct = OpenXMLConstants.TABLE_FULL_WIDTH_PCT;
+			int numOfColumns = 2;
+			int columnWidthDxa = tableWidthDxa / numOfColumns;
+			int columnWidthPct = tableWidthPct / numOfColumns;
+			
+			Integer[] columnsWidth = new Integer[numOfColumns];
+			for(int i=numOfColumns; i-->0; ) {
+				columnsWidth[i] = columnWidthDxa;
+			}
+			startTable(Columns.valueOf(columnsWidth));
+
+			if(hasClass(matchInteraction, QTI21Constants.CSS_MATCH_SOURCE_RIGHT)) {
+				getCurrentTable().addRowEl();
+				createCellHeader(translator.translate("form.imd.layout.match.targets.short"), columnWidthPct, 50);
+				createCellHeader(translator.translate("form.imd.layout.match.sources"), columnWidthPct, 50);
+				getCurrentTable().closeRow();
+				
+				getCurrentTable().addRowEl();
+				Element targetsCell = getCurrentTable().addCellEl(factory.createTableCell(null, columnWidthPct, Unit.pct), 1);
+				appendMatchTargetsVertical(targetsAssociableChoices, sourcesAssociableChoices, matchInteraction, columnWidthPct, targetsCell);
+				Element sourcesCell = getCurrentTable().addCellEl(factory.createTableCell(null, columnWidthPct, Unit.pct), 1);
+				appendMatchSourcesVertical(sourcesAssociableChoices, columnWidthPct, sourcesCell);
+				getCurrentTable().closeRow();
+			} else {
+				getCurrentTable().addRowEl();
+				createCellHeader(translator.translate("form.imd.layout.match.sources"), columnWidthPct, 50);
+				createCellHeader(translator.translate("form.imd.layout.match.targets.short"), columnWidthPct, 50);
+				getCurrentTable().closeRow();
+				
+				getCurrentTable().addRowEl();
+				Element sourcesCell = getCurrentTable().addCellEl(factory.createTableCell(null, columnWidthPct, Unit.pct), 1);
+				appendMatchSourcesVertical(sourcesAssociableChoices, columnWidthPct, sourcesCell);
+				Element targetsCell = getCurrentTable().addCellEl(factory.createTableCell(null, columnWidthPct, Unit.pct), 1);
+				appendMatchTargetsVertical(targetsAssociableChoices, sourcesAssociableChoices, matchInteraction, columnWidthPct, targetsCell);
+				getCurrentTable().closeRow();
+			}
+
+			endTable();
+		}
+		
+		private void createCellHeader(String header, int columnWidthPct, int indent) {
+			Element sourcesHeaderCell = getCurrentTable().addCellEl(factory.createTableCell(null, columnWidthPct, Unit.pct), 1);
+			
+			Element paragraphEl = factory.createParagraphEl(new Indent(indent), null, null, null);
+			Element runEl = factory.createRunEl();
+			runEl.appendChild(factory.createRunPrefsEl(Style.bold));
+			runEl.appendChild(factory.createTextEl(header));
+
+			paragraphEl.appendChild(runEl);
+			sourcesHeaderCell.appendChild(paragraphEl);
+		}
+		
+		private boolean hasClass(Interaction interaction, String cssClass) {
+			List<String> cssClassses = interaction.getClassAttr();
+			return cssClassses != null && cssClassses.contains(cssClass);
+		}
+		
+		private void appendMatchSourcesVertical(List<SimpleAssociableChoice> choices, int columnWidthPct, Element sourcesCell) {
+			Element wrapEl = factory.createParagraphEl();
+			
+			String backgroundColor = "FFFFFF";
+			Border sourceBorder = new Border(0, 6, "E9EAF2");
+			
+			HTMLToOpenXMLHandler innerTable = new HTMLToOpenXMLHandler(factory, relPath, wrapEl, false);
+			innerTable.setMaxWidthCm(7.5);
+			innerTable.startTable(Columns.valueOf(columnWidthPct));
+			for(SimpleAssociableChoice choice:choices) {
+				innerTable.startCurrentTableRow();
+				Node contentCell = innerTable.addCell(factory.createTableCell(backgroundColor, sourceBorder, columnWidthPct - 10, Unit.pct));
+				
+				String html = htmlBuilder.flowStaticString(choice.getFlowStatics());
+				List<Node> nodes = appendHtmlText(html, factory.createParagraphEl(), 7.5);
+				if(nodes.isEmpty()) {
+					contentCell.appendChild(factory.createParagraphEl());
+				} else {
+					for(Node node:nodes) {
+						contentCell.appendChild(node);
+					}
+					contentCell.appendChild(factory.createParagraphEl());
+				}
+				innerTable.closeCurrentTableRow();
+			}
+			innerTable.endTable();
+
+			List<Node> innerNodes = innerTable.getContent();
+			for(int i=1; i< innerNodes.size(); i++) {
+				sourcesCell.appendChild(innerNodes.get(i));
+			}
+			sourcesCell.appendChild(factory.createParagraphEl());
+		}
+		
+		private void appendMatchTargetsVertical(List<SimpleAssociableChoice> targetChoices, List<SimpleAssociableChoice> sourceChoices,
+				MatchInteraction matchInteraction, int columnWidthPct, Element sourcesCell) {
+
+			String backgroundColor = "E9EAF2";
+			String dropBackgroundColor = "FFFFFF";
+			Border targetBorder = new Border(0, 6, "E9EAF2");
+			Border dropBorder = new Border(0, 6, "EEEEEE");
+			Element wrapEl = factory.createParagraphEl();
+
+			HTMLToOpenXMLHandler innerTable = new HTMLToOpenXMLHandler(factory, relPath, wrapEl, false);
+			innerTable.setMaxWidthCm(7.5);
+			innerTable.startTable(Columns.valueOf(columnWidthPct));
+			for(SimpleAssociableChoice choice:targetChoices) {
+				innerTable.startCurrentTableRow();
+				Node contentCell = innerTable.addCell(factory.createTableCell(backgroundColor, targetBorder, columnWidthPct - 10, Unit.pct));
+				
+				String html = htmlBuilder.flowStaticString(choice.getFlowStatics());
+				List<Node> nodes = appendHtmlText(html, factory.createParagraphEl(), 7.5);
+				for(Node node:nodes) {
+					contentCell.appendChild(node);
+				}
+
+				// add the drop panels
+				HTMLToOpenXMLHandler dropTable = new HTMLToOpenXMLHandler(factory, relPath, wrapEl, false);
+				dropTable.setMaxWidthCm(7);
+				dropTable.startTable(Columns.valueOf(columnWidthPct - 50));
+				if(withResponses) {
+					for(SimpleAssociableChoice sourceChoice:sourceChoices) {
+						boolean correct = isCorrectMatchResponse(sourceChoice.getIdentifier(), choice.getIdentifier(), matchInteraction);
+						if(correct) {
+							dropTable.startCurrentTableRow();
+							Node answerCell = dropTable.addCell(factory.createTableCell(dropBackgroundColor, targetBorder, columnWidthPct - 10, Unit.pct));
+							String answerHtml = htmlBuilder.flowStaticString(sourceChoice.getFlowStatics());
+							List<Node> answerNodes = appendHtmlText(answerHtml, factory.createParagraphEl(), 7.5);
+							if(answerNodes.isEmpty()) {
+								answerCell.appendChild(factory.createParagraphEl());
+							} else {
+								for(Node answerNode:answerNodes) {
+									answerCell.appendChild(answerNode);
+								}
+							}
+							dropTable.closeCurrentTableRow();
+						}
+					}
+				} else {
+					dropTable.startCurrentTableRow();
+					Node dropCell = dropTable.addCell(factory.createTableCell(dropBackgroundColor, dropBorder, columnWidthPct - 10, Unit.pct));
+					appendDropPlaceholder(dropCell);
+					dropTable.closeCurrentTableRow();
+				}
+				dropTable.endTable();
+
+				List<Node> dropNodes = dropTable.getContent();
+				for(int i=1; i<dropNodes.size(); i++) {
+					contentCell.appendChild(dropNodes.get(i));
+				}
+				contentCell.appendChild(factory.createParagraphEl());
+				innerTable.closeCurrentTableRow();
+			}
+			innerTable.endTable();
+
+			List<Node> innerNodes = innerTable.getContent();
+			for(int i=1; i<innerNodes.size(); i++) {
+				sourcesCell.appendChild(innerNodes.get(i));
+			}
+			sourcesCell.appendChild(factory.createParagraphEl());
+		}
+		
+		private void appendDropPlaceholder(Node cell) {
+			Element paragraphEl = factory.createParagraphEl();
+			Node runEl = paragraphEl.appendChild(factory.createRunEl());
+			runEl.appendChild(factory.createBreakEl());
+			runEl.appendChild(factory.createBreakEl());
+			runEl.appendChild(factory.createBreakEl());
+			cell.appendChild(paragraphEl);
+		}
+		
+		private void startMatchMatrix(MatchInteraction matchInteraction) {
+			SimpleMatchSet questionMatchSetVertical = matchInteraction.getSimpleMatchSets().get(0);
+			SimpleMatchSet questionMatchSetHorizontal = matchInteraction.getSimpleMatchSets().get(1);
+			List<SimpleAssociableChoice> horizontalAssociableChoices = questionMatchSetHorizontal.getSimpleAssociableChoices();
+			List<SimpleAssociableChoice> verticalAssociableChoices = questionMatchSetVertical.getSimpleAssociableChoices();
+			
+			// calculate the width of the table () and of its columns
+			int tableWidthDxa = OpenXMLConstants.TABLE_FULL_WIDTH_DXA;
+			int tableWidthPct = OpenXMLConstants.TABLE_FULL_WIDTH_PCT;
 			int numOfColumns = horizontalAssociableChoices.size() + 1;
 			int columnWidthDxa = tableWidthDxa / numOfColumns;
 			int columnWidthPct = tableWidthPct / numOfColumns;
@@ -680,25 +1057,25 @@ public class QTI21WordExport implements MediaResource {
 			for(int i=numOfColumns; i-->0; ) {
 				columnsWidth[i] = columnWidthDxa;
 			}
-			startTable(columnsWidth);
+			startTable(Columns.valueOf(columnsWidth));
 
 			
-			currentTable.addRowEl();
+			getCurrentTable().addRowEl();
 			// white corner
-			Node emptyCell = currentTable.addCellEl(factory.createTableCell(null, columnWidthDxa, Unit.dxa), 1);
+			Node emptyCell = getCurrentTable().addCellEl(factory.createTableCell(null, columnWidthDxa, Unit.dxa), 1);
 			emptyCell.appendChild(factory.createParagraphEl(""));
 			
 			// horizontal headers
 			for(SimpleAssociableChoice choice:horizontalAssociableChoices) {
-				Element answerCell = currentTable.addCellEl(factory.createTableCell("E9EAF2", columnWidthPct, Unit.pct), 1);
+				Element answerCell = getCurrentTable().addCellEl(factory.createTableCell("E9EAF2", columnWidthPct, Unit.pct), 1);
 				appendSimpleAssociableChoice(choice, answerCell);
 			}
-			currentTable.closeRow();
+			getCurrentTable().closeRow();
 
 			for(SimpleAssociableChoice choice:verticalAssociableChoices) {
-				currentTable.addRowEl();
+				getCurrentTable().addRowEl();
 				//answer
-				Element answerCell = currentTable.addCellEl(factory.createTableCell("E9EAF2", columnWidthPct, Unit.pct), 1);
+				Element answerCell = getCurrentTable().addCellEl(factory.createTableCell("E9EAF2", columnWidthPct, Unit.pct), 1);
 				appendSimpleAssociableChoice(choice, answerCell) ;
 				//checkbox
 				for(SimpleAssociableChoice horizontalChoice:horizontalAssociableChoices) {
@@ -706,7 +1083,7 @@ public class QTI21WordExport implements MediaResource {
 					appendMatchCheckBox(correct, columnWidthPct, factory);
 				}
 				
-				currentTable.closeRow();
+				getCurrentTable().closeRow();
 			}
 			
 			endTable();
@@ -721,13 +1098,19 @@ public class QTI21WordExport implements MediaResource {
 			}
 		}
 		
+
 		public List<Node> appendHtmlText(String html, Element wrapEl) {
+			return appendHtmlText(html, wrapEl, OpenXMLConstants.PAGE_FULL_WIDTH_CM);
+		}
+		
+		public List<Node> appendHtmlText(String html, Element wrapEl, double widthCm) {
 			if(!StringHelper.containsNonWhitespace(html)) {
 				return Collections.emptyList();
 			}
 			try {
-				SAXParser parser = new SAXParser();
-				HTMLToOpenXMLHandler handler = new HTMLToOpenXMLHandler(factory, wrapEl, false);
+				HtmlParser parser = new HtmlParser();
+				HTMLToOpenXMLHandler handler = new HTMLToOpenXMLHandler(factory, relPath, wrapEl, false);
+				handler.setMaxWidthCm(widthCm);
 				parser.setContentHandler(handler);
 				parser.parse(new InputSource(new StringReader(html)));
 				return handler.getContent();
@@ -741,25 +1124,25 @@ public class QTI21WordExport implements MediaResource {
 			SimpleMatchSet questionMatchSet = matchInteraction.getSimpleMatchSets().get(0);
 
 			//open a table with 3 columns
-			startTable(new Integer[]{9062, 1116, 1116});
+			startTable(Columns.valueOf(9062, 1116, 1116));
 
-			currentTable.addRowEl();
+			getCurrentTable().addRowEl();
 			//draw header with +/-
-			Node emptyCell = currentTable.addCellEl(factory.createTableCell(null, 9062, Unit.dxa), 1);
+			Node emptyCell = getCurrentTable().addCellEl(factory.createTableCell(null, 9062, Unit.dxa), 1);
 			emptyCell.appendChild(factory.createParagraphEl(""));
 			
-			Node plusCell = currentTable.addCellEl(factory.createTableCell(null, 1116, Unit.dxa), 1);
+			Node plusCell = getCurrentTable().addCellEl(factory.createTableCell(null, 1116, Unit.dxa), 1);
 			plusCell.appendChild(factory.createParagraphEl(translator.translate("kprim.plus")));
-			Node minusCell = currentTable.addCellEl(factory.createTableCell(null, 1116, Unit.dxa), 1);
+			Node minusCell = getCurrentTable().addCellEl(factory.createTableCell(null, 1116, Unit.dxa), 1);
 			minusCell.appendChild(factory.createParagraphEl(translator.translate("kprim.minus")));
 
-			currentTable.closeRow();
+			getCurrentTable().closeRow();
 			
 			for(SimpleAssociableChoice choice:questionMatchSet.getSimpleAssociableChoices()) {
-				currentTable.addRowEl();
+				getCurrentTable().addRowEl();
 	
 				//answer
-				Element answerCell = currentTable.addCellEl(factory.createTableCell("E9EAF2", 4120, Unit.pct), 1);
+				Element answerCell = getCurrentTable().addCellEl(factory.createTableCell("E9EAF2", 4120, Unit.pct), 1);
 				appendSimpleAssociableChoice(choice, answerCell);
 				//checkbox
 				boolean correct = isCorrectKPrimResponse(choice.getIdentifier(), QTI21Constants.CORRECT_IDENTIFIER, matchInteraction);
@@ -767,7 +1150,7 @@ public class QTI21WordExport implements MediaResource {
 				boolean wrong = isCorrectKPrimResponse(choice.getIdentifier(), QTI21Constants.WRONG_IDENTIFIER, matchInteraction);
 				appendMatchCheckBox(wrong, 369, factory);
 
-				currentTable.closeRow();
+				getCurrentTable().closeRow();
 			}
 			
 			endTable();
@@ -828,7 +1211,7 @@ public class QTI21WordExport implements MediaResource {
 		}
 		
 		private void appendMatchCheckBox(boolean checked, int width, OpenXMLDocument document) {
-			Node checkboxCell = currentTable.addCellEl(document.createTableCell(null, width, Unit.pct), 1);
+			Node checkboxCell = getCurrentTable().addCellEl(document.createTableCell(null, width, Unit.pct), 1);
 			Node responseEl = document.createCheckbox(checked);
 			Node wrapEl = document.wrapInParagraph(responseEl);
 			checkboxCell.appendChild(wrapEl);

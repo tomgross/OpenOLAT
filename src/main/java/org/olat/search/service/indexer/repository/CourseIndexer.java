@@ -28,6 +28,7 @@ package org.olat.search.service.indexer.repository;
 import java.io.IOException;
 import java.util.List;
 
+import org.apache.logging.log4j.Logger;
 import org.olat.core.gui.components.tree.TreeNode;
 import org.olat.core.id.Identity;
 import org.olat.core.id.IdentityEnvironment;
@@ -36,6 +37,7 @@ import org.olat.core.id.context.BusinessControl;
 import org.olat.core.id.context.ContextEntry;
 import org.olat.core.logging.AssertException;
 import org.olat.core.logging.StartupException;
+import org.olat.core.logging.Tracing;
 import org.olat.core.util.nodes.INode;
 import org.olat.course.CorruptedCourseException;
 import org.olat.course.CourseFactory;
@@ -49,20 +51,22 @@ import org.olat.course.run.userview.UserCourseEnvironment;
 import org.olat.course.run.userview.UserCourseEnvironmentImpl;
 import org.olat.course.run.userview.VisibleTreeFilter;
 import org.olat.repository.RepositoryEntry;
-import org.olat.repository.RepositoryEntryStatus;
+import org.olat.repository.RepositoryEntryStatusEnum;
 import org.olat.repository.RepositoryManager;
 import org.olat.search.service.SearchResourceContext;
 import org.olat.search.service.indexer.AbstractHierarchicalIndexer;
 import org.olat.search.service.indexer.Indexer;
 import org.olat.search.service.indexer.OlatFullIndexer;
+import org.olat.search.service.indexer.repository.course.CourseNodeEntry;
 import org.olat.search.service.indexer.repository.course.CourseNodeIndexer;
 
 /**
- * Index a hole course.
+ * Index a whole course.
  * @author Christian Guretzki
  */
 public class CourseIndexer extends AbstractHierarchicalIndexer {
-	public final static String TYPE = "type.repository.entry.CourseModule"; 
+	private static final Logger log = Tracing.createLoggerFor(CourseIndexer.class);
+	public static final String TYPE = "type.repository.entry.CourseModule"; 
 	
 	private RepositoryManager repositoryManager;
 	
@@ -82,11 +86,11 @@ public class CourseIndexer extends AbstractHierarchicalIndexer {
 	@Override
 	public void doIndex(SearchResourceContext parentResourceContext, Object parentObject, OlatFullIndexer indexWriter) {
 		RepositoryEntry repositoryEntry = (RepositoryEntry) parentObject;
-		if (isLogDebugEnabled()) logDebug("Analyse Course... repositoryEntry=" + repositoryEntry);
+		if (log.isDebugEnabled()) log.debug("Analyse Course... repositoryEntry=" + repositoryEntry);
 		try {
-			RepositoryEntryStatus status = RepositoryManager.getInstance().createRepositoryEntryStatus(repositoryEntry.getStatusCode());
-			if(status.isClosed()) {
-				if(isLogDebugEnabled()) logDebug("Course not indexed because it's closed: repositoryEntry=" + repositoryEntry);
+			RepositoryEntryStatusEnum status = repositoryEntry.getEntryStatus();
+			if(status.decommissioned()) {
+				if(log.isDebugEnabled()) log.debug("Course not indexed because it's " + status + ": repositoryEntry=" + repositoryEntry);
 				return;
 			}
 
@@ -96,9 +100,9 @@ public class CourseIndexer extends AbstractHierarchicalIndexer {
 			parentResourceContext.setParentContextName(course.getCourseTitle());
 			doIndexCourse( parentResourceContext, course,  course.getRunStructure().getRootNode(), indexWriter);			
 		} catch(CorruptedCourseException ex) {
-			logWarn("Can not index repositoryEntry (" + repositoryEntry.getKey() + ")", ex);
+			log.warn("Can not index repositoryEntry (" + repositoryEntry.getKey() + ")", ex);
 		} catch (Exception ex) {
-			logWarn("Can not index repositoryEntry=" + repositoryEntry,ex);
+			log.warn("Can not index repositoryEntry=" + repositoryEntry,ex);
 		}
 	}
 
@@ -115,16 +119,19 @@ public class CourseIndexer extends AbstractHierarchicalIndexer {
 	throws IOException,InterruptedException  {
 		//try to index the course node
 		if(node instanceof CourseNode) {
-			if (isLogDebugEnabled()) logDebug("Analyse CourseNode child ... childCourseNode=" + node);
+			if (log.isDebugEnabled()) log.debug("Analyse CourseNode child ... childCourseNode=" + node);
 			// go further with resource
 			CourseNode childCourseNode = (CourseNode)node;
 			CourseNodeIndexer courseNodeIndexer = getCourseNodeIndexer(childCourseNode);
 			if (courseNodeIndexer != null) {
-				if (isLogDebugEnabled()) logDebug("courseNodeIndexer=" + courseNodeIndexer);
+				if (log.isDebugEnabled()) {
+					log.debug("courseNodeIndexer=" + courseNodeIndexer);
+				}
+				
  				try {
 					courseNodeIndexer.doIndex(repositoryResourceContext, course, childCourseNode, indexWriter);
 				} catch (Exception e) {
-					logWarn("Can not index course node=" + childCourseNode.getIdent(), e);
+					log.warn("Can not index course node=" + childCourseNode.getIdent(), e);
 				}
 			}
 		}
@@ -159,30 +166,34 @@ public class CourseIndexer extends AbstractHierarchicalIndexer {
 			// not a course node of course we have access to the course metadata
 			return true;
 		}
-		if (isLogDebugEnabled()) logDebug("Start identity=" + identity + "  roles=" + roles);
+		if (log.isDebugEnabled()) log.debug("Start identity=" + identity + "  roles=" + roles);
 		Long repositoryKey = contextEntry.getOLATResourceable().getResourceableId();
 		RepositoryEntry repositoryEntry = repositoryManager.lookupRepositoryEntry(repositoryKey);
-		if (isLogDebugEnabled()) logDebug("repositoryEntry=" + repositoryEntry );
+		if (log.isDebugEnabled()) log.debug("repositoryEntry=" + repositoryEntry );
 
-		Long nodeId = bcContextEntry.getOLATResourceable().getResourceableId();
-		if (isLogDebugEnabled()) logDebug("nodeId=" + nodeId );
+		if(roles.isGuestOnly() && repositoryEntry.isGuests()) {
+			return false;
+		}
 		
+		Long nodeId = bcContextEntry.getOLATResourceable().getResourceableId();
+		if (log.isDebugEnabled()) log.debug("nodeId=" + nodeId );
 		ICourse course = CourseFactory.loadCourse(repositoryEntry);
+		
 		IdentityEnvironment ienv = new IdentityEnvironment();
 		ienv.setIdentity(identity);
 		ienv.setRoles(roles);
 		UserCourseEnvironment userCourseEnv = new UserCourseEnvironmentImpl(ienv, course.getCourseEnvironment());
-		if (isLogDebugEnabled()) logDebug("userCourseEnv=" + userCourseEnv + "ienv=" + ienv );
+		if (log.isDebugEnabled()) log.debug("userCourseEnv=" + userCourseEnv + "ienv=" + ienv );
 		
 		CourseNode rootCn = userCourseEnv.getCourseEnvironment().getRunStructure().getRootNode();
 
 		String nodeIdS = nodeId.toString();
 		CourseNode courseNode = course.getRunStructure().getNode(nodeIdS);
-		if (isLogDebugEnabled()) logDebug("courseNode=" + courseNode );
+		if (log.isDebugEnabled()) log.debug("courseNode=" + courseNode );
 		
 		TreeEvaluation treeEval = new TreeEvaluation();
 		NodeEvaluation rootNodeEval = rootCn.eval(userCourseEnv.getConditionInterpreter(), treeEval, new VisibleTreeFilter());
-		if (isLogDebugEnabled()) logDebug("rootNodeEval=" + rootNodeEval );
+		if (log.isDebugEnabled()) log.debug("rootNodeEval=" + rootNodeEval );
 
 		TreeNode newCalledTreeNode = treeEval.getCorrespondingTreeNode(courseNode);
 		if (newCalledTreeNode == null) {
@@ -191,15 +202,16 @@ public class CourseIndexer extends AbstractHierarchicalIndexer {
 		}
 		// go further
 		NodeEvaluation nodeEval = (NodeEvaluation) newCalledTreeNode.getUserObject();
-		if (isLogDebugEnabled()) logDebug("nodeEval=" + nodeEval );
+		if (log.isDebugEnabled()) log.debug("nodeEval=" + nodeEval );
 		if (nodeEval.getCourseNode() != courseNode) throw new AssertException("error in structure");
 		if (!nodeEval.isVisible()) throw new AssertException("node eval not visible!!");
-		if (isLogDebugEnabled()) logDebug("call mayAccessWholeTreeUp..." );
+		if (log.isDebugEnabled()) log.debug("call mayAccessWholeTreeUp..." );
 		boolean mayAccessWholeTreeUp = NavigationHandler.mayAccessWholeTreeUp(nodeEval);	
-		if (isLogDebugEnabled()) logDebug("call mayAccessWholeTreeUp=" + mayAccessWholeTreeUp );
+		if (log.isDebugEnabled()) log.debug("call mayAccessWholeTreeUp=" + mayAccessWholeTreeUp );
 		
 		if (mayAccessWholeTreeUp) {
 			CourseNodeIndexer courseNodeIndexer = getCourseNodeIndexer(courseNode);
+			bcContextEntry.setTransientState(new CourseNodeEntry(courseNode));
 			return courseNodeIndexer.checkAccess(bcContextEntry, businessControl, identity, roles)
 					&& super.checkAccess(bcContextEntry, businessControl, identity, roles);		
 		} else {

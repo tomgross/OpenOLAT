@@ -40,7 +40,6 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 
-import org.apache.commons.lang.StringEscapeUtils;
 import org.olat.core.gui.components.Component;
 import org.olat.core.gui.components.DefaultComponentRenderer;
 import org.olat.core.gui.components.form.flexible.impl.FormEvent;
@@ -72,12 +71,6 @@ public class MenuTreeRenderer extends DefaultComponentRenderer {
 		super();
 	}
 
-	/**
-	 * @see org.olat.core.gui.render.ui.ComponentRenderer#render(org.olat.core.gui.render.Renderer,
-	 *      org.olat.core.gui.render.StringOutput, org.olat.core.gui.components.Component,
-	 *      org.olat.core.gui.render.URLBuilder, org.olat.core.gui.translator.Translator,
-	 *      org.olat.core.gui.render.RenderResult, java.lang.String[])
-	 */
 	@Override
 	public void render(Renderer renderer, StringOutput target, Component source, URLBuilder ubu, Translator translator,
 			RenderResult renderResult, String[] args) {
@@ -91,7 +84,7 @@ public class MenuTreeRenderer extends DefaultComponentRenderer {
 		INode selNode = tree.getSelectedNode();
 		Collection<String> openNodeIds = tree.getOpenNodeIds();
 
-		List<INode> selPath = new ArrayList<INode>(5);
+		List<INode> selPath = new ArrayList<>(5);
 		INode cur = selNode;
 		if (cur == null && !tree.isUnselectNodes()) {
 			cur = root; 
@@ -124,15 +117,15 @@ public class MenuTreeRenderer extends DefaultComponentRenderer {
 		if(StringHelper.containsNonWhitespace(tree.getElementCssClass())) {
 			target.append(" ").append(tree.getElementCssClass());
 		}
-		target.append("'><ul class=\"o_tree_l0\">");
+		target.append("' role='navigation'><ul class=\"o_tree_l0\">");
 		if(tree.isRootVisible()) {
-			renderLevel(target, 0, root, selPath, openNodeIds, elements, ubu, flags, tree);
+			renderLevel(renderer, target, 0, root, selPath, openNodeIds, elements, ubu, flags, tree);
 		} else {
 			selPath.remove(0);
 			int chdCnt = root.getChildCount();
 			for (int i = 0; i < chdCnt; i++) {
 				TreeNode curChd = (TreeNode)root.getChildAt(i);
-				renderLevel(target, 0, curChd, selPath, openNodeIds, elements, ubu, flags, tree);
+				renderLevel(renderer, target, 0, curChd, selPath, openNodeIds, elements, ubu, flags, tree);
 			}
 		}
 		target.append("</ul>");
@@ -140,7 +133,7 @@ public class MenuTreeRenderer extends DefaultComponentRenderer {
 		      .append("</div>");
 	}
 
-	private void renderLevel(StringOutput target, int level, TreeNode curRoot, List<INode> selPath,
+	private void renderLevel(Renderer renderer, StringOutput target, int level, TreeNode curRoot, List<INode> selPath,
 			Collection<String> openNodeIds, List<DndElement> dndElements, URLBuilder ubu, AJAXFlags flags, MenuTree tree) {	
 
 		INode curSel = null;
@@ -187,7 +180,7 @@ public class MenuTreeRenderer extends DefaultComponentRenderer {
 		}
 		// Render menu item as link, also for active elements
 		// mark active item as strong for accessibility reasons
-		renderLink(curRoot, level, selected, renderChildren, curSel, target, ubu, flags, tree);
+		renderLink(renderer, curRoot, level, selected, renderChildren, curSel, target, ubu, flags, tree);
 		
 		if(selected && tree.isInsertToolEnabled()) {
 			renderInsertCallout(target, curRoot, ubu, flags, tree);
@@ -201,7 +194,7 @@ public class MenuTreeRenderer extends DefaultComponentRenderer {
 		
 		if (renderChildren) {
 			//open / close ul
-			renderChildren(target, level, curRoot, selPath, openNodeIds, dndElements, ubu, flags, tree);
+			renderChildren(renderer, target, level, curRoot, selPath, openNodeIds, dndElements, ubu, flags, tree);
 			
 			//append div to drop as sibling after the children
 			if(tree.isDragEnabled() || tree.isDropSiblingEnabled()) {
@@ -288,7 +281,7 @@ public class MenuTreeRenderer extends DefaultComponentRenderer {
 		}
 	}
 	
-	private void renderLink(TreeNode curRoot, int level, boolean selected, boolean renderChildren, INode curSel,
+	private void renderLink(Renderer renderer, TreeNode curRoot, int level, boolean selected, boolean renderChildren, INode curSel,
 			StringOutput target, URLBuilder ubu, AJAXFlags flags, MenuTree tree) {
 		int chdCnt = curRoot.getChildCount();
 		boolean iframePostEnabled = flags.isIframePostEnabled();
@@ -341,23 +334,23 @@ public class MenuTreeRenderer extends DefaultComponentRenderer {
 		String alt = curRoot.getAltText();
 		if (alt != null) {
 			target.append(" title=\"")
-			      .append(StringEscapeUtils.escapeHtml(alt).toString())
+			      .appendHtmlEscaped(alt)
 			      .append("\"");
 		}
 		target.append(">");
 
 		String iconCssClass = curRoot.getIconCssClass();
 		if (iconCssClass != null) {
-			target.append("<i class='o_icon ").append(iconCssClass).append("'></i> ");			
+			target.append("<i class='o_icon o_icon-fw ").append(iconCssClass).append("'></i> ");			
 		}
-		renderDisplayTitle(target, curRoot, tree);
+		renderDisplayTitle(renderer, target, curRoot, tree);
 		// display title and close menu item
 		
 		appendDecorators(curRoot, target);
 		target.append("</a></span>");
 	}
 	
-	private void renderDisplayTitle(StringOutput target, TreeNode node, MenuTree tree) {
+	private void renderDisplayTitle(Renderer renderer, StringOutput target, TreeNode node, MenuTree tree) {
 		target.append("<span ");
 		if(tree.isDragEnabled() || tree.isDropEnabled()) {
 			if(tree.isDragEnabled()) {
@@ -379,6 +372,11 @@ public class MenuTreeRenderer extends DefaultComponentRenderer {
 			StringHelper.escapeHtml(target, title);
 		}
 		target.append("</span>");
+		//render badge
+		if(node.getBadge() != null) {
+			target.append("&nbsp");
+			renderer.render(node.getBadge(), target, new String[] {});
+		}
 	}
 	
 	private void renderInsertCallout(StringOutput sb, TreeNode node, URLBuilder ubu, AJAXFlags flags, MenuTree tree) {
@@ -417,7 +415,7 @@ public class MenuTreeRenderer extends DefaultComponentRenderer {
 		sb.append("><i class='o_icon ").append(cssClass).append("'> </i></a>");
 	}
 	
-	private void renderChildren(StringOutput target, int level, TreeNode curRoot, List<INode> selPath, Collection<String> openNodeIds,
+	private void renderChildren(Renderer renderer, StringOutput target, int level, TreeNode curRoot, List<INode> selPath, Collection<String> openNodeIds,
 			List<DndElement> dndElements, URLBuilder ubu, AJAXFlags flags, MenuTree tree) {
 		int chdCnt = curRoot.getChildCount();
 		// render children as new level
@@ -432,7 +430,7 @@ public class MenuTreeRenderer extends DefaultComponentRenderer {
 		for (int i = 0; i < chdCnt; i++) {
 			TreeNode curChd = (TreeNode) curRoot.getChildAt(i);
 			if(tree.getFilter().isVisible(curChd)) {
-				renderLevel(target, level + 1, curChd, selPath, openNodeIds, dndElements, ubu, flags, tree);
+				renderLevel(renderer, target, level + 1, curChd, selPath, openNodeIds, dndElements, ubu, flags, tree);
 			}
 		}
 		target.append("</ul>");

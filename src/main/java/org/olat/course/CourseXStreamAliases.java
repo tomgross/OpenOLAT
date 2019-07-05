@@ -36,6 +36,7 @@ import org.olat.course.condition.operators.IsNotInAttributeOperator;
 import org.olat.course.condition.operators.LowerThanEqualsOperator;
 import org.olat.course.condition.operators.LowerThanOperator;
 import org.olat.course.config.CourseConfig;
+import org.olat.course.nodes.AdobeConnectCourseNode;
 import org.olat.course.nodes.AssessableCourseNode;
 import org.olat.course.nodes.BCCourseNode;
 import org.olat.course.nodes.BasicLTICourseNode;
@@ -43,6 +44,7 @@ import org.olat.course.nodes.BlogCourseNode;
 import org.olat.course.nodes.COCourseNode;
 import org.olat.course.nodes.CPCourseNode;
 import org.olat.course.nodes.CalCourseNode;
+import org.olat.course.nodes.Card2BrainCourseNode;
 import org.olat.course.nodes.CourseNode;
 import org.olat.course.nodes.DialogCourseNode;
 import org.olat.course.nodes.ENCourseNode;
@@ -62,8 +64,12 @@ import org.olat.course.nodes.TACourseNode;
 import org.olat.course.nodes.TUCourseNode;
 import org.olat.course.nodes.ViteroCourseNode;
 import org.olat.course.nodes.WikiCourseNode;
+import org.olat.course.nodes.adobeconnect.compatibility.AdobeConnectCompatibilityConfiguration;
+import org.olat.course.nodes.adobeconnect.compatibility.MeetingCompatibilityDate;
+import org.olat.course.nodes.adobeconnect.compatibility.WimbaClassroomCompatibilityConfiguration;
 import org.olat.course.tree.CourseEditorTreeModel;
 import org.olat.course.tree.CourseEditorTreeNode;
+import org.olat.modules.edubase.model.BookSectionImpl;
 
 import com.thoughtworks.xstream.XStream;
 
@@ -100,6 +106,7 @@ public class CourseXStreamAliases {
 	static {
 		//write XStream
 		writeXstream.alias("com.frentix.olat.course.nodes.ViteroCourseNode", ViteroCourseNode.class);
+		writeXstream.alias("BookSection", BookSectionImpl.class);
 		//end write XStream
 		
 		////////////////////////////////////////////////////////////////////////////////////////////////
@@ -115,10 +122,12 @@ public class CourseXStreamAliases {
 		readXstream.alias("BCCourseNode", BCCourseNode.class);
 		readXstream.alias("BlogCourseNode", BlogCourseNode.class);
 		readXstream.alias("CalCourseNode", CalCourseNode.class);
+		readXstream.alias("Card2BrainCourseNode", Card2BrainCourseNode.class);
 		readXstream.alias("COCourseNode", COCourseNode.class);
 		readXstream.alias("CourseNode", CourseNode.class);
 		readXstream.alias("CPCourseNode", CPCourseNode.class);
 		readXstream.alias("DialogCourseNode", DialogCourseNode.class);
+		readXstream.alias("BookSection", BookSectionImpl.class);
 		readXstream.alias("ENCourseNode", ENCourseNode.class);
 		readXstream.alias("FOCourseNode", FOCourseNode.class);
 		readXstream.alias("InfoCourseNode", InfoCourseNode.class);
@@ -138,6 +147,12 @@ public class CourseXStreamAliases {
 		readXstream.alias("ExtendedCondition", ExtendedCondition.class);
 		readXstream.alias("Condition", Condition.class);
 		
+		// vc node to new adobe connect cours element
+		readXstream.alias("de.bps.course.nodes.VCCourseNode", AdobeConnectCourseNode.class);
+		readXstream.alias("de.bps.course.nodes.vc.MeetingDate", MeetingCompatibilityDate.class);
+		readXstream.alias("de.bps.course.nodes.vc.provider.adobe.AdobeConnectConfiguration", AdobeConnectCompatibilityConfiguration.class);
+		readXstream.alias("de.bps.course.nodes.vc.provider.wimba.WimbaClassroomConfiguration", WimbaClassroomCompatibilityConfiguration.class);
+
 		// conditions can hold operators and they get serialized as well. So we need all of the as aliases
 		readXstream.alias("IsInAttributeOperator", IsInAttributeOperator.class);
 		readXstream.alias("EqualsOperator", EqualsOperator.class);

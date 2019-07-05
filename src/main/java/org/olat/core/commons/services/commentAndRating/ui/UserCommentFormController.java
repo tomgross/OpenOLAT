@@ -31,9 +31,9 @@ import org.olat.core.gui.control.Controller;
 import org.olat.core.gui.control.Event;
 import org.olat.core.gui.control.WindowControl;
 import org.olat.core.id.OLATResourceable;
-import org.olat.core.id.User;
-import org.olat.core.id.UserConstants;
 import org.olat.core.util.StringHelper;
+import org.olat.user.UserManager;
+import org.springframework.beans.factory.annotation.Autowired;
 
 /**
  * Description:<br>
@@ -52,23 +52,26 @@ import org.olat.core.util.StringHelper;
  * </ul>
  * <P>
  * Initial Date: 24.11.2009 <br>
- * 
+ *
  * @author gnaegi
  */
 public class UserCommentFormController extends FormBasicController {
 	private UserComment parentComment;
 	private UserComment toBeUpdatedComment;
-	// 
+	//
 	private RichTextElement commentElem;
-	
+
 	private final String resSubPath;
 	private final OLATResourceable ores;
 	private final CommentAndRatingService commentAndRatingService;
 
+	@Autowired
+	private UserManager userManager;
+
 	/**
 	 * Constructor for a user comment form controller. Use the
 	 * UserCommentsAndRatingsController to work with user comments.
-	 * 
+	 *
 	 * @param ureq
 	 * @param wControl
 	 * @param parentComment
@@ -82,7 +85,7 @@ public class UserCommentFormController extends FormBasicController {
 		this.ores = ores;
 		this.resSubPath = resSubPath;
 		commentAndRatingService = CoreSpringFactory.getImpl(CommentAndRatingService.class);
-		
+
 		this.parentComment = parentComment;
 		this.toBeUpdatedComment = toBeUpdatedComment;
 		//
@@ -98,8 +101,8 @@ public class UserCommentFormController extends FormBasicController {
 			UserRequest ureq) {
 		// Add parent and parent first / last name
 		if (parentComment != null) {
-			User parent = parentComment.getCreator().getUser();
-			String[] args = new String[] {parent.getProperty(UserConstants.FIRSTNAME, getLocale()), parent.getProperty(UserConstants.LASTNAME, getLocale())};
+			String name = userManager.getUserDisplayName(parentComment.getCreator());
+			String[] args = new String[] {name};
 			setFormTitle("comments.form.reply.title", args);
 		} else {
 			setFormTitle("comments.form.new.title");
@@ -139,26 +142,26 @@ public class UserCommentFormController extends FormBasicController {
 			if (toBeUpdatedComment == null) {
 				if (parentComment == null) {
 					// create new comment
-					toBeUpdatedComment = commentAndRatingService.createComment(getIdentity(), ores, resSubPath, commentText);					
+					toBeUpdatedComment = commentAndRatingService.createComment(getIdentity(), ores, resSubPath, commentText);
 					// notify listeners that we finished.
-					fireEvent(ureq, Event.CHANGED_EVENT);			
+					fireEvent(ureq, Event.CHANGED_EVENT);
 				} else {
 					// reply to parent comment
 					toBeUpdatedComment = commentAndRatingService.replyTo(parentComment, getIdentity(), commentText);
 					if (toBeUpdatedComment == null) {
 						showError("comments.coment.reply.error");
-						fireEvent(ureq, Event.FAILED_EVENT);									
+						fireEvent(ureq, Event.FAILED_EVENT);
 					} else {
-						fireEvent(ureq, Event.CHANGED_EVENT);									
+						fireEvent(ureq, Event.CHANGED_EVENT);
 					}
 				}
 			} else {
 				toBeUpdatedComment = commentAndRatingService.updateComment(toBeUpdatedComment, commentText);
 				if (toBeUpdatedComment == null) {
-					showError("comments.coment.update.error");					
-					fireEvent(ureq, Event.FAILED_EVENT);									
+					showError("comments.coment.update.error");
+					fireEvent(ureq, Event.FAILED_EVENT);
 				} else {
-					fireEvent(ureq, Event.CHANGED_EVENT);									
+					fireEvent(ureq, Event.CHANGED_EVENT);
 				}
 			}
 		}

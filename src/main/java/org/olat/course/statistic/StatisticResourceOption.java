@@ -39,5 +39,4 @@ public class StatisticResourceOption {
 	public void setParticipantsGroups(List<Group> groups) {
 		this.groups = groups;
 	}
-
 }

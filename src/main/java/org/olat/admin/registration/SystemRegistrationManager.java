@@ -24,7 +24,10 @@
 */
 package org.olat.admin.registration;
 
-import java.text.ParseException;
+import static org.quartz.CronScheduleBuilder.cronSchedule;
+import static org.quartz.JobBuilder.newJob;
+import static org.quartz.TriggerBuilder.newTrigger;
+
 import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.HashMap;
@@ -33,7 +36,6 @@ import java.util.Map;
 
 import javax.ws.rs.core.UriBuilder;
 
-import org.apache.commons.io.IOUtils;
 import org.apache.commons.lang.math.RandomUtils;
 import org.apache.http.HttpResponse;
 import org.apache.http.HttpStatus;
@@ -45,14 +47,12 @@ import org.apache.http.impl.client.CloseableHttpClient;
 import org.apache.http.message.BasicNameValuePair;
 import org.apache.http.util.EntityUtils;
 import org.olat.basesecurity.BaseSecurity;
-import org.olat.basesecurity.Constants;
-import org.olat.basesecurity.PermissionOnResourceable;
-import org.olat.basesecurity.SecurityGroup;
+import org.olat.basesecurity.OrganisationRoles;
 import org.olat.core.CoreSpringFactory;
 import org.olat.core.commons.persistence.DB;
 import org.olat.core.helpers.Settings;
 import org.olat.core.id.Identity;
-import org.olat.core.logging.OLog;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.StringHelper;
 import org.olat.core.util.httpclient.HttpClientFactory;
@@ -61,12 +61,12 @@ import org.olat.course.CourseModule;
 import org.olat.group.BusinessGroupService;
 import org.olat.group.model.SearchBusinessGroupParams;
 import org.olat.instantMessaging.InstantMessagingModule;
-import org.olat.repository.RepositoryEntry;
 import org.olat.repository.RepositoryManager;
-import org.quartz.CronTrigger;
 import org.quartz.JobDetail;
+import org.quartz.JobKey;
 import org.quartz.Scheduler;
 import org.quartz.SchedulerException;
+import org.quartz.Trigger;
 import org.springframework.beans.factory.InitializingBean;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -86,7 +86,7 @@ import org.springframework.stereotype.Service;
 @Service
 public class SystemRegistrationManager implements InitializingBean {
 	
-	private static final OLog log = Tracing.createLoggerFor(SystemRegistrationManager.class);
+	private static final Logger log = Tracing.createLoggerFor(SystemRegistrationManager.class);
 
 	private static final String SCHEDULER_NAME = "system.registration";
 	private static final String TRIGGER = "system_registration_trigger";
@@ -131,8 +131,7 @@ public class SystemRegistrationManager implements InitializingBean {
 		int min = RandomUtils.nextInt(59);
 		int hour = RandomUtils.nextInt(23);
 		int day = RandomUtils.nextInt(6) + 1;
-		String cronExpression = "0 " + min + " " + hour + " ? * "+ day;
-		return cronExpression;
+		return "0 " + min + " " + hour + " ? * "+ day;
 	}
 
 	public String getLocationCoordinates(String textLocation){
@@ -141,11 +140,9 @@ public class SystemRegistrationManager implements InitializingBean {
 		}
 		
 		String csvCoordinates = null;
-		CloseableHttpClient client = null;
-		try {
-			client = HttpClientFactory.getHttpClientInstance(true);
+		try(CloseableHttpClient client = HttpClientFactory.getHttpClientInstance(true)) {
 			URIBuilder uriBuilder = new URIBuilder("http://maps.google.com/maps/geo");
-			List<NameValuePair> nvps = new ArrayList<NameValuePair>(5);
+			List<NameValuePair> nvps = new ArrayList<>(5);
 			nvps.add(new BasicNameValuePair("q",textLocation));
 			nvps.add(new BasicNameValuePair("output","csv"));
 			nvps.add(new BasicNameValuePair("oe","utf8"));
@@ -163,15 +160,13 @@ public class SystemRegistrationManager implements InitializingBean {
 			}
 		} catch (Exception e) {
 			//
-		} finally {
-			IOUtils.closeQuietly(client);
 		}
 		return csvCoordinates;
 	}
 	
 	public void send() {
 		try {
-			scheduler.triggerJob(SCHEDULER_NAME, Scheduler.DEFAULT_GROUP);
+			scheduler.triggerJob(new JobKey(SCHEDULER_NAME, Scheduler.DEFAULT_GROUP));
 		} catch (SchedulerException e) {
 			log.error("", e);
 		}
@@ -183,8 +178,8 @@ public class SystemRegistrationManager implements InitializingBean {
 	 */
 	protected void sendRegistrationData() {
 		HttpPut method = null;
-		CloseableHttpClient client = null;
-		try {
+
+		try(CloseableHttpClient client = HttpClientFactory.getHttpClientInstance(true)) {
 			// Do it optimistic and try to generate the XML message. If the message
 			// doesn't contain anything, the user does not want to register this
 			// instance
@@ -206,23 +201,22 @@ public class SystemRegistrationManager implements InitializingBean {
 			}
 			builder.queryParam("product", PRODUCT);
 
-			client = HttpClientFactory.getHttpClientInstance(true);
 			String url = builder.build().toString();
 			method = new HttpPut(url);
 			HttpResponse response = client.execute(method);
 			int status = response.getStatusLine().getStatusCode();
 			if(status == HttpStatus.SC_CREATED) {
-				log.info("Successfully registered OLAT installation on openolat.org server, thank you for your support!", null);
+				log.info("Successfully registered OLAT installation on openolat.org server, thank you for your support!");
 				String registrationKey = EntityUtils.toString(response.getEntity());
 				registrationModule.setSecretKey(registrationKey);
 			} else if (status == HttpStatus.SC_NOT_MODIFIED || status == HttpStatus.SC_OK || status == HttpStatus.SC_CREATED) {
-				log.info("Successfully registered OLAT installation on openolat.org server, thank you for your support!", null);
+				log.info("Successfully registered OLAT installation on openolat.org server, thank you for your support!");
 			} else if (status == HttpStatus.SC_NOT_FOUND) {
-				log.error("Registration server not found: " + response.getStatusLine().toString(), null);
+				log.error("Registration server not found: " + response.getStatusLine().toString());
 			} else if(status == HttpStatus.SC_NO_CONTENT){
-				log.info(EntityUtils.toString(response.getEntity()), response.getStatusLine().toString());
+				log.info(response.getStatusLine().toString() + " " + EntityUtils.toString(response.getEntity()));
 			} else {
-				log.error("Unexpected HTTP Status: " + response.getStatusLine().toString() + " during registration call", null);
+				log.error("Unexpected HTTP Status: " + response.getStatusLine().toString() + " during registration call");
 			}
 		} catch (Exception e) {
 			log.error("Unexpected exception during registration call", e);
@@ -231,12 +225,11 @@ public class SystemRegistrationManager implements InitializingBean {
 			if(method != null) {
 				method.releaseConnection();
 			}
-			IOUtils.closeQuietly(client);
 		}
 	}
 
 	public Map<String,String> getRegistrationPropertiesMessage() {
-		Map<String,String> msgProperties = new HashMap<String,String>();
+		Map<String,String> msgProperties = new HashMap<>();
 		
 		boolean website = registrationModule.isPublishWebsite();
 		boolean notify = registrationModule.isNotifyReleases();
@@ -250,24 +243,23 @@ public class SystemRegistrationManager implements InitializingBean {
 		
 		// System config
 		msgProperties.put("instantMessagingEnabled", String.valueOf(CoreSpringFactory.getImpl(InstantMessagingModule.class).isEnabled()));
-		msgProperties.put("enabledLanguages", I18nModule.getEnabledLanguageKeys().toString());
+		msgProperties.put("enabledLanguages", CoreSpringFactory.getImpl(I18nModule.class).getEnabledLanguageKeys().toString());
 		msgProperties.put("clusterEnabled", clusterMode);
 		msgProperties.put("debuggingEnabled", String.valueOf(Settings.isDebuging()));
 		
 		// Course counts
-		int allCourses = repositoryManager.countByTypeLimitAccess(CourseModule.ORES_TYPE_COURSE, RepositoryEntry.ACC_OWNERS);
-		int publishedCourses = repositoryManager.countByTypeLimitAccess(CourseModule.ORES_TYPE_COURSE, RepositoryEntry.ACC_USERS);
+		int allCourses = repositoryManager.countByType(CourseModule.ORES_TYPE_COURSE);
+		int publishedCourses = repositoryManager.countPublished(CourseModule.ORES_TYPE_COURSE);
 		msgProperties.put("courses", String.valueOf(allCourses));
 		msgProperties.put("coursesPublished", String.valueOf(publishedCourses));
 		
 		// User counts
-		SecurityGroup olatuserGroup = securityManager.findSecurityGroupByName(Constants.GROUP_OLATUSERS);
-		int users = securityManager.countIdentitiesOfSecurityGroup(olatuserGroup);
-		long disabled = securityManager.countIdentitiesByPowerSearch(null, null, true, null, null, null, null, null, null, null, Identity.STATUS_LOGIN_DENIED);
-		msgProperties.put("usersEnabled", String.valueOf(users - disabled));
-				
-		PermissionOnResourceable[] permissions = { new PermissionOnResourceable(Constants.PERMISSION_HASROLE, Constants.ORESOURCE_AUTHOR) };
-		long authors = securityManager.countIdentitiesByPowerSearch(null, null, true, null, permissions, null, null, null, null, null, null);
+		long visible = securityManager.countIdentitiesByPowerSearch(null, null, true, new OrganisationRoles[] { OrganisationRoles.user },
+				null, null, null, null, null, Identity.STATUS_VISIBLE_LIMIT);
+		msgProperties.put("usersEnabled", String.valueOf(visible));
+
+		long authors = securityManager.countIdentitiesByPowerSearch(null, null, true, new OrganisationRoles[] { OrganisationRoles.author },
+				null, null, null, null, null, Identity.STATUS_VISIBLE_LIMIT);
 		msgProperties.put("authors", String.valueOf(authors));
 		
 		// Activity
@@ -318,20 +310,17 @@ public class SystemRegistrationManager implements InitializingBean {
 
 		String cronExpression = createCronTriggerExpression();
 		try {
-			// Create job with cron trigger configuration
-			JobDetail jobDetail = new JobDetail(SCHEDULER_NAME, Scheduler.DEFAULT_GROUP, SystemRegistrationJob.class);
-			CronTrigger trigger = new CronTrigger();
-			trigger.setName(TRIGGER);
-			// Use this cron expression for debugging, tries to send data every minute
-			//trigger.setCronExpression("0 * * * * ?");
-			trigger.setCronExpression(cronExpression);
-			// Schedule job now
+			JobDetail jobDetail = newJob(SystemRegistrationJob.class)
+					.withIdentity(SCHEDULER_NAME, Scheduler.DEFAULT_GROUP)
+					.build();
+			Trigger trigger = newTrigger()
+				    .withIdentity(TRIGGER)
+				    .withSchedule(cronSchedule(cronExpression))
+				    .build();
 			scheduler.scheduleJob(jobDetail, trigger);
-		} catch (ParseException e) {
+		} catch (Exception e) {
 			log.error("Illegal cron expression for system registration", e);
-		} catch (SchedulerException e) {
-			log.error("Can not start system registration scheduler", e);
 		}
-		log.info("Registration background job successfully started: "+cronExpression, null);
+		log.info("Registration background job successfully started: "+cronExpression);
 	}
 }

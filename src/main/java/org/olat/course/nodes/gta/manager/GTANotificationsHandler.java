@@ -31,7 +31,7 @@ import org.olat.core.commons.services.notifications.SubscriptionInfo;
 import org.olat.core.commons.services.notifications.model.SubscriptionListItem;
 import org.olat.core.commons.services.notifications.model.TitleItem;
 import org.olat.core.gui.translator.Translator;
-import org.olat.core.logging.OLog;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.Util;
 import org.olat.course.CourseFactory;
@@ -39,6 +39,7 @@ import org.olat.course.nodes.CourseNode;
 import org.olat.course.nodes.gta.GTAManager;
 import org.olat.course.nodes.gta.ui.GTARunController;
 import org.olat.group.BusinessGroupService;
+import org.olat.modules.assessment.manager.AssessmentEntryDAO;
 import org.olat.repository.RepositoryManager;
 import org.olat.repository.RepositoryService;
 import org.olat.user.UserManager;
@@ -54,7 +55,7 @@ import org.springframework.stereotype.Service;
 @Service
 public class GTANotificationsHandler implements NotificationsHandler  {
 	
-	private static final OLog log = Tracing.createLoggerFor(GTANotificationsHandler.class);
+	private static final Logger log = Tracing.createLoggerFor(GTANotificationsHandler.class);
 	protected static final String CSS_CLASS_ICON = "o_gta_icon";
 	
 	@Autowired
@@ -62,9 +63,15 @@ public class GTANotificationsHandler implements NotificationsHandler  {
 	@Autowired
 	private UserManager userManager;
 	@Autowired
+	private RepositoryManager repositoryManager;
+	@Autowired
 	private RepositoryService repositoryService;
 	@Autowired
 	private BusinessGroupService businessGroupService;
+	@Autowired
+	private AssessmentEntryDAO courseNodeAssessmentDao;
+	@Autowired
+	private NotificationsManager notificationsManager;
 
 	@Override
 	public SubscriptionInfo createSubscriptionInfo(Subscriber subscriber, Locale locale, Date compareDate) {
@@ -72,32 +79,25 @@ public class GTANotificationsHandler implements NotificationsHandler  {
 		Date latestNews = p.getLatestNewsDate();
 	
 		SubscriptionInfo si;
-	
 		// there could be news for me, investigate deeper
 		try {
-			if (NotificationsManager.getInstance().isPublisherValid(p) && compareDate.before(latestNews)) {
-				Translator translator = Util.createPackageTranslator(GTARunController.class, locale);
-				
-				GTANotifications notifications = new GTANotifications(subscriber, locale, compareDate,
-						repositoryService, gtaManager, businessGroupService, userManager);
+			if (notificationsManager.isPublisherValid(p) && compareDate.before(latestNews)) {
+				GTANotifications notifications = new GTANotifications(subscriber, false, locale, compareDate,
+						repositoryService, gtaManager, businessGroupService, userManager, courseNodeAssessmentDao);
 				List<SubscriptionListItem> items = notifications.getItems();
 				if(items.isEmpty()) {
-					si = NotificationsManager.getInstance().getNoSubscriptionInfo();
+					si = notificationsManager.getNoSubscriptionInfo();
 				} else {
-					String displayName = notifications.getDisplayName();
-					CourseNode node = CourseFactory.loadCourse(p.getResId()).getRunStructure().getNode(p.getSubidentifier());
-					String shortName = (node != null ? node.getShortName() : "");
-					String title = translator.translate("notifications.header", new String[]{ displayName, shortName });
+					String title = notifications.getNotifificationHeader();
 					TitleItem titleItem = new TitleItem(title, CSS_CLASS_ICON);
 					si = new SubscriptionInfo(subscriber.getKey(), p.getType(), titleItem, items);
 				}
 			} else {
-				si = NotificationsManager.getInstance().getNoSubscriptionInfo();
+				si = notificationsManager.getNoSubscriptionInfo();
 			}
 		} catch (Exception e) {
-			log.error("Error creating task notifications for subscriber: " + subscriber.getKey(), e);
-			//checkPublisher(p);
-			si = NotificationsManager.getInstance().getNoSubscriptionInfo();
+			log.error("Cannot create gtask notifications for subscriber: " + subscriber.getKey(), e);
+			si = notificationsManager.getNoSubscriptionInfo();
 		}
 		return si;
 	}
@@ -107,12 +107,9 @@ public class GTANotificationsHandler implements NotificationsHandler  {
 		String title;
 		try {
 			Translator translator = Util.createPackageTranslator(GTARunController.class, locale);
-			Publisher publisher = subscriber.getPublisher();
-			Long resId = publisher.getResId();
-			String displayName = RepositoryManager.getInstance().lookupDisplayNameByOLATResourceableId(resId);
-			CourseNode node = CourseFactory.loadCourse(resId).getRunStructure().getNode(publisher.getSubidentifier());
-			String shortName = (node != null ? node.getShortName() : "");
-			title = translator.translate("notifications.header", new String[]{ displayName, shortName });
+			Long resId = subscriber.getPublisher().getResId();
+			String displayName = repositoryManager.lookupDisplayNameByOLATResourceableId(resId);
+			title = translator.translate("notifications.header", new String[]{ displayName });
 		} catch (Exception e) {
 			log.error("Error while creating task notifications for subscriber: " + subscriber.getKey(), e);
 			title = "-";

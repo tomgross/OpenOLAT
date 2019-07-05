@@ -27,14 +27,14 @@
 package org.olat.core.commons.modules.bc;
 
 import java.io.File;
+import java.nio.file.Path;
 
 import org.olat.core.configuration.AbstractSpringModule;
 import org.olat.core.helpers.Settings;
-import org.olat.core.logging.OLog;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.StringHelper;
 import org.olat.core.util.coordinate.CoordinatorManager;
-import org.olat.core.util.vfs.version.FolderVersioningConfigurator;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -45,9 +45,9 @@ import org.springframework.stereotype.Service;
  * @author Mike Stock
  */
 @Service
-public class FolderModule extends AbstractSpringModule {
-
-	private static final OLog log = Tracing.createLoggerFor(FolderModule.class);
+public class FolderModule extends AbstractSpringModule {	
+	
+	private static final Logger log = Tracing.createLoggerFor(FolderModule.class);
 
 	private static final String CONFIG_FORCE_DOWNLOAD = "forceDownload";
 
@@ -66,9 +66,6 @@ public class FolderModule extends AbstractSpringModule {
 	private boolean sendDocToExtern;
 	@Value("${folder.force.download:true}")
 	private String forceDownload;
-
-	@Autowired
-	private FolderVersioningConfigurator versioning;
 
 	@Autowired
 	public FolderModule(CoordinatorManager coordinatorManager) {
@@ -114,7 +111,6 @@ public class FolderModule extends AbstractSpringModule {
 
 	@Override
 	public void init() {
-		FolderConfig.setVersioningConfigurator(versioning);
 		updateProperties();
 	}
 
@@ -123,14 +119,6 @@ public class FolderModule extends AbstractSpringModule {
 		if(StringHelper.containsNonWhitespace(enabled)) {
 			forceDownload = enabled;
 		}
-	}
-
-	/**
-	 * [used by spring]
-	 * @param versioning
-	 */
-	public void setVersioning(FolderVersioningConfigurator versioning) {
-		this.versioning = versioning;
 	}
 
 	public boolean isForceDownload() {
@@ -145,7 +133,11 @@ public class FolderModule extends AbstractSpringModule {
 	public String getCanonicalRoot() {
 		return FolderConfig.getCanonicalRoot();
 	}
-
+	
+	public Path getCanonicalRootPath() {
+		return FolderConfig.getCanonicalRootPath();
+	}
+	
 	public String getCanonicalTmpDir() {
 		return FolderConfig.getCanonicalTmpDir();
 	}

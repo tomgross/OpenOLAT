@@ -46,6 +46,7 @@ import org.olat.core.gui.components.form.flexible.impl.FormLayoutContainer;
 import org.olat.core.gui.control.Controller;
 import org.olat.core.gui.control.Event;
 import org.olat.core.gui.control.WindowControl;
+import org.olat.core.util.PathUtils;
 import org.olat.course.certificate.CertificateTemplate;
 import org.olat.course.certificate.CertificatesManager;
 import org.olat.fileresource.types.FileResource;
@@ -153,9 +154,9 @@ public class UploadCertificateController extends FormBasicController {
 
 	@Override
 	protected boolean validateFormLogic(UserRequest ureq) {
-		boolean allOk = true;
+		boolean allOk = super.validateFormLogic(ureq);
 		allOk &= validateTemplate();
-		return allOk & super.validateFormLogic(ureq);
+		return allOk;
 	}
 
 	protected boolean validateTemplate() {
@@ -187,22 +188,18 @@ public class UploadCertificateController extends FormBasicController {
 				Path path = FileResource.getResource(template, filename);
 				IndexVisitor visitor = new IndexVisitor(path);
 				Files.walkFileTree(path, visitor);
-				if(!visitor.hasFound()) {
+				if(!visitor.hasFound() || path.getNameCount() > 0) {
 					fileEl.setErrorKey("upload.error.noindex", null);
+					allOk &= false;
 				}
-				allOk = visitor.hasFound();
-				try {
-					path.getFileSystem().close(); // LMSUZH-45 make sure that ZipFileSystem is closed, so that resource is really freed.
-				} catch (UnsupportedOperationException e) {
-				}
-
+				PathUtils.closeSubsequentFS(path);
 				formatEl.setVisible(allOk);
 				orientationEl.setVisible(allOk);
 			} else {
-				fileEl.setErrorKey("upload.error.no.phantomjs", null);
-				allOk = false;
+				fileEl.setErrorKey("upload.error.no.html.templates", null);
+				allOk &= false;
 			}
-		} catch (IOException e) {
+		} catch (Exception e) {
 			logError("", e);
 			fileEl.setErrorKey("upload.unkown.error", null);
 			allOk = false;

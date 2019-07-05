@@ -19,9 +19,10 @@
  */
 package org.olat.core.util.vfs;
 
+import org.olat.core.commons.services.vfs.VFSMetadata;
 import org.olat.core.id.Identity;
-import org.olat.core.id.Roles;
 import org.olat.core.util.vfs.lock.LockInfo;
+import org.olat.core.util.vfs.lock.LockResult;
 
 /**
  * The manager which locks / unlokcs the files
@@ -36,34 +37,64 @@ public interface VFSLockManager {
 	 * @param item
 	 * @return True if the item has a VFS or WebDAv lock
 	 */
-	public boolean isLocked(VFSItem item);
+	public boolean isLocked(VFSItem item, VFSLockApplicationType type, String appName);
+	
+	/**
+	 * This method is used as an optimization of the isLocked() to prevent
+	 * loading several times the same metadata in a list.
+	 * 
+	 * @param item The file to check
+	 * @param loadedInfo The up-to-date meta info
+	 * @return
+	 */
+	public boolean isLocked(VFSItem item, VFSMetadata loadedInfo, VFSLockApplicationType type, String appName);
 	
 	/**
 	 * 
 	 * @param item
 	 * @param me
 	 * @param roles
-	 * @return True if there is a lock owned by someone else, or there is a WebDAV lock on the item
+	 * @return true if there is a lock owned by someone else, or there is a WebDAV lock on the item
 	 */
-	public boolean isLockedForMe(VFSItem item, Identity me, Roles roles);
+	public boolean isLockedForMe(VFSItem item, Identity me, VFSLockApplicationType type, String appName);
+	
+	/**
+	 * 
+	 * @param item
+	 * @param loadedInfo
+	 * @param me
+	 * @param roles
+	 * @return true if there is a lock owned by someone else, or there is a WebDAV lock on the item
+	 */
+	public boolean isLockedForMe(VFSItem item, VFSMetadata loadedInfo, Identity me, VFSLockApplicationType type, String appName);
 	
 	public LockInfo getLock(VFSItem item);
 	
-	public boolean lock(VFSItem item, Identity identity, Roles roles);
+	/**
+	 * 
+	 * @param item
+	 * @param identity
+	 * @param roles
+	 * @param type
+	 * @param appName
+	 * @return
+	 */
+	public LockResult lock(VFSItem item, Identity identity, VFSLockApplicationType type, String appName);
 	
 	/**
 	 * 
 	 * Unlock the VFS lock only. It doesn't change the WebdAV lock.
 	 * 
 	 * @param item
-	 * @param identity
-	 * @param roles
+	 * @param type
 	 * @return True if and only if the VFS lock was unlocked and there isn't any WedDAV lock
 	 */
-	public boolean unlock(VFSItem item, Identity identity, Roles roles);
+	public boolean unlock(VFSItem item, VFSLockApplicationType type);
+	
+	public boolean unlock(VFSItem item, LockResult result);
 	
 	/**
 	 * Method the generate the Lock-Token
 	 */
-	public String generateLockToken(LockInfo lock, Long identityKey);
+	public String generateLockToken(LockInfo lock, Identity identity);
 }

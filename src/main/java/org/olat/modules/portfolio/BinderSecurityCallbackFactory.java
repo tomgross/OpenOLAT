@@ -20,9 +20,11 @@
 package org.olat.modules.portfolio;
 
 import java.util.Collections;
+import java.util.Date;
 import java.util.List;
 
 import org.olat.core.CoreSpringFactory;
+import org.olat.modules.assessment.Role;
 import org.olat.modules.portfolio.model.AccessRights;
 import org.olat.repository.model.RepositoryEntrySecurity;
 
@@ -37,7 +39,8 @@ public class BinderSecurityCallbackFactory {
 	public static final BinderSecurityCallback getCallbackForOwnedBinder(Binder binder) {
 		Binder template = binder.getTemplate();
 		BinderDeliveryOptions deliveryOptions = getDeliveryOptions(binder);
-		return new BinderSecurityCallbackImpl(true, template != null, deliveryOptions);
+		boolean binderAssignments = hasBinderAssignments(binder);
+		return new BinderSecurityCallbackImpl(true, template != null, binderAssignments, deliveryOptions);
 	}
 	
 	public static final BinderSecurityCallback getCallbackForDeletedBinder() {
@@ -45,7 +48,7 @@ public class BinderSecurityCallbackFactory {
 	}
 	
 	public static final BinderSecurityCallback getCallbackForMyPageList() {
-		return new BinderSecurityCallbackImpl(true, false, null);
+		return new BinderSecurityCallbackImpl(true, false, true, null);
 	}
 	
 	/**
@@ -57,7 +60,7 @@ public class BinderSecurityCallbackFactory {
 	}
 	
 	public static final BinderSecurityCallback getReadOnlyCallback() {
-		return new BinderSecurityCallbackImpl(false, false, null);
+		return new ReadOnlyBinderSecurityCallback();
 	}
 	
 	public static final BinderSecurityCallback getCallbackForTemplate(RepositoryEntrySecurity security) {
@@ -67,7 +70,13 @@ public class BinderSecurityCallbackFactory {
 	public static final BinderSecurityCallback getCallbackForCoach(Binder binder, List<AccessRights> rights) {
 		Binder template = binder.getTemplate();
 		BinderDeliveryOptions deliveryOptions = getDeliveryOptions(binder);
-		return new BinderSecurityCallbackImpl(rights, template != null, deliveryOptions);
+		return new BinderSecurityCallbackImpl(rights, template != null, false, deliveryOptions);
+	}
+	
+	public static final BinderSecurityCallback getCallbackForCourseCoach(Binder binder, List<AccessRights> rights) {
+		Binder template = binder.getTemplate();
+		BinderDeliveryOptions deliveryOptions = getDeliveryOptions(binder);
+		return new BinderSecurityCallbackForCoach(rights, template != null, false, deliveryOptions);
 	}
 	
 	/**
@@ -88,12 +97,34 @@ public class BinderSecurityCallbackFactory {
 		return deliveryOptions;
 	}
 	
+	private static final boolean hasBinderAssignments(Binder binder) {
+		Binder template = binder.getTemplate();
+		boolean binderAssignments = false;
+		if(template != null) {
+			binderAssignments = CoreSpringFactory.getImpl(PortfolioService.class)
+					.hasBinderAssignmentTemplate(binder);
+		}
+		return binderAssignments;
+	}
+	
 	/**
 	 * If you can see the business group, you can edit and view the binder.
 	 * @return
 	 */
 	public static final BinderSecurityCallback getCallbackForBusinessGroup() {
-		return new BinderSecurityCallbackGroup(true, false, null);
+		return new BinderSecurityCallbackGroup(true, false, false, null);
+	}
+	
+	private static class ReadOnlyBinderSecurityCallback extends BinderSecurityCallbackImpl {
+		
+		public ReadOnlyBinderSecurityCallback() {
+			super(false, false, false, null);
+		}
+
+		@Override
+		public boolean canPageUserInfosStatus() {
+			return false;
+		}
 	}
 
 	private static class BinderSecurityCallbackForDeletedPages extends DefaultBinderSecurityCallback {
@@ -102,7 +133,12 @@ public class BinderSecurityCallbackFactory {
 		public boolean canRestorePage(Page page) {
 			return page.getPageStatus() == PageStatus.deleted;
 		}
-		
+
+		@Override
+		public Role getRole() {
+			return Role.user;
+		}
+
 	}
 	
 	private static class BinderSecurityCallbackForDeletedBinder extends DefaultBinderSecurityCallback {
@@ -188,6 +224,13 @@ public class BinderSecurityCallbackFactory {
 			if(element instanceof Page) {
 				Page page = (Page)element;
 				if(page.getPageStatus() == null || page.getPageStatus() == PageStatus.draft) {
+					if(rights != null) {
+						for(AccessRights right:rights) {
+							if(right.getRole() == PortfolioRoles.readInvitee && right.matchElementAndAncestors(element)) {
+								return true;
+							}
+						}
+					}
 					return false;
 				}
 			}
@@ -250,17 +293,49 @@ public class BinderSecurityCallbackFactory {
 		public boolean canViewPendingAssignments(Section section) {
 			return true;
 		}
+
+		@Override
+		public boolean canNewBinderAssignment() {
+			return admin;
+		}
 	}
 	
 	private static class BinderSecurityCallbackGroup extends BinderSecurityCallbackImpl {
 		
-		public BinderSecurityCallbackGroup(boolean owner, boolean task, BinderDeliveryOptions deliveryOptions) {
-			super(owner, task, deliveryOptions);
+		public BinderSecurityCallbackGroup(boolean owner, boolean task, boolean binderAssignments, BinderDeliveryOptions deliveryOptions) {
+			super(owner, task, binderAssignments, deliveryOptions);
 		}
 
 		@Override
 		public boolean canDeleteBinder(Binder binder) {
 			return false;
+		}
+	}
+	
+	private static class BinderSecurityCallbackForCoach extends BinderSecurityCallbackImpl {
+
+		public BinderSecurityCallbackForCoach(List<AccessRights> rights, boolean task, boolean binderAssignments, BinderDeliveryOptions deliveryOptions) {
+			super(rights, task, binderAssignments, deliveryOptions);
+		}
+
+		@Override
+		public boolean canViewAssess(PortfolioElement element) {
+			return true;
+		}
+
+		@Override
+		public boolean canDeleteBinder(Binder binder) {
+			return false;
+		}
+		
+		@Override
+		public boolean canBookmark() {
+			return true;
+		}
+
+		@Override
+		public boolean canPageUserInfosStatus() {
+			return true;
 		}
 	}
 	
@@ -271,25 +346,33 @@ public class BinderSecurityCallbackFactory {
 		 */
 		private final boolean task;
 		private final boolean owner;
+		private final boolean binderAssignments;
 		private final List<AccessRights> rights;
 		private final BinderDeliveryOptions deliveryOptions;
 		
-		public BinderSecurityCallbackImpl(boolean owner, boolean task, BinderDeliveryOptions deliveryOptions) {
+		public BinderSecurityCallbackImpl(boolean owner, boolean task, boolean binderAssignments, BinderDeliveryOptions deliveryOptions) {
 			this.task = task;
 			this.owner = owner;
 			this.rights = Collections.emptyList();
 			this.deliveryOptions = deliveryOptions;
+			this.binderAssignments = binderAssignments;
 		}
 		
-		public BinderSecurityCallbackImpl(List<AccessRights> rights, boolean task, BinderDeliveryOptions deliveryOptions) {
+		public BinderSecurityCallbackImpl(List<AccessRights> rights, boolean task, boolean binderAssignments, BinderDeliveryOptions deliveryOptions) {
 			this.owner = false;
 			this.task = task;
 			this.rights = rights;
 			this.deliveryOptions = deliveryOptions;
+			this.binderAssignments = binderAssignments;
 		}
 		
 		@Override
 		public boolean canEditBinder() {
+			return owner;
+		}
+
+		@Override
+		public boolean canExportBinder() {
 			return owner;
 		}
 
@@ -360,8 +443,18 @@ public class BinderSecurityCallbackFactory {
 		}
 
 		@Override
+		public boolean canNewBinderAssignment() {
+			return false;
+		}
+
+		@Override
 		public boolean canInstantiateAssignment() {
 			return owner;
+		}
+
+		@Override
+		public boolean canInstantianteBinderAssignment() {
+			return owner && deliveryOptions != null && deliveryOptions.isAllowTemplatesFolder() && binderAssignments;
 		}
 
 		@Override
@@ -369,13 +462,14 @@ public class BinderSecurityCallbackFactory {
 			if(section == null) {
 				return owner && (deliveryOptions == null || deliveryOptions.isAllowNewEntries());
 			}
-			if(owner) {
-				return section != null
-						&& !SectionStatus.isClosed(section)
-						&& section.getSectionStatus() != SectionStatus.submitted
-						&& (deliveryOptions == null || deliveryOptions.isAllowNewEntries());
-			}
-			return false;
+			return owner && !SectionStatus.isClosed(section)
+					&& section.getSectionStatus() != SectionStatus.submitted
+					&& (deliveryOptions == null || deliveryOptions.isAllowNewEntries());
+		}
+		
+		@Override
+		public boolean canNewPageWithoutAssignment() {
+			return deliveryOptions == null || deliveryOptions.isOptionalTemplateForEntry();
 		}
 
 		/**
@@ -396,11 +490,19 @@ public class BinderSecurityCallbackFactory {
 		public boolean canEditPageMetadata(Page page, List<Assignment> assignments) {
 			if(owner) {
 				if(task) {
-					return assignments == null || assignments.size() == 0;
+					return assignments == null || assignments.isEmpty();
 				}
 				return true;
 			}
 			return false;
+		}
+		
+		/**
+		 * Owner can always edit page categories, regardless of the page state
+		 */
+		@Override
+		public boolean canEditCategories(Page page) {
+			return owner;
 		}
 
 		@Override
@@ -460,7 +562,7 @@ public class BinderSecurityCallbackFactory {
 				return !task && PageStatus.isClosed(page);
 			}
 			
-			if(rights != null && PageStatus.isClosed(page)) {
+			if(rights != null && PageStatus.isClosed(page) && page.getPageStatus() != PageStatus.published) {
 				for(AccessRights right:rights) {
 					if(PortfolioRoles.coach.equals(right.getRole())
 							&& right.matchElementAndAncestors(page)) {
@@ -527,12 +629,74 @@ public class BinderSecurityCallbackFactory {
 		@Override
 		public boolean canViewElement(PortfolioElement element) {
 			if(owner) {
+				if(task) {
+					if(element instanceof Section) {
+						Section section = (Section)element;
+						if(section.getBeginDate() != null && section.getBeginDate().after(new Date())) {
+							return false;
+						}
+					} else if(element instanceof Page) {
+						Page page = (Page)element;
+						Section section = page.getSection();
+						if(section != null && section.getBeginDate() != null && section.getBeginDate().after(new Date())) {
+							return false;
+						}
+					}
+				}
 				return true;
 			}
 			
 			if(element instanceof Page) {
 				Page page = (Page)element;
 				if(page.getPageStatus() == null || page.getPageStatus() == PageStatus.draft) {
+					return false;
+				}
+			}
+			
+			//need to be recursive, if page -> section too -> binder too???
+			if(rights != null) {
+				for(AccessRights right:rights) {
+					if((PortfolioRoles.reviewer.equals(right.getRole()) || PortfolioRoles.coach.equals(right.getRole()))
+							&& right.matchElementAndAncestors(element)) {
+						return true;
+					}
+				}
+			}
+			return false;
+		}
+
+		@Override
+		public boolean canViewTitleOfElement(PortfolioElement element) {
+			if(owner) {
+				if(task) {
+					if(element instanceof Section) {
+						Section section = (Section)element;
+						if(section.getBeginDate() != null && section.getBeginDate().after(new Date())) {
+							return false;
+						}
+					} else if(element instanceof Page) {
+						Page page = (Page)element;
+						Section section = page.getSection();
+						if(section != null && section.getBeginDate() != null && section.getBeginDate().after(new Date())) {
+							return false;
+						}
+					}
+				}
+				return true;
+			}
+			
+			if(element instanceof Page) {
+				Page page = (Page)element;
+				if(page.getPageStatus() == null || page.getPageStatus() == PageStatus.draft) {
+					//need to be recursive, if page -> section too -> binder too???
+					if(rights != null) {
+						for(AccessRights right:rights) {
+							if((PortfolioRoles.reviewer.equals(right.getRole()) || PortfolioRoles.coach.equals(right.getRole()))
+									&& right.matchElementAndAncestors(element)) {
+								return true;
+							}
+						}
+					}
 					return owner;
 				}
 			}
@@ -551,7 +715,13 @@ public class BinderSecurityCallbackFactory {
 
 		@Override
 		public boolean canViewPendingAssignments(Section section) {
-			if(owner) return true;
+			if(owner) {
+				Date beginDate = section.getBeginDate();
+				if(beginDate != null && beginDate.after(new Date())) {
+					return false;
+				}
+				return true;
+			}
 			
 			if(rights != null) {
 				for(AccessRights right:rights) {
@@ -631,12 +801,32 @@ public class BinderSecurityCallbackFactory {
 			}
 			return false;
 		}
+
+		@Override
+		public boolean canBookmark() {
+			return !owner;
+		}
+
+		@Override
+		public boolean canPageUserInfosStatus() {
+			return !owner;
+		}
+
+		@Override
+		public Role getRole() {
+			return owner ? Role.user : Role.coach;
+		}
 	}
 	
 	private static class DefaultBinderSecurityCallback implements BinderSecurityCallback {
 
 		@Override
 		public boolean canEditBinder() {
+			return false;
+		}
+
+		@Override
+		public boolean canExportBinder() {
 			return false;
 		}
 
@@ -679,6 +869,11 @@ public class BinderSecurityCallbackFactory {
 		public boolean canNewAssignment() {
 			return false;
 		}
+		
+		@Override
+		public boolean canNewBinderAssignment() {
+			return false;
+		}
 
 		@Override
 		public boolean canInstantiateAssignment() {
@@ -686,7 +881,17 @@ public class BinderSecurityCallbackFactory {
 		}
 
 		@Override
+		public boolean canInstantianteBinderAssignment() {
+			return false;
+		}
+
+		@Override
 		public boolean canAddPage(Section section) {
+			return false;
+		}
+
+		@Override
+		public boolean canNewPageWithoutAssignment() {
 			return false;
 		}
 
@@ -699,7 +904,12 @@ public class BinderSecurityCallbackFactory {
 		public boolean canEditPageMetadata(Page page, List<Assignment> assignments) {
 			return false;
 		}
-
+		
+		@Override
+		public boolean canEditCategories(Page page) {
+			return false;
+		}
+		
 		@Override
 		public boolean canPublish(Page page) {
 			return false;
@@ -751,6 +961,11 @@ public class BinderSecurityCallbackFactory {
 		}
 
 		@Override
+		public boolean canViewTitleOfElement(PortfolioElement element) {
+			return canViewElement(element);
+		}
+
+		@Override
 		public boolean canViewPendingAssignments(Section section) {
 			return false;
 		}
@@ -783,6 +998,21 @@ public class BinderSecurityCallbackFactory {
 		@Override
 		public boolean canViewAssessment() {
 			return false;
-		}	
+		}
+
+		@Override
+		public boolean canBookmark() {
+			return false;
+		}
+
+		@Override
+		public boolean canPageUserInfosStatus() {
+			return false;
+		}
+
+		@Override
+		public Role getRole() {
+			return Role.coach;
+		}
 	}
 }

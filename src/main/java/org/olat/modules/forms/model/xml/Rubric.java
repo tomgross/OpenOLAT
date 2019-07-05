@@ -20,6 +20,7 @@
 package org.olat.modules.forms.model.xml;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 /**
@@ -32,17 +33,31 @@ public class Rubric extends AbstractElement {
 
 	private static final long serialVersionUID = -8486210445435845568L;
 	
+	public static final String TYPE = "formrubric";
+
 	private SliderType sliderType;
+	private ScaleType scaleType;
+	private Integer weight;
 	private List<Slider> sliders = new ArrayList<>();
 	private List<StepLabel> stepLabels = new ArrayList<>();
 	
+	private String name;
+	private List<NameDisplay> nameDisplays;
 	private int start;
 	private int end;
 	private int steps;
+	private boolean noResponseEnabled;
+	private Double lowerBoundInsufficient;
+	private Double upperBoundInsufficient;
+	private Double lowerBoundNeutral;
+	private Double upperBoundNeutral;
+	private Double lowerBoundSufficient;
+	private Double upperBoundSufficient;
+	private boolean startGoodRating;
 	
 	@Override
 	public String getType() {
-		return "formrubric";
+		return TYPE;
 	}
 
 	public SliderType getSliderType() {
@@ -51,6 +66,49 @@ public class Rubric extends AbstractElement {
 
 	public void setSliderType(SliderType sliderType) {
 		this.sliderType = sliderType;
+	}
+
+	public ScaleType getScaleType() {
+		if (scaleType == null) {
+			scaleType = ScaleType.oneToMax;
+		}
+		return scaleType;
+	}
+
+	public void setScaleType(ScaleType scaleType) {
+		this.scaleType = scaleType;
+	}
+
+	public Integer getWeight() {
+		if (weight == null) {
+			weight = 1;
+		}
+		return weight;
+	}
+
+	public void setWeight(Integer scaleWeight) {
+		this.weight = scaleWeight;
+	}
+
+	public String getName() {
+		return name;
+	}
+
+	public void setName(String name) {
+		this.name = name;
+	}
+	
+	public List<NameDisplay> getNameDisplays() {
+		return nameDisplays != null? nameDisplays: Arrays.asList(NameDisplay.report);
+	}
+
+	public void setNameDisplays(List<NameDisplay> nameDisplays) {
+		this.nameDisplays = nameDisplays != null? nameDisplays: new ArrayList<>(0);
+	}
+
+	public enum NameDisplay {
+		execution,
+		report;
 	}
 
 	public int getStart() {
@@ -77,6 +135,14 @@ public class Rubric extends AbstractElement {
 		this.steps = steps;
 	}
 
+	public boolean isNoResponseEnabled() {
+		return noResponseEnabled;
+	}
+
+	public void setNoResponseEnabled(boolean noResponseEnabled) {
+		this.noResponseEnabled = noResponseEnabled;
+	}
+
 	public List<StepLabel> getStepLabels() {
 		return stepLabels;
 	}
@@ -96,9 +162,65 @@ public class Rubric extends AbstractElement {
 	public enum SliderType {
 		discrete,
 		discrete_slider,
-		continuous	
+		continuous
 	}
 	
+	public Double getLowerBoundInsufficient() {
+		return lowerBoundInsufficient;
+	}
+
+	public void setLowerBoundInsufficient(Double lowerBoundInsufficient) {
+		this.lowerBoundInsufficient = lowerBoundInsufficient;
+	}
+
+	public Double getUpperBoundInsufficient() {
+		return upperBoundInsufficient;
+	}
+
+	public void setUpperBoundInsufficient(Double upperBoundInsufficient) {
+		this.upperBoundInsufficient = upperBoundInsufficient;
+	}
+
+	public Double getLowerBoundNeutral() {
+		return lowerBoundNeutral;
+	}
+
+	public void setLowerBoundNeutral(Double lowerBoundNeutral) {
+		this.lowerBoundNeutral = lowerBoundNeutral;
+	}
+
+	public Double getUpperBoundNeutral() {
+		return upperBoundNeutral;
+	}
+
+	public void setUpperBoundNeutral(Double upperBoundNeutral) {
+		this.upperBoundNeutral = upperBoundNeutral;
+	}
+
+	public Double getLowerBoundSufficient() {
+		return lowerBoundSufficient;
+	}
+
+	public void setLowerBoundSufficient(Double lowerBoundSufficient) {
+		this.lowerBoundSufficient = lowerBoundSufficient;
+	}
+
+	public Double getUpperBoundSufficient() {
+		return upperBoundSufficient;
+	}
+
+	public void setUpperBoundSufficient(Double upperBoundSufficient) {
+		this.upperBoundSufficient = upperBoundSufficient;
+	}
+
+	public boolean isStartGoodRating() {
+		return startGoodRating;
+	}
+
+	public void setStartGoodRating(boolean startGoodRating) {
+		this.startGoodRating = startGoodRating;
+	}
+
 	@Override
 	public boolean equals(Object obj) {
 		if(this == obj) {

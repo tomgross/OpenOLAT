@@ -20,25 +20,25 @@
 
 package org.olat.ldap;
 
+import static org.quartz.CronScheduleBuilder.cronSchedule;
+import static org.quartz.JobBuilder.newJob;
+import static org.quartz.TriggerBuilder.newTrigger;
+
 import java.io.FileInputStream;
 import java.security.KeyStore;
 import java.security.cert.Certificate;
 import java.security.cert.X509Certificate;
-import java.text.ParseException;
 import java.util.Date;
 import java.util.Enumeration;
 
-import org.olat.basesecurity.BaseSecurity;
-import org.olat.basesecurity.SecurityGroup;
 import org.olat.core.configuration.AbstractSpringModule;
-import org.olat.core.logging.OLog;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.StringHelper;
 import org.olat.core.util.coordinate.CoordinatorManager;
-import org.quartz.CronTrigger;
 import org.quartz.JobDetail;
 import org.quartz.Scheduler;
-import org.quartz.SchedulerException;
+import org.quartz.Trigger;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -147,14 +147,12 @@ public class LDAPLoginModule extends AbstractSpringModule {
 	// User LDAP attributes to be synced and a map with the mandatory attributes
 
 
-	private static final OLog log = Tracing.createLoggerFor(LDAPLoginModule.class);
+	private static final Logger log = Tracing.createLoggerFor(LDAPLoginModule.class);
 	
-	@Autowired
-	private LDAPSyncConfiguration syncConfiguration;
 	@Autowired
 	private Scheduler scheduler;
 	@Autowired
-	private BaseSecurity securityManager;
+	private LDAPSyncConfiguration syncConfiguration;
 	
 	@Autowired
 	public LDAPLoginModule(CoordinatorManager coordinatorManager) {
@@ -173,12 +171,6 @@ public class LDAPLoginModule extends AbstractSpringModule {
 		}
 		log.info("Starting LDAP module");
 		
-		// Create LDAP Security Group if not existing. Used to identify users that
-		// have to be synced with LDAP
-		SecurityGroup ldapGroup = securityManager.findSecurityGroupByName(LDAPConstants.SECURITY_GROUP_LDAP);
-		if (ldapGroup == null) {
-			ldapGroup = securityManager.createAndPersistNamedSecurityGroup(LDAPConstants.SECURITY_GROUP_LDAP);
-		}
 		// check for valid configuration
 		if (!checkConfigParameterIsNotEmpty(ldapUrl)) return;
 		if (!checkConfigParameterIsNotEmpty(systemDN)) return;
@@ -267,21 +259,23 @@ public class LDAPLoginModule extends AbstractSpringModule {
 	private void initCronSyncJob() {
 		try {
 			// Create job with cron trigger configuration
-			JobDetail jobDetail = new JobDetail("LDAP_Cron_Syncer_Job", Scheduler.DEFAULT_GROUP, LDAPUserSynchronizerJob.class);
-			CronTrigger trigger = new CronTrigger();
-			trigger.setName("LDAP_Cron_Syncer_Trigger");
-			trigger.setCronExpression(ldapSyncCronSyncExpression);
+			JobDetail jobDetail = newJob(LDAPUserSynchronizerJob.class)
+					.withIdentity("LDAP_Cron_Syncer_Job", Scheduler.DEFAULT_GROUP)
+					.build();
+			Trigger trigger = newTrigger()
+				    .withIdentity("LDAP_Cron_Syncer_Trigger")
+				    .withSchedule(cronSchedule(ldapSyncCronSyncExpression))
+				    .build();
+
 			// Schedule job now
 			scheduler.scheduleJob(jobDetail, trigger);
 			log.info("LDAP cron syncer is enabled with expression::" + ldapSyncCronSyncExpression);
-		} catch (ParseException e) {
+		} catch (Exception e) {
 			setLdapSyncCronSync(false);
 			log.error("LDAP configuration in attribute 'ldapSyncCronSyncExpression' is not valid ("
 				+ ldapSyncCronSyncExpression
 				+ "). See http://quartz.sourceforge.net/javadoc/org/quartz/CronTrigger.html to learn more about the cron syntax. Disabling LDAP cron syncing",
 				e);
-		} catch (SchedulerException e) {
-			log.error("Error while scheduling LDAP cron sync job. Disabling LDAP cron syncing", e);
 		}
 	}
 

@@ -29,11 +29,15 @@ public class TextInput extends AbstractElement {
 
 	private static final long serialVersionUID = 2420712254825004290L;
 	
+	public static final String TYPE = "formtextinput";
+
 	private int rows;
+	private boolean singleRow;
+	private boolean numeric;
 
 	@Override
 	public String getType() {
-		return "formtextinput";
+		return TYPE;
 	}
 	
 	public int getRows() {
@@ -42,6 +46,22 @@ public class TextInput extends AbstractElement {
 
 	public void setRows(int rows) {
 		this.rows = rows;
+	}
+
+	public boolean isSingleRow() {
+		return singleRow;
+	}
+
+	public void setSingleRow(boolean singleRow) {
+		this.singleRow = singleRow;
+	}
+
+	public boolean isNumeric() {
+		return numeric;
+	}
+
+	public void setNumeric(boolean numeric) {
+		this.numeric = numeric;
 	}
 
 	@Override

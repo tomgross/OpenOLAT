@@ -31,7 +31,7 @@ import java.util.Date;
  * @author patrickb
  *
  */
-public interface DateChooser extends TextElement{
+public interface DateChooser extends TextElement {
 
 	/**
 	 * @return the date or null if the value is not valid (parsed with
@@ -62,5 +62,23 @@ public interface DateChooser extends TextElement{
 	public void setValidDateCheck(String errorKey);
 
 	public String getExampleDateString();
+	
+	
+	public DateChooser getDefaultValue();
+	
+	/**
+	 * Set an other date chooser as default value for this
+	 * chooser.
+	 * 
+	 * @param dateChooser A date chooser
+	 */
+	public void setDefaultValue(DateChooser dateChooser);
+	
+	/**
+	 * This will set the default time to 23:59 instead of 00:00
+	 * 
+	 * @param endOfDay
+	 */
+	public void setDefaultTimeAtEndOfDay(boolean endOfDay);
 
 }

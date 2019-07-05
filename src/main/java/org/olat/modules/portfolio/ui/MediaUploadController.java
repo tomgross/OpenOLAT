@@ -42,13 +42,13 @@ import org.olat.core.id.context.BusinessControlFactory;
 import org.olat.core.util.Formatter;
 import org.olat.core.util.StringHelper;
 import org.olat.core.util.Util;
+import org.olat.modules.ceditor.PageElement;
+import org.olat.modules.ceditor.PageElementAddController;
+import org.olat.modules.ceditor.ui.AddElementInfos;
 import org.olat.modules.portfolio.Media;
 import org.olat.modules.portfolio.MediaHandler;
 import org.olat.modules.portfolio.PortfolioService;
 import org.olat.modules.portfolio.model.MediaPart;
-import org.olat.modules.portfolio.ui.editor.AddElementInfos;
-import org.olat.modules.portfolio.ui.editor.PageElement;
-import org.olat.modules.portfolio.ui.editor.PageElementAddController;
 import org.olat.modules.portfolio.ui.media.UploadMedia;
 import org.springframework.beans.factory.annotation.Autowired;
 
@@ -153,6 +153,12 @@ public class MediaUploadController extends FormBasicController implements PageEl
 		} else if(getHandler() == null) {
 			fileEl.setErrorKey("form.legende.mandatory", null);
 			allOk &= false;
+		} 
+		
+		titleEl.clearError();
+		if (titleEl.isEmpty()) {
+			titleEl.setErrorKey("form.legende.mandatory", null);
+			allOk &= false;
 		}
 
 		return allOk & super.validateFormLogic(ureq);
@@ -184,6 +190,10 @@ public class MediaUploadController extends FormBasicController implements PageEl
 	protected void formInnerEvent(UserRequest ureq, FormItem source, FormEvent event) {
 		if(fileEl == source) {
 			getHandler();
+			if (this.titleEl.isEmpty()) {
+				this.titleEl.setValue(fileEl.getUploadFileName());
+				this.titleEl.getComponent().setDirty(true);
+			}
 		}
 		super.formInnerEvent(ureq, source, event);
 	}

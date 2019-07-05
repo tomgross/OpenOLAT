@@ -19,11 +19,9 @@
  */
 package org.olat.core.util.filter.impl;
 
-import java.io.IOException;
 import java.io.StringReader;
 
-import org.cyberneko.html.parsers.SAXParser;
-import org.olat.core.logging.OLog;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.StringHelper;
 import org.olat.core.util.filter.Filter;
@@ -31,8 +29,10 @@ import org.olat.core.util.io.LimitedContentWriter;
 import org.olat.search.service.document.file.FileDocumentFactory;
 import org.xml.sax.Attributes;
 import org.xml.sax.InputSource;
-import org.xml.sax.SAXException;
 import org.xml.sax.helpers.DefaultHandler;
+
+import nu.validator.htmlparser.common.XmlViolationPolicy;
+import nu.validator.htmlparser.sax.HtmlParser;
 
 /**
  * Description:<br>
@@ -51,8 +51,8 @@ import org.xml.sax.helpers.DefaultHandler;
  * 
  * @author gnaegi
  */
-public class SimpleHTMLTagsFilter extends StripHTMLTagsFilter {
-	private static final OLog log = Tracing.createLoggerFor(SimpleHTMLTagsFilter.class);
+public class SimpleHTMLTagsFilter implements Filter {
+	private static final Logger log = Tracing.createLoggerFor(SimpleHTMLTagsFilter.class);
 
 	@Override
 	public String filter(String original) {
@@ -60,7 +60,12 @@ public class SimpleHTMLTagsFilter extends StripHTMLTagsFilter {
 		if(original.isEmpty()) return "";
 		
 		try {
-			String text = super.filter(original);
+			HtmlParser parser = new HtmlParser(XmlViolationPolicy.ALTER_INFOSET);
+			HTMLHandler contentHandler = new HTMLHandler(original.length());
+			parser.setContentHandler(contentHandler);
+			parser.parse(new InputSource(new StringReader(original)));
+			String text = contentHandler.toString();
+			text = text.replace('\u00a0', ' ');
 			text = StringHelper.escapeHtml(text);
 			return text;
 		} catch (Exception e) {
@@ -68,4 +73,60 @@ public class SimpleHTMLTagsFilter extends StripHTMLTagsFilter {
 			return null;
 		}
 	}
+	
+	private static class HTMLHandler extends DefaultHandler {
+		private boolean collect = true;
+		private boolean consumeBlanck = false;
+		private final LimitedContentWriter content;
+		
+		public HTMLHandler(int size) {
+			content = new LimitedContentWriter(size, FileDocumentFactory.getMaxFileSize());
+		}
+
+		@Override
+		public void startElement(String uri, String localName, String qName, Attributes attributes) {
+			String elem = localName.toLowerCase();
+			if("script".equals(elem)) {
+				collect = false;
+			// add a single whitespace before each block element but only if not there is not already a whitespace there
+			} else if("li".equals(elem)) {
+				content.append(" ");
+			} else if("br".equals(elem)) {
+				content.append(" ");
+			} else if(HtmlFilter.blockTags.contains(elem) && content.length() > 0 && content.charAt(content.length() -1) != ' ' ) {
+				consumeBlanck = true;
+			}
+		}
+		
+		@Override
+		public void characters(char[] chars, int offset, int length) {
+			if(collect) {
+				if(consumeBlanck) {
+					if(content.length() > 0 && content.charAt(content.length() -1) != ' ' && length > 0 && chars[offset] != ' ') { 
+						content.append(' ');
+					}
+					consumeBlanck = false;
+				}
+				content.write(chars, offset, length);
+			}
+		}
+
+		@Override
+		public void endElement(String uri, String localName, String qName) {
+			String elem = localName.toLowerCase();
+			if("script".equals(elem)) {
+				collect = true;
+			} else if("li".equals(elem) || "p".equals(elem)) {
+				content.append(" ");
+			} else if(HtmlFilter.blockTags.contains(elem) && content.length() > 0 && content.charAt(content.length() -1) != ' ' ) {
+				consumeBlanck = true;
+			}
+		}
+		
+		@Override
+		public String toString() {
+			return content.toString();
+		}
+	}
+
 }

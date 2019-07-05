@@ -47,14 +47,12 @@ import org.olat.core.gui.control.WindowControl;
 import org.olat.core.gui.control.generic.dtabs.Activateable2;
 import org.olat.core.gui.media.MediaResource;
 import org.olat.core.gui.media.NotFoundMediaResource;
-import org.olat.core.id.OLATResourceable;
 import org.olat.core.id.context.BusinessControlFactory;
 import org.olat.core.id.context.ContextEntry;
 import org.olat.core.id.context.StateEntry;
 import org.olat.core.logging.activity.ThreadLocalUserActivityLogger;
 import org.olat.core.util.StringHelper;
 import org.olat.core.util.Util;
-import org.olat.core.util.resource.OresHelper;
 import org.olat.core.util.vfs.VFSLeaf;
 import org.olat.core.util.vfs.VFSMediaResource;
 import org.olat.fileresource.types.VideoFileResource;
@@ -63,6 +61,7 @@ import org.olat.repository.RepositoryEntry;
 import org.olat.repository.RepositoryManager;
 import org.olat.repository.RepositoryModule;
 import org.olat.repository.RepositoryService;
+import org.olat.repository.model.RepositoryEntrySecurity;
 import org.olat.repository.model.SearchMyRepositoryEntryViewParams;
 import org.olat.repository.model.SearchMyRepositoryEntryViewParams.OrderBy;
 import org.olat.util.logging.activity.LoggingResourceable;
@@ -164,10 +163,11 @@ public class VideoListingController extends FormBasicController implements Activ
 	 */
 	private void doShowVideo(UserRequest ureq, Long id) {
 		RepositoryEntry videoEntry = repositoryManager.lookupRepositoryEntry(id);
-		if (repositoryManager.isAllowed(ureq, videoEntry).canLaunch()) {
-			
-			boolean readOnly = repositoryManager.createRepositoryEntryStatus(videoEntry.getStatusCode()).isClosed();
-			VideoDisplayController videoDisplayCtr = new VideoDisplayController(ureq, getWindowControl(), videoEntry, true, true, true, true, null, false, true, null, readOnly);
+		RepositoryEntrySecurity reSecurity = repositoryManager.isAllowed(ureq, videoEntry);
+		if (reSecurity.canLaunch()) {// no booking implemented for video
+			boolean readOnly = videoEntry.getEntryStatus().decommissioned();
+			VideoDisplayOptions options = VideoDisplayOptions.valueOf(true, true, true, true, false, true, null, false, readOnly);
+			VideoDisplayController videoDisplayCtr = new VideoDisplayController(ureq, getWindowControl(), videoEntry, null, null, options);
 			listenTo(videoDisplayCtr);
 			toolbarPanel.pushController(videoEntry.getDisplayname(), videoDisplayCtr);
 			// Update launch counter
@@ -187,7 +187,7 @@ public class VideoListingController extends FormBasicController implements Activ
 				String rowKeyStr = ureq.getParameter("select_row");
 				if(StringHelper.isLong(rowKeyStr)) {
 					try {
-						doShowVideo(ureq, new Long(rowKeyStr));
+						doShowVideo(ureq, Long.valueOf(rowKeyStr));
 					} catch (NumberFormatException e) {
 						logWarn("Not a valid long: " + rowKeyStr, e);
 					}
@@ -222,13 +222,13 @@ public class VideoListingController extends FormBasicController implements Activ
 				int start = relPath.lastIndexOf("/");
 				if (start != -1) {
 					relPath = relPath.substring(start+1);
-					long id = Long.parseLong(relPath);
-					OLATResourceable videoResource = OresHelper.createOLATResourceableInstance("RepositoryEntry", id);
-					VFSLeaf imageFile = repositoryManager.getImage(videoResource);
+					Long id = Long.valueOf(relPath);
+					RepositoryEntry entry = repositoryService.loadByKey(id);
+					VFSLeaf imageFile = repositoryManager.getImage(entry);
 					return new VFSMediaResource(imageFile);
 				}
 			}
-			return new NotFoundMediaResource("Image for resource ID::" + relPath + " not found");
+			return new NotFoundMediaResource();
 		}
 	}
 	

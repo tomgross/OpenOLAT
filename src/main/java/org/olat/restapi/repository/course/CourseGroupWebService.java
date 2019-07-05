@@ -42,14 +42,15 @@ import org.olat.admin.quota.QuotaConstants;
 import org.olat.collaboration.CollaborationTools;
 import org.olat.collaboration.CollaborationToolsFactory;
 import org.olat.core.CoreSpringFactory;
-import org.olat.core.commons.modules.bc.vfs.OlatRootFolderImpl;
 import org.olat.core.commons.services.notifications.SubscriptionContext;
+import org.olat.core.commons.services.vfs.restapi.VFSWebServiceSecurityCallback;
+import org.olat.core.commons.services.vfs.restapi.VFSWebservice;
 import org.olat.core.gui.UserRequest;
 import org.olat.core.id.Identity;
 import org.olat.core.util.vfs.Quota;
 import org.olat.core.util.vfs.QuotaManager;
-import org.olat.core.util.vfs.restapi.VFSWebServiceSecurityCallback;
-import org.olat.core.util.vfs.restapi.VFSWebservice;
+import org.olat.core.util.vfs.VFSContainer;
+import org.olat.core.util.vfs.VFSManager;
 import org.olat.group.BusinessGroup;
 import org.olat.group.BusinessGroupService;
 import org.olat.group.model.SearchBusinessGroupParams;
@@ -120,15 +121,15 @@ public class CourseGroupWebService {
 		}
 		
 		String relPath = collabTools.getFolderRelPath();
-		QuotaManager qm = QuotaManager.getInstance();
+		QuotaManager qm = CoreSpringFactory.getImpl(QuotaManager.class);
 		Quota folderQuota = qm.getCustomQuota(relPath);
 		if (folderQuota == null) {
 			Quota defQuota = qm.getDefaultQuota(QuotaConstants.IDENTIFIER_DEFAULT_GROUPS);
-			folderQuota = QuotaManager.getInstance().createQuota(relPath, defQuota.getQuotaKB(), defQuota.getUlLimitKB());
+			folderQuota = qm.createQuota(relPath, defQuota.getQuotaKB(), defQuota.getUlLimitKB());
 		}
 		SubscriptionContext subsContext = null;
 		VFSWebServiceSecurityCallback secCallback = new VFSWebServiceSecurityCallback(true, true, true, folderQuota, subsContext);
-		OlatRootFolderImpl rootContainer = new OlatRootFolderImpl(relPath, null);
+		VFSContainer rootContainer = VFSManager.olatRootContainer(relPath, null);
 		rootContainer.setLocalSecurityCallback(secCallback);
 		return new VFSWebservice(rootContainer);
 	}
@@ -157,7 +158,9 @@ public class CourseGroupWebService {
 		CollaborationTools collabTools = CollaborationToolsFactory.getInstance().getOrCreateCollaborationTools(bg);
 		if(collabTools.isToolEnabled(CollaborationTools.TOOL_FORUM)) {
 			Forum forum = collabTools.getForum();
-			return new ForumWebService(forum);
+			ForumWebService ws = new ForumWebService(forum);
+			CoreSpringFactory.autowireObject(ws);
+			return ws;
 		}
 		return null;
 	}

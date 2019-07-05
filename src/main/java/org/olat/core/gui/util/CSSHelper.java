@@ -51,10 +51,9 @@ public class CSSHelper {
 	 * @return
 	 */
 	public static String createFiletypeIconCssClassFor(String fileName) {
-		StringBuilder cssClass;
 		// fallback to standard file icon in case the next class does not exist
-		cssClass = new StringBuilder(CSS_CLASS_FILETYPE_FILE);
-		int typePos = fileName.lastIndexOf(".");
+		 StringBuilder cssClass = new StringBuilder(CSS_CLASS_FILETYPE_FILE);
+		int typePos = fileName.lastIndexOf('.');
 		if (typePos > 0) {
 			cssClass.append(' ').append(CSS_CLASS_FILETYPE_FILE_PREFIX).append(fileName.substring(typePos + 1).toLowerCase());
 		}

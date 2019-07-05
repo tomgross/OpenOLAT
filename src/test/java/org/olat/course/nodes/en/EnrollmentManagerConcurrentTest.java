@@ -38,15 +38,18 @@ import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
+import org.apache.logging.log4j.Logger;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Ignore;
 import org.junit.Test;
 import org.olat.basesecurity.BaseSecurity;
 import org.olat.basesecurity.GroupRoles;
+import org.olat.basesecurity.OrganisationService;
 import org.olat.core.commons.persistence.DB;
 import org.olat.core.commons.persistence.DBFactory;
 import org.olat.core.gui.components.Component;
+import org.olat.core.gui.control.Controller;
 import org.olat.core.gui.control.WindowBackOffice;
 import org.olat.core.gui.control.WindowControl;
 import org.olat.core.gui.control.generic.closablewrapper.CalloutSettings;
@@ -55,10 +58,10 @@ import org.olat.core.gui.control.info.WindowControlInfo;
 import org.olat.core.gui.translator.Translator;
 import org.olat.core.id.Identity;
 import org.olat.core.id.IdentityEnvironment;
+import org.olat.core.id.Organisation;
 import org.olat.core.id.Roles;
 import org.olat.core.id.context.BusinessControl;
 import org.olat.core.id.context.ContextEntry;
-import org.olat.core.logging.OLog;
 import org.olat.core.logging.Tracing;
 import org.olat.core.logging.activity.OlatResourceableType;
 import org.olat.core.logging.activity.ThreadLocalUserActivityLogger;
@@ -77,6 +80,7 @@ import org.olat.course.run.userview.UserCourseEnvironmentImpl;
 import org.olat.group.BusinessGroup;
 import org.olat.group.BusinessGroupService;
 import org.olat.repository.RepositoryEntry;
+import org.olat.repository.RepositoryEntryStatusEnum;
 import org.olat.repository.RepositoryService;
 import org.olat.resource.OLATResource;
 import org.olat.resource.OLATResourceManager;
@@ -95,7 +99,7 @@ import org.springframework.beans.factory.annotation.Autowired;
  */
 public class EnrollmentManagerConcurrentTest extends OlatTestCase implements WindowControl {
 	//
-	private static OLog log = Tracing.createLoggerFor(EnrollmentManagerConcurrentTest.class);
+	private static final Logger log = Tracing.createLoggerFor(EnrollmentManagerConcurrentTest.class);
 	/*
 	 * ::Test Setup::
 	 */
@@ -113,6 +117,8 @@ public class EnrollmentManagerConcurrentTest extends OlatTestCase implements Win
 	private RepositoryService repositoryService;
 	@Autowired
 	private OLATResourceManager resourceManager;
+	@Autowired
+	private OrganisationService organisationService;
 	@Autowired
 	private BusinessGroupService businessGroupService;
 	@Autowired
@@ -168,7 +174,9 @@ public class EnrollmentManagerConcurrentTest extends OlatTestCase implements Win
 		ENCourseNode enNode = new ENCourseNode();
 
 		OLATResource resource = resourceManager.createOLATResourceInstance(CourseModule.class);
-		RepositoryEntry addedEntry = repositoryService.create("Ayanami", "-", "Enrollment test course 1", "A JUnit course", resource);
+		Organisation defOrganisation = organisationService.getDefaultOrganisation();
+		RepositoryEntry addedEntry = repositoryService.create(null, "Ayanami", "-", "Enrollment test course 1", "A JUnit course",
+				resource, RepositoryEntryStatusEnum.trash, defOrganisation);
 		CourseEnvironment cenv = CourseFactory.createCourse(addedEntry, "Test", "Test", "learningObjectives").getCourseEnvironment();
 		// 1. enroll wg1 user
 		IdentityEnvironment ienv = new IdentityEnvironment();
@@ -257,9 +265,9 @@ public class EnrollmentManagerConcurrentTest extends OlatTestCase implements Win
 	
 	@Test
 	public void testConcurrentEnrollmentWithWaitingList() {
-		int NUM_OF_USERS = 30;
-		List<Identity> ids = new ArrayList<Identity>(NUM_OF_USERS);	
-		for(int i=0; i<NUM_OF_USERS; i++) {
+		int numOfUsers = isOracleConfigured() ? 12 : 30;
+		List<Identity> ids = new ArrayList<Identity>(numOfUsers);	
+		for(int i=0; i<numOfUsers; i++) {
 			Identity id = JunitTestHelper.createAndPersistIdentityAsUser("enroll-a-" + i + "-" + UUID.randomUUID().toString());
 			ids.add(id);
 		}
@@ -274,7 +282,7 @@ public class EnrollmentManagerConcurrentTest extends OlatTestCase implements Win
 		dbInstance.commitAndCloseSession();
 
 		final CountDownLatch doneSignal = new CountDownLatch(ids.size());
-		EnrollThread[] threads = new EnrollThread[NUM_OF_USERS];
+		EnrollThread[] threads = new EnrollThread[numOfUsers];
 		int t = 0;
 		for(Identity id:ids) {
 			threads[t++] = new EnrollThread(id, addedEntry, group, enNode, cenv, doneSignal);
@@ -410,7 +418,7 @@ public class EnrollmentManagerConcurrentTest extends OlatTestCase implements Win
 				ThreadLocalUserActivityLogger.addLoggingResourceInfo(LoggingResourceable.wrap(group));
 
 				sleep(Math.round(new Random().nextDouble() * 100l));
-				enrollmentManager.doEnroll(identity, JunitTestHelper.getUserRoles(), group, enNode, coursePropertyManager, EnrollmentManagerConcurrentTest.this /*WindowControl mock*/, testTranslator,
+				enrollmentManager.doEnroll(identity, Roles.userRoles(), group, enNode, coursePropertyManager, EnrollmentManagerConcurrentTest.this /*WindowControl mock*/, testTranslator,
 						new ArrayList<Long>()/*enrollableGroupNames*/, new ArrayList<Long>()/*enrollableAreaNames*/, courseGroupManager);
 				DBFactory.getInstance().commit();
 			} catch (Exception e) {
@@ -428,6 +436,8 @@ public class EnrollmentManagerConcurrentTest extends OlatTestCase implements Win
   /////////////////////////////////////
 	public void pushToMainArea(Component comp){}
 	public void pushAsModalDialog(Component comp){}
+	@Override
+	public void pushFullScreen(Controller ctrl, String bodyClass) {/* */}
 	@Override
 	public void pushAsCallout(Component comp, String targetId, CalloutSettings settings){}
 	public void pop(){}

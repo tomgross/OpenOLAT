@@ -30,11 +30,11 @@ import java.util.Locale;
 
 import javax.persistence.Column;
 
+import org.apache.logging.log4j.Logger;
 import org.olat.core.commons.persistence.DBFactory;
 import org.olat.core.gui.components.table.ColumnDescriptor;
 import org.olat.core.gui.components.table.DefaultColumnDescriptor;
 import org.olat.core.id.User;
-import org.olat.core.logging.OLog;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.StringHelper;
 import org.olat.user.propertyhandlers.UserPropertyHandler;
@@ -47,11 +47,10 @@ import org.olat.user.propertyhandlers.UserPropertyHandler;
  * @author Carsten Weisse, Florian Gnägi
  */
 public abstract class AbstractUserPropertyHandler implements UserPropertyHandler {
-	private static final OLog log = Tracing.createLoggerFor(AbstractUserPropertyHandler.class);
+	private static final Logger log = Tracing.createLoggerFor(AbstractUserPropertyHandler.class);
 	
 	private String name; 
 	private String group;
-	private boolean deletable = true; // default
 	private String databaseColumnName;
 
 	/**
@@ -131,14 +130,6 @@ public abstract class AbstractUserPropertyHandler implements UserPropertyHandler
 	}
 
 	/**
-	 * @see org.olat.user.propertyhandlers.UserPropertyHandler#isDeletable()
-	 */
-	@Override
-	public boolean isDeletable() {
-		return deletable;
-	}
-
-	/**
 	 * @return The non-i18-ified raw value from the database
 	 */
 	protected String getInternalValue(User user) {
@@ -167,7 +158,7 @@ public abstract class AbstractUserPropertyHandler implements UserPropertyHandler
 				((UserImpl)user).setUserProperty(name, value);
 			}
 		} else {
-			log.warn("Set read-only value: " + name,  null);
+			log.warn("Set read-only value: " + name);
 		}
 	}
 
@@ -190,14 +181,6 @@ public abstract class AbstractUserPropertyHandler implements UserPropertyHandler
 	@Override
 	public void setGroup(String group) {
 		this.group = group;
-	}
-
-	/**
-	 * Spring setter
-	 * @param isDeletable
-	 */
-	public void setDeletable(boolean deletable) {
-		this.deletable = deletable;
 	}
 
 	/**

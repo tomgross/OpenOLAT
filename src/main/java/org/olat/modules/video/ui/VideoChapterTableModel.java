@@ -19,7 +19,6 @@
  */
 package org.olat.modules.video.ui;
 
-import org.olat.core.gui.components.form.flexible.FormUIFactory;
 import org.olat.core.gui.components.form.flexible.impl.elements.table.DefaultFlexiTableDataModel;
 import org.olat.core.gui.components.form.flexible.impl.elements.table.FlexiSortableColumnDef;
 import org.olat.core.gui.components.form.flexible.impl.elements.table.FlexiTableColumnModel;
@@ -33,8 +32,8 @@ import org.olat.core.gui.translator.Translator;
  */
 public class VideoChapterTableModel extends DefaultFlexiTableDataModel<VideoChapterTableRow>{
 
-	protected FormUIFactory uifactory = FormUIFactory.getInstance();
-	private Translator translator;
+	private final Translator translator;
+	
 	public VideoChapterTableModel(FlexiTableColumnModel columnModel, Translator translator) {
 		super(columnModel);
 		this.translator = translator;

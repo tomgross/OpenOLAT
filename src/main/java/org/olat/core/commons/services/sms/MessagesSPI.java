@@ -19,6 +19,11 @@
  */
 package org.olat.core.commons.services.sms;
 
+import org.olat.core.commons.services.sms.ui.AbstractSMSConfigurationController;
+import org.olat.core.gui.UserRequest;
+import org.olat.core.gui.components.form.flexible.impl.Form;
+import org.olat.core.gui.control.WindowControl;
+
 /**
  * 
  * Initial date: 3 févr. 2017<br>
@@ -32,6 +37,8 @@ public interface MessagesSPI {
 	public String getName();
 	
 	public boolean isValid();
+	
+	public AbstractSMSConfigurationController getConfigurationController(UserRequest ureq, WindowControl wControl, Form form);
 
 	public boolean send(String messageId, String text, String recipient) throws SimpleMessageException;
 

@@ -19,6 +19,8 @@
  */
 package org.olat.restapi.group;
 
+import static org.olat.restapi.security.RestSecurityHelper.getIdentity;
+
 import java.util.List;
 
 import javax.servlet.http.HttpServletRequest;
@@ -33,18 +35,22 @@ import javax.ws.rs.core.Request;
 import javax.ws.rs.core.Response;
 import javax.ws.rs.core.Response.Status;
 
-import org.olat.core.CoreSpringFactory;
+import org.olat.basesecurity.BaseSecurity;
+import org.olat.basesecurity.OrganisationRoles;
 import org.olat.core.id.Identity;
+import org.olat.core.id.Roles;
 import org.olat.core.util.StringHelper;
 import org.olat.group.BusinessGroup;
 import org.olat.group.BusinessGroupService;
 import org.olat.group.model.SearchBusinessGroupParams;
+import org.olat.restapi.security.RestSecurityHelper;
 import org.olat.restapi.support.MediaTypeVariants;
 import org.olat.restapi.support.ObjectFactory;
 import org.olat.restapi.support.vo.GroupInfoVO;
 import org.olat.restapi.support.vo.GroupInfoVOes;
 import org.olat.restapi.support.vo.GroupVO;
 import org.olat.restapi.support.vo.GroupVOes;
+import org.springframework.beans.factory.annotation.Autowired;
 
 /**
  * 
@@ -58,6 +64,11 @@ import org.olat.restapi.support.vo.GroupVOes;
 public class MyGroupWebService {
 	
 	private final Identity retrievedUser;
+	
+	@Autowired
+	private BaseSecurity securityManager;
+	@Autowired
+	private BusinessGroupService businessGroupService;
 	
 	public MyGroupWebService(Identity retrievedUser) {
 		this.retrievedUser = retrievedUser;
@@ -138,7 +149,9 @@ public class MyGroupWebService {
 	private Response getGroupList(Integer start, Integer limit, String externalId, Boolean managed,
 			boolean owner, boolean participant, HttpServletRequest httpRequest, Request request) {
 		
-		BusinessGroupService bgs = CoreSpringFactory.getImpl(BusinessGroupService.class);
+		if(!hasAccess(httpRequest)) {
+			return Response.serverError().status(Status.UNAUTHORIZED).build();
+		}
 		
 		SearchBusinessGroupParams params = new SearchBusinessGroupParams(retrievedUser, owner, participant);
 		if(StringHelper.containsNonWhitespace(externalId)) {
@@ -148,8 +161,8 @@ public class MyGroupWebService {
 		
 		List<BusinessGroup> groups;
 		if(MediaTypeVariants.isPaged(httpRequest, request)) {
-			int totalCount = bgs.countBusinessGroups(params, null);
-			groups = bgs.findBusinessGroups(params, null, start, limit);
+			int totalCount = businessGroupService.countBusinessGroups(params, null);
+			groups = businessGroupService.findBusinessGroups(params, null, start, limit);
 			
 			int count = 0;
 			GroupVO[] groupVOs = new GroupVO[groups.size()];
@@ -161,7 +174,7 @@ public class MyGroupWebService {
 			voes.setTotalCount(totalCount);
 			return Response.ok(voes).build();
 		} else {
-			groups = bgs.findBusinessGroups(params, null, 0, -1);
+			groups = businessGroupService.findBusinessGroups(params, null, 0, -1);
 			
 			int count = 0;
 			GroupVO[] groupVOs = new GroupVO[groups.size()];
@@ -170,7 +183,6 @@ public class MyGroupWebService {
 			}
 			return Response.ok(groupVOs).build();
 		}
-		
 	}
 	
 	
@@ -196,9 +208,11 @@ public class MyGroupWebService {
 			@QueryParam("limit") @DefaultValue("25") Integer limit,
 			@QueryParam("externalId") String externalId, @QueryParam("managed") Boolean managed,
 			@Context HttpServletRequest httpRequest, @Context Request request) {
-
-		BusinessGroupService bgs = CoreSpringFactory.getImpl(BusinessGroupService.class);
 		
+		if(!hasAccess(httpRequest)) {
+			return Response.serverError().status(Status.UNAUTHORIZED).build();
+		}
+
 		SearchBusinessGroupParams params = new SearchBusinessGroupParams(retrievedUser, true, true);
 		if(StringHelper.containsNonWhitespace(externalId)) {
 			params.setExternalId(externalId);
@@ -207,8 +221,8 @@ public class MyGroupWebService {
 		
 		List<BusinessGroup> groups;
 		if(MediaTypeVariants.isPaged(httpRequest, request)) {
-			int totalCount = bgs.countBusinessGroups(params, null);
-			groups = bgs.findBusinessGroups(params, null, start, limit);
+			int totalCount = businessGroupService.countBusinessGroups(params, null);
+			groups = businessGroupService.findBusinessGroups(params, null, start, limit);
 			
 			int count = 0;
 			GroupInfoVO[] groupVOs = new GroupInfoVO[groups.size()];
@@ -222,5 +236,22 @@ public class MyGroupWebService {
 		} else {
 			return Response.serverError().status(Status.NOT_ACCEPTABLE).build();
 		}
+	}
+	
+	private boolean hasAccess(@Context HttpServletRequest httpRequest) {
+		Identity identity = getIdentity(httpRequest);
+		if(identity.getKey().equals(retrievedUser.getKey())) {
+			return true;
+		}
+		
+		Roles managerRoles = RestSecurityHelper.getRoles(httpRequest);
+		if(managerRoles.isGroupManager()) {
+			return true;
+		}
+		
+		Roles identityRoles = securityManager.getRoles(retrievedUser);
+		return managerRoles.isManagerOf(OrganisationRoles.administrator, identityRoles)
+				|| managerRoles.isManagerOf(OrganisationRoles.rolesmanager, identityRoles)
+				|| managerRoles.isManagerOf(OrganisationRoles.usermanager, identityRoles);
 	}
 }

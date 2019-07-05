@@ -37,7 +37,7 @@ import org.olat.core.gui.control.WindowControl;
 import org.olat.core.gui.control.generic.tabbable.TabbableController;
 import org.olat.core.gui.translator.Translator;
 import org.olat.core.logging.AssertException;
-import org.olat.core.logging.OLog;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.memento.Memento;
 import org.olat.ims.qti.editor.ItemNodeTabbedFormController;
@@ -63,7 +63,7 @@ public class ItemNode extends GenericQtiNode {
 	private Item item;
 	private QTIEditorPackage qtiPackage;
 	private TabbedPane myTabbedPane;
-	private static OLog log = Tracing.createLoggerFor(ItemNode.class);
+	private static final Logger log = Tracing.createLoggerFor(ItemNode.class);
 	
 	/**
 	 * 
@@ -110,23 +110,20 @@ public class ItemNode extends GenericQtiNode {
 	 * 
 	 * @param title
 	 */
+	@Override
 	public void setMenuTitleAndAlt(String title) {
 		super.setMenuTitleAndAlt(title);
 		item.setTitle(title);
 	}
 
-	/**
-	 * @see org.olat.ims.qti.editor.tree.GenericQtiNode#createEditTabbedPane(org.olat.core.gui.UserRequest,
-	 *      org.olat.core.gui.control.WindowControl,
-	 *      org.olat.core.gui.translator.Translator, QTIEditorMainController)
-	 */
+	@Override
 	public TabbedPane createEditTabbedPane(UserRequest ureq, WindowControl wControl, Translator trnsltr,
 			QTIEditorMainController editorMainController) {
 		if (myTabbedPane == null) {
 			try {
 				myTabbedPane = new TabbedPane("tabbedPane", ureq.getLocale());
-				TabbableController tabbCntrllr = new ItemNodeTabbedFormController(item, qtiPackage, ureq, wControl, editorMainController
-						.isRestrictedEdit());
+				TabbableController tabbCntrllr = new ItemNodeTabbedFormController(item, qtiPackage, ureq, wControl,
+						editorMainController.isRestrictedEdit(), editorMainController.isBlockedEdit());
 				tabbCntrllr.addTabs(myTabbedPane);
 				tabbCntrllr.addControllerListener(editorMainController);
 			} catch (Exception e) {
@@ -142,10 +139,7 @@ public class ItemNode extends GenericQtiNode {
 		//
 	}
 
-	/**
-	 * @see org.olat.ims.qti.editor.tree.IQtiNode#insertQTIObjectAt(QTIObject,
-	 *      int)
-	 */
+	@Override
 	public void insertQTIObjectAt(QTIObject object, int position) {
 		throw new AssertException("Can't insert objects on ItemNode.");
 	}

@@ -20,6 +20,11 @@
 
 package org.olat.modules.webFeed.portfolio;
 
+import java.util.List;
+
+import org.olat.basesecurity.BaseSecurity;
+import org.olat.basesecurity.OrganisationRoles;
+import org.olat.core.CoreSpringFactory;
 import org.olat.core.gui.UserRequest;
 import org.olat.core.gui.control.Controller;
 import org.olat.core.gui.control.WindowControl;
@@ -28,14 +33,13 @@ import org.olat.core.util.StringHelper;
 import org.olat.core.util.filter.Filter;
 import org.olat.core.util.resource.OresHelper;
 import org.olat.fileresource.types.BlogFileResource;
+import org.olat.modules.webFeed.Feed;
 import org.olat.modules.webFeed.FeedResourceSecurityCallback;
 import org.olat.modules.webFeed.FeedSecurityCallback;
-import org.olat.modules.webFeed.managers.FeedManager;
-import org.olat.modules.webFeed.models.Feed;
-import org.olat.modules.webFeed.models.Item;
+import org.olat.modules.webFeed.Item;
+import org.olat.modules.webFeed.manager.FeedManager;
 import org.olat.modules.webFeed.search.document.FeedItemDocument;
 import org.olat.modules.webFeed.ui.FeedItemDisplayConfig;
-import org.olat.modules.webFeed.ui.FeedMainController;
 import org.olat.modules.webFeed.ui.blog.BlogUIFactory;
 import org.olat.portfolio.EPAbstractHandler;
 import org.olat.portfolio.manager.EPFrontendManager;
@@ -75,36 +79,27 @@ public class LiveBlogArtefactHandler extends EPAbstractHandler<LiveBlogArtefact>
 	}
 
 	@Override
-	public void prefillArtefactAccordingToSource(AbstractArtefact artefact, Object source) {
-		super.prefillArtefactAccordingToSource(artefact, source);
-	}
-
-	@Override
 	public Controller createDetailsController(UserRequest ureq, WindowControl wControl, AbstractArtefact artefact, boolean readOnlyMode) {
-		FeedSecurityCallback callback = new FeedResourceSecurityCallback(false, false);
+		FeedSecurityCallback callback = new FeedResourceSecurityCallback(false);
 		String businessPath = artefact.getBusinessPath();
 		Long resid = Long.parseLong(businessPath.substring(10, businessPath.length() - 1));
 		OLATResource ores = OLATResourceManager.getInstance().findResourceable(resid, BlogFileResource.TYPE_NAME);
 		FeedItemDisplayConfig displayConfig = new FeedItemDisplayConfig(false, false, readOnlyMode);
-		FeedMainController detailsController = BlogUIFactory.getInstance(ureq.getLocale()).createMainController(ores, ureq, wControl, callback, displayConfig);
-		return detailsController;
+		return BlogUIFactory.getInstance(ureq.getLocale()).createMainController(ores, ureq, wControl, callback, displayConfig);
 	}
 
-	/**
-	 * @see org.olat.portfolio.EPAbstractHandler#isProvidingSpecialMapViewController()
-	 */
 	@Override
 	public boolean isProvidingSpecialMapViewController() {
 		return true;
 	}
 
-	/**
-	 * @see org.olat.portfolio.EPAbstractHandler#getSpecialMapViewController(org.olat.core.gui.UserRequest, org.olat.core.gui.control.WindowControl)
-	 */
 	@Override
 	public Controller getSpecialMapViewController(UserRequest ureq, WindowControl wControl, AbstractArtefact artefact) {
-		boolean isOwner = ureq.getIdentity().equalsByPersistableKey(artefact.getAuthor());
-		FeedSecurityCallback callback = new FeedResourceSecurityCallback(ureq.getUserSession().getRoles().isOLATAdmin(), isOwner);
+		BaseSecurity securityManager = CoreSpringFactory.getImpl(BaseSecurity.class);
+		boolean isAdministrator = ureq.getIdentity().equalsByPersistableKey(artefact.getAuthor())
+				|| ureq.getUserSession().getRoles().isManagerOf(OrganisationRoles.administrator, securityManager.getRoles(artefact.getAuthor()));
+
+		FeedSecurityCallback callback = new FeedResourceSecurityCallback(isAdministrator);
 		String businessPath = artefact.getBusinessPath();
 		Long resid = Long.parseLong(businessPath.substring(10, businessPath.length() - 1));
 		OLATResource ores = OLATResourceManager.getInstance().findResourceable(resid, BlogFileResource.TYPE_NAME);
@@ -119,9 +114,10 @@ public class LiveBlogArtefactHandler extends EPAbstractHandler<LiveBlogArtefact>
 			manager = FeedManager.getInstance();
 			String oresId = businessPath.substring(LIVEBLOG.length(), businessPath.length() - 1);
 			OLATResourceable ores = OresHelper.createOLATResourceableInstance(BlogFileResource.TYPE_NAME, Long.parseLong(oresId));
-			Feed feed = manager.getFeed(ores);
+			Feed feed = manager.loadFeed(ores);
+			List<Item> publishedItems = manager.loadPublishedItems(feed);
 
-			for (Item item : feed.getPublishedItems()) {
+			for (Item item : publishedItems) {
 				OlatDocument itemDoc = new FeedItemDocument(item, context);
 				String content = itemDoc.getContent();
 				sb.append(content);

@@ -20,24 +20,35 @@
 package org.olat.ims.qti21.ui.components;
 
 import java.util.Date;
+import java.util.List;
 
+import org.apache.logging.log4j.Logger;
 import org.olat.core.gui.components.Component;
+import org.olat.core.gui.components.form.flexible.impl.NameValuePair;
 import org.olat.core.gui.render.RenderResult;
 import org.olat.core.gui.render.Renderer;
 import org.olat.core.gui.render.StringOutput;
 import org.olat.core.gui.render.URLBuilder;
 import org.olat.core.gui.translator.Translator;
 import org.olat.core.logging.OLATRuntimeException;
-import org.olat.core.logging.OLog;
 import org.olat.core.logging.Tracing;
+import org.olat.core.util.Formatter;
 import org.olat.core.util.StringHelper;
+import org.olat.core.util.WebappHelper;
 import org.olat.ims.qti21.AssessmentTestSession;
+import org.olat.ims.qti21.QTI21Constants;
 import org.olat.ims.qti21.model.audit.CandidateEvent;
 import org.olat.ims.qti21.model.audit.CandidateItemEventType;
 import org.olat.ims.qti21.ui.CandidateSessionContext;
+import org.olat.ims.qti21.ui.QTIWorksAssessmentItemEvent.Event;
 
 import uk.ac.ed.ph.jqtiplus.node.content.variable.PrintedVariable;
 import uk.ac.ed.ph.jqtiplus.node.item.AssessmentItem;
+import uk.ac.ed.ph.jqtiplus.node.item.ModalFeedback;
+import uk.ac.ed.ph.jqtiplus.node.item.interaction.DrawingInteraction;
+import uk.ac.ed.ph.jqtiplus.node.item.interaction.ExtendedTextInteraction;
+import uk.ac.ed.ph.jqtiplus.node.item.interaction.Interaction;
+import uk.ac.ed.ph.jqtiplus.node.item.interaction.UploadInteraction;
 import uk.ac.ed.ph.jqtiplus.node.item.template.declaration.TemplateDeclaration;
 import uk.ac.ed.ph.jqtiplus.node.outcome.declaration.OutcomeDeclaration;
 import uk.ac.ed.ph.jqtiplus.node.result.SessionStatus;
@@ -55,7 +66,7 @@ import uk.ac.ed.ph.jqtiplus.value.Value;
  */
 public class AssessmentItemComponentRenderer extends AssessmentObjectComponentRenderer {
 	
-	private static final OLog log = Tracing.createLoggerFor(AssessmentItemComponentRenderer.class);
+	private static final Logger log = Tracing.createLoggerFor(AssessmentItemComponentRenderer.class);
 
 	@Override
 	public void render(Renderer renderer, StringOutput sb, Component source, URLBuilder ubu,
@@ -76,10 +87,10 @@ public class AssessmentItemComponentRenderer extends AssessmentObjectComponentRe
             renderTerminated(sb, translator);
         } else {
             /* Look up most recent event */
-            final CandidateEvent latestEvent = candidateSessionContext.getLastEvent();// assertSessionEntered(candidateSession);
+            final CandidateEvent latestEvent = candidateSessionContext.getLastEvent();
 
             /* Load the ItemSessionState */
-            final ItemSessionState itemSessionState = cmp.getItemSessionController().getItemSessionState();// candidateDataService.loadItemSessionState(latestEvent);
+            final ItemSessionState itemSessionState = cmp.getItemSessionController().getItemSessionState();
 
             /* Touch the session's duration state if appropriate */
             if (itemSessionState.isEntered() && !itemSessionState.isEnded() && !itemSessionState.isSuspended()) {
@@ -90,6 +101,11 @@ public class AssessmentItemComponentRenderer extends AssessmentObjectComponentRe
             /* Render event */
             AssessmentRenderer renderHints = new AssessmentRenderer(renderer);
             renderItemEvent(renderHints, sb, cmp, latestEvent, itemSessionState, ubu, translator);
+            
+            if(renderHints.isMathJax()
+            		|| (WebappHelper.isMathJaxMarkers() && (sb.contains("\\(") || sb.contains("\\[") || sb.contains("$$")))) {
+				sb.append(Formatter.elementLatexFormattingScript("o_c".concat(cmp.getDispatchID())));
+			}
         }
 		
 		sb.append("</div>");
@@ -162,7 +178,7 @@ public class AssessmentItemComponentRenderer extends AssessmentObjectComponentRe
 		sb.append("<h4 class='itemTitle'>");
 		renderItemStatus(renderer, sb, itemSessionState, translator);
 		sb.append(StringHelper.escapeHtml(assessmentItem.getTitle())).append("</h4>")
-		  .append("<div id='itemBody' class='clearfix'>");
+		  .append("<div id='itemBody' class='o_qti_item_body clearfix'>");
 		
 		//TODO prompt
 		
@@ -184,13 +200,96 @@ public class AssessmentItemComponentRenderer extends AssessmentObjectComponentRe
 		//controls
 		sb.append("<div class='o_button_group o_assessmentitem_controls'>");
 		//submit button
+		AssessmentItemFormItem itemEl = component.getQtiItem();
 		if(component.isItemSessionOpen(itemSessionState, renderer.isSolutionMode())) {
-			Component submit = component.getQtiItem().getSubmitButton().getComponent();
+			Component submit = itemEl.getSubmitButton().getComponent();
 			submit.getHTMLRendererSingleton().render(renderer.getRenderer(), sb, submit, ubu, translator, new RenderResult(), null);
 		}
+		
+		boolean enableAdditionalButtons = component.isEnableBack() || component.isEnableSkip()
+				|| component.isEnableResetHard() || component.isEnableResetSoft();
+		if(enableAdditionalButtons && (itemSessionState.isResponded() || itemSessionState.getEndTime() != null)) {
+			boolean lobOnly = isLobOnly(assessmentItem);
+			if(lobOnly && itemSessionState.isResponded()) {
+				String title = translator.translate("next.item");
+				renderControl(sb, component, title, false, "o_sel_next_question", new NameValuePair("cid", Event.next.name()));
+			} else if(isIncorrectlyAnswered(itemSessionState) || (!itemSessionState.isResponded() && itemSessionState.getEndTime() != null)) {
+				if(!willShowFeedback(component, assessmentItem)) {
+					sb.append("<span class='o_sel_additional_feedback'><i class='o_icon o_icon-lg o_icon_failed'> </i></span>");
+				}
+				
+				if(component.isEnableBack()) {
+					String title = translator.translate("back.item");
+					renderControl(sb, component, title, false, "o_sel_back_question", new NameValuePair("cid", Event.back.name()));
+				}
+				if(component.isEnableResetHard()) {
+					String title = translator.translate("retry.item");
+					renderControl(sb, component, title, false, "o_sel_reset_question", new NameValuePair("cid", Event.resethard.name()));
+				} else if(component.isEnableResetSoft()) {
+					String title = translator.translate("retry.item");
+					renderControl(sb, component, title, false, "o_sel_reset_question", new NameValuePair("cid", Event.resetsoft.name()));
+				}
+				if(component.isEnableSkip()) {
+					String title = translator.translate("skip.item");
+					renderControl(sb, component, title, false, "o_sel_skip_question", new NameValuePair("cid", Event.skip.name()));
+				}
+			} else {
+				if(isCorrectlyAnswered(itemSessionState) && !willShowFeedback(component, assessmentItem)) {
+					sb.append("<span class='o_sel_additional_feedback'><i class='o_icon o_icon-lg o_icon_passed'> </i></span>");
+				}
+				String title = translator.translate("next.item");
+				renderControl(sb, component, title, false, "o_sel_next_question", new NameValuePair("cid", Event.next.name()));
+			}
+		}
+		
 		sb.append("</div>");
 		
 		sb.append("</div>"); // end wrapper
+	}
+	
+	private boolean willShowFeedback(AssessmentItemComponent component, AssessmentItem assessmentItem) {
+		if(component.isHideFeedbacks()) return false;
+		
+		for(ModalFeedback modalFeedback:assessmentItem.getModalFeedbacks()) {
+			if(component.isFeedback(modalFeedback, component.getItemSessionController().getItemSessionState())) {
+				return true;
+			}
+		}
+		return false;
+	}
+	
+	private boolean isLobOnly(AssessmentItem assessmentItem) {
+		List<Interaction> interactions = assessmentItem.getItemBody().findInteractions();
+		for(Interaction interaction:interactions) {
+			if(!(interaction instanceof UploadInteraction)
+					&& !(interaction instanceof DrawingInteraction)
+					&& !(interaction instanceof ExtendedTextInteraction)) {
+				return false;
+			}
+		}
+		return true;
+	}
+	
+	private boolean isCorrectlyAnswered(ItemSessionState itemSessionState) {
+		if(itemSessionState.isResponded()) {
+			Value maxScore = itemSessionState.getOutcomeValue(QTI21Constants.MAXSCORE_IDENTIFIER);
+			Value score = itemSessionState.getOutcomeValue(QTI21Constants.SCORE_IDENTIFIER);
+			if(maxScore != null && maxScore.equals(score)) {
+				return true;
+			}
+		}
+		return false;
+	}
+	
+	private boolean isIncorrectlyAnswered(ItemSessionState itemSessionState) {
+		if(itemSessionState.isResponded()) {
+			Value maxScore = itemSessionState.getOutcomeValue(QTI21Constants.MAXSCORE_IDENTIFIER);
+			Value score = itemSessionState.getOutcomeValue(QTI21Constants.SCORE_IDENTIFIER);
+			if(maxScore != null && !maxScore.equals(score)) {
+				return true;
+			}
+		}
+		return false;
 	}
     
 	private void renderItemStatus(AssessmentRenderer renderer, StringOutput sb, ItemSessionState itemSessionState, Translator translator) {

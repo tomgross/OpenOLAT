@@ -25,10 +25,12 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
+import org.apache.logging.log4j.Logger;
 import org.olat.core.commons.modules.bc.FolderConfig;
 import org.olat.core.commons.persistence.DB;
 import org.olat.core.id.Identity;
 import org.olat.core.id.Roles;
+import org.olat.core.logging.Tracing;
 import org.olat.core.util.StringHelper;
 import org.olat.core.util.nodes.INode;
 import org.olat.core.util.tree.TreeVisitor;
@@ -59,6 +61,8 @@ import org.springframework.beans.factory.annotation.Autowired;
  */
 public class OLATUpgrade_11_2_1 extends OLATUpgrade {
 
+	private static final Logger log = Tracing.createLoggerFor(OLATUpgrade_11_2_1.class);
+
 	private static final int BATCH_SIZE = 50;
 	private static final String STATUS_OLD_TASK_ELEMENT = "STATUS OLD TASK ELEMENT";
 	private static final String VERSION = "OLAT_11.2.1";
@@ -75,11 +79,6 @@ public class OLATUpgrade_11_2_1 extends OLATUpgrade {
 	@Override
 	public String getVersion() {
 		return VERSION;
-	}
-	
-	@Override
-	public boolean doPreSystemInitUpgrade(UpgradeManager upgradeManager) {
-		return false;
 	}
 
 	@Override
@@ -98,9 +97,9 @@ public class OLATUpgrade_11_2_1 extends OLATUpgrade {
 		uhd.setInstallationComplete(allOk);
 		upgradeManager.setUpgradesHistory(uhd, VERSION);
 		if(allOk) {
-			log.audit("Finished OLATUpgrade_11_2_1 successfully!");
+			log.info(Tracing.M_AUDIT, "Finished OLATUpgrade_11_2_1 successfully!");
 		} else {
-			log.audit("OLATUpgrade_11_2_1 not finished, try to restart OpenOLAT!");
+			log.info(Tracing.M_AUDIT, "OLATUpgrade_11_2_1 not finished, try to restart OpenOLAT!");
 		}
 		return allOk;
 	}
@@ -109,7 +108,7 @@ public class OLATUpgrade_11_2_1 extends OLATUpgrade {
 		boolean allOk = true;
 		if (!uhd.getBooleanDataValue(STATUS_OLD_TASK_ELEMENT)) {
 			int counter = 0;
-			final Roles roles = new Roles(true, false, false, false, false, false, false);
+			final Roles roles = Roles.administratorRoles();
 			final SearchRepositoryEntryParameters params = new SearchRepositoryEntryParameters();
 			params.setRoles(roles);
 			params.setResourceTypes(Collections.singletonList("CourseModule"));
@@ -121,7 +120,7 @@ public class OLATUpgrade_11_2_1 extends OLATUpgrade {
 					processCourse(course);
 				}
 				counter += courses.size();
-				log.audit("Course for checklist and deprecated tasks migration processed: " + courses.size() + ", total courses processed (" + counter + ")");
+				log.info(Tracing.M_AUDIT, "Course for checklist and deprecated tasks migration processed: " + courses.size() + ", total courses processed (" + counter + ")");
 				dbInstance.commitAndCloseSession();
 			} while(courses.size() == BATCH_SIZE);
 

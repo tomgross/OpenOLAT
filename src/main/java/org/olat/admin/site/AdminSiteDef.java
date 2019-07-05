@@ -31,6 +31,7 @@ import org.olat.core.gui.control.navigation.AbstractSiteDefinition;
 import org.olat.core.gui.control.navigation.SiteConfiguration;
 import org.olat.core.gui.control.navigation.SiteDefinition;
 import org.olat.core.gui.control.navigation.SiteInstance;
+import org.olat.core.util.UserSession;
 
 /**
  * Description:<br>
@@ -43,13 +44,13 @@ import org.olat.core.gui.control.navigation.SiteInstance;
  */
 public class AdminSiteDef extends AbstractSiteDefinition implements SiteDefinition {
 
-	public AdminSiteDef() {
-		//
-	}
-
 	@Override
 	public SiteInstance createSite(UserRequest ureq, WindowControl wControl, SiteConfiguration config) {
-		if (ureq.getUserSession().getRoles().isOLATAdmin()) {
+		if(ureq == null) return null;
+		
+		UserSession usess = ureq.getUserSession();
+		if (usess != null && usess.getRoles() != null
+				&& (usess.getRoles().isAdministrator() || usess.getRoles().isSystemAdmin())) {
 			// only open for olat-admins
 			return new AdminSite(this, ureq.getLocale());
 		} 

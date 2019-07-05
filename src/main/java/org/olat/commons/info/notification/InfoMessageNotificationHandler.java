@@ -24,9 +24,8 @@ import java.util.Date;
 import java.util.List;
 import java.util.Locale;
 
-import org.olat.commons.info.manager.InfoMessageManager;
-import org.olat.commons.info.model.InfoMessage;
-import org.olat.core.CoreSpringFactory;
+import org.olat.commons.info.InfoMessage;
+import org.olat.commons.info.InfoMessageManager;
 import org.olat.core.commons.services.notifications.NotificationHelper;
 import org.olat.core.commons.services.notifications.NotificationsHandler;
 import org.olat.core.commons.services.notifications.NotificationsManager;
@@ -39,7 +38,8 @@ import org.olat.core.gui.translator.Translator;
 import org.olat.core.id.Identity;
 import org.olat.core.id.OLATResourceable;
 import org.olat.core.id.context.BusinessControlFactory;
-import org.olat.core.logging.LogDelegator;
+import org.apache.logging.log4j.Logger;
+import org.olat.core.logging.Tracing;
 import org.olat.core.util.Util;
 import org.olat.core.util.resource.OresHelper;
 import org.olat.course.CourseFactory;
@@ -48,6 +48,8 @@ import org.olat.group.BusinessGroup;
 import org.olat.group.BusinessGroupService;
 import org.olat.repository.RepositoryEntry;
 import org.olat.repository.RepositoryManager;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
 
 /**
  * 
@@ -58,9 +60,21 @@ import org.olat.repository.RepositoryManager;
  * Initial Date:  27 jul. 2010 <br>
  * @author srosse, stephane.rosse@frentix.com, http://www.frentix.com
  */
-public class InfoMessageNotificationHandler extends LogDelegator implements NotificationsHandler {
+@Service("org.olat.commons.info.notification.InfoMessageNotificationHandler")
+public class InfoMessageNotificationHandler implements NotificationsHandler {
+	
+	private static final Logger log = Tracing.createLoggerFor(InfoMessageNotificationHandler.class);
 
 	private static final String CSS_CLASS_ICON = "o_infomsg_icon";
+	
+	@Autowired
+	private RepositoryManager repositoryManager;
+	@Autowired
+	private InfoMessageManager infoMessageManager;
+	@Autowired
+	private NotificationsManager notificationsManager;
+	@Autowired
+	private BusinessGroupService businessGroupService;
 	
 	@Override
 	public SubscriptionInfo createSubscriptionInfo(Subscriber subscriber, Locale locale, Date compareDate) {
@@ -78,16 +92,16 @@ public class InfoMessageNotificationHandler extends LogDelegator implements Noti
 				final String resName = subscriber.getPublisher().getResName();
 				String resSubPath = subscriber.getPublisher().getSubidentifier();
 				
-				String displayName, notificationtitle;
+				String displayName;
+				String notificationtitle;
 				if ("BusinessGroup".equals(resName)) {
-					BusinessGroupService groupService = CoreSpringFactory.getImpl(BusinessGroupService.class);
-					BusinessGroup group = groupService.loadBusinessGroup(resId);
+					BusinessGroup group = businessGroupService.loadBusinessGroup(resId);
 					displayName = group.getName();
 					notificationtitle = "notification.title.group";
 				} else {
-					RepositoryEntry re = RepositoryManager.getInstance().lookupRepositoryEntry(OresHelper.createOLATResourceableInstance(resName, resId), false);
-					if(re.getRepositoryEntryStatus().isClosed() || re.getRepositoryEntryStatus().isUnpublished()) {
-						return NotificationsManager.getInstance().getNoSubscriptionInfo();
+					RepositoryEntry re = repositoryManager.lookupRepositoryEntry(OresHelper.createOLATResourceableInstance(resName, resId), false);
+					if(re== null || re.getEntryStatus().decommissioned()) {
+						return notificationsManager.getNoSubscriptionInfo();
 					}					
 					displayName = re.getDisplayname();	
 					notificationtitle = "notification.title";
@@ -98,7 +112,7 @@ public class InfoMessageNotificationHandler extends LogDelegator implements Noti
 				si = new SubscriptionInfo(subscriber.getKey(), p.getType(), new TitleItem(title, CSS_CLASS_ICON), null);
 				
 				OLATResourceable ores = OresHelper.createOLATResourceableInstance(resName, resId);
-				List<InfoMessage> infos = InfoMessageManager.getInstance().loadInfoMessageByResource(ores, resSubPath, null, compareDate, null, 0, 0);
+				List<InfoMessage> infos = infoMessageManager.loadInfoMessageByResource(ores, resSubPath, null, compareDate, null, 0, 0);
 				for(InfoMessage info:infos) {
 					Identity ident = info.getAuthor();
 					String desc = translator.translate("notifications.entry", new String[] { info.getTitle(), NotificationHelper.getFormatedName(ident) });
@@ -110,11 +124,11 @@ public class InfoMessageNotificationHandler extends LogDelegator implements Noti
 					si.addSubscriptionListItem(subListItem);
 				}
 			} catch (Exception e) {
-				logError("Unexpected exception", e);
-				si = NotificationsManager.getInstance().getNoSubscriptionInfo();
+				log.error("Unexpected exception", e);
+				si = notificationsManager.getNoSubscriptionInfo();
 			}
 		} else {
-			si = NotificationsManager.getInstance().getNoSubscriptionInfo();
+			si = notificationsManager.getNoSubscriptionInfo();
 		}
 		return si;
 	}
@@ -122,11 +136,8 @@ public class InfoMessageNotificationHandler extends LogDelegator implements Noti
 	@Override
 	public String createTitleInfo(Subscriber subscriber, Locale locale) {
 		Translator translator = Util.createPackageTranslator(this.getClass(), locale);
-		String displayName = RepositoryManager.getInstance().lookupDisplayNameByOLATResourceableId(subscriber.getPublisher().getResId());
-		Publisher p = subscriber.getPublisher();
-		CourseNode node = CourseFactory.loadCourse(p.getResId()).getRunStructure().getNode(getNodeId(p.getBusinessPath()));
-		String shortName = (node != null ? node.getShortName() : "");
-		return translator.translate("notification.title", new String[]{displayName, shortName});
+		String displayName = repositoryManager.lookupDisplayNameByOLATResourceableId(subscriber.getPublisher().getResId());
+		return translator.translate("notification.title", new String[]{displayName});
 	}
 
 	private String getNodeId(String businessPath) {

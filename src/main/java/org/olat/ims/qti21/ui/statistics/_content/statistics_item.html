@@ -1,19 +1,19 @@
+<div id="o_c$questionComponentId">
 #if($r.available("filter"))
 <div class="o_button_group o_button_group_right">
 	$r.render("filter")
 </div>
 #end
 
+#if($sectionTitle)
+<h5>$r.translate("section"): $r.escapeHtml($sectionTitle)</h5>
+#end
+<h3><i class="o_icon $itemCss""> </i> $r.escapeHtml($title)</h3>
+#if($r.available("question"))
+	<h4>$r.translate("chart.item")</h4>
+	<div id="itemBody" class="clearfix">$r.render("question")</div>
+#end
 <div class="o_qti_statistics">
-	#if($sectionTitle)
-	<h5>$r.translate("section"): $r.escapeHtml($sectionTitle)</h5>
-	#end
-	<h3><i class="o_icon $itemCss""> </i> $r.escapeHtml($title)</h3>
-	#if ($question && $question != "")
-		<h4>$r.translate("chart.item")</h4>
-		<div class="o_qti_statistics_question clearfix">$r.escapeHtml($question)</div>
-	#end
-	
 	<h4>$r.translate("fig.title")</h4>
 	<table class="o_qti_statistics_figures"><tbody>
 		#if($numOfParticipants)
@@ -53,4 +53,5 @@
 	#foreach($interactionId in $interactionIds)
 		$r.render($interactionId)
 	#end
+</div>
 </div>

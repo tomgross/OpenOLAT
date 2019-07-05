@@ -34,7 +34,6 @@ import org.olat.admin.securitygroup.gui.IdentitiesRemoveEvent;
 import org.olat.admin.securitygroup.gui.WaitingGroupController;
 import org.olat.basesecurity.Group;
 import org.olat.basesecurity.GroupRoles;
-import org.olat.basesecurity.ui.GroupController;
 import org.olat.core.gui.UserRequest;
 import org.olat.core.gui.components.Component;
 import org.olat.core.gui.components.velocity.VelocityContainer;
@@ -43,6 +42,7 @@ import org.olat.core.gui.control.Event;
 import org.olat.core.gui.control.WindowControl;
 import org.olat.core.gui.control.controller.BasicController;
 import org.olat.core.id.Identity;
+import org.olat.core.id.Roles;
 import org.olat.core.logging.activity.ActionType;
 import org.olat.core.util.mail.MailBundle;
 import org.olat.core.util.mail.MailContext;
@@ -190,7 +190,10 @@ public class ProjectGroupController extends BasicController {
 					MailBundle ccBundle = mailManager.makeMailBundle(context, urequest.getIdentity(), mailTemplate, null, metaId, result);
 					result.append(mailManager.sendMessage(ccBundle));
 				}
-				MailHelper.printErrorsAndWarnings(result, getWindowControl(), urequest.getLocale());
+				
+				Roles roles = urequest.getUserSession().getRoles();
+				boolean detailedErrorOutput = roles.isAdministrator() || roles.isSystemAdmin();
+				MailHelper.printErrorsAndWarnings(result, getWindowControl(), detailedErrorOutput, urequest.getLocale());
 			}
 			fireEvent(urequest, Event.CHANGED_EVENT );		
 			// Participant and waiting-list were changed => reload both

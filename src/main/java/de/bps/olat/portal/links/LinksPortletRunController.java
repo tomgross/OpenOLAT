@@ -38,8 +38,8 @@ import org.olat.core.gui.control.generic.closablewrapper.CloseableModalControlle
 import org.olat.core.gui.control.generic.modal.DialogBoxController;
 import org.olat.core.gui.control.generic.modal.DialogBoxUIFactory;
 import org.olat.core.id.UserConstants;
-import org.olat.core.util.i18n.I18nManager;
 import org.olat.core.util.i18n.I18nModule;
+import org.springframework.beans.factory.annotation.Autowired;
 
 /**
  *
@@ -58,6 +58,9 @@ public class LinksPortletRunController extends BasicController {
 	private Link backLink;
 	private DialogBoxController delLinkCtrl;
 	
+	@Autowired
+	private I18nModule i18nModule;
+	
 	protected LinksPortletRunController(UserRequest ureq, WindowControl wControl) {
 		super(ureq, wControl);
 		
@@ -65,7 +68,7 @@ public class LinksPortletRunController extends BasicController {
 		initOrUpdatePortletView(ureq);
 		
 		//edit link
-		if (ureq.getUserSession().getRoles().isOLATAdmin()){
+		if (ureq.getUserSession().getRoles().isAdministrator()){
 			editButton = LinkFactory.createButtonXSmall("editor.button", portletVC, this);
 			editButton.setIconLeftCSS("o_icon o_icon-fw o_icon_edit");
 		}
@@ -76,9 +79,9 @@ public class LinksPortletRunController extends BasicController {
 	}
 	
 	private void initOrUpdatePortletView(UserRequest ureq){
-		String lang = I18nManager.getInstance().getLocaleKey(ureq.getLocale());
+		String lang = i18nModule.getLocaleKey(ureq.getLocale());
 		if (lang == null) {
-			lang = I18nManager.getInstance().getLocaleKey(I18nModule.getDefaultLocale());
+			lang = i18nModule.getLocaleKey(I18nModule.getDefaultLocale());
 		}
 		// fxdiff: compare with language-base not with variant...
 		int underlinePos = lang.indexOf("_");
@@ -90,7 +93,7 @@ public class LinksPortletRunController extends BasicController {
 		String inst = new String();
 		if(!isGuest) inst = ureq.getIdentity().getUser().getProperty(UserConstants.INSTITUTIONALNAME, getLocale());
 		
-		StringBuffer sb = new StringBuffer();
+		StringBuilder sb = new StringBuilder();
 		
 		// Inhalt verarbeiten
 		Map<String, PortletInstitution> content = LinksPortlet.getContent();
@@ -128,7 +131,7 @@ public class LinksPortletRunController extends BasicController {
 	 * @param StringBuffer to append the link
 	 */
 	private void appendContentFor(Map<String, PortletInstitution> content,
-			String inst, String lang, StringBuffer sb) {
+			String inst, String lang, StringBuilder sb) {
 		String linkLang = "";
 		int underlinePos = -1;
 		for( PortletLink link : content.get(inst).getLinks() ) {
@@ -137,7 +140,7 @@ public class LinksPortletRunController extends BasicController {
 			if (underlinePos != -1){
 				linkLang= linkLang.substring(0,underlinePos);
 			}
-			if(linkLang.equals(lang) | linkLang.equals(LinksPortlet.LANG_ALL))
+			if(linkLang.equals(lang) || linkLang.equals(LinksPortlet.LANG_ALL))
 				appendContent(link, sb);
 		}
 	}
@@ -147,8 +150,8 @@ public class LinksPortletRunController extends BasicController {
 	 * @param PortletLink
 	 * @param StringBuffer to append
 	 */
-	private void appendContent(PortletLink link, StringBuffer sb) {
-		sb.append("<li>" + buildContentLine(link.getTitle(), link.getUrl(), link.getDescription(), link.getTarget()) + "</li>");
+	private void appendContent(PortletLink link, StringBuilder sb) {
+		sb.append("<li>").append(buildContentLine(link.getTitle(), link.getUrl(), link.getDescription(), link.getTarget())).append("</li>");
 	}
 	
 	/**
@@ -160,10 +163,10 @@ public class LinksPortletRunController extends BasicController {
 	 * @param String lang
 	 * @return
 	 */
-	private String buildContentLine(String title, String URL, String descr, String target) {
-		StringBuffer sb = new StringBuffer();
+	private String buildContentLine(String title, String url, String descr, String target) {
+		StringBuilder sb = new StringBuilder();
 		sb.append("<a href=\"");
-		sb.append(URL);
+		sb.append(url);
 		sb.append("\" title=\"");
 		sb.append(title);
 		sb.append("\" target=\"_");
@@ -199,7 +202,7 @@ public class LinksPortletRunController extends BasicController {
 				}
 			} else if (linkName.contains(LINKADD)){
 				// add a link to institution:
-				PortletLink newLink = new PortletLink("", "", "", I18nManager.getInstance().getLocaleKey(ureq.getLocale()), "", null);
+				PortletLink newLink = new PortletLink("", "", "", i18nModule.getLocaleKey(ureq.getLocale()), "", null);
 				// find institution and port in link!
 				String institution = link.getCommand().substring(LINKADD.length());
 				PortletInstitution inst = LinksPortlet.getContent().get(institution);
@@ -243,9 +246,9 @@ public class LinksPortletRunController extends BasicController {
 		VelocityContainer editorVC = this.createVelocityContainer("editorLinkOverview");
 		Map<String, PortletInstitution> content = LinksPortlet.getContent();
 		if (content != null && !content.isEmpty() ) {
-			ArrayList<String> allInst = new ArrayList<String>();
-			ArrayList<String> allInstTranslated = new ArrayList<String>();
-			HashMap<Integer, ArrayList<String>> allInstWithLinkIds = new HashMap<Integer, ArrayList<String>>();
+			ArrayList<String> allInst = new ArrayList<>();
+			ArrayList<String> allInstTranslated = new ArrayList<>();
+			HashMap<Integer, ArrayList<String>> allInstWithLinkIds = new HashMap<>();
 			int instCount = 1;
 			for (Iterator<String> iterator = content.keySet().iterator(); iterator.hasNext();) {
 				String inst = iterator.next();
@@ -258,7 +261,7 @@ public class LinksPortletRunController extends BasicController {
 				
 				PortletInstitution portletsForInst = content.get(inst);
 				// collect identifiers to find them in VC.
-				ArrayList<String> instLinksIdentifiers = new ArrayList<String>();
+				ArrayList<String> instLinksIdentifiers = new ArrayList<>();
 				
 				// add add-link per institution
 				LinkFactory.createCustomLink(LINKADD + inst, LINKADD + inst, "add.link", Link.BUTTON_XSMALL, editorVC, this);
@@ -285,9 +288,7 @@ public class LinksPortletRunController extends BasicController {
 		viewPanel.setContent(editorVC);
 	}
 
-	/**
-	 * @see org.olat.gui.control.DefaultController#doDispose(boolean)
-	 */
+	@Override
 	protected void doDispose() {
 		if(portletVC != null) portletVC = null;
 	}

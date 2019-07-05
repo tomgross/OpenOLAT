@@ -29,6 +29,7 @@ import javax.persistence.GenerationType;
 import javax.persistence.Id;
 import javax.persistence.JoinColumn;
 import javax.persistence.ManyToOne;
+import javax.persistence.OneToOne;
 import javax.persistence.Table;
 import javax.persistence.Temporal;
 import javax.persistence.TemporalType;
@@ -38,8 +39,10 @@ import org.olat.basesecurity.IdentityImpl;
 import org.olat.core.id.Identity;
 import org.olat.core.id.Persistable;
 import org.olat.core.util.StringHelper;
+import org.olat.modules.forms.EvaluationFormParticipation;
 import org.olat.modules.forms.EvaluationFormSession;
 import org.olat.modules.forms.EvaluationFormSessionStatus;
+import org.olat.modules.forms.EvaluationFormSurvey;
 import org.olat.modules.portfolio.PageBody;
 import org.olat.modules.portfolio.model.PageBodyImpl;
 import org.olat.repository.RepositoryEntry;
@@ -75,18 +78,39 @@ public class EvaluationFormSessionImpl implements EvaluationFormSession, Persist
 	private Date submissionDate;
 	@Column(name="e_first_submission_date", nullable=true, insertable=true, updatable=true)
 	private Date firstSubmissionDate;
+	@Column(name="e_email", nullable=true, insertable=true, updatable=true)
+	private String email;
+	@Column(name="e_firstname", nullable=true, insertable=true, updatable=true)
+	private String firstname;
+	@Column(name="e_lastname", nullable=true, insertable=true, updatable=true)
+	private String lastname;
+	@Column(name="e_age", nullable=true, insertable=true, updatable=true)
+	private String age;
+	@Column(name="e_gender", nullable=true, insertable=true, updatable=true)
+	private String gender;
+	@Column(name="e_org_unit", nullable=true, insertable=true, updatable=true)
+	private String orgUnit;
+	@Column(name="e_study_subject", nullable=true, insertable=true, updatable=true)
+	private String studySubject;
+	
+	@ManyToOne(targetEntity=EvaluationFormSurveyImpl.class,fetch=FetchType.LAZY,optional=true)
+	@JoinColumn(name="fk_survey", nullable=true, insertable=true, updatable=true)
+	private EvaluationFormSurvey survey;
+	@OneToOne(targetEntity=EvaluationFormParticipationImpl.class,fetch=FetchType.LAZY,optional=true)
+	@JoinColumn(name="fk_participation", nullable=true, insertable=true, updatable=true)
+	private EvaluationFormParticipation participation;
 	
 	@ManyToOne(targetEntity=IdentityImpl.class,fetch=FetchType.LAZY,optional=true)
 	@JoinColumn(name="fk_identity", nullable=true, insertable=true, updatable=false)
-    private Identity identity;
+	private Identity identity;
 	
 	@ManyToOne(targetEntity=PageBodyImpl.class,fetch=FetchType.LAZY,optional=true)
 	@JoinColumn(name="fk_page_body", nullable=true, insertable=true, updatable=false)
-    private PageBody pageBody;
+	private PageBody pageBody;
 	
-	@ManyToOne(targetEntity=RepositoryEntry.class,fetch=FetchType.LAZY,optional=false)
-	@JoinColumn(name="fk_form_entry", nullable=false, insertable=true, updatable=false)
-    private RepositoryEntry formEntry;
+	@ManyToOne(targetEntity=RepositoryEntry.class,fetch=FetchType.LAZY,optional=true)
+	@JoinColumn(name="fk_form_entry", nullable=true, insertable=true, updatable=false)
+	private RepositoryEntry formEntry;
 
 	
 	@Override
@@ -134,7 +158,6 @@ public class EvaluationFormSessionImpl implements EvaluationFormSession, Persist
 		return null;
 	}
 
-	@Override
 	public void setEvaluationFormSessionStatus(EvaluationFormSessionStatus sessionStatus) {
 		if(sessionStatus == null) {
 			status = null;
@@ -162,6 +185,87 @@ public class EvaluationFormSessionImpl implements EvaluationFormSession, Persist
 	}
 
 	@Override
+	public String getEmail() {
+		return email;
+	}
+
+	public void setEmail(String email) {
+		this.email = email;
+	}
+
+	@Override
+	public String getFirstname() {
+		return firstname;
+	}
+
+	public void setFirstname(String firstname) {
+		this.firstname = firstname;
+	}
+
+	@Override
+	public String getLastname() {
+		return lastname;
+	}
+
+	public void setLastname(String lastname) {
+		this.lastname = lastname;
+	}
+
+	@Override
+	public String getAge() {
+		return age;
+	}
+
+	public void setAge(String age) {
+		this.age = age;
+	}
+
+	@Override
+	public String getGender() {
+		return gender;
+	}
+
+	public void setGender(String gender) {
+		this.gender = gender;
+	}
+
+	@Override
+	public String getOrgUnit() {
+		return orgUnit;
+	}
+
+	public void setOrgUnit(String orgUnit) {
+		this.orgUnit = orgUnit;
+	}
+
+	@Override
+	public String getStudySubject() {
+		return studySubject;
+	}
+
+	public void setStudySubject(String studySubject) {
+		this.studySubject = studySubject;
+	}
+
+	@Override
+	public EvaluationFormSurvey getSurvey() {
+		return survey;
+	}
+
+	public void setSurvey(EvaluationFormSurvey survey) {
+		this.survey = survey;
+	}
+
+	@Override
+	public EvaluationFormParticipation getParticipation() {
+		return participation;
+	}
+
+	public void setParticipation(EvaluationFormParticipation participation) {
+		this.participation = participation;
+	}
+
+	@Override
 	public Identity getIdentity() {
 		return identity;
 	}
@@ -179,6 +283,7 @@ public class EvaluationFormSessionImpl implements EvaluationFormSession, Persist
 		this.pageBody = pageBody;
 	}
 
+	@Override
 	public RepositoryEntry getFormEntry() {
 		return formEntry;
 	}

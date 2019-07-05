@@ -24,11 +24,14 @@ import java.util.Locale;
 
 import org.junit.Assert;
 import org.junit.Test;
-import org.olat.basesecurity.BaseSecurity;
 import org.olat.basesecurity.GroupRoles;
+import org.olat.basesecurity.OrganisationRoles;
+import org.olat.basesecurity.OrganisationService;
 import org.olat.core.commons.persistence.DB;
 import org.olat.core.id.Identity;
+import org.olat.core.id.Organisation;
 import org.olat.core.id.Roles;
+import org.olat.core.id.UserConstants;
 import org.olat.group.BusinessGroup;
 import org.olat.group.BusinessGroupService;
 import org.olat.group.model.SearchBusinessGroupParams;
@@ -36,8 +39,10 @@ import org.olat.repository.CatalogEntry;
 import org.olat.repository.ErrorList;
 import org.olat.repository.RepositoryEntry;
 import org.olat.repository.RepositoryEntryRelationType;
+import org.olat.repository.RepositoryEntryStatusEnum;
 import org.olat.test.JunitTestHelper;
 import org.olat.test.OlatTestCase;
+import org.olat.user.UserManager;
 import org.springframework.beans.factory.annotation.Autowired;
 
 /**
@@ -51,13 +56,15 @@ public class RepositoryServiceImplTest extends OlatTestCase {
 	@Autowired
 	private DB dbInstance;
 	@Autowired
-	private BaseSecurity securityManager;
+	private UserManager userManager;
 	@Autowired
 	private CatalogManager catalogManager;
 	@Autowired
 	private RepositoryServiceImpl repositoryService;
 	@Autowired
 	private BusinessGroupService businessGroupService;
+	@Autowired
+	private OrganisationService organisationService;
 	@Autowired
 	private RepositoryEntryRelationDAO repositoryEntryRelationDao;
 	
@@ -68,7 +75,9 @@ public class RepositoryServiceImplTest extends OlatTestCase {
 		String displayName = "ServiceTest";
 		String resourceName = "ServiceTest";
 		String description = "Test the brand new service";
-		RepositoryEntry re = repositoryService.create(initialAuthor, null, resourceName, displayName, description, null, 0);
+		Organisation defOrganisation = organisationService.getDefaultOrganisation();
+		RepositoryEntry re = repositoryService.create(initialAuthor, null, resourceName, displayName, description, null,
+				RepositoryEntryStatusEnum.trash, defOrganisation);
 		dbInstance.commit();
 		
 		Assert.assertNotNull(re);
@@ -84,7 +93,9 @@ public class RepositoryServiceImplTest extends OlatTestCase {
 		String displayName = "Service test 2";
 		String resourceName = "ServiceTest";
 		String description = "Test the brand new service";
-		RepositoryEntry re = repositoryService.create(initialAuthor, null, resourceName, displayName, description, null, 0);
+		Organisation defOrganisation = organisationService.getDefaultOrganisation();
+		RepositoryEntry re = repositoryService.create(initialAuthor, null, resourceName, displayName, description, null,
+				RepositoryEntryStatusEnum.trash, defOrganisation);
 		dbInstance.commitAndCloseSession();
 		Assert.assertNotNull(re);
 		
@@ -94,7 +105,7 @@ public class RepositoryServiceImplTest extends OlatTestCase {
 		Assert.assertNotNull(re.getLastModified());
 		Assert.assertNotNull(re.getOlatResource());
 		Assert.assertNotNull(loadedEntry.getGroups());
-		Assert.assertEquals(1, loadedEntry.getGroups().size());
+		Assert.assertEquals(2, loadedEntry.getGroups().size());// default group + default organization group
 		//saved?
 		Assert.assertEquals(displayName, re.getDisplayname());
 		Assert.assertEquals(resourceName, re.getResourcename());
@@ -103,7 +114,7 @@ public class RepositoryServiceImplTest extends OlatTestCase {
 		Assert.assertFalse(re.getCanCopy());
 		Assert.assertFalse(re.getCanDownload());
 		Assert.assertFalse(re.getCanReference());
-		Assert.assertEquals(0, re.getAccess());
+		Assert.assertEquals(RepositoryEntryStatusEnum.trash, re.getEntryStatus());
 	}
 	
 	@Test
@@ -126,7 +137,6 @@ public class RepositoryServiceImplTest extends OlatTestCase {
 	    catEntry.setName("Soft");
 	    catEntry.setRepositoryEntry(re);
 	    catEntry.setParent(rootEntries.get(0));
-	    catEntry.setOwnerGroup(securityManager.createAndPersistSecurityGroup());
 	    catalogManager.saveCatalogEntry(catEntry);
 	    dbInstance.commit();
 	    
@@ -141,12 +151,12 @@ public class RepositoryServiceImplTest extends OlatTestCase {
 	    dbInstance.commit();
 		
 		// kill it softly like A. Keys
-		repositoryService.deleteSoftly(re, initialAuthor, false);
+		repositoryService.deleteSoftly(re, initialAuthor, false, false);
 		dbInstance.commit();
 
 		//check that the members are removed
 		List<Identity> coachAndParticipants = repositoryEntryRelationDao
-				.getMembers(re, RepositoryEntryRelationType.both, GroupRoles.coach.name(), GroupRoles.participant.name());
+				.getMembers(re, RepositoryEntryRelationType.all, GroupRoles.coach.name(), GroupRoles.participant.name());
 		Assert.assertNotNull(coachAndParticipants);
 		Assert.assertEquals(0, coachAndParticipants.size());
 		
@@ -163,7 +173,7 @@ public class RepositoryServiceImplTest extends OlatTestCase {
 		
 		RepositoryEntry reloadEntry = repositoryService.loadByKey(re.getKey());
 		Assert.assertNotNull(reloadEntry);
-		Assert.assertEquals(0, reloadEntry.getAccess());
+		Assert.assertEquals(RepositoryEntryStatusEnum.trash, reloadEntry.getEntryStatus());
 		Assert.assertNotNull(reloadEntry.getDeletionDate());
 		Assert.assertEquals(initialAuthor, reloadEntry.getDeletedBy());
 	}
@@ -174,10 +184,65 @@ public class RepositoryServiceImplTest extends OlatTestCase {
 		RepositoryEntry re = JunitTestHelper.deployDemoCourse(initialAuthor);
 		dbInstance.commitAndCloseSession();
 		
-		Roles roles = new Roles(false, false, false, true, false, false, false);
+		Roles roles = Roles.authorRoles();
 		ErrorList errors = repositoryService.deletePermanently(re, initialAuthor, roles, Locale.ENGLISH);
 		Assert.assertNotNull(errors);
 		Assert.assertFalse(errors.hasErrors());
+	}
+	
+	/**
+	 * How can be a resource manager if Constants.ORESOURCE_USERMANAGER is never used?
+	 */
+	@Test
+	public void isInstitutionalRessourceManagerFor() {
+		Identity owner1 = JunitTestHelper.createAndPersistIdentityAsRndUser("instit-1");
+		Identity owner2 = JunitTestHelper.createAndPersistIdentityAsRndUser("instit-2");
+		Identity part3 = JunitTestHelper.createAndPersistIdentityAsRndUser("instit-3");
+		RepositoryEntry re = JunitTestHelper.createAndPersistRepositoryEntry();
+		repositoryEntryRelationDao.addRole(owner1, re, GroupRoles.owner.name());
+		repositoryEntryRelationDao.addRole(owner2, re, GroupRoles.owner.name());
+		repositoryEntryRelationDao.addRole(part3, re, GroupRoles.participant.name());
+		dbInstance.commit();
+		
+		//set the institutions
+		owner1.getUser().setProperty(UserConstants.INSTITUTIONALNAME, "volks");
+		owner2.getUser().setProperty(UserConstants.INSTITUTIONALNAME, "volks");
+		part3.getUser().setProperty(UserConstants.INSTITUTIONALNAME, "volks");
+		userManager.updateUserFromIdentity(owner1);
+		userManager.updateUserFromIdentity(owner2);
+		userManager.updateUserFromIdentity(part3);
+		dbInstance.commit();
+		
+		//promote owner1 to institution resource manager
+		organisationService.addMember(owner1, OrganisationRoles.learnresourcemanager);
+		dbInstance.commitAndCloseSession();
+		
+		//check
+		boolean institutionMgr1 = repositoryService.hasRoleExpanded(owner1, re, OrganisationRoles.learnresourcemanager.name());
+		boolean institutionMgr2 = repositoryService.hasRoleExpanded(owner2, re, OrganisationRoles.learnresourcemanager.name());
+		boolean institutionMgr3 = repositoryService.hasRoleExpanded(part3, re, OrganisationRoles.learnresourcemanager.name());
+	
+		Assert.assertTrue(institutionMgr1);
+		Assert.assertFalse(institutionMgr2);
+		Assert.assertFalse(institutionMgr3);
+	}
+	
+	@Test
+	public void isOwnerOfRepositoryEntry() {
+		//create a repository entry with an owner and a participant
+		Identity owner = JunitTestHelper.createAndPersistIdentityAsRndUser("re-owner-1-is");
+		Identity part = JunitTestHelper.createAndPersistIdentityAsRndUser("re-owner-2-is");
+		RepositoryEntry re = JunitTestHelper.createAndPersistRepositoryEntry();
+		dbInstance.commitAndCloseSession();
+		repositoryEntryRelationDao.addRole(owner, re, GroupRoles.owner.name());
+		repositoryEntryRelationDao.addRole(part, re, GroupRoles.participant.name());
+		dbInstance.commitAndCloseSession();
+		
+		//check
+		boolean isOwnerOwner = repositoryService.hasRoleExpanded(owner, re, GroupRoles.owner.name());
+		Assert.assertTrue(isOwnerOwner);
+		boolean isPartOwner = repositoryService.hasRoleExpanded(part, re, GroupRoles.owner.name());
+		Assert.assertFalse(isPartOwner);
 	}
 	
 	

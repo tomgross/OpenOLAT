@@ -42,24 +42,26 @@ import java.util.List;
 import java.util.Properties;
 
 import org.apache.commons.codec.binary.Base64;
-import org.olat.core.commons.modules.bc.vfs.OlatRootFolderImpl;
 import org.olat.core.commons.services.notifications.SubscriptionContext;
 import org.olat.core.gui.UserRequest;
 import org.olat.core.gui.control.WindowControl;
 import org.olat.core.id.OLATResourceable;
 import org.olat.core.logging.AssertException;
 import org.olat.core.logging.OLATRuntimeException;
-import org.olat.core.logging.OLog;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
 import org.olat.core.logging.activity.LearningResourceLoggingAction;
 import org.olat.core.logging.activity.ThreadLocalUserActivityLogger;
 import org.olat.core.util.FileUtils;
+import org.olat.core.util.PathUtils;
 import org.olat.core.util.cache.CacheWrapper;
 import org.olat.core.util.coordinate.CoordinatorManager;
 import org.olat.core.util.resource.OresHelper;
+import org.olat.core.util.vfs.LocalFolderImpl;
 import org.olat.core.util.vfs.VFSContainer;
 import org.olat.core.util.vfs.VFSItem;
 import org.olat.core.util.vfs.VFSLeaf;
+import org.olat.core.util.vfs.VFSManager;
 import org.olat.core.util.vfs.filters.VFSItemSuffixFilter;
 import org.olat.core.util.vfs.filters.VFSLeafFilter;
 import org.olat.course.CourseModule;
@@ -86,21 +88,25 @@ import org.olat.resource.OLATResourceManager;
  */
 public class WikiManager {
 	
-	private static final OLog log = Tracing.createLoggerFor(WikiManager.class);
+	private static final Logger log = Tracing.createLoggerFor(WikiManager.class);
 
 	public static final String VIEW_COUNT = "view.count";
 	public static final String MODIFY_AUTHOR = "modify.author";
 	public static final String M_TIME = "mTime";
 	public static final String INITIAL_AUTHOR = "initial.author";
+	public static final String INITIAL_PAGENAME = "initial.pagename";
 	public static final String FORUM_KEY = "forum.key";
 	public static final String VERSION = "version";
 	public static final String C_TIME = "cTime";
 	public static final String PAGENAME = "pagename";
+	public static final String OLD_PAGENAME = "old.pagenames";
 	private static WikiManager instance;
 	public static final String WIKI_RESOURCE_FOLDER_NAME = "wiki";
 	public static final String VERSION_FOLDER_NAME = "versions";
 	public static final String WIKI_FILE_SUFFIX = "wp";
+	public static final String WIKI_DOT_FILE_SUFFIX = "." + WIKI_FILE_SUFFIX;
 	public static final String WIKI_PROPERTIES_SUFFIX = "properties";
+	public static final String WIKI_DOT_PROPERTIES_SUFFIX = "." + WIKI_PROPERTIES_SUFFIX;
 	public static final String UPDATE_COMMENT = "update.comment";
 	
   //o_clusterNOK cache : 08.04.08/cg Not tested in cluster-mode 
@@ -203,20 +209,19 @@ public class WikiManager {
 	 */
 	private final static void resetAndCopyProperties(Path file, Path destFile) {
 		Properties props = new Properties();
-    	try(InputStream inStream = Files.newInputStream(file);
-    		OutputStream outStream = Files.newOutputStream(destFile)) {
-    		
-    		props.load(inStream);
-    		props.setProperty(VERSION, "0");
-    		props.setProperty(FORUM_KEY, "0");
-    		props.setProperty(MODIFY_AUTHOR, "0");
-    		props.setProperty(UPDATE_COMMENT, "0");
-    		props.setProperty(VIEW_COUNT, "0");
-    		props.setProperty(M_TIME, "0");
-    		props.store(outStream, "");
-    	} catch(Exception e) {
-    		log.error("", e);
-    	}
+		try (InputStream inStream = Files.newInputStream(file);
+				OutputStream outStream = Files.newOutputStream(destFile)) {
+			props.load(inStream);
+			props.setProperty(VERSION, "0");
+			props.setProperty(FORUM_KEY, "0");
+			props.setProperty(MODIFY_AUTHOR, "0");
+			props.setProperty(UPDATE_COMMENT, "0");
+			props.setProperty(VIEW_COUNT, "0");
+			props.setProperty(M_TIME, "0");
+			props.store(outStream, "");
+		} catch (Exception e) {
+			log.error("", e);
+		}
 	}
 
 	/**
@@ -252,9 +257,8 @@ public class WikiManager {
 			
 	        String filename = file.getFileName().toString();
 	        if(filename.endsWith(WikiManager.WIKI_PROPERTIES_SUFFIX)) {
-	        	final Path destFile = Paths.get(destDir.toString(), relFile.toString());
-	        	resetAndCopyProperties(file, destFile);
-	        	
+	        		final Path destFile = Paths.get(destDir.toString(), relFile.toString());
+	        		resetAndCopyProperties(file, destFile);
 	        } else if (filename.endsWith(WIKI_FILE_SUFFIX)) {
 	        	final Path destFile = Paths.get(destDir.toString(), relFile.toString());
 				Files.copy(file, destFile, StandardCopyOption.REPLACE_EXISTING);
@@ -309,10 +313,12 @@ public class WikiManager {
 	    throws IOException {
 	        String filename = file.getFileName().toString();
 	        if(filename.endsWith(WikiManager.WIKI_PROPERTIES_SUFFIX)) {
-	        	final Path destFile = Paths.get(wikiDir.toString(), file.toString());
-	        	resetAndCopyProperties(file, destFile);
+	        		String f = convertAlternativeFilename(file.toString());
+	        		final Path destFile = Paths.get(wikiDir.toString(), f);
+	        		resetAndCopyProperties(file, destFile);
 	        } else if (filename.endsWith(WIKI_FILE_SUFFIX)) {
-	        	final Path destFile = Paths.get(wikiDir.toString(), file.toString());
+        			String f = convertAlternativeFilename(file.toString());
+	        		final Path destFile = Paths.get(wikiDir.toString(), f);
 				Files.copy(file, destFile, StandardCopyOption.REPLACE_EXISTING);
 			} else if (!filename.contains(WIKI_FILE_SUFFIX + "-")
 					&& !filename.contains(WIKI_PROPERTIES_SUFFIX + "-")) {
@@ -325,9 +331,9 @@ public class WikiManager {
 		@Override
 		public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs)
 		throws IOException {
-	        final Path dirToCreate = Paths.get(destDir.toString(), dir.toString());
+			final Path dirToCreate = Paths.get(destDir.toString(), dir.toString());
 	        if(Files.notExists(dirToCreate)){
-	        	Files.createDirectory(dirToCreate);
+	        		Files.createDirectory(dirToCreate);
 	        }
 	        return FileVisitResult.CONTINUE;
 		}
@@ -340,7 +346,7 @@ public class WikiManager {
 	
 	void createFolders(OLATResourceable ores) {
 		long start = 0;
-		if (log.isDebug()) {
+		if (log.isDebugEnabled()) {
 			start = System.currentTimeMillis();
 		}
 		VFSContainer rootContainer = getWikiRootContainer(ores);
@@ -364,8 +370,9 @@ public class WikiManager {
 				} else {
 					if (leaf.getName().contains(WikiManager.WIKI_FILE_SUFFIX+"-") || leaf.getName().contains(WikiManager.WIKI_PROPERTIES_SUFFIX+"-")) {
 						leaf.delete(); // delete version history
-					} else
-					mediaCtn.copyFrom(leaf);
+					} else {
+						mediaCtn.copyFrom(leaf);
+					}
 				}
 			}
 			unzippedDir.delete();
@@ -390,9 +397,9 @@ public class WikiManager {
 				saveWikiPageProperties(ores, page);
 			}
 		}
-		if (log.isDebug()) {
+		if (log.isDebugEnabled()) {
 			long end = System.currentTimeMillis();
-			log.debug("creating folders and move files and updating properties to default values took: (milliseconds)"+(end-start), null);
+			log.debug("creating folders and move files and updating properties to default values took: (milliseconds)"+(end-start));
 		}
 	}
 
@@ -412,10 +419,10 @@ public class WikiManager {
 		if (wikiCache == null) {
 			wikiCache =  coordinator.getCoordinator().getCacher().getCache(WikiManager.class.getSimpleName(), "wiki");
 		}
-		return wikiCache.computeIfAbsent(wikiKey, (key) -> {
+		return wikiCache.computeIfAbsent(wikiKey, key -> {
 			long start = 0;
 			// wiki not in cache load form filesystem
-			if (log.isDebug()) {
+			if (log.isDebugEnabled()) {
 				log.debug("wiki not in cache. Loading wiki from filesystem. Ores: " + ores.getResourceableId());
 				start = System.currentTimeMillis();
 			}
@@ -424,7 +431,6 @@ public class WikiManager {
 			// wiki folder structure does not yet exists, but resource does. Create
 			// wiki in group context
 			if (folder == null) {
-				// createWikiforExistingResource(ores);
 				createFolders(ores);
 				folder = getWikiContainer(ores, WIKI_RESOURCE_FOLDER_NAME);
 			}
@@ -453,7 +459,7 @@ public class WikiManager {
 				// due to a bug we have to rename some pages that start with an non
 				// ASCII lowercase letter
 				String idOutOfFileName = propertiesFile.getName().substring(0, propertiesFile.getName().indexOf("."));
-				if (!page.getPageId().equals(idOutOfFileName)) {
+				if (!page.matchIds(idOutOfFileName)) {
 					// rename corrupt prop file
 					propertiesFile.rename(page.getPageId() + "." + WikiManager.WIKI_PROPERTIES_SUFFIX);
 					// load content and delete corrupt content file
@@ -473,8 +479,8 @@ public class WikiManager {
 				menuPage.setCreationTime(System.currentTimeMillis());
 				menuPage.setContent("* [[Index]]\n* [[Index|Your link]]");
 				wiki.addPage(menuPage);
-				saveWikiPage(ores, indexPage, false, wiki);
-				saveWikiPage(ores, menuPage, false, wiki);
+				saveWikiPage(ores, indexPage, false, wiki, false);
+				saveWikiPage(ores, menuPage, false, wiki, false);
 			}
 			
 			// add pages internally used for displaying dynamic data, they are not persisted
@@ -483,7 +489,7 @@ public class WikiManager {
 			wiki.addPage(recentChangesPage);
 			wiki.addPage(a2zPage);
 
-			if (log.isDebug()) {
+			if (log.isDebugEnabled()) {
 				long stop = System.currentTimeMillis();
 				log.debug("loading of wiki from filessystem took (ms) " + (stop - start));
 			}
@@ -506,7 +512,7 @@ public class WikiManager {
 	 * @param ores
 	 * @param page
 	 */
-	public void saveWikiPage(OLATResourceable ores, WikiPage page, boolean incrementVersion, Wiki wiki) {
+	public void saveWikiPage(OLATResourceable ores, WikiPage page, boolean incrementVersion, Wiki wiki, boolean cache) {
 		//cluster_OK by guido
 		VFSContainer versionsContainer = getWikiContainer(ores, VERSION_FOLDER_NAME);
 		VFSContainer wikiContentContainer = getWikiContainer(ores, WIKI_RESOURCE_FOLDER_NAME);
@@ -526,7 +532,6 @@ public class WikiManager {
 		// container
 		item = wikiContentContainer.resolve(page.getPageId() + "." + WIKI_PROPERTIES_SUFFIX);
 		if (item != null && incrementVersion) {
-			// TODO renaming and coping does not work. Bug?? felix fragen
 			if (page.getVersion() > 0) {
 				versionsContainer.copyFrom(item);
 				VFSItem copiedItem = versionsContainer.resolve(page.getPageId() + "." + WIKI_PROPERTIES_SUFFIX);
@@ -547,18 +552,15 @@ public class WikiManager {
 		// update modification time
 		if (!page.getContent().equals("")) page.setModificationTime(System.currentTimeMillis());
 		Properties p = getPageProperties(page);
-		try {
-			OutputStream os = leaf.getOutputStream(false);
+		try(OutputStream os = leaf.getOutputStream(false)) {
 			p.store(os, "wiki page meta properties");
-			os.close();
-			// if (incrementVersion) page.incrementVersion();
 		} catch (IOException e) {
 			throw new OLATRuntimeException(WikiManager.class, "failed to save wiki page properties for page with id: " + page.getPageId() + " and olatresource: " + ores.getResourceableId(), e);
 		}
 		page.setViewCount(0); //reset view count of the page
 		
 		//update cache to inform all nodes about the change
-		if (wikiCache!=null) {
+		if (cache && wikiCache != null) {
 			wikiCache.update(OresHelper.createStringRepresenting(ores), wiki);
 		}
 		
@@ -597,7 +599,7 @@ public class WikiManager {
 				}
 			}
 		}
-		log.audit("Deleted wiki page with name: " + page.getPageName() + " from resourcable id: "+ ores.getResourceableId());
+		log.info(Tracing.M_AUDIT, "Deleted wiki page with name: " + page.getPageName() + " from resourcable id: "+ ores.getResourceableId());
 		if (wikiCache!=null) {
 			wikiCache.update(OresHelper.createStringRepresenting(ores), getOrLoadWiki(ores));
 		}
@@ -669,6 +671,31 @@ public class WikiManager {
 			throw new OLATRuntimeException(WikiManager.class, "Encoding UTF-8 not supported by your platform!", e);
 		}
 	}
+	
+	public static String convertAlternativeFilename(String id) {
+		String convertedId = id;
+		if(id != null) {
+			if(id.endsWith(WIKI_DOT_FILE_SUFFIX)) {
+				convertedId = convertAlternativeFilename(id, WIKI_DOT_FILE_SUFFIX);
+			} else if(id.endsWith(WIKI_DOT_PROPERTIES_SUFFIX)) {
+				convertedId = convertAlternativeFilename(id, WIKI_DOT_PROPERTIES_SUFFIX);
+			}
+		}
+		return convertedId;
+	}
+	
+	private static String convertAlternativeFilename(String id, String suffix) {
+		char[] idChars = id.toCharArray();
+		int indexLast = idChars.length - suffix.length() - 1;
+		if(idChars[indexLast] == '_') {
+			idChars[indexLast] =  '=';
+			if(idChars[indexLast - 1] == '_') {
+				idChars[indexLast - 1] =  '=';
+			}
+			return new String(idChars);
+		}
+		return id;
+	}
 
 	/**
 	 * @param ores
@@ -685,14 +712,14 @@ public class WikiManager {
 	 * @param ores
 	 * @return
 	 */
-	public OlatRootFolderImpl getWikiRootContainer(OLATResourceable ores) {
+	public LocalFolderImpl getWikiRootContainer(OLATResourceable ores) {
 		// Check if Resource is a BusinessGroup, because BusinessGroup-wiki's are stored at a different place
-		if(log.isDebug()){
-			log.debug("calculating wiki root container with ores id: "+ores.getResourceableId()+" and resourcable type name: "+ores.getResourceableTypeName(), null);
+		if(log.isDebugEnabled()){
+			log.debug("calculating wiki root container with ores id: "+ores.getResourceableId()+" and resourcable type name: "+ores.getResourceableTypeName());
 		}
 		if (isGroupContextWiki(ores)) {
 			// Group Wiki
-			return new OlatRootFolderImpl(getGroupWikiRelPath(ores), null);
+			return VFSManager.olatRootContainer(getGroupWikiRelPath(ores), null);
 		} else {
 			// Repository Wiki
 			return getFileResourceManager().getFileResourceRootImpl(ores);
@@ -713,14 +740,14 @@ public class WikiManager {
 	 * @param ores 
 	 * @return
 	 */
-	public OlatRootFolderImpl getMediaFolder(OLATResourceable ores) {
+	public LocalFolderImpl getMediaFolder(OLATResourceable ores) {
 		// Check if Resource is a BusinessGroup, because BusinessGroup-wiki's are stored at a different place
 		if (isGroupContextWiki(ores)) {
 			// Group Wiki
-			return new OlatRootFolderImpl(getGroupWikiRelPath(ores) + "/" + WikiContainer.MEDIA_FOLDER_NAME, null);
+			return VFSManager.olatRootContainer(getGroupWikiRelPath(ores) + "/" + WikiContainer.MEDIA_FOLDER_NAME, null);
 		} else {
 			// Repository Wiki	
-		  return new OlatRootFolderImpl("/repository/" + ores.getResourceableId() + "/" + WikiContainer.MEDIA_FOLDER_NAME,	null);
+			return VFSManager.olatRootContainer("/repository/" + ores.getResourceableId() + "/" + WikiContainer.MEDIA_FOLDER_NAME,	null);
 		}
 	}
 	

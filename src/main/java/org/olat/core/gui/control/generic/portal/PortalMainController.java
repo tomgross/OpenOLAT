@@ -19,8 +19,8 @@
  */
 package org.olat.core.gui.control.generic.portal;
 
-import org.olat.commons.rss.RSSUtil;
 import org.olat.core.CoreSpringFactory;
+import org.olat.core.commons.services.notifications.PersonalRSSUtil;
 import org.olat.core.dispatcher.impl.StaticMediaDispatcher;
 import org.olat.core.gui.UserRequest;
 import org.olat.core.gui.components.Component;
@@ -62,7 +62,7 @@ public class PortalMainController extends BasicController {
 		portalEditButton.setElementCssClass("pull-right");
 
 		// rss link
-		String rssLink = RSSUtil.getPersonalRssLink(ureq);
+		String rssLink = PersonalRSSUtil.getPersonalRssLink(ureq);
 		welcome.contextPut("rssLink", rssLink);
 		StringOutput staticUrl = new StringOutput();
 		StaticMediaDispatcher.renderStaticURI(staticUrl, "js/egg.js");
@@ -78,8 +78,7 @@ public class PortalMainController extends BasicController {
 				portalTemplate = ((PortalImpl)CoreSpringFactory.getBean("guestportal"));
 				portalEditButton.setEnabled(false);
 				portalEditButton.setVisible(false);
-			} else if((roles.isGroupManager() || roles.isInstitutionalResourceManager() || roles.isOLATAdmin() || roles.isPoolAdmin() || roles.isUserManager())
-					&& CoreSpringFactory.containsBean("authorportal")) {
+			} else if(isConsideredManager(roles) && CoreSpringFactory.containsBean("authorportal")) {
 				portalTemplate = ((PortalImpl)CoreSpringFactory.getBean("authorportal"));
 			} else {
 				portalTemplate = ((PortalImpl)CoreSpringFactory.getBean("homeportal"));
@@ -91,6 +90,15 @@ public class PortalMainController extends BasicController {
 		welcome.contextPut("portalEditMode", Boolean.FALSE);
 
 		putInitialPanel(welcome);
+	}
+	
+	private boolean isConsideredManager(Roles roles) {
+		return roles.isAdministrator() || roles.isGroupManager()
+				|| roles.isUserManager() || roles.isRolesManager()
+				|| roles.isLearnResourceManager() ||  roles.isCurriculumManager()
+				|| roles.isPoolManager() || roles.isQualityManager()
+				|| roles.isLectureManager() || roles.isLineManager()
+				|| roles.isPrincipal();
 	}
 	
 	@Override

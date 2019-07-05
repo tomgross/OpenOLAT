@@ -20,6 +20,7 @@
 package org.olat.course.nodes;
 
 import java.io.File;
+import java.io.OutputStream;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Date;
@@ -30,6 +31,8 @@ import java.util.Set;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
+import org.apache.logging.log4j.Logger;
+import org.olat.basesecurity.GroupRoles;
 import org.olat.basesecurity.IdentityRef;
 import org.olat.core.CoreSpringFactory;
 import org.olat.core.commons.services.notifications.NotificationsManager;
@@ -43,9 +46,9 @@ import org.olat.core.gui.control.generic.messages.MessageUIFactory;
 import org.olat.core.gui.control.generic.tabbable.TabbableController;
 import org.olat.core.gui.translator.Translator;
 import org.olat.core.id.Identity;
+import org.olat.core.id.Organisation;
 import org.olat.core.id.Roles;
 import org.olat.core.logging.OLATRuntimeException;
-import org.olat.core.logging.OLog;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.ExportUtil;
 import org.olat.core.util.FileUtils;
@@ -56,12 +59,12 @@ import org.olat.core.util.ZipUtil;
 import org.olat.core.util.io.ShieldOutputStream;
 import org.olat.core.util.vfs.VFSContainer;
 import org.olat.core.util.vfs.VFSItem;
-import org.olat.core.util.vfs.filters.SystemItemFilter;
+import org.olat.core.util.vfs.filters.VFSSystemItemFilter;
 import org.olat.course.CourseFactory;
 import org.olat.course.ICourse;
 import org.olat.course.archiver.ScoreAccountingHelper;
 import org.olat.course.assessment.AssessmentManager;
-import org.olat.course.assessment.bulk.BulkAssessmentToolController;
+import org.olat.course.assessment.ui.tool.AssessmentCourseNodeController;
 import org.olat.course.auditing.UserNodeAuditManager;
 import org.olat.course.editor.CourseEditorEnv;
 import org.olat.course.editor.NodeEditController;
@@ -75,22 +78,24 @@ import org.olat.course.nodes.gta.Task;
 import org.olat.course.nodes.gta.TaskHelper;
 import org.olat.course.nodes.gta.TaskList;
 import org.olat.course.nodes.gta.model.TaskDefinition;
-import org.olat.course.nodes.gta.ui.BulkDownloadToolController;
 import org.olat.course.nodes.gta.ui.GTAAssessmentDetailsController;
 import org.olat.course.nodes.gta.ui.GTACoachedGroupListController;
 import org.olat.course.nodes.gta.ui.GTAEditController;
-import org.olat.course.nodes.gta.ui.GTAGroupAssessmentToolController;
+import org.olat.course.nodes.gta.ui.GTAIdentityListCourseNodeController;
 import org.olat.course.nodes.gta.ui.GTARunController;
-import org.olat.course.run.environment.CourseEnvironment;
 import org.olat.course.run.navigation.NodeRunConstructionResult;
 import org.olat.course.run.scoring.AssessmentEvaluation;
 import org.olat.course.run.scoring.ScoreEvaluation;
 import org.olat.course.run.userview.NodeEvaluation;
 import org.olat.course.run.userview.UserCourseEnvironment;
 import org.olat.group.BusinessGroup;
+import org.olat.group.BusinessGroupService;
 import org.olat.modules.ModuleConfiguration;
 import org.olat.modules.assessment.AssessmentEntry;
-import org.olat.modules.assessment.AssessmentToolOptions;
+import org.olat.modules.assessment.Role;
+import org.olat.modules.assessment.model.AssessmentRunStatus;
+import org.olat.modules.assessment.ui.AssessmentToolContainer;
+import org.olat.modules.assessment.ui.AssessmentToolSecurityCallback;
 import org.olat.repository.RepositoryEntry;
 import org.olat.user.UserManager;
 
@@ -102,8 +107,8 @@ import org.olat.user.UserManager;
  */
 public class GTACourseNode extends AbstractAccessableCourseNode implements PersistentAssessableCourseNode {
 	
-	private final static OLog log = Tracing.createLoggerFor(GTACourseNode.class);
-	private final static String PACKAGE_GTA = Util.getPackageName(GTAEditController.class);
+	private static final Logger log = Tracing.createLoggerFor(GTACourseNode.class);
+	private static final String PACKAGE_GTA = Util.getPackageName(GTAEditController.class);
 
 	private static final long serialVersionUID = 1L;
 	
@@ -126,6 +131,8 @@ public class GTACourseNode extends AbstractAccessableCourseNode implements Persi
 	public static final String GTASK_REVISION_PERIOD = "grouptask.revision.period";
 	public static final String GTASK_SAMPLE_SOLUTION = "grouptask.solution";
 	public static final String GTASK_SAMPLE_SOLUTION_VISIBLE_AFTER = "grouptask.solution.visible.after";
+	public static final String GTASK_SAMPLE_SOLUTION_VISIBLE_ALL = "grouptask.solution.visible.all";
+	
 	public static final String GTASK_SAMPLE_SOLUTION_VISIBLE_AFTER_RELATIVE = "grouptask.solution.visible.after.relative";
 	public static final String GTASK_SAMPLE_SOLUTION_VISIBLE_AFTER_RELATIVE_TO = "grouptask.solution.visible.after.relative.to";
 	public static final String GTASK_GRADING = "grouptask.grading";
@@ -156,18 +163,10 @@ public class GTACourseNode extends AbstractAccessableCourseNode implements Persi
 	public static final String GTASK_MAX_SUBMITTED_DOCS = "grouptask.max.submitted.docs";
 	
 	public static final String GTASK_SUBMISSION_TEXT = "grouptask.submission.text";
-	public static final String GTASK_SUBMISSION_MAIL_CONFIRMATION = "grouptask.submission.mail.confirmation"; // needed for backwards compatibility
-	public static final String GTASK_SUBMISSION_MAIL_CONFIRMATION_OWNER = "grouptask.submission.mail.confirmation.owner";
-	public static final String GTASK_SUBMISSION_MAIL_CONFIRMATION_COACH_COURSE = "grouptask.submission.mail.confirmation.coach.course";
-	public static final String GTASK_SUBMISSION_MAIL_CONFIRMATION_COACH_GROUP = "grouptask.submission.mail.confirmation.coach.group";
-	public static final String GTASK_SUBMISSION_MAIL_CONFIRMATION_PARTICIPANT = "grouptask.submission.mail.confirmation.participant";
-
-	public static final String GTASK_ASSESSMENT_TEXT = "grouptask.assessment.text";
-	public static final String GTASK_ASSESSMENT_MAIL_CONFIRMATION_OWNER = "grouptask.assessment.mail.confirmation.owner";
-	public static final String GTASK_ASSESSMENT_MAIL_CONFIRMATION_COACH_COURSE = "grouptask.assessment.mail.confirmation.coach.course";
-	public static final String GTASK_ASSESSMENT_MAIL_CONFIRMATION_COACH_GROUP = "grouptask.assessment.mail.confirmation.coach.group";
-	public static final String GTASK_ASSESSMENT_MAIL_CONFIRMATION_PARTICIPANT = "grouptask.assessment.mail.confirmation.participant";
-
+	public static final String GTASK_SUBMISSION_MAIL_CONFIRMATION = "grouptask.submission.mail.confirmation";
+	
+	public static final String GTASK_MAX_REVISED_DOCS = "grouptask.max.revised.docs";
+	
 	public static final String GTASK_SOLUTIONS = "grouptask.solutions";
 
 
@@ -222,8 +221,8 @@ public class GTACourseNode extends AbstractAccessableCourseNode implements Persi
 			config.setStringValue(GTACourseNode.GTASK_SAMPLING, GTACourseNode.GTASK_SAMPLING_REUSE);
 			//configure grading
 			config.set(MSCourseNode.CONFIG_KEY_HAS_SCORE_FIELD, Boolean.FALSE);
-			config.set(MSCourseNode.CONFIG_KEY_SCORE_MIN, new Float(0));
-			config.set(MSCourseNode.CONFIG_KEY_SCORE_MAX, new Float(0));
+			config.set(MSCourseNode.CONFIG_KEY_SCORE_MIN, Float.valueOf(0.0f));
+			config.set(MSCourseNode.CONFIG_KEY_SCORE_MAX, Float.valueOf(0.0f));
 			config.set(MSCourseNode.CONFIG_KEY_HAS_PASSED_FIELD, Boolean.TRUE);
 			config.set(MSCourseNode.CONFIG_KEY_HAS_COMMENT_FIELD, Boolean.TRUE);
 		}
@@ -340,7 +339,7 @@ public class GTACourseNode extends AbstractAccessableCourseNode implements Persi
 			}
 			
 			List<IdentityRef> participants = gtaManager.getDuplicatedMemberships(this);
-			if(participants.size() > 0) {
+			if(!participants.isEmpty()) {
 				UserManager um = CoreSpringFactory.getImpl(UserManager.class);
 				StringBuilder sb = new StringBuilder();
 				for(IdentityRef participant:participants) {
@@ -412,7 +411,7 @@ public class GTACourseNode extends AbstractAccessableCourseNode implements Persi
 	}
 	
 	@Override
-	public void importNode(File importDirectory, ICourse course, Identity owner, Locale locale, boolean withReferences) {
+	public void importNode(File importDirectory, ICourse course, Identity owner, Organisation organisation, Locale locale, boolean withReferences) {
 		File fNodeImportDir = new File(importDirectory, getIdent());
 		GTAManager gtaManager = CoreSpringFactory.getImpl(GTAManager.class);
 		
@@ -528,7 +527,7 @@ public class GTACourseNode extends AbstractAccessableCourseNode implements Persi
 	}
 
 	@Override
-	public boolean archiveNodeData(Locale locale, ICourse course, ArchiveOptions options, ZipOutputStream exportStream, String charset) {
+	public boolean archiveNodeData(Locale locale, ICourse course, ArchiveOptions options, ZipOutputStream exportStream, String path, String charset) {
 		final GTAManager gtaManager = CoreSpringFactory.getImpl(GTAManager.class);
 		final ModuleConfiguration config =  getModuleConfiguration();
 		CourseEnvironment courseEnvironment = course.getCourseEnvironment();
@@ -540,9 +539,14 @@ public class GTACourseNode extends AbstractAccessableCourseNode implements Persi
 			prefix = "ita_";
 		}
 	
-		String dirName = prefix
+		String dirName;
+		if(StringHelper.containsNonWhitespace(path)) {
+			dirName = path;
+		} else {
+			dirName = prefix
 				+ StringHelper.transformDisplayNameToFileSystemName(getShortName())
 				+ "_" + Formatter.formatDatetimeFilesystemSave(new Date(System.currentTimeMillis()));
+		}
 		
 		TaskList taskList = gtaManager.getTaskList(courseEnvironment.getCourseGroupManager().getCourseEntry(), this);
 
@@ -554,9 +558,9 @@ public class GTACourseNode extends AbstractAccessableCourseNode implements Persi
 			String courseTitle = course.getCourseTitle();
 			String fileName = ExportUtil.createFileNameWithTimeStamp(courseTitle, "xlsx");
 			List<AssessableCourseNode> nodes = Collections.<AssessableCourseNode>singletonList(this);
-			try {
+			try(OutputStream out = new ShieldOutputStream(exportStream)) {
 				exportStream.putNextEntry(new ZipEntry(dirName + "/" + fileName));
-				ScoreAccountingHelper.createCourseResultsOverviewXMLTable(users, nodes, course, locale, new ShieldOutputStream(exportStream));
+				ScoreAccountingHelper.createCourseResultsOverviewXMLTable(users, nodes, course, locale, out);
 				exportStream.closeEntry();
 			} catch (Exception e) {
 				log.error("", e);
@@ -593,7 +597,7 @@ public class GTACourseNode extends AbstractAccessableCourseNode implements Persi
 			VFSContainer solutions = gtaManager.getSolutionsContainer(courseEnvironment, this);
 			if (solutions.exists()) {
 				String solutionDirName = dirName + "/solutions";
-				for(VFSItem solution:solutions.getItems(new SystemItemFilter())) {
+				for(VFSItem solution:solutions.getItems(new VFSSystemItemFilter())) {
 					ZipUtil.addToZip(solution, solutionDirName, exportStream);
 				}
 			}
@@ -605,12 +609,13 @@ public class GTACourseNode extends AbstractAccessableCourseNode implements Persi
 	private void archiveNodeData(ICourse course, Identity assessedIdentity, TaskList taskList, String dirName, ZipOutputStream exportStream) {
 		ModuleConfiguration config = getModuleConfiguration();
 		GTAManager gtaManager = CoreSpringFactory.getImpl(GTAManager.class);
-		CourseEnvironment courseEnvironment = course.getCourseEnvironment();
-
+		
+		String name = assessedIdentity.getUser().getLastName()
+				+ "_" + assessedIdentity.getUser().getFirstName()
+				+ "_" + assessedIdentity.getName();
+		
 		int flow = 0;//for beautiful ordering
-		String userDirName = dirName + "/"
-				+ StringHelper.transformDisplayNameToFileSystemName(assessedIdentity.getName())
-				+ "_" + assessedIdentity.getKey();
+		String userDirName = dirName + "/" + StringHelper.transformDisplayNameToFileSystemName(name);
 		
 		Task task = gtaManager.getTask(assessedIdentity, taskList);
 		if(task != null && task.getTaskName() != null && config.getBooleanSafe(GTASK_ASSIGNMENT)) {
@@ -646,14 +651,27 @@ public class GTACourseNode extends AbstractAccessableCourseNode implements Persi
 				ZipUtil.addDirectoryToZip(correctionDirectory.toPath(), correctionDirName, exportStream);
 			}
 		}
+		
+		//assessment documents
+		if(config.getBooleanSafe(MSCourseNode.CONFIG_KEY_HAS_INDIVIDUAL_ASSESSMENT_DOCS, false)) {
+			List<File> assessmentDocuments = course.getCourseEnvironment()
+					.getAssessmentManager().getIndividualAssessmentDocuments(this, assessedIdentity);
+			if(assessmentDocuments != null && !assessmentDocuments.isEmpty()) {
+				String assessmentDir = userDirName + "/"  + (++flow) + "_assessment/";
+				for(File document:assessmentDocuments) {
+					String path = assessmentDir + document.getName(); 
+					ZipUtil.addFileToZip(path, document, exportStream);
+				}
+			}
+		}
 	}
 	
-	private void archiveNodeData(ICourse course, BusinessGroup businessGroup, TaskList taskList, String dirName, ZipOutputStream exportStream) {
+	public void archiveNodeData(ICourse course, BusinessGroup businessGroup, TaskList taskList, String dirName, ZipOutputStream exportStream) {
 		ModuleConfiguration config = getModuleConfiguration();
 		GTAManager gtaManager = CoreSpringFactory.getImpl(GTAManager.class);
 		
 		int flow = 0;//for beautiful ordering
-		String groupDirName = dirName + "/"
+		String groupDirName = (StringHelper.containsNonWhitespace(dirName) ? dirName + "/" : "")
 				+ StringHelper.transformDisplayNameToFileSystemName(businessGroup.getName())
 				+ "_" + businessGroup.getKey();
 		
@@ -691,10 +709,33 @@ public class GTACourseNode extends AbstractAccessableCourseNode implements Persi
 				ZipUtil.addDirectoryToZip(correctionDirectory.toPath(), correctionDirName, exportStream);
 			}
 		}
+		
+		//assessment documents for all participants of the group
+		if(config.getBooleanSafe(MSCourseNode.CONFIG_KEY_HAS_INDIVIDUAL_ASSESSMENT_DOCS, false)) {
+			List<Identity> assessedIdentities = CoreSpringFactory.getImpl(BusinessGroupService.class)
+					.getMembers(businessGroup, GroupRoles.participant.name());
+			String assessmentDirName = groupDirName + "/"  + (++flow) + "_assessment";
+			for(Identity assessedIdentity:assessedIdentities) {
+				List<File> assessmentDocuments = course.getCourseEnvironment()
+						.getAssessmentManager().getIndividualAssessmentDocuments(this, assessedIdentity);
+				if(assessmentDocuments != null && !assessmentDocuments.isEmpty()) {
+					String name = assessedIdentity.getUser().getLastName()
+							+ "_" + assessedIdentity.getUser().getFirstName()
+							+ "_" + assessedIdentity.getName();
+					String userDirName = assessmentDirName + "/" + StringHelper.transformDisplayNameToFileSystemName(name);
+					for(File document:assessmentDocuments) {
+						String path = userDirName + "/" + document.getName(); 
+						ZipUtil.addFileToZip(path, document, exportStream);
+					}
+				}
+			}
+		}
 	}
 	
 	@Override
 	public void cleanupOnDelete(ICourse course) {
+		super.cleanupOnDelete(course);
+		
 		GTAManager gtaManager = CoreSpringFactory.getImpl(GTAManager.class);
 		CourseEnvironment courseEnvironment = course.getCourseEnvironment();
 		//tasks
@@ -710,13 +751,19 @@ public class GTACourseNode extends AbstractAccessableCourseNode implements Persi
 		gtaManager.deleteTaskList(entry, this);
 		
 		//clean subscription
-		SubscriptionContext subscriptionContext = gtaManager.getSubscriptionContext(courseEnvironment, this);
+		SubscriptionContext markedSubscriptionContext = gtaManager.getSubscriptionContext(course.getCourseEnvironment(), this, true);
+		NotificationsManager.getInstance().delete(markedSubscriptionContext);
+		SubscriptionContext subscriptionContext = gtaManager.getSubscriptionContext(course.getCourseEnvironment(), this, false);
 		NotificationsManager.getInstance().delete(subscriptionContext);
 	}
 
 	@Override
 	public boolean isAssessedBusinessGroups() {
 		return GTAType.group.name().equals(getModuleConfiguration().getStringValue(GTACourseNode.GTASK_TYPE));
+	}
+	
+	public boolean isOptional() {
+		return getModuleConfiguration().getBooleanSafe(MSCourseNode.CONFIG_KEY_OPTIONAL);
 	}
 
 	@Override
@@ -785,6 +832,16 @@ public class GTACourseNode extends AbstractAccessableCourseNode implements Persi
 	}
 
 	@Override
+	public boolean hasIndividualAsssessmentDocuments() {
+		boolean hasGrading = getModuleConfiguration().getBooleanSafe(GTASK_GRADING);
+		if (hasGrading) {
+			return getModuleConfiguration()
+					.getBooleanSafe(MSCourseNode.CONFIG_KEY_HAS_INDIVIDUAL_ASSESSMENT_DOCS, false);
+		}
+		return false;
+	}
+
+	@Override
 	public boolean hasAttemptsConfigured(){
 		return true;
 	}
@@ -797,6 +854,22 @@ public class GTACourseNode extends AbstractAccessableCourseNode implements Persi
 				|| config.getBooleanSafe(GTASK_REVIEW_AND_CORRECTION)
 				|| config.getBooleanSafe(GTASK_REVISION_PERIOD);
 	}
+	
+	@Override
+	public boolean hasCompletion() {
+		return false;
+	}
+
+	@Override
+	public Double getUserCurrentRunCompletion(UserCourseEnvironment userCourseEnvironment) {
+		throw new OLATRuntimeException(GTACourseNode.class, "No completion available in task nodes", null);
+	}
+	
+	@Override
+	public void updateCurrentCompletion(UserCourseEnvironment userCourseEnvironment, Identity identity,
+			Double currentCompletion, AssessmentRunStatus status, Role doneBy) {
+		throw new OLATRuntimeException(GTACourseNode.class, "Completion variable can't be updated in task nodes", null);
+	}
 
 	@Override
 	public boolean isEditableConfigured() {
@@ -808,6 +881,17 @@ public class GTACourseNode extends AbstractAccessableCourseNode implements Persi
 			ICourse course, UserCourseEnvironment euce) {
 		GTAEditController editCtrl = new GTAEditController(ureq, wControl, this, course, euce);
 		return new NodeEditController(ureq, wControl, course.getEditorTreeModel(), course, euce, editCtrl);
+	}
+
+	@Override
+	public boolean hasResultsDetails() {
+		return false;
+	}
+
+	@Override
+	public Controller getResultDetailsController(UserRequest ureq, WindowControl wControl,
+			UserCourseEnvironment assessedUserCourseEnv) {
+		return null;
 	}
 
 	@Override
@@ -872,35 +956,11 @@ public class GTACourseNode extends AbstractAccessableCourseNode implements Persi
 	}
 
 	@Override
-	public List<Controller> createAssessmentTools(UserRequest ureq, WindowControl wControl,
-			TooledStackedPanel stackPanel, UserCourseEnvironment coachCourseEnv, AssessmentToolOptions options) {
-		
-		ModuleConfiguration config =  getModuleConfiguration();
-		CourseEnvironment courseEnv = coachCourseEnv.getCourseEnvironment();
-		List<Controller> tools = new ArrayList<>(2);
-		if(GTAType.group.name().equals(config.getStringValue(GTACourseNode.GTASK_TYPE))
-			&& (config.getBooleanSafe(GTASK_ASSIGNMENT)
-				|| config.getBooleanSafe(GTASK_SUBMIT)
-				|| config.getBooleanSafe(GTASK_REVIEW_AND_CORRECTION)
-				|| config.getBooleanSafe(GTASK_REVISION_PERIOD))) {
-			
-			if(options.getGroup() != null && !coachCourseEnv.isCourseReadOnly()) {
-				tools.add(new GTAGroupAssessmentToolController(ureq, wControl, courseEnv, options.getGroup(), this));
-			}
-			tools.add(new BulkDownloadToolController(ureq, wControl, courseEnv, options, this));
-		} else if(GTAType.individual.name().equals(config.getStringValue(GTACourseNode.GTASK_TYPE))) {
-			if(!coachCourseEnv.isCourseReadOnly() && (config.getBooleanSafe(GTASK_REVIEW_AND_CORRECTION) || config.getBooleanSafe(GTASK_GRADING))){
-				tools.add(new BulkAssessmentToolController(ureq, wControl, courseEnv, this));
-			}
-			
-			if(config.getBooleanSafe(GTASK_ASSIGNMENT)
-					|| config.getBooleanSafe(GTASK_SUBMIT)
-					|| config.getBooleanSafe(GTASK_REVIEW_AND_CORRECTION)
-					|| config.getBooleanSafe(GTASK_REVISION_PERIOD)) {
-				tools.add(new BulkDownloadToolController(ureq, wControl, courseEnv, options, this));
-			}
-		}
-		return tools;
+	public AssessmentCourseNodeController getIdentityListController(UserRequest ureq, WindowControl wControl, TooledStackedPanel stackPanel,
+			RepositoryEntry courseEntry, BusinessGroup group, UserCourseEnvironment coachCourseEnv,
+			AssessmentToolContainer toolContainer, AssessmentToolSecurityCallback assessmentCallback) {
+		return new GTAIdentityListCourseNodeController(ureq, wControl, stackPanel,
+				courseEntry, group, this, coachCourseEnv, toolContainer, assessmentCallback);
 	}
 
 	@Override
@@ -928,6 +988,12 @@ public class GTACourseNode extends AbstractAccessableCourseNode implements Persi
 		AssessmentManager am = userCourseEnv.getCourseEnvironment().getAssessmentManager();
 		return am.getNodeComment(this, userCourseEnv.getIdentityEnvironment().getIdentity());
 	}
+	
+	@Override
+	public List<File> getIndividualAssessmentDocuments(UserCourseEnvironment userCourseEnvironment) {
+		AssessmentManager am = userCourseEnvironment.getCourseEnvironment().getAssessmentManager();
+		return am.getIndividualAssessmentDocuments(this, userCourseEnvironment.getIdentityEnvironment().getIdentity());
+	}
 
 	@Override
 	public String getUserCoachComment(UserCourseEnvironment userCourseEnv) {
@@ -950,35 +1016,60 @@ public class GTACourseNode extends AbstractAccessableCourseNode implements Persi
 
 	@Override
 	public void updateUserScoreEvaluation(ScoreEvaluation scoreEvaluation, UserCourseEnvironment userCourseEnv,
-			Identity coachingIdentity, boolean incrementAttempts) {
+			Identity coachingIdentity, boolean incrementAttempts, Role by) {
 		AssessmentManager am = userCourseEnv.getCourseEnvironment().getAssessmentManager();
 		Identity assessedIdentity = userCourseEnv.getIdentityEnvironment().getIdentity();
-		am.saveScoreEvaluation(this, coachingIdentity, assessedIdentity, new ScoreEvaluation(scoreEvaluation), userCourseEnv, incrementAttempts);
+		am.saveScoreEvaluation(this, coachingIdentity, assessedIdentity, new ScoreEvaluation(scoreEvaluation), userCourseEnv, incrementAttempts, by);
 	}
 
 	@Override
 	public void updateUserUserComment(String userComment, UserCourseEnvironment userCourseEnv, Identity coachingIdentity) {
-		AssessmentManager am = userCourseEnv.getCourseEnvironment().getAssessmentManager();
-		Identity assessedIdentity = userCourseEnv.getIdentityEnvironment().getIdentity();
 		if (userComment != null) {
+			AssessmentManager am = userCourseEnv.getCourseEnvironment().getAssessmentManager();
+			Identity assessedIdentity = userCourseEnv.getIdentityEnvironment().getIdentity();
 			am.saveNodeComment(this, coachingIdentity, assessedIdentity, userComment);
 		}
 	}
-
+	
 	@Override
-	public void incrementUserAttempts(UserCourseEnvironment userCourseEnv) {
-		AssessmentManager am = userCourseEnv.getCourseEnvironment().getAssessmentManager();
-		Identity assessedIdentity = userCourseEnv.getIdentityEnvironment().getIdentity();
-		am.incrementNodeAttempts(this, assessedIdentity, userCourseEnv);
+	public void addIndividualAssessmentDocument(File document, String filename, UserCourseEnvironment userCourseEnvironment, Identity coachingIdentity) {
+		if(document != null) {
+			AssessmentManager am = userCourseEnvironment.getCourseEnvironment().getAssessmentManager();
+			Identity assessedIdentity = userCourseEnvironment.getIdentityEnvironment().getIdentity();
+			am.addIndividualAssessmentDocument(this, coachingIdentity, assessedIdentity, document, filename);
+		}
 	}
 
 	@Override
-	public void updateUserAttempts(Integer userAttempts, UserCourseEnvironment userCourseEnv, Identity coachingIdentity) {
+	public void removeIndividualAssessmentDocument(File document, UserCourseEnvironment userCourseEnvironment, Identity coachingIdentity) {
+		if(document != null) {
+			AssessmentManager am = userCourseEnvironment.getCourseEnvironment().getAssessmentManager();
+			Identity assessedIdentity = userCourseEnvironment.getIdentityEnvironment().getIdentity();
+			am.removeIndividualAssessmentDocument(this, coachingIdentity, assessedIdentity, document);
+		}
+	}
+
+	@Override
+	public void incrementUserAttempts(UserCourseEnvironment userCourseEnv, Role by) {
+		AssessmentManager am = userCourseEnv.getCourseEnvironment().getAssessmentManager();
+		Identity assessedIdentity = userCourseEnv.getIdentityEnvironment().getIdentity();
+		am.incrementNodeAttempts(this, assessedIdentity, userCourseEnv, by);
+	}
+
+	@Override
+	public void updateUserAttempts(Integer userAttempts, UserCourseEnvironment userCourseEnv, Identity coachingIdentity, Role by) {
 		if (userAttempts != null) {
 			AssessmentManager am = userCourseEnv.getCourseEnvironment().getAssessmentManager();
 			Identity assessedIdentity = userCourseEnv.getIdentityEnvironment().getIdentity();
-			am.saveNodeAttempts(this, coachingIdentity, assessedIdentity, userAttempts);
+			am.saveNodeAttempts(this, coachingIdentity, assessedIdentity, userAttempts, by);
 		}
+	}
+	
+	@Override
+	public void updateLastModifications(UserCourseEnvironment userCourseEnvironment, Identity identity, Role by) {
+		AssessmentManager am = userCourseEnvironment.getCourseEnvironment().getAssessmentManager();
+		Identity assessedIdentity = userCourseEnvironment.getIdentityEnvironment().getIdentity();
+		am.updateLastModifications(this, assessedIdentity, userCourseEnvironment, by);
 	}
 
 	@Override

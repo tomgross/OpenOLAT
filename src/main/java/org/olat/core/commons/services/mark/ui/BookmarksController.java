@@ -56,8 +56,8 @@ import org.olat.core.gui.control.generic.modal.DialogBoxUIFactory;
 import org.olat.core.gui.translator.Translator;
 import org.olat.core.util.Util;
 import org.olat.repository.RepositoryEntry;
-import org.olat.repository.RepositoryEntryStatus;
 import org.olat.repository.RepositoryManager;
+import org.olat.repository.RepositoryModule;
 
 /**
  * Description:
@@ -226,8 +226,8 @@ public class BookmarksController extends BasicController {
 		 */
 		private String getBookmarkTitle(Bookmark bookmark) {
 			String title = bookmark.getTitle();
-			if (new RepositoryEntryStatus(bookmark.getStatusCode()).isClosed() || new RepositoryEntryStatus(bookmark.getStatusCode()).isUnpublished()) {
-				Translator pT = Util.createPackageTranslator(RepositoryEntryStatus.class, locale);
+			if (bookmark.getEntryStatus().decommissioned()) {
+				Translator pT = Util.createPackageTranslator(RepositoryModule.class, locale);
 				title = "[" + pT.translate("title.prefix.closed") + "] ".concat(title);
 			}
 			return title;

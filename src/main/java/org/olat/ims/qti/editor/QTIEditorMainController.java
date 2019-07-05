@@ -103,6 +103,7 @@ import org.olat.fileresource.types.FileResource;
 import org.olat.fileresource.types.ImsQTI21Resource;
 import org.olat.ims.qti.QTIChangeLogMessage;
 import org.olat.ims.qti.QTIConstants;
+import org.olat.ims.qti.QTIModule;
 import org.olat.ims.qti.QTIResultManager;
 import org.olat.ims.qti.editor.beecom.objects.Assessment;
 import org.olat.ims.qti.editor.beecom.objects.ChoiceQuestion;
@@ -134,6 +135,7 @@ import org.olat.modules.qpool.QuestionItemView;
 import org.olat.modules.qpool.ui.SelectItemController;
 import org.olat.modules.qpool.ui.events.QItemViewEvent;
 import org.olat.repository.RepositoryEntry;
+import org.olat.repository.RepositoryEntryRelationType;
 import org.olat.repository.RepositoryManager;
 import org.olat.repository.RepositoryService;
 import org.olat.repository.handlers.RepositoryHandler;
@@ -240,6 +242,7 @@ public class QTIEditorMainController extends MainLayoutBasicController implement
 	private Link previewLink, exportPoolLink, convertQTI21Link, exportDocLink, importTableLink, closeLink;
 	private Link addPoolLink, addSectionLink, addSCLink, addMCLink, addFIBLink, addKPrimLink, addEssayLink;
 	private Link deleteLink, moveLink, copyLink;
+	private Link convertQTI21Button;
 
 	private QTIEditorTreeModel menuTreeModel;
 	private DialogBoxController deleteDialog;
@@ -247,6 +250,7 @@ public class QTIEditorMainController extends MainLayoutBasicController implement
 	private IQDisplayController previewController;
 	private LockResult lockEntry;
 	private boolean restrictedEdit;
+	private boolean blockedEdit;
 	private Map<String, Memento> history = null;
 	private String startedWithTitle;
 	private List<Reference> referencees;
@@ -269,7 +273,11 @@ public class QTIEditorMainController extends MainLayoutBasicController implement
 	private RepositoryEntry qtiEntry;
 
 	@Autowired
+	private QTIModule qtiModule;
+	@Autowired
 	private UserManager userManager;
+	@Autowired
+	private QuotaManager quotaManager;
 	@Autowired
 	private QTIResultManager qtiResultManager;
 	@Autowired
@@ -287,6 +295,7 @@ public class QTIEditorMainController extends MainLayoutBasicController implement
 		super(ureq, wControl);
 		
 		this.qtiEntry = qtiEntry;
+		blockedEdit = !qtiModule.isEditResourcesEnabled();
 
 		for(Iterator<Reference> iter = referencees.iterator(); iter.hasNext(); ) {
 			Reference ref = iter.next();
@@ -324,7 +333,7 @@ public class QTIEditorMainController extends MainLayoutBasicController implement
 		this.referencees = referencees;
 		
 
-		Quota defQuota = QuotaManager.getInstance().getDefaultQuota(QuotaConstants.IDENTIFIER_DEFAULT_REPO);
+		Quota defQuota = quotaManager.getDefaultQuota(QuotaConstants.IDENTIFIER_DEFAULT_REPO);
 		//unlimited for author
 		Quota quota = new QuotaImpl(defQuota.getPath(), defQuota.getQuotaKB() * 100, defQuota.getUlLimitKB() * 100);
 		VFSSecurityCallback secCallback = new FullAccessWithQuotaCallback(quota, null);
@@ -383,8 +392,11 @@ public class QTIEditorMainController extends MainLayoutBasicController implement
 		} else {
 			// start with a fresh history. Editor is resumed but no changes were made
 			// so far.
-			history = new HashMap<String, Memento>();
+			history = new HashMap<>();
 		}
+		
+		convertQTI21Button = LinkFactory.createButton("tools.convert.qti21", main, this);
+		convertQTI21Button.setIconLeftCSS("o_icon o_FileResource-IMSQTI21_icon");
 
 		// The menu tree model represents the structure of the qti document.
 		// All insert/move operations on the model are propagated to the structure
@@ -408,7 +420,7 @@ public class QTIEditorMainController extends MainLayoutBasicController implement
 		populateToolC(); // qtiPackage must be loaded previousely
 		
 		// Add css background
-		if (restrictedEdit) {
+		if (restrictedEdit || blockedEdit) {
 			addSectionLink.setEnabled(false);
 			addSCLink.setEnabled(false);
 			addMCLink.setEnabled(false);
@@ -422,6 +434,10 @@ public class QTIEditorMainController extends MainLayoutBasicController implement
 			columnLayoutCtr.addCssClassToMain("o_editor_qti_correct");
 		} else {
 			columnLayoutCtr.addCssClassToMain("o_editor_qti");
+		}
+		if(blockedEdit) {
+			importTableLink.setEnabled(false);
+			exportPoolLink.setEnabled(false);
 		}
 
 		deleteLink.setEnabled(false);
@@ -450,7 +466,7 @@ public class QTIEditorMainController extends MainLayoutBasicController implement
 		boolean warningEssay = false;
 		if(qtiPackage.getQTIDocument() != null && !qtiPackage.getQTIDocument().isSurvey()) {
 			//check if the test contains some essay
-			List<TreeNode> flattedTree = new ArrayList<TreeNode>();
+			List<TreeNode> flattedTree = new ArrayList<>();
 			TreeHelper.makeTreeFlat(menuTreeModel.getRootNode(), flattedTree);
 			for(TreeNode node:flattedTree) {
 				Object uo = node.getUserObject();
@@ -460,7 +476,7 @@ public class QTIEditorMainController extends MainLayoutBasicController implement
 				}
 			}
 		}
-		main.contextPut("warningEssay", new Boolean(warningEssay));
+		main.contextPut("warningEssay", Boolean.valueOf(warningEssay));
 	}
 
 	@Override
@@ -498,10 +514,10 @@ public class QTIEditorMainController extends MainLayoutBasicController implement
 					copyLink.setEnabled(false);
 					stackedPanel.setDirty(true);
 				} else {
-					deleteLink.setEnabled(true && !restrictedEdit);
-					moveLink.setEnabled(true && !restrictedEdit);
+					deleteLink.setEnabled(!restrictedEdit && !blockedEdit);
+					moveLink.setEnabled(!restrictedEdit && !blockedEdit);
 					if (clickedNode instanceof ItemNode) {
-						copyLink.setEnabled(true && !restrictedEdit);
+						copyLink.setEnabled(!restrictedEdit && !blockedEdit);
 					} else {
 						copyLink.setEnabled(false);
 					}
@@ -528,7 +544,7 @@ public class QTIEditorMainController extends MainLayoutBasicController implement
 					// sein wenn man nur ein Menü braucht.
 					// TODO:pb:a extend ContentOnlyController to work also if menu and
 					// tool are null, hence only content is desired
-					String userN = ureq.getIdentity().getUser().getProperty(UserConstants.EMAIL, ureq.getLocale());
+					String userN = UserManager.getInstance().getUserDisplayEmail(ureq.getIdentity(), ureq.getLocale());
 					String lastN = ureq.getIdentity().getUser().getProperty(UserConstants.LASTNAME, ureq.getLocale());
 					String firstN = ureq.getIdentity().getUser().getProperty(UserConstants.FIRSTNAME, ureq.getLocale());
 					String changeMsg = "Changed by: " + firstN + " " + lastN + " [" + userN + "]\n";
@@ -648,7 +664,7 @@ public class QTIEditorMainController extends MainLayoutBasicController implement
 			doExportQItem();
 		} else if (exportDocLink == source) {
 			doExportDocx(ureq);
-		} else if (convertQTI21Link == source) {
+		} else if (convertQTI21Link == source || convertQTI21Button == source) {
 			doConvertToQTI21(ureq);
 		} else if (importTableLink == source) {
 			doImportTable(ureq);
@@ -794,7 +810,7 @@ public class QTIEditorMainController extends MainLayoutBasicController implement
 				QTIChangeLogMessage clm = new QTIChangeLogMessage(changeLog, chngMsgFrom.hasInformLearners());
 				qtiPackage.commitChangelog(clm);
 				StringBuilder traceMsg = new StringBuilder(chngMsgFrom.hasInformLearners() ? "Visible for ALL \n" : "Visible for GROUP only \n");
-				logAudit(traceMsg.append(changeLog).toString(), null);
+				logAudit(traceMsg.append(changeLog).toString());
 				// save, remove locks and tmp files
 				saveAndExit(ureq);
 			}
@@ -810,7 +826,7 @@ public class QTIEditorMainController extends MainLayoutBasicController implement
 					changeEmail.setBodyText("<p>" + userMsg + "</p>\n<pre>" + changeLog + "</pre>");
 				}// else nothing was added!
 				changeEmail.setSubject("Change log for " + startedWithTitle);
-				cfc = new ContactFormController(ureq, getWindowControl(), true, false, false, changeEmail);
+				cfc = new ContactFormController(ureq, getWindowControl(), true, false, false, changeEmail, null);
 				listenTo(cfc);
 				exitPanel.setContent(cfc.getInitialComponent());
 				return;
@@ -1003,9 +1019,6 @@ public class QTIEditorMainController extends MainLayoutBasicController implement
 		int targetPos = tp.getChildpos();
 		ItemNode selectedNode = (ItemNode) menuTree.getSelectedNode();
 		// only items are moveable
-		// use XStream instead of ObjectCloner
-		// Item qtiItem =
-		// (Item)xstream.fromXML(xstream.toXML(selectedNode.getUnderlyingQTIObject()));
 		Item toClone = (Item) selectedNode.getUnderlyingQTIObject();
 		Item qtiItem = (Item) XStreamHelper.xstreamClone(toClone);
 		// copy flow label class too, olat-2791
@@ -1207,7 +1220,7 @@ public class QTIEditorMainController extends MainLayoutBasicController implement
 		addItemTools.addComponent(new Spacer(""));
 		addPoolLink = LinkFactory.createToolLink(CMD_TOOLS_ADD_QPOOL, translate("tools.import.qpool"), this, "o_mi_qpool_import");
 		addItemTools.addComponent(addPoolLink);
-
+	
 		importTableLink = LinkFactory.createToolLink(CMD_TOOLS_IMPORT_TABLE, translate("tools.import.table"), this, "o_mi_table_import");
 		importTableLink.setIconLeftCSS("o_icon o_icon_table o_icon-fw");
 		addItemTools.addComponent(importTableLink);
@@ -1274,7 +1287,7 @@ public class QTIEditorMainController extends MainLayoutBasicController implement
 		
 		// add qti resource owners as group
 		ContactList cl = new ContactList("qtiPkgOwners");
-		cl.addAllIdentites(repositoryService.getMembers(myEntry, GroupRoles.owner.name()));
+		cl.addAllIdentites(repositoryService.getMembers(myEntry, RepositoryEntryRelationType.all, GroupRoles.owner.name()));
 		changeEmail.addEmailTo(cl);
 
 		StringBuilder result = new StringBuilder();
@@ -1305,8 +1318,8 @@ public class QTIEditorMainController extends MainLayoutBasicController implement
 				// the course owners
 				RepositoryEntry entry = repositoryManager.lookupRepositoryEntry(course, false);
 				if(entry != null) {//OO-1300
-					List<Identity> stakeHoldersIds = repositoryService.getMembers(entry, GroupRoles.owner.name());
-					if(stakeHoldersIds != null && stakeHoldersIds.size() > 0) {
+					List<Identity> stakeHoldersIds = repositoryService.getMembers(entry, RepositoryEntryRelationType.all, GroupRoles.owner.name());
+					if(stakeHoldersIds != null && !stakeHoldersIds.isEmpty()) {
 						// add stakeholders as group
 						cl = new ContactList(courseTitle);
 						cl.addAllIdentites(stakeHoldersIds);
@@ -1460,6 +1473,10 @@ public class QTIEditorMainController extends MainLayoutBasicController implement
 	 */
 	public boolean isRestrictedEdit() {
 		return restrictedEdit;
+	}
+	
+	public boolean isBlockedEdit() {
+		return blockedEdit;
 	}
 
 	public boolean isLockedSuccessfully() {

@@ -25,7 +25,10 @@ import static org.olat.core.commons.persistence.PersistenceHelper.makeFuzzyQuery
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 import javax.persistence.TypedQuery;
 
@@ -38,7 +41,6 @@ import org.olat.core.id.Identity;
 import org.olat.core.id.OLATResourceable;
 import org.olat.core.util.StringHelper;
 import org.olat.core.util.resource.OresHelper;
-import org.olat.modules.forms.manager.EvaluationFormSessionDAO;
 import org.olat.modules.portfolio.AssignmentStatus;
 import org.olat.modules.portfolio.BinderRef;
 import org.olat.modules.portfolio.Page;
@@ -47,11 +49,13 @@ import org.olat.modules.portfolio.PageImageAlign;
 import org.olat.modules.portfolio.PagePart;
 import org.olat.modules.portfolio.PageStatus;
 import org.olat.modules.portfolio.PortfolioRoles;
+import org.olat.modules.portfolio.PortfolioService;
 import org.olat.modules.portfolio.Section;
 import org.olat.modules.portfolio.SectionRef;
 import org.olat.modules.portfolio.model.AbstractPart;
 import org.olat.modules.portfolio.model.PageBodyImpl;
 import org.olat.modules.portfolio.model.PageImpl;
+import org.olat.repository.RepositoryEntryRef;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
@@ -71,7 +75,7 @@ public class PageDAO {
 	@Autowired
 	private UserCommentsDAO userCommentsDAO;
 	@Autowired
-	private EvaluationFormSessionDAO evaluationFormSessionDao;
+	private PortfolioService portfolioService;
 
 	/**
 	 * 
@@ -174,6 +178,23 @@ public class PageDAO {
 			.createQuery(sb.toString(), Page.class)
 			.setParameter("sectionKey", section.getKey())
 			.getResultList();
+	}
+	
+	public int countOwnedPages(IdentityRef owner) {
+		StringBuilder sb = new StringBuilder();
+		sb.append("select count(distinct page.key) from pfpage as page")
+		  .append(" left join page.section as section")
+		  .append(" left join section.binder as binder")
+		  .append(" where exists (select pageMember from bgroupmember as pageMember")
+		  .append("     inner join pageMember.identity as ident on (ident.key=:ownerKey and pageMember.role='").append(PortfolioRoles.owner.name()).append("')")
+		  .append("  	where pageMember.group.key=page.baseGroup.key or pageMember.group.key=binder.baseGroup.key")
+		  .append(" )");
+
+		List<Long> count = dbInstance.getCurrentEntityManager()
+			.createQuery(sb.toString(), Long.class)
+			.setParameter("ownerKey", owner.getKey())
+			.getResultList();
+		return count != null && !count.isEmpty() && count.get(0) != null ? count.get(0).intValue() : 0;
 	}
 	
 	public List<Page> getOwnedPages(IdentityRef owner, String searchString) {
@@ -279,8 +300,25 @@ public class PageDAO {
 		return pages == null || pages.isEmpty() ? null : pages.get(0);
 	}
 	
+	public List<Page> loadByKeys(List<Long> keys) {
+		if(keys == null || keys.isEmpty()) return new ArrayList<>();
+		
+		StringBuilder sb = new StringBuilder(512);
+		sb.append("select page from pfpage as page")
+		  .append(" inner join fetch page.baseGroup as baseGroup")
+		  .append(" left join fetch page.section as section")
+		  .append(" left join fetch section.binder as binder")
+		  .append(" left join fetch page.body as body")
+		  .append(" where page.key in (:pageKeys)");
+		
+		return dbInstance.getCurrentEntityManager()
+			.createQuery(sb.toString(), Page.class)
+			.setParameter("pageKeys", keys)
+			.getResultList();
+	}
+	
 	public Page loadByBody(PageBody body) {
-		StringBuilder sb = new StringBuilder();
+		StringBuilder sb = new StringBuilder(512);
 		sb.append("select page from pfpage as page")
 		  .append(" inner join fetch page.baseGroup as baseGroup")
 		  .append(" left join fetch page.section as section")
@@ -296,37 +334,118 @@ public class PageDAO {
 	}
 	
 	public PageBody loadPageBodyByKey(Long key) {
-		StringBuilder sb = new StringBuilder();
-		sb.append("select body from pfpagebody as body")
-		  .append(" where body.key=:bodyKey");
+		String query = "select body from pfpagebody as body where body.key=:bodyKey";
 		
 		List<PageBody> bodies = dbInstance.getCurrentEntityManager()
-			.createQuery(sb.toString(), PageBody.class)
+			.createQuery(query, PageBody.class)
 			.setParameter("bodyKey", key)
 			.getResultList();
 		return bodies == null || bodies.isEmpty() ? null : bodies.get(0);
 	}
 	
-	public Page getLastPage(Identity owner, boolean mandatoryBinder) {
-		StringBuilder sb = new StringBuilder();
-		sb.append("select page from pfpage as page")
-		  .append(" inner join fetch page.baseGroup as baseGroup")
-		  .append(" ").append(mandatoryBinder ? "inner" : "left").append(" join fetch page.section as section")
-		  .append(" ").append(mandatoryBinder ? "inner" : "left").append(" join fetch section.binder as binder")
-		  .append(" left join fetch page.body as body")
-		  .append(" where exists (select pageMember from bgroupmember as pageMember")
-		  .append("     inner join pageMember.identity as ident on (ident.key=:ownerKey and pageMember.role='").append(PortfolioRoles.owner.name()).append("')")
-		  .append("  	where pageMember.group.key=page.baseGroup.key or pageMember.group.key=binder.baseGroup.key")
-		  .append(" )")
-		  .append(" order by page.lastModified desc");
-		
-		List<Page> pages = dbInstance.getCurrentEntityManager()
-			.createQuery(sb.toString(), Page.class)
-			.setParameter("ownerKey", owner.getKey())
+	public boolean isFormEntryInUse(RepositoryEntryRef formEntry) {
+		StringBuilder sb = new StringBuilder(128);
+		sb.append("select part.key from pfformpart as part")
+		  .append(" where part.formEntry.key=:formEntryKey");
+
+		List<Long> counts = dbInstance.getCurrentEntityManager()
+			.createQuery(sb.toString(), Long.class)
+			.setParameter("formEntryKey", formEntry.getKey())
 			.setFirstResult(0)
 			.setMaxResults(1)
 			.getResultList();
-		return pages == null || pages.isEmpty() ? null : pages.get(0);
+		return counts != null && !counts.isEmpty() && counts.get(0) != null && counts.get(0).intValue() >= 0;
+	}
+	
+	public List<Page> getLastPages(IdentityRef owner, int maxResults) {
+		StringBuilder sc = new StringBuilder(1024);
+		sc.append("select page.key, page.lastModified, body.lastModified, part.lastModified")
+		  .append(" from pfpage as page")
+		  .append(" inner join page.body as body")
+		  .append(" left join page.section as section")
+		  .append(" left join section.binder as binder")
+		  .append(" left join body.parts as part")
+		  .append(" where exists (select pageMember from bgroupmember as pageMember")
+		  .append("     inner join pageMember.identity as ident on (ident.key=:ownerKey and pageMember.role='").append(PortfolioRoles.owner.name()).append("')")
+		  .append("  	where pageMember.group.key=page.baseGroup.key or pageMember.group.key=binder.baseGroup.key")
+		  .append(" )");
+		
+		List<Object[]> rawLastModifieds = dbInstance.getCurrentEntityManager()
+			.createQuery(sc.toString(), Object[].class)
+			.setParameter("ownerKey", owner.getKey())
+			.setFirstResult(0)
+			.getResultList();
+		
+		Map<Long, PageLastModified> lastModifieMap = new HashMap<>();
+		for(Object[] rawLastModified:rawLastModifieds) {
+			Long pageKey = (Long)rawLastModified[0];
+			Date lastModified = (Date)rawLastModified[1];
+			Date bodyLastModified = (Date)rawLastModified[2];
+			Date partLastModified = (Date)rawLastModified[3];
+			if(bodyLastModified != null && bodyLastModified.after(lastModified)) {
+				lastModified = bodyLastModified;
+			}
+			if(partLastModified != null && partLastModified.after(lastModified)) {
+				lastModified = partLastModified;
+			}
+			
+			PageLastModified pageLastModified = lastModifieMap
+					.computeIfAbsent(pageKey, PageLastModified::new);
+			if(pageLastModified.getLastModified() == null || lastModified.after(pageLastModified.getLastModified())) {
+				pageLastModified.setLastModified(lastModified);
+			}
+		}
+		
+		List<PageLastModified> lastPages = new ArrayList<>(lastModifieMap.values());
+		Collections.sort(lastPages);
+		Collections.reverse(lastPages);
+		List<Long> lastPageKeys = new ArrayList<>(maxResults);
+		for(int i=0; i<lastPages.size() && i < maxResults; i++) {
+			lastPageKeys.add(lastPages.get(i).getPageKey());
+		}
+		List<Page> pages = loadByKeys(lastPageKeys);
+		if(pages.size() > 1) {
+			Map<Long,Page> pageMap = pages.stream()
+				.collect(Collectors.toMap(Page::getKey, p -> p, (u, v) -> u));
+			
+			List<Page> orderedPages = new ArrayList<>(pages.size());
+			for(PageLastModified lastPage:lastPages) {
+				Page page = pageMap.get(lastPage.getPageKey());
+				if(page != null) {
+					orderedPages.add(page);
+				}
+			}
+			pages = orderedPages;
+		}
+		
+		return pages;
+	}
+	
+	private static class PageLastModified implements Comparable<PageLastModified> {
+		
+		private final Long pageKey;
+		private Date lastModified;
+		
+		private PageLastModified(Long pageKey) {
+			this.pageKey = pageKey;
+		}
+
+		public Long getPageKey() {
+			return pageKey;
+		}
+
+		public Date getLastModified() {
+			return lastModified;
+		}
+
+		public void setLastModified(Date lastModified) {
+			this.lastModified = lastModified;
+		}
+
+		@Override
+		public int compareTo(PageLastModified o) {
+			return lastModified.compareTo(o.lastModified);
+		}
 	}
 	
 	public Page removePage(Page page) {
@@ -417,6 +536,30 @@ public class PageDAO {
 		}
 	}
 	
+	public void movePart(PageBody body, PagePart part, PagePart sibling, boolean after) {
+		body.getParts().size();
+		body.getParts().remove(part);
+		
+		int index;
+		if(sibling == null) {
+			index = body.getParts().size();
+		} else {
+			index = body.getParts().indexOf(sibling);
+		}
+		if(after) {
+			index++;
+		}
+		
+		List<PagePart> parts = body.getParts();
+		if(index >= 0 && index < parts.size()) {
+			parts.add(index, part);
+		} else {
+			parts.add(part);
+		}
+		((PageBodyImpl)body).setLastModified(new Date());
+		dbInstance.getCurrentEntityManager().merge(body);
+	}
+	
 	public List<PagePart> getParts(PageBody body) {
 		StringBuilder sb = new StringBuilder();
 		sb.append("select part from pfpagepart as part")
@@ -443,6 +586,8 @@ public class PageDAO {
 	 * @return
 	 */
 	public int deletePage(Page page) {
+		if(page == null || page.getKey() == null) return 0;//nothing to do
+		
 		OLATResourceable ores = OresHelper.createOLATResourceableInstance(Page.class, page.getKey());
 		
 		PageBody body = page.getBody();
@@ -458,17 +603,13 @@ public class PageDAO {
 				.setParameter("pageKey", page.getKey())
 				.executeUpdate();
 		
-		int evaluations = 0;
-		if(assignments > 0) {
-			// delete sessions and responses	
-			evaluations = evaluationFormSessionDao.deleteSessionForPortfolioEvaluation(body);
-		}
+		portfolioService.deleteSurvey(body);
 		
 		dbInstance.getCurrentEntityManager().remove(page);
 		dbInstance.getCurrentEntityManager().remove(body);
 		
 		int comments = userCommentsDAO.deleteAllComments(ores, null);
 
-		return comments + parts + evaluations + assignments + 2;
+		return comments + parts + assignments + 2;
 	}
 }

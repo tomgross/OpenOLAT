@@ -28,7 +28,6 @@ package org.olat.core.gui.components.form.flexible.impl.elements;
 import java.util.Calendar;
 import java.util.Date;
 
-import org.apache.commons.lang.StringEscapeUtils;
 import org.olat.core.gui.components.Component;
 import org.olat.core.gui.components.DefaultComponentRenderer;
 import org.olat.core.gui.components.form.flexible.impl.FormJSHelper;
@@ -37,11 +36,10 @@ import org.olat.core.gui.render.Renderer;
 import org.olat.core.gui.render.StringOutput;
 import org.olat.core.gui.render.URLBuilder;
 import org.olat.core.gui.translator.Translator;
+import org.olat.core.util.StringHelper;
 import org.olat.core.util.Util;
 
 /**
- * Description:<br>
- * TODO: patrickb Class Description for JSDateChooserRenderer
  * <P>
  * Initial Date: 19.01.2007 <br>
  * 
@@ -82,12 +80,12 @@ class JSDateChooserRenderer extends DefaultComponentRenderer {
 
 			//date chooser button
 			sb.append("<span class='input-group-addon'>")
-			  .append("<i class='o_icon o_icon_calendar' id=\"").append(triggerId).append("\" title=\"").append(StringEscapeUtils.escapeHtml(sourceTranslator.translate("calendar.choose"))).append("\"")
+			  .append("<i class='o_icon o_icon_calendar' id=\"").append(triggerId).append("\" title=\"").appendHtmlEscaped(sourceTranslator.translate("calendar.choose")).append("\"")
 			  .append(" onclick=\"jQuery('#").append(receiverId).append("').datepicker('show');\"")
-			  .append("></i></span>")
+			  .append(">\u00A0</i></span>")
 			  .append("</div></div>");//input-group
 			// date chooser javascript
-			sb.append("<script type=\"text/javascript\">\n /* <![CDATA[ */ \n")
+			sb.append("<script>\n /* <![CDATA[ */ \n")
 				.append("jQuery(function(){ jQuery('#").append(receiverId).append("').datepicker({\n")
 				.append("  dateFormat:'").append(format).append("',\n")
 				.append("  firstDay:1,\n")
@@ -114,11 +112,18 @@ class JSDateChooserRenderer extends DefaultComponentRenderer {
 				  .append("'").append(dateTranslator.translate("day.short.fr")).append("',")
 				  .append("'").append(dateTranslator.translate("day.short.sa")).append("'")
 				.append("],\n")
-				.append("  showOtherMonths:true,\n")
-				.append("  onSelect:function(){\n")
-				.append("    setFlexiFormDirty('").append(te.getRootForm().getDispatchFieldId()).append("');\n")
-				.append("    jQuery(this).change();\n")
-				.append("  }\n")
+				.append("  showOtherMonths:true,\n");
+			if(jsdcc.getFormItem().getDefaultValue() != null) {
+				String id = ((JSDateChooser)jsdcc.getFormItem().getDefaultValue()).getTextElementComponent().getFormDispatchId();
+				sb.append("  beforeShow:function(el, inst) {\n")
+				  .append("    var defDate = jQuery('#").append(id).append("').datepicker('getDate');\n")
+				  .append("    jQuery('#").append(receiverId).append("').datepicker('option', 'defaultDate', defDate);")
+				  .append("  },\n");
+			}
+			sb.append("  onSelect:function(){\n")
+			  .append("    setFlexiFormDirty('").append(te.getRootForm().getDispatchFieldId()).append("');\n")
+			  .append("    jQuery(this).change();\n")
+			  .append("  }\n")
 			  .append("})});")
 			  .append("\n/* ]]> */ \n</script>");
 			
@@ -127,7 +132,12 @@ class JSDateChooserRenderer extends DefaultComponentRenderer {
 				int hour, minute;
 				Date currentDate = jsdcc.getDate();
 				if(currentDate == null) {
-					hour = minute = 0;
+					if(jsdcc.isDefaultTimeAtEndOfDay()) {
+						hour = 23;
+						minute = 59;
+					} else {
+						hour = minute = 0;
+					}
 				} else {
 					Calendar cal = Calendar.getInstance();
 					cal.setTime(currentDate);
@@ -145,14 +155,6 @@ class JSDateChooserRenderer extends DefaultComponentRenderer {
 		}
 		sb.append("</div>");
 	}
-	
-	private StringOutput renderMS(StringOutput dc, String id, int time) {
-		dc.append("<input class='form-control o_date_ms' type='text' id='").append(id).append("'")
-	      .append(" name=\"").append(id).append("\" size='2'")
-		  .append(" maxlength='2' value='").append(time > 9 ? "" + time : "0" + time).append("'")
-		  .append(" />");
-		return dc;
-	}
 
 	private void renderTextElementReadonly(StringOutput sb, JSDateChooserComponent jsdcc, int maxlength) {
 		TextElementComponent teC = jsdcc.getTextElementComponent();
@@ -166,7 +168,7 @@ class JSDateChooserRenderer extends DefaultComponentRenderer {
 		if(value == null){
 			value = "";
 		}
-		value = StringEscapeUtils.escapeHtml(value);
+		value = StringHelper.escapeHtml(value);
 		sb.append("<span id='").append(id).append("_wp' ")
 		  .append(FormJSHelper.getRawJSFor(te.getRootForm(), id, te.getAction()))
 		  .append("title=\"").append(value).append("\">");
@@ -182,7 +184,7 @@ class JSDateChooserRenderer extends DefaultComponentRenderer {
 				shorter += "&nbsp;";
 			}
 		}				
-		sb.append("<input id='").append(id).append("' disabled='disabled' class='o_form_element_disabled' size=\"")
+		sb.append("<input id='").append(id).append("' disabled='disabled' class='form-control o_disabled' size=\"")
 		  .append(te.displaySize)
 		  .append("\" value=\"").append(shorter).append("\" /></span>");
 		
@@ -197,15 +199,28 @@ class JSDateChooserRenderer extends DefaultComponentRenderer {
 				hour = cal.get(Calendar.HOUR_OF_DAY);
 				minute = cal.get(Calendar.MINUTE);
 			}
-			sb.append("<span class='o_form_element_disabled'> ")
-			  .append(hour)
-			  .append(" : ");
-			if(minute < 10) {
-				sb.append("0");
-			}
-			sb.append(minute)
-			  .append("</span>");
+			sb.append("<div class='form-group o_date_ms'>");
+			renderMSDisabled(sb, "o_dch_" + id, hour);
+			sb.append(" : ");
+			renderMSDisabled(sb, "o_dcm_" + id, minute);
+			sb.append("</div>");
 		}
+	}
+	
+	private StringOutput renderMS(StringOutput dc, String id, int time) {
+		dc.append("<input class='form-control o_date_ms' type='text' id='").append(id).append("'")
+	      .append(" name=\"").append(id).append("\" size='2'")
+		  .append(" maxlength='2' value='").append(time > 9 ? "" + time : "0" + time).append("'")
+		  .append(" />");
+		return dc;
+	}
+	
+	private StringOutput renderMSDisabled(StringOutput dc, String id, int time) {
+		dc.append("<input class='form-control o_disabled o_date_ms' disabled='disabled' type='text' id='").append(id).append("'")
+	      .append(" name=\"").append(id).append("\" size='2'")
+		  .append(" maxlength='2' value='").append(time > 9 ? "" + time : "0" + time).append("'")
+		  .append(" />");
+		return dc;
 	}
 	
 	private void renderTextElement(StringOutput sb, TextElementComponent teC, int maxlength) {
@@ -219,7 +234,7 @@ class JSDateChooserRenderer extends DefaultComponentRenderer {
 		  .append(id).append("\" name=\"").append(id)
 		  .append("\" size=\"").append(te.displaySize)
 		  .append("\" maxlength=\"").append(maxlength)
-		  .append("\" value=\"").append(StringEscapeUtils.escapeHtml(te.getValue())).append("\" ")
+		  .append("\" value=\"").append(StringHelper.escapeHtml(te.getValue())).append("\" ")
 		  .append(FormJSHelper.getRawJSFor(te.getRootForm(), id, te.getAction()))
 		  .append("/>");
 		//add set dirty form only if enabled

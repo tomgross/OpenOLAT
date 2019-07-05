@@ -47,7 +47,7 @@ import org.olat.core.id.Identity;
 import org.olat.core.id.Roles;
 import org.olat.core.id.context.BusinessControl;
 import org.olat.core.id.context.BusinessControlFactory;
-import org.olat.core.logging.OLog;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.Formatter;
 import org.olat.core.util.StringHelper;
@@ -67,18 +67,18 @@ import org.olat.search.service.indexer.Indexer;
 public class SearchResultsImpl implements SearchResults {
 
 	private static final long serialVersionUID = 3950063141792217522L;
-	private static final OLog log = Tracing.createLoggerFor(SearchResultsImpl.class);
+	private static final Logger log = Tracing.createLoggerFor(SearchResultsImpl.class);
 	
 	private static final String HIGHLIGHT_PRE_TAG  = "<span class=\"o_search_result_highlight\">"; 
 	private static final String HIGHLIGHT_POST_TAG = "</span>";
 	private static final String HIGHLIGHT_SEPARATOR = "...<br />";
 	
 	/* Define in module config */
-	private int maxHits;
-	private int totalHits;
-	private int totalDocs;
+	private long maxHits;
+	private long totalHits;
+	private long totalDocs;
 	private long queryTime;
-	private int numberOfIndexDocuments;
+	private long numberOfIndexDocuments;
 	/* List of ResultDocument. */
 	private List<ResultDocument> resultList;
 	private transient Indexer mainIndexer;
@@ -138,15 +138,21 @@ public class SearchResultsImpl implements SearchResults {
 	 * Set number of search-index-elements. 
 	 * @param numberOfIndexDocuments  Number of search-index-elements.
 	 */
-	public void setNumberOfIndexDocuments(int numberOfIndexDocuments) {
+	public void setNumberOfIndexDocuments(long numberOfIndexDocuments) {
 		this.numberOfIndexDocuments = numberOfIndexDocuments;
+	}
+
+	@Override
+	public Exception getException() {
+		return null;
 	}
 
 	/**
 	 * @return  Number of search-index-elements. 
 	 */
+	@Override
 	public String getNumberOfIndexDocuments() {
-		return Integer.toString(numberOfIndexDocuments);
+		return Long.toString(numberOfIndexDocuments);
 	}
 	
 	/**
@@ -154,15 +160,16 @@ public class SearchResultsImpl implements SearchResults {
 	 */
 	@Override
 	public int getTotalHits() {
-		return totalHits;
+		return (int)totalHits;
 	}
-	
+
+	@Override
 	public int getTotalDocs() {
-		return totalDocs;
+		return (int)totalDocs;
 	}
 	
 	public String getMaxHits() {
-		return Integer.toString(maxHits);
+		return Long.toString(maxHits);
 	}
 	
 	public boolean hasTooManyResults() {
@@ -184,8 +191,8 @@ public class SearchResultsImpl implements SearchResults {
 		maxHits = SearchServiceFactory.getService().getSearchModuleConfig().getMaxHits();
 		totalHits = docs.totalHits;
 		totalDocs = (docs.scoreDocs == null ? 0 : docs.scoreDocs.length);
-		int numOfDocs = Math.min(maxHits, docs.totalHits);
-		List<ResultDocument> res = new ArrayList<ResultDocument>(maxReturns + 1);
+		long numOfDocs = Math.min(maxHits, docs.totalHits);
+		List<ResultDocument> res = new ArrayList<>(maxReturns + 1);
 		for (int i=firstResult; i<numOfDocs && res.size() < maxReturns; i++) {
 			Document doc;
 			if(doHighlight) {
@@ -205,7 +212,7 @@ public class SearchResultsImpl implements SearchResults {
 				res.add(rDoc);
 			}
 			
-			if(!roles.isOLATAdmin() && i % 10 == 0) {
+			if(i % 10 == 0) {
 				// Do commit after certain number of documents because the transaction should not be too big
 				DBFactory.getInstance().commitAndCloseSession();
 			}
@@ -226,18 +233,12 @@ public class SearchResultsImpl implements SearchResults {
 	 */
 	private ResultDocument createResultDocument(Document doc, int pos, Query query, Analyzer analyzer, boolean doHighlight, Identity identity, Roles roles) 
 	throws IOException {
-		boolean hasAccess = false;
-		if(roles.isOLATAdmin()) {
-			hasAccess = true;
-		} else {
-			String resourceUrl = doc.get(AbstractOlatDocument.RESOURCEURL_FIELD_NAME);
-			if(resourceUrl == null) {
-				resourceUrl = "";
-			}
-				
-			BusinessControl businessControl = BusinessControlFactory.getInstance().createFromString(resourceUrl);
-			hasAccess = mainIndexer.checkAccess(null, businessControl, identity, roles);
-		}
+		String resourceUrl = doc.get(AbstractOlatDocument.RESOURCEURL_FIELD_NAME);
+		if(resourceUrl == null) {
+			resourceUrl = "";
+		}	
+		BusinessControl businessControl = BusinessControlFactory.getInstance().createFromString(resourceUrl);
+		boolean hasAccess = mainIndexer.checkAccess(null, businessControl, identity, roles);
 		
 		ResultDocument resultDoc;
 		if(hasAccess) {

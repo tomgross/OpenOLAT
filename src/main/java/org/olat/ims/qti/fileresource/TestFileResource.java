@@ -39,8 +39,8 @@ import java.util.List;
 import org.dom4j.Attribute;
 import org.dom4j.Document;
 import org.dom4j.Element;
-import org.olat.core.CoreSpringFactory;
-import org.olat.core.logging.OLog;
+import org.dom4j.Node;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.PathUtils;
 import org.olat.core.util.vfs.LocalFileImpl;
@@ -59,15 +59,13 @@ import org.olat.ims.qti.process.QTIHelper;
 import org.olat.ims.resources.IMSEntityResolver;
 import org.olat.resource.OLATResource;
 
-import de.bps.onyx.plugin.OnyxModule;
-
 /**
  * Initial Date: Apr 6, 2004
  * 
  * @author Mike Stock
  */
 public class TestFileResource extends FileResource {
-	private static final OLog log = Tracing.createLoggerFor(TestFileResource.class);
+	private static final Logger log = Tracing.createLoggerFor(TestFileResource.class);
 	private static final String QTI_FILE = "qti.xml";
 
 	/**
@@ -86,8 +84,7 @@ public class TestFileResource extends FileResource {
 			XMLParser xmlParser = new XMLParser(new IMSEntityResolver());
 			Document doc = xmlParser.parse(in, true);
 			ParserManager parser = new ParserManager();
-			QTIDocument document = (QTIDocument)parser.parse(doc);
-			return document;
+			return (QTIDocument)parser.parse(doc);
 		} catch (Exception e) {			
 			log.error("Exception when parsing input QTI input stream for ", e);
 			return null;
@@ -97,8 +94,7 @@ public class TestFileResource extends FileResource {
 	public static QTIReaderPackage getQTIEditorPackageReader(OLATResource resource) {
 		VFSContainer baseDir = FileResourceManager.getInstance().unzipContainerResource(resource);
 		QTIDocument document = getQTIDocument(resource);
-		return new QTIReaderPackage(baseDir, document);
-		
+		return new QTIReaderPackage(baseDir, document);	
 	}
 	
 	/**
@@ -106,11 +102,6 @@ public class TestFileResource extends FileResource {
 	 * @return True if is of type.
 	 */
 	public static boolean validate(File unzippedDir) {
-		if(CoreSpringFactory.getImpl(OnyxModule.class).isEnabled() && OnyxModule.isOnyxTest(unzippedDir)) {
-			return true;
-		}
-
-		// with VFS FIXME:pb:c: remove casts to LocalFileImpl and LocalFolderImpl if
 		// no longer needed.
 		VFSContainer vfsUnzippedRoot = new LocalFolderImpl(unzippedDir);
 		VFSItem vfsQTI = vfsUnzippedRoot.resolve("qti.xml");
@@ -131,6 +122,7 @@ public class TestFileResource extends FileResource {
 			} else {
 				eval.setValid(false);
 			}
+			PathUtils.closeSubsequentFS(fPath);
 		} catch (IOException | IllegalArgumentException e) {
 			log.error("", e);
 			eval.setValid(false);
@@ -145,7 +137,7 @@ public class TestFileResource extends FileResource {
 			boolean validType = false;
 			boolean validScore = true;
 			
-			List assessment = doc.selectNodes("questestinterop/assessment");
+			List<Node> assessment = doc.selectNodes("questestinterop/assessment");
 			if(assessment.size() == 1) {
 				Object assessmentObj = assessment.get(0);
 				if(assessmentObj instanceof Element) {
@@ -156,8 +148,8 @@ public class TestFileResource extends FileResource {
 					}
 
 					// check if this is marked as test
-					List metas = assessmentEl.selectNodes("qtimetadata/qtimetadatafield");
-					for (Iterator iter = metas.iterator(); iter.hasNext();) {
+					List<Node> metas = assessmentEl.selectNodes("qtimetadata/qtimetadatafield");
+					for (Iterator<Node> iter = metas.iterator(); iter.hasNext();) {
 						Element el_metafield = (Element) iter.next();
 						Element el_label = (Element) el_metafield.selectSingleNode("fieldlabel");
 						String label = el_label.getText();
@@ -172,10 +164,10 @@ public class TestFileResource extends FileResource {
 					}
 			
 					// check if at least one section with one item
-					List<Element> sectionItems = assessmentEl.selectNodes("section/item");
-					if (sectionItems.size() > 0) {
-						for (Element it : sectionItems) {
-							List<?> sv = it.selectNodes("resprocessing/outcomes/decvar[@varname='SCORE']");
+					List<Node> sectionItems = assessmentEl.selectNodes("section/item");
+					if (!sectionItems.isEmpty()) {
+						for (Node it : sectionItems) {
+							List<Node> sv = it.selectNodes("resprocessing/outcomes/decvar[@varname='SCORE']");
 							// the QTIv1.2 system relies on the SCORE variable of items
 							if (sv.size() != 1) {
 								validScore &= false;

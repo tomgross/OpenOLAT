@@ -41,12 +41,6 @@ public interface ChiefController extends Controller {
 	 * @return the window
 	 */
 	public Window getWindow();
-	
-	/**
-	 * 
-	 * @return The title of the browser window
-	 */
-	public String getWindowTitle();
 
 	/**
 	 * @return the windowcontrol
@@ -73,6 +67,11 @@ public interface ChiefController extends Controller {
 	 * @return
 	 */
 	public boolean wishReload(UserRequest ureq, boolean erase);
+	
+	/**
+	 * Make sure a reload will not be triggered.
+	 */
+	public void resetReload();
 	
 	/**
 	 * 

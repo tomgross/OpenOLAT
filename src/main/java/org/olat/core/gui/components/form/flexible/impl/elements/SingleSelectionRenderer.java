@@ -84,7 +84,7 @@ class SingleSelectionRenderer extends DefaultComponentRenderer {
 		String formDispatchId = ssec.getFormDispatchId();
 		
 		// read write view
-		sb.append("<div class='radio'", !inline); // normal radios need a wrapper (bootstrap) ...
+		sb.append("<div class='radio' ", !inline); // normal radios need a wrapper (bootstrap) ...
 		if(!inline && source.getWidthInPercent() > 0) {
 			sb.append("style='width:").append(source.getWidthInPercent()).append("%;'");
 		}
@@ -108,7 +108,12 @@ class SingleSelectionRenderer extends DefaultComponentRenderer {
 		}
 		sb.append(" />");
 		if (StringHelper.containsNonWhitespace(value)) {
-			sb.append(" ").append(value);		
+			sb.append(" ");
+			if(source.isEscapeHtml()) {
+				sb.append(StringHelper.escapeHtml(value));
+			} else {
+				sb.append(value);
+			}
 		} else if(inline) {
 			// at least something in label required for properly aligned rendering, nbsp is important for bootstrap
 			sb.append("&nbsp;"); 

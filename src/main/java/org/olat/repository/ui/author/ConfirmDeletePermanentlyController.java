@@ -77,8 +77,6 @@ public class ConfirmDeletePermanentlyController extends FormBasicController {
 	
 	private static final String[] yesNo = new String[] { "yes", "no" };
 	
-	private String[] referenceKeys;
-	
 	@Autowired
 	private ReferenceManager referenceManager;
 	@Autowired
@@ -91,7 +89,7 @@ public class ConfirmDeletePermanentlyController extends FormBasicController {
 		this.rows = rows;
 		this.notAllDeleteable = notAllDeleteable;
 		numOfMembers = repositoryService.countMembers(rows, getIdentity());
-		references = referenceManager.getReferencesInfos(rows, getIdentity(), ureq.getUserSession().getRoles());
+		references = referenceManager.getReferencesInfos(rows, getIdentity());
 		if(references.size() > 1) {
 			Collections.sort(references, new ReferenceInfosComparator(Collator.getInstance(getLocale())));
 		}
@@ -103,7 +101,7 @@ public class ConfirmDeletePermanentlyController extends FormBasicController {
 	protected void initForm(FormItemContainer formLayout, Controller listener, UserRequest ureq) {
 		if(formLayout instanceof FormLayoutContainer) {
 			FormLayoutContainer layout = (FormLayoutContainer)formLayout;
-			layout.contextPut("notAllDeleteable", new Boolean(notAllDeleteable));
+			layout.contextPut("notAllDeleteable", Boolean.valueOf(notAllDeleteable));
 			layout.contextPut("numOfMembers", Integer.toString(numOfMembers));
 
 			FormLayoutContainer layoutCont = FormLayoutContainer.createDefaultFormLayout("confirm", getTranslator());
@@ -122,7 +120,7 @@ public class ConfirmDeletePermanentlyController extends FormBasicController {
 			
 			int pos = 0;
 			boolean hasOrphans = false;
-			referenceKeys = new String[references.size()];
+			String[] referenceKeys = new String[references.size()];
 			String[] referenceValues = new String[references.size()];
 			for(ReferenceInfos reference:references) {
 				hasOrphans |= reference.isOrphan() && reference.isOwner() && !reference.isManaged();
@@ -140,8 +138,8 @@ public class ConfirmDeletePermanentlyController extends FormBasicController {
 			
 			FormLayoutContainer buttonsCont = FormLayoutContainer.createButtonLayout("buttons", getTranslator());
 			layoutCont.add(buttonsCont);
-			deleteButton = uifactory.addFormLink("details.delete", buttonsCont, Link.BUTTON);
 			uifactory.addFormCancelButton("cancel", buttonsCont, ureq, getWindowControl());
+			deleteButton = uifactory.addFormLink("details.delete", buttonsCont, Link.BUTTON);
 		}
 	}
 	
@@ -238,7 +236,7 @@ public class ConfirmDeletePermanentlyController extends FormBasicController {
 	
 	private void doCompleteDelete(UserRequest ureq) {
 		List<ErrorList> errorList = new ArrayList<>();
-		boolean allOk = deleteEntries(ureq, rows, errorList) ;
+		boolean allOk = deleteEntries(ureq, rows, errorList);
 		
 		if(allOk && deleteReferencesEl.isVisible() && deleteReferencesEl.isEnabled()
 				&& deleteReferencesEl.isOneSelected() && deleteReferencesEl.isSelected(0)) {
@@ -250,7 +248,7 @@ public class ConfirmDeletePermanentlyController extends FormBasicController {
 			Collection<String> selectedKeys = referencesEl.getSelectedKeys();
 			List<RepositoryEntry> referencesToDelete = new ArrayList<>(selectedKeys.size());
 			for(String selectedRefKey:selectedKeys) {
-				Long key = new Long(selectedRefKey);
+				Long key = Long.valueOf(selectedRefKey);
 				ReferenceInfos refInfos = referencesMap.get(key);
 				if(refInfos != null && refInfos.isOrphan() && refInfos.isOwner() && !refInfos.isManaged()) {
 					referencesToDelete.add(referencesMap.get(key).getEntry());
@@ -289,26 +287,15 @@ public class ConfirmDeletePermanentlyController extends FormBasicController {
 		boolean allOk = true;
 		Roles roles = ureq.getUserSession().getRoles();
 		for(RepositoryEntry entry:entries) {
-			RepositoryEntry reloadedEntry = repositoryService.loadByKey(entry.getKey());
-			if(reloadedEntry != null) {
-				ErrorList errors = new ErrorList();
-				try {
-					errors = repositoryService.deletePermanently(reloadedEntry, getIdentity(), roles, getLocale());
-				} catch (RepositoryEntryDeletionException e) {
-					allOk = false;
-					errors.setError(e.getMessage());
-					errorList.add(errors);
-					continue;
-				}
-				ThreadLocalUserActivityLogger.log(LearningResourceLoggingAction.LEARNING_RESOURCE_DELETE, getClass(),
-						LoggingResourceable.wrap(reloadedEntry, OlatResourceableType.genRepoEntry));
-				if (errors.hasErrors()) {
-					allOk = false;
-					errorList.add(errors);
-				} else {
-					EntryChangedEvent e = new EntryChangedEvent(reloadedEntry, getIdentity(), Change.deleted, "delete");
-					ureq.getUserSession().getSingleUserEventCenter().fireEventToListenersOf(e, RepositoryService.REPOSITORY_EVENT_ORES);
-				}
+			ErrorList errors = repositoryService.deletePermanently(entry, getIdentity(), roles, getLocale());
+			ThreadLocalUserActivityLogger.log(LearningResourceLoggingAction.LEARNING_RESOURCE_DELETE, getClass(),
+					LoggingResourceable.wrap(entry, OlatResourceableType.genRepoEntry));
+			if (errors.hasErrors()) {
+				allOk = false;
+				errorList.add(errors);
+			} else {
+				EntryChangedEvent e = new EntryChangedEvent(entry, getIdentity(), Change.deleted, "delete");
+				ureq.getUserSession().getSingleUserEventCenter().fireEventToListenersOf(e, RepositoryService.REPOSITORY_EVENT_ORES);
 			}
 		}
 		return allOk;

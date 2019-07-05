@@ -1,4 +1,5 @@
 /**
+
  * <a href="http://www.openolat.org">
  * OpenOLAT - Online Learning and Training</a><br>
  * <p>
@@ -20,7 +21,10 @@
 package org.olat.modules.fo.portfolio;
 
 import java.io.File;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
+import java.util.Locale;
 
 import org.olat.core.commons.services.image.Size;
 import org.olat.core.gui.UserRequest;
@@ -29,12 +33,15 @@ import org.olat.core.gui.control.WindowControl;
 import org.olat.core.id.Identity;
 import org.olat.core.logging.activity.ThreadLocalUserActivityLogger;
 import org.olat.core.util.FileUtils;
+import org.olat.core.util.StringHelper;
+import org.olat.core.util.io.SystemFileFilter;
 import org.olat.core.util.resource.OresHelper;
 import org.olat.core.util.vfs.VFSContainer;
 import org.olat.core.util.vfs.VFSItem;
 import org.olat.core.util.vfs.VFSLeaf;
 import org.olat.core.util.vfs.VFSManager;
-import org.olat.core.util.vfs.filters.SystemItemFilter;
+import org.olat.core.util.vfs.filters.VFSSystemItemFilter;
+import org.olat.modules.ceditor.PageElementCategory;
 import org.olat.modules.fo.Forum;
 import org.olat.modules.fo.Message;
 import org.olat.modules.fo.MessageLight;
@@ -42,6 +49,7 @@ import org.olat.modules.fo.manager.ForumManager;
 import org.olat.modules.portfolio.Media;
 import org.olat.modules.portfolio.MediaInformations;
 import org.olat.modules.portfolio.MediaLight;
+import org.olat.modules.portfolio.MediaRenderingHints;
 import org.olat.modules.portfolio.PortfolioLoggingAction;
 import org.olat.modules.portfolio.handler.AbstractMediaHandler;
 import org.olat.modules.portfolio.manager.MediaDAO;
@@ -49,6 +57,7 @@ import org.olat.modules.portfolio.manager.PortfolioFileStorage;
 import org.olat.modules.portfolio.ui.media.StandardEditMediaController;
 import org.olat.portfolio.manager.EPFrontendManager;
 import org.olat.portfolio.model.artefacts.AbstractArtefact;
+import org.olat.user.manager.ManifestBuilder;
 import org.olat.util.logging.activity.LoggingResourceable;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -80,6 +89,11 @@ public class ForumMediaHandler extends AbstractMediaHandler {
 	@Override
 	public String getIconCssClass() {
 		return "o_fo_icon";
+	}
+	
+	@Override
+	public PageElementCategory getCategory() {
+		return PageElementCategory.embed;
 	}
 	
 	@Override
@@ -147,7 +161,7 @@ public class ForumMediaHandler extends AbstractMediaHandler {
 		ThreadLocalUserActivityLogger.log(PortfolioLoggingAction.PORTFOLIO_MEDIA_ADDED, getClass(),
 				LoggingResourceable.wrap(media));
 		
-		List<VFSItem> items = artefactFolder.getItems(new SystemItemFilter());
+		List<VFSItem> items = artefactFolder.getItems(new VFSSystemItemFilter());
 		if(items.size() > 0) {
 			File mediaDir = fileStorage.generateMediaSubDirectory(media);
 			String storagePath = fileStorage.getRelativePath(mediaDir);
@@ -160,12 +174,25 @@ public class ForumMediaHandler extends AbstractMediaHandler {
 	}
 
 	@Override
-	public Controller getMediaController(UserRequest ureq, WindowControl wControl, Media media) {
-		return new ForumMessageMediaController(ureq, wControl, media);
+	public Controller getMediaController(UserRequest ureq, WindowControl wControl, Media media, MediaRenderingHints hints) {
+		return new ForumMessageMediaController(ureq, wControl, media, hints);
 	}
 
 	@Override
 	public Controller getEditMediaController(UserRequest ureq, WindowControl wControl, Media media) {
 		return new StandardEditMediaController(ureq, wControl, media);
+	}
+	
+	@Override
+	public void export(Media media, ManifestBuilder manifest, File mediaArchiveDirectory, Locale locale) {
+		List<File> attachments = new ArrayList<>();
+		if(StringHelper.containsNonWhitespace(media.getStoragePath())) {
+			File mediaDir = fileStorage.getMediaDirectory(media);
+			if(mediaDir != null && mediaDir.exists()) {
+				File[] attachmentArr = mediaDir.listFiles(SystemFileFilter.FILES_ONLY);
+				attachments = Arrays.asList(attachmentArr);
+			}
+		}
+		super.exportContent(media, null, attachments, mediaArchiveDirectory, locale);
 	}
 }

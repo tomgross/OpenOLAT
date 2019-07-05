@@ -35,6 +35,8 @@ import javax.persistence.TemporalType;
 
 import org.olat.core.id.ModifiedInfo;
 import org.olat.core.id.Persistable;
+import org.olat.core.util.StringHelper;
+import org.olat.modules.video.VideoFormat;
 import org.olat.modules.video.VideoMeta;
 import org.olat.resource.OLATResource;
 import org.olat.resource.OLATResourceImpl;
@@ -66,6 +68,8 @@ public class VideoMetaImpl implements VideoMeta, Persistable, ModifiedInfo {
 	@JoinColumn(name="fk_resource_id", nullable=false, insertable=true, updatable=false)
 	private OLATResource videoResource;
 	
+	@Column(name="vid_url", nullable=true, insertable=true, updatable=true)
+	private String url;
 	@Column(name="vid_width", nullable=true, insertable=true, updatable=true)
 	private int width;
 	@Column(name="vid_height", nullable=true, insertable=true, updatable=true)
@@ -76,20 +80,6 @@ public class VideoMetaImpl implements VideoMeta, Persistable, ModifiedInfo {
 	private String format;
 	@Column(name="vid_length", nullable=true, insertable=true, updatable=true)
 	private String length;	
-	
-
-
-	public VideoMetaImpl(OLATResource videoResource, int width, int height, long size, String format, String length) {
-		super();
-		this.creationDate = new Date();
-		this.lastModified = new Date();
-		this.videoResource = videoResource;
-		this.width = width;
-		this.height = height;
-		this.size = size;
-		this.format = format;
-		this.length = length;
-	}
 	
 	public VideoMetaImpl(int width, int height, long size) {
 		this.width = width;
@@ -122,11 +112,6 @@ public class VideoMetaImpl implements VideoMeta, Persistable, ModifiedInfo {
 	}
 
 	@Override
-	public boolean equalsByPersistableKey(Persistable persistable) {
-		return false;
-	}
-
-	@Override
 	public Long getKey() {
 		return key;
 	}
@@ -139,6 +124,15 @@ public class VideoMetaImpl implements VideoMeta, Persistable, ModifiedInfo {
 	@Override
 	public OLATResource getVideoResource() {
 		return videoResource;
+	}
+
+	@Override
+	public String getUrl() {
+		return url;
+	}
+
+	public void setUrl(String url) {
+		this.url = url;
 	}
 
 	@Override
@@ -171,14 +165,29 @@ public class VideoMetaImpl implements VideoMeta, Persistable, ModifiedInfo {
 		this.size = size;
 	}
 
-	@Override
 	public String getFormat() {
 		return format;
 	}
 
-	@Override
 	public void setFormat(String format) {
 		this.format = format;
+	}
+
+	@Override
+	public VideoFormat getVideoFormat() {
+		if(StringHelper.containsNonWhitespace(format)) {
+			return VideoFormat.secureValueOf(format);
+		}
+		return null;
+	}
+
+	@Override
+	public void setVideoFormat(VideoFormat format) {
+		if(format != null) {
+			this.format = format.name();
+		} else {
+			this.format = null;
+		}
 	}
 
 	@Override
@@ -190,6 +199,26 @@ public class VideoMetaImpl implements VideoMeta, Persistable, ModifiedInfo {
 	public void setLength(String length) {
 		this.length = length;
 	}
+	
+	@Override
+	public int hashCode() {
+		return key == null ? 237865 : key.hashCode();
+	}
 
+	@Override
+	public boolean equals(Object obj) {
+		if(obj == this) {
+			return true;
+		}
+		if(obj instanceof VideoMetaImpl) {
+			VideoMetaImpl meta = (VideoMetaImpl)obj;
+			return key != null && key.equals(meta.key);
+		}
+		return false;
+	}
 
+	@Override
+	public boolean equalsByPersistableKey(Persistable persistable) {
+		return equals(persistable);
+	}
 }

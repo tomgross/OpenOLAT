@@ -31,13 +31,14 @@ import java.io.IOException;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 
+import org.apache.logging.log4j.Logger;
 import org.olat.core.CoreSpringFactory;
 import org.olat.core.commons.persistence.DBFactory;
 import org.olat.core.dispatcher.Dispatcher;
 import org.olat.core.dispatcher.DispatcherModule;
 import org.olat.core.gui.media.MediaResource;
 import org.olat.core.gui.media.ServletUtil;
-import org.olat.core.logging.LogDelegator;
+import org.olat.core.logging.Tracing;
 import org.olat.core.util.UserSession;
 import org.olat.core.util.session.UserSessionManager;
 
@@ -56,7 +57,9 @@ import org.olat.core.util.session.UserSessionManager;
  * @author Felix Jost
  * @author Florian Gnägi, <a href="http://www.frentix.com">frentix GmbH</a>
  */
-public class MapperDispatcher extends LogDelegator implements Dispatcher {
+public class MapperDispatcher implements Dispatcher {
+
+	private static final Logger log = Tracing.createLoggerFor(MapperDispatcher.class);
 	
 	public MapperDispatcher() {
 		//
@@ -88,20 +91,21 @@ public class MapperDispatcher extends LogDelegator implements Dispatcher {
 		// e.g. non-cacheable: 	23423
 		// e.g. cacheable: 		my.mapper.path
 		UserSession usess = CoreSpringFactory.getImpl(UserSessionManager.class).getUserSession(hreq);
-		Mapper m = CoreSpringFactory.getImpl(MapperService.class).getMapperById(usess, smappath);
+		MapperService mapperService = CoreSpringFactory.getImpl(MapperService.class);
+		Mapper m = mapperService.getMapperById(usess, smappath);
 		if (m == null) {
 			//an anonymous mapper?
-			m = CoreSpringFactory.getImpl(MapperService.class).getMapperById(null, smappath);
+			m = mapperService.getMapperById(null, smappath);
 			if(m == null) {
-				logWarn("Call to mapped resource, but mapper does not exist for path::" + smappath, null);
-				DispatcherModule.sendNotFound(pathInfo, hres);
+				log.warn("Call to mapped resource, but mapper does not exist for path::" + smappath);
+				hres.setStatus(HttpServletResponse.SC_NOT_FOUND);
 				return;
 			}
 		}
 		String mod = slashPos > 0 ? subInfo.substring(slashPos) : "";
 		if (mod.indexOf("..") != -1) {
-			logWarn("Illegal mapper path::" + mod + " contains '..'", null);
-			DispatcherModule.sendForbidden(pathInfo, hres);
+			log.warn("Illegal mapper path::" + mod + " contains '..'");
+			hres.setStatus(HttpServletResponse.SC_FORBIDDEN);
 			return;
 		}
 		// /bla/blu.html

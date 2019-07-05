@@ -71,8 +71,7 @@ public class GroupTaskToCoachPage {
 	
 	public GroupTaskToCoachPage assertSubmittedDocument(String title) {
 		By selectLinkBy = By.xpath("//div[@id='o_step_submit_content']//ul//a//span[contains(text(),'" + title + "')]");
-		List<WebElement> documentLinkEls = browser.findElements(selectLinkBy);
-		Assert.assertFalse(documentLinkEls.isEmpty());
+		OOGraphene.waitElement(selectLinkBy, browser);
 		return this;
 	}
 	
@@ -85,8 +84,8 @@ public class GroupTaskToCoachPage {
 	
 	public GroupTaskToCoachPage reviewed() {
 		By reviewBy = By.cssSelector("#o_step_review_content .o_sel_course_gta_reviewed");
-		browser.findElement(reviewBy).click();
-		OOGraphene.waitBusy(browser);
+		OOGraphene.waitElement(reviewBy, browser);
+		OOGraphene.moveAndClick(reviewBy, browser);
 		confirm();
 		OOGraphene.waitAndCloseBlueMessageWindow(browser);
 		return this;
@@ -94,29 +93,46 @@ public class GroupTaskToCoachPage {
 	
 	public GroupTaskToCoachPage needRevision() {
 		By reviewBy = By.cssSelector("#o_step_review_content .o_sel_course_gta_need_revision");
-		browser.findElement(reviewBy).click();
+		OOGraphene.clickAndWait(reviewBy, browser);
+		
+		OOGraphene.waitModalDialog(browser);
+		By okBy = By.xpath("//div[contains(@class,'modal-dialog')]//button");
+		browser.findElement(okBy).click();
 		OOGraphene.waitBusy(browser);
-		return confirm();
+		return this;
 	}
 	
 	public GroupTaskToCoachPage closeRevisions() {
 		By closeRevisionBy = By.cssSelector("#o_step_revision_content .o_sel_course_gta_close_revision");
-		browser.findElement(closeRevisionBy).click();
-		OOGraphene.waitBusy(browser);
+		OOGraphene.clickAndWait(closeRevisionBy, browser);
 		return confirm();
 	}
 	
 	public GroupTaskToCoachPage confirm() {
-		WebElement yesLink = browser.findElement(By.xpath("//div[contains(@class,'modal-dialog')]//a[contains(@href,'link_0')]"));
-		yesLink.click();
+		OOGraphene.waitBusyAndScrollTop(browser);
+		OOGraphene.waitModalDialog(browser);
+		By yes = By.xpath("//div[contains(@class,'modal-dialog')]//a[contains(@href,'link_0')]");
+		browser.findElement(yes).click();
 		OOGraphene.waitBusy(browser);
+		OOGraphene.waitModalDialogDisappears(browser);
+		return this;
+	}
+	
+	public GroupTaskToCoachPage openRevisionsStep() {
+		By uploadButtonBs = By.cssSelector("#o_step_review_content .o_sel_course_gta_submit_file");
+		List<WebElement> buttons = browser.findElements(uploadButtonBs);
+		if(buttons.isEmpty() || !buttons.get(0).isDisplayed()) {
+			//open grading tab
+			By collpaseBy = By.xpath("//a[@href='#o_step_review_content']");
+			OOGraphene.click(collpaseBy, browser);
+			OOGraphene.waitElement(uploadButtonBs, browser);
+		}
 		return this;
 	}
 	
 	public GroupTaskToCoachPage uploadCorrection(File correctionFile) {
 		By uploadButtonBy = By.cssSelector("#o_step_review_content .o_sel_course_gta_submit_file");
-		browser.findElement(uploadButtonBy).click();
-		OOGraphene.waitBusy(browser);
+		OOGraphene.clickAndWait(uploadButtonBy, browser);
 		
 		By inputBy = By.cssSelector(".o_fileinput input[type='file']");
 		OOGraphene.uploadFile(inputBy, correctionFile, browser);
@@ -125,6 +141,7 @@ public class GroupTaskToCoachPage {
 		By saveButtonBy = By.cssSelector(".o_sel_course_gta_upload_form button.btn-primary");
 		browser.findElement(saveButtonBy).click();
 		OOGraphene.waitBusy(browser);
+		OOGraphene.waitModalDialogDisappears(browser);
 		By correctionUploaded = By.xpath("//table[contains(@class,'table')]//tr/td//a[text()[contains(.,'" + correctionFile.getName() + "')]]");
 		OOGraphene.waitElement(correctionUploaded, 5, browser);
 		return this;
@@ -136,13 +153,13 @@ public class GroupTaskToCoachPage {
 		if(buttons.isEmpty() || !buttons.get(0).isDisplayed()) {
 			//open grading tab
 			By collpaseBy = By.xpath("//a[@href='#o_step_grading_content']");
-			browser.findElement(collpaseBy).click();
+			OOGraphene.click(collpaseBy, browser);
 			OOGraphene.waitElement(assessmentButtonBy, browser);
-			browser.findElement(assessmentButtonBy).click();
-		} else {
-			buttons.get(0).click();
 		}
+		
+		OOGraphene.click(assessmentButtonBy, browser);
 		OOGraphene.waitBusy(browser);
+		OOGraphene.waitModalDialog(browser);
 		return this;
 	}
 	
@@ -158,7 +175,7 @@ public class GroupTaskToCoachPage {
 		}
 		
 		By saveAndCloseBy = By.cssSelector(".o_sel_assessment_form button.o_sel_assessment_form_save_and_close");
-		browser.findElement(saveAndCloseBy).click();
+		OOGraphene.click(saveAndCloseBy, browser);
 		OOGraphene.waitBusy(browser);
 		return this;
 	}
@@ -175,7 +192,6 @@ public class GroupTaskToCoachPage {
 		} else {
 			buttons.get(0).click();
 		}
-		OOGraphene.waitBusy(browser);
 		OOGraphene.waitModalDialog(browser);
 		return this;
 	}
@@ -190,15 +206,15 @@ public class GroupTaskToCoachPage {
 		By groupAssessmentPopupBy = By.cssSelector(".modal-body .o_sel_course_gta_group_assessment_form");
 		OOGraphene.waitElement(groupAssessmentPopupBy, 5, browser);
 		
-		By applyToAllBy = By.cssSelector(".o_sel_course_gta_group_assessment_form .o_sel_course_gta_apply_to_all input[type='checkbox']");
-		WebElement applyToAllEl = browser.findElement(applyToAllBy);
-		OOGraphene.check(applyToAllEl, Boolean.TRUE);
+		By applyToAllCheckBy = By.xpath("//div[contains(@class,'o_sel_course_gta_group_assessment_form')]//div[contains(@class,'o_sel_course_gta_apply_to_all')]//input[@type='checkbox']");
+		WebElement applyToAllCheckEl = browser.findElement(applyToAllCheckBy);
+		OOGraphene.check(applyToAllCheckEl, Boolean.TRUE);
 		OOGraphene.waitBusy(browser);
 		
 		if(passed != null) {
-			By passedBy = By.cssSelector(".o_sel_course_gta_group_assessment_form .o_sel_course_gta_group_passed input[type='checkbox']");
-			WebElement passedEl = browser.findElement(passedBy);
-			OOGraphene.check(passedEl, Boolean.TRUE);
+			By passedCheckBy = By.xpath("//div[contains(@class,'o_sel_course_gta_group_assessment_form')]//div[contains(@class,'o_sel_course_gta_group_passed')]//input[@type='checkbox']");
+			WebElement passedCheckEl = browser.findElement(passedCheckBy);
+			OOGraphene.check(passedCheckEl, Boolean.TRUE);
 			OOGraphene.waitBusy(browser);
 		}
 		

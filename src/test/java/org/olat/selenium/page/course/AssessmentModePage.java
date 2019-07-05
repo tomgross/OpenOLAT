@@ -22,7 +22,6 @@ package org.olat.selenium.page.course;
 import java.util.Date;
 import java.util.List;
 
-import org.jboss.arquillian.drone.api.annotation.Drone;
 import org.junit.Assert;
 import org.olat.selenium.page.graphene.OOGraphene;
 import org.openqa.selenium.By;
@@ -40,12 +39,7 @@ import org.openqa.selenium.support.ui.Select;
  */
 public class AssessmentModePage {
 	
-	@Drone
-	private WebDriver browser;
-	
-	public AssessmentModePage() {
-		//
-	}
+	private final WebDriver browser;
 	
 	public AssessmentModePage(WebDriver browser) {
 		this.browser = browser;
@@ -78,6 +72,7 @@ public class AssessmentModePage {
 		OOGraphene.closeBlueMessageWindow(browser);
 		
 		By nameBy = By.cssSelector("div.o_sel_assessment_mode_name input[type='text']");
+		OOGraphene.waitElement(nameBy, browser);
 		browser.findElement(nameBy).sendKeys(name);
 		//begin
 		OOGraphene.datetime(begin, "o_sel_assessment_mode_begin", browser);
@@ -90,8 +85,8 @@ public class AssessmentModePage {
 		//audience course
 		
 		By audienceBy = By.xpath("//div[contains(@class,'o_sel_assessment_mode_audience')]//input[@value='course']");
-		WebElement audienceEl = browser.findElement(audienceBy);
-		audienceEl.click();
+		OOGraphene.waitElement(audienceBy, browser);
+		browser.findElement(audienceBy).click();
 		return this;
 	}
 	

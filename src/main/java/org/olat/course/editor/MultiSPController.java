@@ -21,6 +21,8 @@
 package org.olat.course.editor;
 
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -40,11 +42,10 @@ import org.olat.core.gui.control.Event;
 import org.olat.core.gui.control.WindowControl;
 import org.olat.core.gui.util.CSSHelper;
 import org.olat.core.id.OLATResourceable;
-import org.olat.core.util.vfs.MergeSource;
-import org.olat.core.util.vfs.NamedContainerImpl;
 import org.olat.core.util.vfs.VFSContainer;
 import org.olat.core.util.vfs.VFSItem;
 import org.olat.core.util.vfs.VFSLeaf;
+import org.olat.core.util.vfs.VFSManager;
 import org.olat.core.util.vfs.filters.VFSItemFilter;
 import org.olat.course.CourseFactory;
 import org.olat.course.ICourse;
@@ -73,8 +74,8 @@ public class MultiSPController extends FormBasicController {
 	private FormLink sameLevel;
 	private FormLink asChild;
 	private MultipleSelectionElement rootSelection;
-	private final Map<String,MultipleSelectionElement> identToSelectionMap = new HashMap<String,MultipleSelectionElement>();
-	private final List<MultipleSelectionElement> nodeSelections = new ArrayList<MultipleSelectionElement>();
+	private final Map<String,MultipleSelectionElement> identToSelectionMap = new HashMap<>();
+	private final List<MultipleSelectionElement> nodeSelections = new ArrayList<>();
 
 	private int position;
 	private CourseEditorTreeNode selectedNode;
@@ -84,19 +85,9 @@ public class MultiSPController extends FormBasicController {
 	public MultiSPController(UserRequest ureq, WindowControl wControl, VFSContainer rootContainer,
 			OLATResourceable ores, CourseEditorTreeNode selectedNode) {
 		super(ureq, wControl, "choosesps");
-		
 		this.ores = ores;
 		this.selectedNode = selectedNode;
-
-		if(rootContainer instanceof MergeSource) {
-			//we cannot link to files from course elements or groups folders without single page BB update
-			VFSContainer realContainer = ((MergeSource)rootContainer).getRootWriteContainer();
-			VFSContainer namedRoot = new NamedContainerImpl(rootContainer.getName(), realContainer);
-			this.rootContainer = namedRoot;
-		} else {
-			this.rootContainer = rootContainer;
-		}
-
+		this.rootContainer = rootContainer;
 		initForm(ureq);
 	}
 	
@@ -141,7 +132,10 @@ public class MultiSPController extends FormBasicController {
 
 		if(item instanceof VFSContainer) {
 			VFSContainer container = (VFSContainer)item;
-			for(VFSItem subItem:container.getItems(new MultiSPVFSItemFilter())) {	
+			List<VFSItem> subItems = container.getItems(new MultiSPVFSItemFilter());
+			Collections.sort(subItems, new VFSItemNameComparator());
+			
+			for(VFSItem subItem:subItems) {	
 				MultipleSelectionElement sel = initTreeRec(level + 1, subItem, layoutcont);
 				node.getChildren().add(sel);
 			}
@@ -219,7 +213,7 @@ public class MultiSPController extends FormBasicController {
 				//create node
 				newNode = createCourseNode(item, "sp");
 				ModuleConfiguration moduleConfig = newNode.getModuleConfiguration();
-				String path = getRelativePath(item);
+				String path = VFSManager.getRelativeItemPath(item, rootContainer, null);
 				moduleConfig.set(SPEditController.CONFIG_KEY_FILE, path);
 				moduleConfig.setBooleanEntry(SPEditController.CONFIG_KEY_ALLOW_RELATIVE_LINKS, true);
 			} else if (item instanceof VFSContainer) {
@@ -244,7 +238,8 @@ public class MultiSPController extends FormBasicController {
 		}
 		
 		//recurse
-		for(MultipleSelectionElement childElement:node.getChildren()) {
+		List<MultipleSelectionElement> childElements = node.getChildren();
+		for(MultipleSelectionElement childElement:childElements) {
 			create(childElement, course, parentNode);
 		}
 	}
@@ -252,30 +247,17 @@ public class MultiSPController extends FormBasicController {
 	private CourseNode createCourseNode(VFSItem item, String type) {
 		CourseNodeConfiguration newNodeConfig = CourseNodeFactory.getInstance().getCourseNodeConfiguration(type);
 		CourseNode newNode = newNodeConfig.getInstance();
-		newNode.setShortTitle(item.getName());
+		String name = item.getName();
+		if (name.length() > NodeConfigFormController.SHORT_TITLE_MAX_LENGTH) {
+			String shortName = name.substring(0, NodeConfigFormController.SHORT_TITLE_MAX_LENGTH - 1);
+			newNode.setShortTitle(shortName);
+			newNode.setLongTitle(name);
+		} else {
+			newNode.setShortTitle(name);
+		}
 		newNode.setLearningObjectives(item.getName());
 		newNode.setNoAccessExplanation("You don't have access");
 		return newNode;
-	}
-	
-	private String getRelativePath(VFSItem item) {
-		String path = "";
-		while(item != null && !isSameAsRootContainer(item)) {
-			path = "/" + item.getName() + path;
-			item = item.getParentContainer();
-		}
-		return path;
-	}
-	
-	private boolean isSameAsRootContainer(VFSItem item) {
-		if(item instanceof VFSContainer) {
-			VFSContainer blocker = rootContainer;
-			if(blocker instanceof MergeSource) {
-				blocker = ((MergeSource)blocker).getRootWriteContainer();
-			}
-			return blocker.isSame(item);
-		}
-		return false;
 	}
 	
 	/**
@@ -298,7 +280,7 @@ public class MultiSPController extends FormBasicController {
 		private final int indentation;
 		private final VFSItem item;
 		private final String id;
-		private final List<MultipleSelectionElement> children = new ArrayList<MultipleSelectionElement>();
+		private final List<MultipleSelectionElement> children = new ArrayList<>();
 		
 		public SelectNodeObject(VFSItem item, String id, int indentation) {
 			this.id = id;
@@ -360,11 +342,29 @@ public class MultiSPController extends FormBasicController {
 		}
 	}
 	
-	public class MultiSPVFSItemFilter implements VFSItemFilter {
+	public static class MultiSPVFSItemFilter implements VFSItemFilter {
 		@Override
 		public boolean accept(VFSItem vfsItem) {
 			String name = vfsItem.getName();
 			return !name.startsWith(".");
+		}
+	}
+	
+	public static class VFSItemNameComparator implements Comparator<VFSItem> {
+
+		@Override
+		public int compare(VFSItem o1, VFSItem o2) {
+			if(o1 == null && o2 == null) return 0;
+			if(o1 == null) return -1;
+			if(o2 == null) return 1;
+			
+			String n1 = o1.getName();
+			String n2 = o2.getName();
+			
+			if(n1 == null && n2 == null) return 0;
+			if(n1 == null) return -1;
+			if(n2 == null) return 1;
+			return n1.compareToIgnoreCase(n2);
 		}
 	}
 }

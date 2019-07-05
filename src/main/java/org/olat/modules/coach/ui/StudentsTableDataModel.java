@@ -28,7 +28,7 @@ import org.olat.core.gui.components.form.flexible.impl.elements.table.FlexiSorta
 import org.olat.core.gui.components.form.flexible.impl.elements.table.FlexiTableColumnModel;
 import org.olat.core.gui.components.form.flexible.impl.elements.table.SortableFlexiTableDataModel;
 import org.olat.core.gui.components.form.flexible.impl.elements.table.SortableFlexiTableModelDelegate;
-import org.olat.core.logging.OLog;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.StringHelper;
 import org.olat.modules.coach.model.StudentStatEntry;
@@ -46,7 +46,7 @@ import org.olat.modules.coach.ui.LightedValue.Light;
 public class StudentsTableDataModel extends DefaultFlexiTableDataModel<StudentStatEntry>
 	implements SortableFlexiTableDataModel<StudentStatEntry> {
 	
-	private static final OLog log = Tracing.createLoggerFor(StudentsTableDataModel.class);
+	private static final Logger log = Tracing.createLoggerFor(StudentsTableDataModel.class);
 
 	private List<StudentStatEntry> backupList;
 	
@@ -59,7 +59,7 @@ public class StudentsTableDataModel extends DefaultFlexiTableDataModel<StudentSt
 			try {
 				List<StudentStatEntry> filteredList;
 				if(StringHelper.isLong(searchString)) {
-					Long identityKey = new Long(searchString);
+					Long identityKey = Long.valueOf(searchString);
 					filteredList = backupList.stream()
 						.filter(entry ->  entry.getIdentityKey().equals(identityKey))
 						.collect(Collectors.toList());
@@ -95,7 +95,7 @@ public class StudentsTableDataModel extends DefaultFlexiTableDataModel<StudentSt
 			int countRepo = student.getCountRepo();
 			switch(Columns.getValueAt(col)) {
 				case name: return student.getIdentityName();
-				case countCourse: return new Integer(countRepo);
+				case countCourse: return Integer.valueOf(countRepo);
 				case initialLaunch: {
 					if(countRepo == 0) {
 						return null;

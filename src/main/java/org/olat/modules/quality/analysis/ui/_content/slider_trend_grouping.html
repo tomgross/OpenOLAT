@@ -1,0 +1,16 @@
+#set($col = "col-sm-3")
+<div class="o_slider_trend_config panel panel-default">
+	<div class="panel-heading">
+		<h4 class="panel-title">$r.translate("slider.trend.group.panel.header")</h4>
+	</div>
+	<div class="panel-body">
+		<div class='row'>
+			<div class="$col">
+				$r.render("slider.trend.group.temporal")
+			</div>
+			<div class="$col">
+				$r.render("slider.trend.difference")
+			</div>
+		</div>
+	</div>
+</div>

@@ -22,12 +22,16 @@ package org.olat.course.assessment.ui.mode;
 import java.util.ArrayList;
 import java.util.List;
 
+import org.apache.logging.log4j.Logger;
 import org.olat.core.commons.persistence.SortKey;
 import org.olat.core.gui.components.form.flexible.impl.elements.table.DefaultFlexiTableDataModel;
+import org.olat.core.gui.components.form.flexible.impl.elements.table.FlexiSortableColumnDef;
 import org.olat.core.gui.components.form.flexible.impl.elements.table.FlexiTableColumnModel;
 import org.olat.core.gui.components.form.flexible.impl.elements.table.SortableFlexiTableDataModel;
 import org.olat.core.gui.translator.Translator;
+import org.olat.core.logging.Tracing;
 import org.olat.core.util.StringHelper;
+import org.olat.course.CorruptedCourseException;
 import org.olat.course.CourseFactory;
 import org.olat.course.ICourse;
 import org.olat.course.assessment.AssessmentMode;
@@ -44,6 +48,8 @@ import org.olat.course.nodes.CourseNode;
  *
  */
 public class AssessmentModeListModel extends DefaultFlexiTableDataModel<AssessmentMode> implements SortableFlexiTableDataModel<AssessmentMode> {
+	
+	private static final Logger log = Tracing.createLoggerFor(AssessmentModeListModel.class);
 	
 	private final Translator translator;
 	private final AssessmentModeCoordinationService coordinationService;
@@ -72,27 +78,35 @@ public class AssessmentModeListModel extends DefaultFlexiTableDataModel<Assessme
 			case status: {
 				List<String> warnings = null;
 				Status status = mode.getStatus();
-				if(StringHelper.containsNonWhitespace(mode.getStartElement())) {
-					ICourse course = CourseFactory.loadCourse(mode.getRepositoryEntry());
-					CourseNode node = course.getRunStructure().getNode(mode.getStartElement());
-					if(node == null) {
-						warnings = new ArrayList<>(2);
-						warnings.add(translator.translate("warning.missing.start.element"));
-					}
-				}
-				if(StringHelper.containsNonWhitespace(mode.getElementList())) {
-					ICourse course = CourseFactory.loadCourse(mode.getRepositoryEntry());
-					String elements = mode.getElementList();
-					for(String element:elements.split(",")) {
-						CourseNode node = course.getRunStructure().getNode(element);
+				try {
+					if(StringHelper.containsNonWhitespace(mode.getStartElement())) {
+						ICourse course = CourseFactory.loadCourse(mode.getRepositoryEntry());
+						CourseNode node = course.getRunStructure().getNode(mode.getStartElement());
 						if(node == null) {
-							if(warnings == null) {
-								warnings = new ArrayList<>(2);
-							}
-							warnings.add(translator.translate("warning.missing.element"));
-							break;
+							warnings = new ArrayList<>(2);
+							warnings.add(translator.translate("warning.missing.start.element"));
 						}
 					}
+					if(StringHelper.containsNonWhitespace(mode.getElementList())) {
+						ICourse course = CourseFactory.loadCourse(mode.getRepositoryEntry());
+						String elements = mode.getElementList();
+						for(String element:elements.split(",")) {
+							CourseNode node = course.getRunStructure().getNode(element);
+							if(node == null) {
+								if(warnings == null) {
+									warnings = new ArrayList<>(2);
+								}
+								warnings.add(translator.translate("warning.missing.element"));
+								break;
+							}
+						}
+					}
+				} catch (CorruptedCourseException e) {
+					log.error("", e);
+					if(warnings == null) {
+						warnings = new ArrayList<>(2);
+					}
+					warnings.add(translator.translate("cif.error.corrupted"));
 				}
 				return new EnhancedStatus(status, warnings);
 			}
@@ -147,7 +161,7 @@ public class AssessmentModeListModel extends DefaultFlexiTableDataModel<Assessme
 		return updated;
 	}
 	
-	public enum Cols {
+	public enum Cols implements FlexiSortableColumnDef {
 		status("table.header.status"),
 		course("table.header.course"),
 		externalId("table.header.externalId"),
@@ -166,9 +180,20 @@ public class AssessmentModeListModel extends DefaultFlexiTableDataModel<Assessme
 		private Cols(String i18nKey) {
 			this.i18nKey = i18nKey;
 		}
-		
-		public String i18nKey() {
+
+		@Override
+		public String i18nHeaderKey() {
 			return i18nKey;
+		}
+
+		@Override
+		public boolean sortable() {
+			return true;
+		}
+
+		@Override
+		public String sortKey() {
+			return name();
 		}
 	}
 }

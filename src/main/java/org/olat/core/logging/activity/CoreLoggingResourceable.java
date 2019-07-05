@@ -26,10 +26,10 @@
 
 package org.olat.core.logging.activity;
 
+import org.apache.logging.log4j.Logger;
 import org.olat.core.id.Identity;
 import org.olat.core.id.OLATResourceable;
 import org.olat.core.id.context.ContextEntry;
-import org.olat.core.logging.OLog;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.resource.OresHelper;
 
@@ -71,7 +71,7 @@ import org.olat.core.util.resource.OresHelper;
 public class CoreLoggingResourceable implements ILoggingResourceable {
 
 	/** the logging object used in this class **/
-	private static final OLog log_ = Tracing.createLoggerFor(CoreLoggingResourceable.class);
+	private static final Logger log_ = Tracing.createLoggerFor(CoreLoggingResourceable.class);
 
 	/** type of this LoggingResourceable - contains the OlatResourceable's type in the OlatResourceable case,
 	 * or the enum name() of the StringResourceableType otherwise
@@ -223,6 +223,21 @@ public class CoreLoggingResourceable implements ILoggingResourceable {
 	public static CoreLoggingResourceable wrap(OLATResourceable olatResourceable, ILoggingResourceableType type) {
 		return new CoreLoggingResourceable(olatResourceable, type, olatResourceable.getResourceableTypeName(),
 				String.valueOf(olatResourceable.getResourceableId()), "", false);			
+	}
+	
+	/**
+	 * General wrapper for an OlatResourceable - as it's not obvious of what type that 
+	 * OlatResourceable is (in terms of being able to later compare it against the businessPath etc)
+	 * an ILoggingResourceableType needs to be passed to this method as well.
+	 * 
+	 * @param olatResourceable A generic OLATResourceable
+	 * @param type The type of the resource
+	 * @param name The display name of the resource
+	 * @return
+	 */
+	public static CoreLoggingResourceable wrap(OLATResourceable olatResourceable, ILoggingResourceableType type, String name) {
+		return new CoreLoggingResourceable(olatResourceable, type, olatResourceable.getResourceableTypeName(),
+				String.valueOf(olatResourceable.getResourceableId()), name, false);			
 	}
 	
 	/**

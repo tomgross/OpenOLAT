@@ -19,19 +19,22 @@
  */
 package org.olat.login.oauth.spi;
 
+import org.apache.logging.log4j.Logger;
 import org.json.JSONException;
 import org.json.JSONObject;
-import org.olat.core.logging.OLog;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.StringHelper;
 import org.olat.login.oauth.OAuthLoginModule;
 import org.olat.login.oauth.OAuthSPI;
 import org.olat.login.oauth.model.OAuthUser;
-import org.scribe.builder.api.Api;
-import org.scribe.model.Token;
-import org.scribe.oauth.OAuthService;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+
+import com.github.scribejava.core.builder.ServiceBuilder;
+import com.github.scribejava.core.model.OAuth2AccessToken;
+import com.github.scribejava.core.model.Token;
+import com.github.scribejava.core.oauth.OAuthService;
 
 /**
  * 
@@ -42,8 +45,19 @@ import org.springframework.stereotype.Service;
 @Service
 public class ADFSProvider implements OAuthSPI {
 	
-	private static final OLog log = Tracing.createLoggerFor(ADFSProvider.class);
+	private static final Logger log = Tracing.createLoggerFor(ADFSProvider.class);
 
+	@Value("${adfs.attributename.useridentifyer:employeeNumber}")
+	private String idAttributeName;
+	@Value("${adfs.attributename.firstName:displayNamePrintable}")
+	private String firstNameAttributeName;
+	@Value("${adfs.attributename.lastName:Sn}")
+	private String lastNameAttributeName;
+	@Value("${adfs.attributename.email:mail}")
+	private String emailAttributeName;
+	@Value("${adfs.attributename.institutionalUserIdentifier:SAMAccountName}")
+	private String institutionalUserIdentifierAttributeName;
+	
 	@Autowired
 	private OAuthLoginModule oauthModule;
 	
@@ -63,8 +77,11 @@ public class ADFSProvider implements OAuthSPI {
 	}
 
 	@Override
-	public Api getScribeProvider() {
-		return new ADFSApi();
+	public OAuthService getScribeProvider() {
+		return new ServiceBuilder(oauthModule.getAdfsApiKey())
+                .apiSecret(oauthModule.getAdfsApiSecret())
+                .callback(oauthModule.getCallbackUrl())
+                .build(new ADFSApi());
 	}
 
 	@Override
@@ -83,35 +100,19 @@ public class ADFSProvider implements OAuthSPI {
 	}
 
 	@Override
-	public String getAppKey() {
-		return oauthModule.getAdfsApiKey();
-	}
-
-	@Override
-	public String getAppSecret() {
-		return "n/A";
-	}
-
-	@Override
-	public String[] getScopes() {
-		return new String[0];
-	}
-
-	@Override
 	public OAuthUser getUser(OAuthService service, Token accessToken) {
 		OAuthUser user = new OAuthUser();
 		try {
-			JSONWebToken jwt = JSONWebToken.parse(accessToken);
+			JSONWebToken jwt = JSONWebToken.parse((OAuth2AccessToken)accessToken);
 			JSONObject obj = jwt.getJsonPayload();
-			user.setId(getValue(obj, "employeeNumber"));
-			user.setFirstName(getValue(obj, "displayNamePrintable"));
-			user.setLastName(getValue(obj, "Sn"));
-			user.setEmail(getValue(obj, "mail"));
-			user.setInstitutionalUserIdentifier(getValue(obj, "SAMAccountName"));
+			user.setId(getValue(obj, idAttributeName));
+			user.setFirstName(getValue(obj, firstNameAttributeName));
+			user.setLastName(getValue(obj, lastNameAttributeName));
+			user.setEmail(getValue(obj, emailAttributeName));
+			user.setInstitutionalUserIdentifier(getValue(obj, institutionalUserIdentifierAttributeName));
 			if(!StringHelper.containsNonWhitespace(user.getId())) {
 				user.setId(user.getInstitutionalUserIdentifier());
 			}
-			
 		} catch (JSONException e) {
 			log.error("", e);
 		}
@@ -121,5 +122,10 @@ public class ADFSProvider implements OAuthSPI {
 	private String getValue(JSONObject obj, String property) {
 		String value = obj.optString(property);
 		return StringHelper.containsNonWhitespace(value) ? value : null;
+	}
+	
+	@Override
+	public String getIssuerIdentifier() {
+		return oauthModule.getAdfsOAuth2Endpoint();
 	}
 }

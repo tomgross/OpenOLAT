@@ -25,12 +25,12 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
 
 import org.olat.basesecurity.BaseSecurity;
 import org.olat.basesecurity.BaseSecurityModule;
 import org.olat.basesecurity.Group;
+import org.olat.basesecurity.IdentityRef;
+import org.olat.basesecurity.model.IdentityRefImpl;
 import org.olat.core.commons.persistence.SortKey;
 import org.olat.core.gui.UserRequest;
 import org.olat.core.gui.components.Component;
@@ -43,7 +43,6 @@ import org.olat.core.gui.components.form.flexible.elements.FormLink;
 import org.olat.core.gui.components.form.flexible.impl.FormBasicController;
 import org.olat.core.gui.components.form.flexible.impl.FormEvent;
 import org.olat.core.gui.components.form.flexible.impl.FormLayoutContainer;
-import org.olat.core.gui.components.form.flexible.impl.elements.table.DateFlexiCellRenderer;
 import org.olat.core.gui.components.form.flexible.impl.elements.table.DefaultFlexiColumnModel;
 import org.olat.core.gui.components.form.flexible.impl.elements.table.FlexiTableColumnModel;
 import org.olat.core.gui.components.form.flexible.impl.elements.table.FlexiTableDataModelFactory;
@@ -51,12 +50,12 @@ import org.olat.core.gui.components.form.flexible.impl.elements.table.FlexiTable
 import org.olat.core.gui.components.form.flexible.impl.elements.table.SelectionEvent;
 import org.olat.core.gui.components.link.Link;
 import org.olat.core.gui.components.link.LinkFactory;
-import org.olat.core.gui.components.stack.BreadcrumbPanelAware;
 import org.olat.core.gui.components.stack.TooledStackedPanel;
 import org.olat.core.gui.components.stack.TooledStackedPanel.Align;
 import org.olat.core.gui.control.Controller;
 import org.olat.core.gui.control.Event;
 import org.olat.core.gui.control.WindowControl;
+import org.olat.core.gui.control.generic.closablewrapper.CloseableCalloutWindowController;
 import org.olat.core.gui.control.generic.closablewrapper.CloseableModalController;
 import org.olat.core.gui.control.generic.dtabs.Activateable2;
 import org.olat.core.id.Identity;
@@ -67,8 +66,8 @@ import org.olat.core.id.context.ContextEntry;
 import org.olat.core.id.context.StateEntry;
 import org.olat.core.util.StringHelper;
 import org.olat.core.util.Util;
-import org.olat.core.util.mail.MailContext;
-import org.olat.core.util.mail.MailContextImpl;
+import org.olat.core.util.coordinate.CoordinatorManager;
+import org.olat.core.util.event.GenericEventListener;
 import org.olat.core.util.resource.OresHelper;
 import org.olat.course.CourseFactory;
 import org.olat.course.ICourse;
@@ -78,27 +77,32 @@ import org.olat.course.assessment.bulk.BulkAssessmentToolController;
 import org.olat.course.assessment.bulk.PassedCellRenderer;
 import org.olat.course.assessment.model.SearchAssessedIdentityParams;
 import org.olat.course.assessment.ui.tool.IdentityListCourseNodeTableModel.IdentityCourseElementCols;
-import org.olat.course.certificate.CertificateLight;
-import org.olat.course.certificate.CertificatesManager;
-import org.olat.course.certificate.ui.DownloadCertificateCellRenderer;
-import org.olat.course.nodes.*;
-import org.olat.course.nodes.gta.GTAManager;
-import org.olat.course.nodes.gta.Task;
-import org.olat.course.nodes.gta.TaskList;
+import org.olat.course.assessment.ui.tool.event.ShowDetailsEvent;
+import org.olat.course.nodes.AssessableCourseNode;
+import org.olat.course.nodes.CalculatedAssessableCourseNode;
+import org.olat.course.nodes.CourseNode;
+import org.olat.course.nodes.CourseNodeFactory;
+import org.olat.course.nodes.STCourseNode;
+import org.olat.course.run.environment.CourseEnvironment;
 import org.olat.course.run.scoring.ScoreEvaluation;
 import org.olat.course.run.userview.UserCourseEnvironment;
 import org.olat.course.run.userview.UserCourseEnvironmentImpl;
 import org.olat.group.BusinessGroup;
 import org.olat.modules.assessment.AssessmentEntry;
 import org.olat.modules.assessment.AssessmentToolOptions;
+import org.olat.modules.assessment.Role;
 import org.olat.modules.assessment.model.AssessmentEntryStatus;
+import org.olat.modules.assessment.model.AssessmentRunStatus;
 import org.olat.modules.assessment.ui.AssessedIdentityController;
 import org.olat.modules.assessment.ui.AssessedIdentityElementRow;
 import org.olat.modules.assessment.ui.AssessedIdentityListState;
 import org.olat.modules.assessment.ui.AssessmentToolContainer;
 import org.olat.modules.assessment.ui.AssessmentToolSecurityCallback;
 import org.olat.modules.assessment.ui.ScoreCellRenderer;
+import org.olat.modules.assessment.ui.component.CompletionItem;
 import org.olat.modules.assessment.ui.event.AssessmentFormEvent;
+import org.olat.modules.assessment.ui.event.CompletionEvent;
+import org.olat.modules.curriculum.CurriculumElement;
 import org.olat.repository.RepositoryEntry;
 import org.olat.repository.RepositoryService;
 import org.olat.user.UserManager;
@@ -106,32 +110,40 @@ import org.olat.user.propertyhandlers.UserPropertyHandler;
 import org.springframework.beans.factory.annotation.Autowired;
 
 /**
+ * This is the "abstract" class of the assessed identities list. If you want
+ * to inherit from it, don't forget to copy the velocity template and adapt
+ * it to your need.
  * 
  * Initial date: 06.10.2015<br>
  * @author srosse, stephane.rosse@frentix.com, http://www.frentix.com
  *
  */
-public class IdentityListCourseNodeController extends FormBasicController implements Activateable2 {
+public class IdentityListCourseNodeController extends FormBasicController
+	implements Activateable2, GenericEventListener, AssessmentCourseNodeController {
 
-	private final BusinessGroup group;
-	private final CourseNode courseNode;
+	private int counter = 0;
+	protected final BusinessGroup group;
+	protected final CourseNode courseNode;
 	private final RepositoryEntry courseEntry;
 	private final RepositoryEntry referenceEntry;
+	private final CourseEnvironment courseEnv;
 	private final boolean isAdministrativeUser;
-	private final UserCourseEnvironment coachCourseEnv;
+	protected final UserCourseEnvironment coachCourseEnv;
 	private final List<UserPropertyHandler> userPropertyHandlers;
-	private final AssessmentToolSecurityCallback assessmentCallback;
+	protected final AssessmentToolSecurityCallback assessmentCallback;
 	
 	private Link nextLink, previousLink;
-	private FlexiTableElement tableEl;
+	protected FlexiTableElement tableEl;
 	private FormLink bulkDoneButton, bulkVisibleButton;
-	private final TooledStackedPanel stackPanel;
+	protected final TooledStackedPanel stackPanel;
 	private final AssessmentToolContainer toolContainer;
-	private IdentityListCourseNodeTableModel usersTableModel;
+	protected IdentityListCourseNodeTableModel usersTableModel;
 	
-	private List<Controller> toolsCtrl;
-	private CloseableModalController cmc;
+	private Controller toolsCtrl;
+	protected CloseableModalController cmc;
+	private List<Controller> bulkToolsList;
 	private AssessedIdentityController currentIdentityCtrl;
+	private CloseableCalloutWindowController toolsCalloutCtrl;
 	private ConfirmUserVisibilityController changeUserVisibilityCtrl;
 	
 	@Autowired
@@ -143,7 +155,7 @@ public class IdentityListCourseNodeController extends FormBasicController implem
 	@Autowired
 	private RepositoryService repositoryService;
 	@Autowired
-	private CertificatesManager certificatesManager;
+	private CoordinatorManager coordinatorManager;
 	@Autowired
 	private AssessmentToolManager assessmentToolManager;
 	@Autowired
@@ -155,6 +167,7 @@ public class IdentityListCourseNodeController extends FormBasicController implem
 			RepositoryEntry courseEntry, BusinessGroup group, CourseNode courseNode, UserCourseEnvironment coachCourseEnv,
 			AssessmentToolContainer toolContainer, AssessmentToolSecurityCallback assessmentCallback) {
 		super(ureq, wControl, "identity_courseelement");
+		setTranslator(Util.createPackageTranslator(IdentityListCourseNodeController.class, getLocale(), getTranslator()));
 		setTranslator(Util.createPackageTranslator(AssessmentModule.class, getLocale(), getTranslator()));
 		setTranslator(userManager.getPropertyHandlerTranslator(getTranslator()));
 		
@@ -165,6 +178,7 @@ public class IdentityListCourseNodeController extends FormBasicController implem
 		this.toolContainer = toolContainer;
 		this.coachCourseEnv = coachCourseEnv;
 		this.assessmentCallback = assessmentCallback;
+		courseEnv = CourseFactory.loadCourse(courseEntry).getCourseEnvironment();
 		
 		if(courseNode.needsReferenceToARepositoryEntry()) {
 			referenceEntry = courseNode.getReferencedRepositoryEntry();
@@ -176,15 +190,58 @@ public class IdentityListCourseNodeController extends FormBasicController implem
 		userPropertyHandlers = userManager.getUserPropertyHandlersFor(AssessmentToolConstants.usageIdentifyer, isAdministrativeUser);
 		
 		initForm(ureq);
+		initMultiSelectionTools(ureq, flc);
+		
+		coordinatorManager.getCoordinator().getEventBus()
+			.registerFor(this, getIdentity(), courseEntry.getOlatResource());
 	}
 	
+	public RepositoryEntry getCourseRepositoryEntry() {
+		return courseEntry;
+	}
+	
+	public RepositoryEntry getReferencedRepositoryEntry() {
+		return referenceEntry;
+	}
+	
+	public CourseEnvironment getCourseEnvironment() {
+		return courseEnv;
+	}
+	
+	public AssessmentToolContainer getToolContainer() {
+		return toolContainer;
+	}
+
+	@Override
 	public AssessedIdentityListState getListState() {
 		List<FlexiTableFilter> filters = tableEl.getSelectedFilters();
 		String filter = null;
-		if(filters != null && filters.size() > 0) {
+		if(filters != null && !filters.isEmpty()) {
 			filter = filters.get(0).getFilter();
 		}
 		return new AssessedIdentityListState(filter, tableEl.getSelectedExtendedFilters());
+	}
+
+	@Override
+	public List<IdentityRef> getSelectedIdentities() {
+		Set<Integer> selections = tableEl.getMultiSelectedIndex();
+		List<AssessedIdentityElementRow> rows = new ArrayList<>(selections.size());
+		for(Integer i:selections) {
+			AssessedIdentityElementRow row = usersTableModel.getObject(i.intValue());
+			if(row != null && row.getAssessmentStatus() != AssessmentEntryStatus.done) {
+				rows.add(row);
+			}
+		}
+
+		if(rows.isEmpty()) {
+			return Collections.emptyList();
+		}
+		
+		List<IdentityRef> selectedIdentities = new ArrayList<>();
+		for(AssessedIdentityElementRow row:rows) {
+			selectedIdentities.add(new IdentityRefImpl(row.getIdentityKey()));
+		}
+		return selectedIdentities;
 	}
 
 	@Override
@@ -199,10 +256,7 @@ public class IdentityListCourseNodeController extends FormBasicController implem
 			}
 		}
 		
-		ICourse course = CourseFactory.loadCourse(courseEntry);
-		String select = (courseNode instanceof AssessableCourseNode
-				&& (courseNode.getParent() == null || !(courseNode instanceof STCourseNode)))
-				? "select" : null;
+		String select = isSelectable() ? "select" : null;
 
 		//add the table
 		FlexiTableSortOptions options = new FlexiTableSortOptions();
@@ -222,9 +276,89 @@ public class IdentityListCourseNodeController extends FormBasicController implem
 			}
 			colIndex++;
 		}
-		AssessableCourseNode assessableNode = null;
+		
+		initAssessmentColumns(columnsModel);
+		initStatusColumns(columnsModel);
+		initModificationDatesColumns(columnsModel);
+		initCalloutColumns(columnsModel);
+
+		AssessableCourseNode assessableNode = courseNode instanceof AssessableCourseNode ? (AssessableCourseNode)courseNode : null;
+		usersTableModel = new IdentityListCourseNodeTableModel(columnsModel, assessableNode, getLocale()); 
+		tableEl = uifactory.addTableElement(getWindowControl(), "table", usersTableModel, 20, false, getTranslator(), formLayout);
+		tableEl.setExportEnabled(true);
+		tableEl.setSearchEnabled(new AssessedIdentityListProvider(getIdentity(), courseEntry, referenceEntry, courseNode.getIdent(), assessmentCallback), ureq.getUserSession());
+		tableEl.setMultiSelect(!coachCourseEnv.isCourseReadOnly());
+		tableEl.setSortSettings(options);
+		tableEl.setSelectAllEnable(true);
+		tableEl.setFilters("", getFilters(), false);
+		List<FlexiTableFilter> extendedFilters = getExtendedFilters();
+		if(!extendedFilters.isEmpty()) {
+			tableEl.setExtendedFilterButton(translate("filter.groups"), extendedFilters);
+		}
+		tableEl.setAndLoadPersistedPreferences(ureq, getTableId());
+	}
+	
+	protected List<FlexiTableFilter> getFilters() {
+		List<FlexiTableFilter> filters = new ArrayList<>();
+		filters.add(new FlexiTableFilter(translate("filter.passed"), "passed"));
+		filters.add(new FlexiTableFilter(translate("filter.failed"), "failed"));
+		filters.add(new FlexiTableFilter(translate("filter.inProgress"), "inProgress"));
+		filters.add(new FlexiTableFilter(translate("filter.inReview"), "inReview"));
+		filters.add(new FlexiTableFilter(translate("filter.done"), "done"));
+		filters.add(FlexiTableFilter.SPACER);
+		filters.add(new FlexiTableFilter(translate("filter.showAll"), "showAll", true));
+		return filters;
+	}
+	
+	protected List<FlexiTableFilter> getExtendedFilters() {
+		List<FlexiTableFilter> extendedFilters = new ArrayList<>();
+		if(group == null) {
+			if(assessmentCallback.canAssessBusinessGoupMembers()) {
+				List<BusinessGroup> coachedGroups;
+				if(assessmentCallback.isAdmin()) {
+					coachedGroups = coachCourseEnv.getCourseEnvironment().getCourseGroupManager().getAllBusinessGroups();
+				} else {
+					coachedGroups = assessmentCallback.getCoachedGroups(); 
+				}
+	
+				if(!coachedGroups.isEmpty()) {
+					for(BusinessGroup coachedGroup:coachedGroups) {
+						String groupName = StringHelper.escapeHtml(coachedGroup.getName());
+						extendedFilters.add(new FlexiTableFilter(groupName, "businessgroup-" + coachedGroup.getKey(), "o_icon o_icon_group"));
+					}
+				}
+			}
+			
+			if(assessmentCallback.canAssessCurriculumMembers()) {
+				List<CurriculumElement> coachedCurriculumElements;
+				if(assessmentCallback.isAdmin()) {
+					coachedCurriculumElements = coachCourseEnv.getCourseEnvironment().getCourseGroupManager().getAllCurriculumElements();
+				} else {
+					coachedCurriculumElements = coachCourseEnv.getCoachedCurriculumElements();
+				}
+				
+				if(!coachedCurriculumElements.isEmpty()) {
+					if(!extendedFilters.isEmpty()) {
+						extendedFilters.add(FlexiTableFilter.SPACER);
+					}
+					for(CurriculumElement coachedCurriculumElement:coachedCurriculumElements) {
+						String groupName = StringHelper.escapeHtml(coachedCurriculumElement.getDisplayName());
+						extendedFilters.add(new FlexiTableFilter(groupName, "curriculumelement-" + coachedCurriculumElement.getKey(), "o_icon o_icon_curriculum_element"));
+					}
+				}
+			}
+		}
+		
+		return extendedFilters;
+	}
+	
+	protected String getTableId() {
+		return "assessment-tool-identity-list";
+	}
+	
+	protected void initAssessmentColumns(FlexiTableColumnModel columnsModel) {
 		if(courseNode instanceof AssessableCourseNode) {
-			assessableNode = (AssessableCourseNode)courseNode;
+			AssessableCourseNode assessableNode = (AssessableCourseNode)courseNode;
 			
 			if(assessableNode.hasAttemptsConfigured()) {
 				columnsModel.addFlexiColumnModel(new DefaultFlexiColumnModel(IdentityCourseElementCols.attempts));
@@ -241,78 +375,110 @@ public class IdentityListCourseNodeController extends FormBasicController implem
 					if(assessableNode.getMaxScoreConfiguration() != null) {
 						columnsModel.addFlexiColumnModel(new DefaultFlexiColumnModel(IdentityCourseElementCols.max, new ScoreCellRenderer()));
 					}
+					if(assessableNode.hasPassedConfigured() && assessableNode.getCutValueConfiguration() != null) {
+						columnsModel.addFlexiColumnModel(new DefaultFlexiColumnModel(false, IdentityCourseElementCols.cut, new ScoreCellRenderer()));
+					}
 				}
-				columnsModel.addFlexiColumnModel(new DefaultFlexiColumnModel(IdentityCourseElementCols.score, new ScoreCellRenderer()));
+				initScoreColumns(columnsModel);
 			}
 			if(assessableNode.hasPassedConfigured()) {
 				columnsModel.addFlexiColumnModel(new DefaultFlexiColumnModel(IdentityCourseElementCols.passed, new PassedCellRenderer()));
 			}
+			if(assessableNode.hasIndividualAsssessmentDocuments()) {
+				columnsModel.addFlexiColumnModel(new DefaultFlexiColumnModel(IdentityCourseElementCols.numOfAssessmentDocs));
+			}
 		}
+	}
 
+	protected void initScoreColumns(FlexiTableColumnModel columnsModel) {
+		columnsModel.addFlexiColumnModel(new DefaultFlexiColumnModel(IdentityCourseElementCols.score, new ScoreCellRenderer()));
+	}
+	
+	protected void initStatusColumns(FlexiTableColumnModel columnsModel) {
 		columnsModel.addFlexiColumnModel(new DefaultFlexiColumnModel(IdentityCourseElementCols.assessmentStatus, new AssessmentStatusCellRenderer(getLocale())));
-		columnsModel.addFlexiColumnModel(new DefaultFlexiColumnModel(IdentityCourseElementCols.initialLaunchDate, select));
-		columnsModel.addFlexiColumnModel(new DefaultFlexiColumnModel(IdentityCourseElementCols.lastScoreUpdate, select));
-		
-		if(course.getCourseConfig().isCertificateEnabled()) {
-			columnsModel.addFlexiColumnModel(new DefaultFlexiColumnModel(IdentityCourseElementCols.certificate, new DownloadCertificateCellRenderer()));
-			if(course.getCourseConfig().isRecertificationEnabled()) {
-				columnsModel.addFlexiColumnModel(new DefaultFlexiColumnModel(IdentityCourseElementCols.recertification, new DateFlexiCellRenderer(getLocale())));
-			}
+	}
+	
+	protected void initModificationDatesColumns(FlexiTableColumnModel columnsModel) {
+		String select = getSelectAction();
+		columnsModel.addFlexiColumnModel(new DefaultFlexiColumnModel(false, IdentityCourseElementCols.lastModified, select));
+		columnsModel.addFlexiColumnModel(new DefaultFlexiColumnModel(IdentityCourseElementCols.lastUserModified, select));
+		columnsModel.addFlexiColumnModel(new DefaultFlexiColumnModel(false, IdentityCourseElementCols.lastCoachModified, select));
+	}
+	
+	protected void initCalloutColumns(FlexiTableColumnModel columnsModel) {
+		if(courseNode instanceof AssessableCourseNode) {
+			DefaultFlexiColumnModel toolsCol = new DefaultFlexiColumnModel(IdentityCourseElementCols.tools);
+			toolsCol.setExportable(false);
+			columnsModel.addFlexiColumnModel(toolsCol);
 		}
-
-		usersTableModel = new IdentityListCourseNodeTableModel(columnsModel, assessableNode); 
-		tableEl = uifactory.addTableElement(getWindowControl(), "table", usersTableModel, 20, false, getTranslator(), formLayout);
-		tableEl.setExportEnabled(true);
-		tableEl.setSearchEnabled(new AssessedIdentityListProvider(getIdentity(), courseEntry, referenceEntry, courseNode.getIdent(), assessmentCallback), ureq.getUserSession());
-		tableEl.setMultiSelect(!coachCourseEnv.isCourseReadOnly());
-		tableEl.setSortSettings(options);
-		tableEl.setSelectAllEnable(true);
-
-		List<FlexiTableFilter> filters = new ArrayList<>();
-		filters.add(new FlexiTableFilter(translate("filter.showAll"), "showAll", true));
-		filters.add(FlexiTableFilter.SPACER);
-		filters.add(new FlexiTableFilter(translate("filter.passed"), "passed"));
-		filters.add(new FlexiTableFilter(translate("filter.failed"), "failed"));
-		filters.add(new FlexiTableFilter(translate("filter.inProgress"), "inProgress"));
-		filters.add(new FlexiTableFilter(translate("filter.inReview"), "inReview"));
-		filters.add(new FlexiTableFilter(translate("filter.done"), "done"));
-		tableEl.setFilters("", filters, false);
-		
-		if(assessmentCallback.canAssessBusinessGoupMembers() && group == null) {
-			List<BusinessGroup> coachedGroups = null;
-			if(assessmentCallback.isAdmin()) {
-				coachedGroups = course.getCourseEnvironment().getCourseGroupManager().getAllBusinessGroups();
-			} else {
-				coachedGroups = assessmentCallback.getCoachedGroups(); 
-			}
-
-			if(coachedGroups.size() > 0) {
-				List<FlexiTableFilter> groupFilters = new ArrayList<>();
-				for(BusinessGroup coachedGroup:coachedGroups) {
-					String groupName = StringHelper.escapeHtml(coachedGroup.getName());
-					groupFilters.add(new FlexiTableFilter(groupName, coachedGroup.getKey().toString(), "o_icon o_icon_group"));
-				}
-				
-				tableEl.setExtendedFilterButton(translate("filter.groups"), groupFilters);
-			}
-		}
-
-		tableEl.setAndLoadPersistedPreferences(ureq, "assessment-tool-identity-list");
-		
-		if(courseNode instanceof AssessableCourseNode && !(courseNode instanceof CalculatedAssessableCourseNode)) {
+	}
+	
+	protected String getSelectAction() {
+		return isSelectable() ? "select" : null;
+	}
+	
+	protected boolean isSelectable() {
+		return courseNode instanceof AssessableCourseNode;
+	}
+	
+	protected void initMultiSelectionTools(@SuppressWarnings("unused") UserRequest ureq, FormLayoutContainer formLayout) {
+		if(courseNode instanceof AssessableCourseNode) {
 			bulkDoneButton = uifactory.addFormLink("bulk.done", formLayout, Link.BUTTON);
+			bulkDoneButton.setElementCssClass("o_sel_assessment_bulk_done");
 			bulkDoneButton.setVisible(!coachCourseEnv.isCourseReadOnly());
 			
 			bulkVisibleButton = uifactory.addFormLink("bulk.visible", formLayout, Link.BUTTON);
+			bulkVisibleButton.setElementCssClass("o_sel_assessment_bulk_visible");
 			bulkVisibleButton.setVisible(!coachCourseEnv.isCourseReadOnly());
 		}
 	}
 	
-	private void updateModel(UserRequest ureq, String searchString, List<FlexiTableFilter> filters, List<FlexiTableFilter> extendedFilters) {
+	protected void loadModel(@SuppressWarnings("unused") UserRequest ureq) {
+		SearchAssessedIdentityParams params = getSearchParameters();
+		List<Identity> assessedIdentities = assessmentToolManager.getAssessedIdentities(getIdentity(), params);
+		List<AssessmentEntry> assessmentEntries = assessmentToolManager.getAssessmentEntries(getIdentity(), params, null);
+		Map<Long,AssessmentEntry> entryMap = new HashMap<>();
+		assessmentEntries.stream()
+			.filter(entry -> entry.getIdentity() != null)
+			.forEach(entry -> entryMap.put(entry.getIdentity().getKey(), entry));
+
+		List<AssessedIdentityElementRow> rows = new ArrayList<>(assessedIdentities.size());
+		for(Identity assessedIdentity:assessedIdentities) {
+			AssessmentEntry entry = entryMap.get(assessedIdentity.getKey());
+			
+			CompletionItem currentCompletion = new CompletionItem("current-completion-" + (++counter), getLocale());
+			if(entry != null) {
+				currentCompletion.setCompletion(entry.getCurrentRunCompletion());
+				AssessmentRunStatus status = entry.getCurrentRunStatus();
+				currentCompletion.setEnded(status != null && AssessmentRunStatus.done.equals(status));
+			}
+			
+			FormLink toolsLink = uifactory.addFormLink("tools_" + (++counter), "tools", "", null, null, Link.NONTRANSLATED);
+			toolsLink.setIconLeftCSS("o_icon o_icon_actions o_icon-lg");
+		
+			AssessedIdentityElementRow row = new AssessedIdentityElementRow(assessedIdentity, entry,
+					currentCompletion, toolsLink, userPropertyHandlers, getLocale());
+			toolsLink.setUserObject(row);
+			rows.add(row);
+		}
+
+		usersTableModel.setObjects(rows);
+		List<FlexiTableFilter> filters = tableEl.getSelectedFilters();
+		if(filters != null && !filters.isEmpty() && filters.get(0) != null) {
+			usersTableModel.filter(tableEl.getQuickSearchString(), Collections.singletonList(filters.get(0)));
+		}
+		tableEl.reset();
+		tableEl.reloadData();
+	}
+	
+	protected SearchAssessedIdentityParams getSearchParameters() {
 		SearchAssessedIdentityParams params = new SearchAssessedIdentityParams(courseEntry, courseNode.getIdent(), referenceEntry, assessmentCallback);
 		
+		List<FlexiTableFilter> filters = tableEl.getSelectedFilters();
+		List<FlexiTableFilter> extendedFilters = tableEl.getSelectedExtendedFilters();
+		
 		List<AssessmentEntryStatus> assessmentStatus = null;
-		if(filters != null && filters.size() > 0) {
+		if(filters != null && !filters.isEmpty()) {
 			assessmentStatus = new ArrayList<>(filters.size());
 			for(FlexiTableFilter filter:filters) {
 				if("passed".equals(filter.getFilter())) {
@@ -327,102 +493,85 @@ public class IdentityListCourseNodeController extends FormBasicController implem
 		params.setAssessmentStatus(assessmentStatus);
 		
 		List<Long> businessGroupKeys = null;
+		List<Long> curriculumElementKeys = null;
 		if(group != null) {
 			businessGroupKeys = Collections.singletonList(group.getKey());
-		} else if(extendedFilters != null && extendedFilters.size() > 0) {
-			businessGroupKeys = new ArrayList<>(extendedFilters.size());
+		} else if(extendedFilters != null && !extendedFilters.isEmpty()) {
+			businessGroupKeys = new ArrayList<>();
+			curriculumElementKeys = new ArrayList<>();
 			for(FlexiTableFilter extendedFilter:extendedFilters) {
-				if(StringHelper.isLong(extendedFilter.getFilter())) {
-					businessGroupKeys.add(Long.parseLong(extendedFilter.getFilter()));
+				String filter = extendedFilter.getFilter();
+				int index = extendedFilter.getFilter().indexOf('-');
+				if(index > 0) {
+					Long key = Long.valueOf(filter.substring(index + 1));
+					if(filter.startsWith("businessgroup-")) {
+						businessGroupKeys.add(key);
+					} else if(filter.startsWith("curriculumelement-")) {
+						curriculumElementKeys.add(key);
+					}
 				}
+				
+				
 			}
 		}
 		params.setBusinessGroupKeys(businessGroupKeys);
-		params.setSearchString(searchString);
-		
-		List<Identity> assessedIdentities = assessmentToolManager.getAssessedIdentities(getIdentity(), params);
-		List<AssessmentEntry> assessmentEntries = assessmentToolManager.getAssessmentEntries(getIdentity(), params, null);
-		Map<Long,AssessmentEntry> entryMap = new HashMap<>();
-		assessmentEntries.stream()
-			.filter(entry -> entry.getIdentity() != null)
-			.forEach((entry) -> entryMap.put(entry.getIdentity().getKey(), entry));
-
-		List<AssessedIdentityElementRow> rows = new ArrayList<>(assessedIdentities.size());
-		for(Identity assessedIdentity:assessedIdentities) {
-			AssessmentEntry entry = entryMap.get(assessedIdentity.getKey());
-			rows.add(new AssessedIdentityElementRow(assessedIdentity, entry, userPropertyHandlers, getLocale()));
-		}
-		
-		if(toolContainer.getCertificateMap() == null) {
-			List<CertificateLight> certificates = certificatesManager.getLastCertificates(courseEntry.getOlatResource());
-			ConcurrentMap<Long, CertificateLight> certificateMap = new ConcurrentHashMap<>();
-			for(CertificateLight certificate:certificates) {
-				certificateMap.put(certificate.getIdentityKey(), certificate);
-			}
-			toolContainer.setCertificateMap(certificateMap);
-		}
-		usersTableModel.setCertificateMap(toolContainer.getCertificateMap());
-		usersTableModel.setObjects(rows);
-		if(filters != null && filters.size() > 0 && filters.get(0) != null) {
-			usersTableModel.filter(Collections.singletonList(filters.get(0)));
-		}
-		tableEl.reset();
-		tableEl.reloadData();
-
-		List<String> toolCmpNames = new ArrayList<>();
-		if(courseNode instanceof AssessableCourseNode) {
-			AssessableCourseNode acn = (AssessableCourseNode)courseNode;
-			AssessmentToolOptions options = new AssessmentToolOptions();
-			options.setAdmin(assessmentCallback.isAdmin());
-			if(group == null) {
-				if(assessmentCallback.isAdmin()) {
-					options.setNonMembers(params.isNonMembers());
-				} else {
-					options.setIdentities(assessedIdentities);
-					fillAlternativeToAssessableIdentityList(options, params);
-				}
+		params.setCurriculumElementKeys(curriculumElementKeys);
+		params.setSearchString(tableEl.getQuickSearchString());
+		return params;
+	}
+	
+	protected AssessmentToolOptions getOptions() {
+		SearchAssessedIdentityParams params = getSearchParameters();
+		AssessmentToolOptions options = new AssessmentToolOptions();
+		options.setAdmin(assessmentCallback.isAdmin());
+		if(group == null) {
+			if(assessmentCallback.isAdmin()) {
+				options.setNonMembers(params.isNonMembers());
 			} else {
-				options.setGroup(group);
+				List<Identity> assessedIdentities = assessmentToolManager.getAssessedIdentities(getIdentity(), params);
+				options.setIdentities(assessedIdentities);
+				fillAlternativeToAssessableIdentityList(options, params);
 			}
-			
-			//TODO qti filter by group?
-			List<Controller> tools = acn.createAssessmentTools(ureq, getWindowControl(), stackPanel, coachCourseEnv, options);
-			int count = 0;
-			if(tools.size() > 0) {
-				for(Controller tool:tools) {
-					listenTo(tool);
-					String toolCmpName = "ctrl_" + (count++);
-					flc.put(toolCmpName, tool.getInitialComponent());
-					toolCmpNames.add(toolCmpName);
-					if(tool instanceof BreadcrumbPanelAware) {
-						((BreadcrumbPanelAware)tool).setBreadcrumbPanel(stackPanel);
-					}
-				}
-			}
-			toolsCtrl = tools;
+		} else {
+			options.setGroup(group);
 		}
-		flc.contextPut("toolCmpNames", toolCmpNames);
+		return options;
 	}
 	
 	private void fillAlternativeToAssessableIdentityList(AssessmentToolOptions options, SearchAssessedIdentityParams params) {
 		List<Group> baseGroups = new ArrayList<>();
-		if((assessmentCallback.canAssessRepositoryEntryMembers()
-				&& (assessmentCallback.getCoachedGroups() == null || assessmentCallback.getCoachedGroups().isEmpty()))
-				|| assessmentCallback.canAssessNonMembers()) {
+		if(assessmentCallback.canAssessRepositoryEntryMembers() || assessmentCallback.canAssessNonMembers()) {
 			baseGroups.add(repositoryService.getDefaultGroup(courseEntry));
 		}
-		if(assessmentCallback.getCoachedGroups() != null && assessmentCallback.getCoachedGroups().size() > 0) {
+		if(assessmentCallback.canAssessBusinessGoupMembers() && assessmentCallback.getCoachedGroups() != null && !assessmentCallback.getCoachedGroups().isEmpty()) {
 			for(BusinessGroup coachedGroup:assessmentCallback.getCoachedGroups()) {
 				baseGroups.add(coachedGroup.getBaseGroup());
 			}
 		}
-		options.setGroups(baseGroups);
+		if(assessmentCallback.canAssessCurriculumMembers()) {
+			List<CurriculumElement> coachedCurriculumElements = coachCourseEnv.getCoachedCurriculumElements();
+			for(CurriculumElement coachedCurriculumElement:coachedCurriculumElements) {
+				baseGroups.add(coachedCurriculumElement.getGroup());
+			}
+		}
+		options.setAlternativeGroupsOfIdentities(baseGroups);
 		options.setNonMembers(params.isNonMembers());
 	}
 
 	@Override
 	protected void doDispose() {
-		//
+		coordinatorManager.getCoordinator().getEventBus()
+			.deregisterFor(this, courseEntry.getOlatResource());
+	}
+	
+	@Override
+	public void event(Event event) {
+		if(event instanceof CompletionEvent) {
+			CompletionEvent ce = (CompletionEvent)event;
+			if(courseNode.getIdent().equals(ce.getSubIdent())) {
+				doUpdateCompletion(ce.getCompletion(), ce.getStatus(), ce.getIdentityKey());
+			}
+		}
 	}
 
 	@Override
@@ -441,7 +590,7 @@ public class IdentityListCourseNodeController extends FormBasicController implem
 		if(extendedFilters != null) {
 			tableEl.setSelectedExtendedFilters(extendedFilters);
 		}
-		updateModel(ureq, null, tableEl.getSelectedFilters(), tableEl.getSelectedExtendedFilters());
+		loadModel(ureq);
 		
 		if(entries != null && entries.size() > 0) {
 			ContextEntry entry = entries.get(0);
@@ -486,35 +635,58 @@ public class IdentityListCourseNodeController extends FormBasicController implem
 		} else if(currentIdentityCtrl == source) {
 			if(event instanceof AssessmentFormEvent) {
 				AssessmentFormEvent aee = (AssessmentFormEvent)event;
-				updateModel(ureq, null, null, null);
+				loadModel(ureq);
 				if(aee.isClose()) {
 					stackPanel.popController(currentIdentityCtrl);
 				}
 			} else if(event == Event.CHANGED_EVENT) {
-				updateModel(ureq, null, null, null);
+				loadModel(ureq);
 			} else if(event == Event.CANCELLED_EVENT) {
+				loadModel(ureq);
 				stackPanel.popController(currentIdentityCtrl);
 			}
-		} else if(toolsCtrl != null && toolsCtrl.contains(source)) {
+		} else if(bulkToolsList != null && bulkToolsList.contains(source)) {
 			if(event == Event.CHANGED_EVENT) {
-				updateModel(ureq, null, null, null);
+				loadModel(ureq);
 			}
 		} else if(changeUserVisibilityCtrl == source) {
 			if(event == Event.DONE_EVENT) {
 				doSetVisibility(ureq, changeUserVisibilityCtrl.getVisibility(), changeUserVisibilityCtrl.getRows());
 			}
 			cmc.deactivate();
-			doCleanUp();
+			cleanUp();
+		} else if(toolsCtrl == source) {
+			if(event instanceof ShowDetailsEvent) {
+				doSelect(ureq, ((ShowDetailsEvent)event).getAssessedIdentity());
+				toolsCalloutCtrl.deactivate();
+				cleanUp();
+			} else if(event == Event.CHANGED_EVENT) {
+				loadModel(ureq);
+				toolsCalloutCtrl.deactivate();
+				cleanUp();
+			} else if(event == Event.CLOSE_EVENT) {
+				//don't dispose it, there are some popup window at work
+				toolsCalloutCtrl.deactivate();
+			} else if(event == Event.CANCELLED_EVENT) {
+				toolsCalloutCtrl.deactivate();
+				cleanUp();
+			}
+		} else if(toolsCalloutCtrl == source) {
+			cleanUp();
 		} else if(cmc == source) {
-			doCleanUp();
+			cleanUp();
 		}
 		super.event(ureq, source, event);
 	}
 	
-	private void doCleanUp() {
+	protected void cleanUp() {
 		removeAsListenerAndDispose(changeUserVisibilityCtrl);
+		removeAsListenerAndDispose(toolsCalloutCtrl);
+		removeAsListenerAndDispose(toolsCtrl);
 		removeAsListenerAndDispose(cmc);
 		changeUserVisibilityCtrl = null;
+		toolsCalloutCtrl = null;
+		toolsCtrl = null;
 		cmc = null;
 	}
 
@@ -529,16 +701,39 @@ public class IdentityListCourseNodeController extends FormBasicController implem
 					doSelect(ureq, row);
 				}
 			} else if(event instanceof FlexiTableSearchEvent) {
-				FlexiTableSearchEvent ftse = (FlexiTableSearchEvent)event;
-				updateModel(ureq, ftse.getSearch(), ftse.getFilters(), ftse.getExtendedFilters());
+				loadModel(ureq);
 			}
 		} else if(bulkDoneButton == source) {
 			doSetDone(ureq);
 		} else if(bulkVisibleButton == source) {
 			doConfirmVisible(ureq);
+		} else if(source instanceof FormLink) {
+			FormLink link = (FormLink)source;
+			if("tools".equals(link.getCmd())) {
+				doOpenTools(ureq, (AssessedIdentityElementRow)link.getUserObject(), link);
+			}
 		}
 		
 		super.formInnerEvent(ureq, source, event);
+	}
+	
+	private void doOpenTools(UserRequest ureq, AssessedIdentityElementRow row, FormLink link) {
+		removeAsListenerAndDispose(toolsCtrl);
+		removeAsListenerAndDispose(toolsCalloutCtrl);
+
+		Identity assessedIdentity = securityManager.loadIdentityByKey(row.getIdentityKey());
+		toolsCtrl = createCalloutController(ureq, assessedIdentity);
+		listenTo(toolsCtrl);
+
+		toolsCalloutCtrl = new CloseableCalloutWindowController(ureq, getWindowControl(),
+				toolsCtrl.getInitialComponent(), link.getFormDispatchId(), "", true, "");
+		listenTo(toolsCalloutCtrl);
+		toolsCalloutCtrl.activate();
+	}
+	
+	protected Controller createCalloutController(UserRequest ureq, Identity assessedIdentity) {
+		return new IdentityListCourseNodeToolsController(ureq, getWindowControl(),
+				(AssessableCourseNode)courseNode, assessedIdentity, coachCourseEnv);
 	}
 	
 	private void doNext(UserRequest ureq) {
@@ -581,6 +776,16 @@ public class IdentityListCourseNodeController extends FormBasicController implem
 		return -1;
 	}
 	
+	private void doSelect(UserRequest ureq, Identity assessedIdentity) {
+		List<AssessedIdentityElementRow> rows = usersTableModel.getObjects();
+		for(AssessedIdentityElementRow row:rows) {
+			if(assessedIdentity.getKey().equals(row.getIdentityKey())) {
+				doSelect(ureq, row);
+				break;
+			}
+		}
+	}
+	
 	private Controller doSelect(UserRequest ureq, AssessedIdentityElementRow row) {
 		removeAsListenerAndDispose(currentIdentityCtrl);
 		
@@ -591,7 +796,7 @@ public class IdentityListCourseNodeController extends FormBasicController implem
 		WindowControl bwControl = addToHistory(ureq, ores, null);
 		if(courseNode.getParent() == null) {
 			currentIdentityCtrl = new AssessmentIdentityCourseController(ureq, bwControl, stackPanel,
-					courseEntry, coachCourseEnv, assessedIdentity);
+					courseEntry, coachCourseEnv, assessedIdentity, true);
 		} else {
 			currentIdentityCtrl = new AssessmentIdentityCourseNodeController(ureq, getWindowControl(), stackPanel,
 					courseEntry, courseNode, coachCourseEnv, assessedIdentity, true);
@@ -618,7 +823,7 @@ public class IdentityListCourseNodeController extends FormBasicController implem
 			}
 		}
 		
-		if(rows == null || rows.isEmpty()) {
+		if(rows.isEmpty()) {
 			showWarning("warning.bulk.done");
 		} else {
 			changeUserVisibilityCtrl = new ConfirmUserVisibilityController(ureq, getWindowControl(), rows);
@@ -646,10 +851,11 @@ public class IdentityListCourseNodeController extends FormBasicController implem
 
 			ScoreEvaluation scoreEval = assessableCourseNode.getUserScoreEvaluation(assessedUserCourseEnv);
 			ScoreEvaluation doneEval = new ScoreEvaluation(scoreEval.getScore(), scoreEval.getPassed(),
-					scoreEval.getAssessmentStatus(), visibility, scoreEval.getFullyAssessed(), scoreEval.getAssessmentID());
-			assessableCourseNode.updateUserScoreEvaluation(doneEval, assessedUserCourseEnv, getIdentity(), false);
+					scoreEval.getAssessmentStatus(), visibility, scoreEval.getFullyAssessed(),
+					scoreEval.getCurrentRunCompletion(), scoreEval.getCurrentRunStatus(), scoreEval.getAssessmentID());
+			assessableCourseNode.updateUserScoreEvaluation(doneEval, assessedUserCourseEnv, getIdentity(), false, Role.coach);
 		}
-		updateModel(ureq, null, null, null);
+		loadModel(ureq);
 	}
 	
 	private void doSetDone(UserRequest ureq) {
@@ -662,39 +868,54 @@ public class IdentityListCourseNodeController extends FormBasicController implem
 			}
 		}
 
-		if(rows == null || rows.isEmpty()) {
+		if(rows.isEmpty()) {
 			showWarning("warning.bulk.done");
 		} else if(courseNode instanceof AssessableCourseNode) {
 			ICourse course = CourseFactory.loadCourse(courseEntry);
 			AssessableCourseNode assessableCourseNode = (AssessableCourseNode)courseNode;
-			
 			for(AssessedIdentityElementRow row:rows) {
 				Identity assessedIdentity = securityManager.loadIdentityByKey(row.getIdentityKey());
-				
-				Roles roles = securityManager.getRoles(assessedIdentity);
-				
-				IdentityEnvironment identityEnv = new IdentityEnvironment(assessedIdentity, roles);
-				UserCourseEnvironment assessedUserCourseEnv = new UserCourseEnvironmentImpl(identityEnv, course.getCourseEnvironment(), coachCourseEnv.isCourseReadOnly());
-				assessedUserCourseEnv.getScoreAccounting().evaluateAll();
-
-				ScoreEvaluation scoreEval = assessableCourseNode.getUserScoreEvaluation(assessedUserCourseEnv);
-				ScoreEvaluation doneEval = new ScoreEvaluation(scoreEval.getScore(), scoreEval.getPassed(),
-						AssessmentEntryStatus.done, null, scoreEval.getFullyAssessed(), scoreEval.getAssessmentID());
-				assessableCourseNode.updateUserScoreEvaluation(doneEval, assessedUserCourseEnv, getIdentity(), false);
-
-				// also send mail about grading to all subscribers
-				if (courseNode instanceof GTACourseNode) {
-					GTACourseNode gtaNode = (GTACourseNode) courseNode;
-					RepositoryEntry entry = course.getCourseEnvironment().getCourseGroupManager().getCourseEntry();
-					TaskList taskList = gtaManager.getTaskList(entry, gtaNode);
-					Task task = gtaManager.getTask(assessedIdentity, taskList);
-					if (task != null) {
-						doGradedEmail(courseEntry, gtaNode, task, assessedIdentity);
-					}
-				}
+				doSetDone(assessedIdentity, assessableCourseNode, course);
 			}
-			
-			updateModel(ureq, null, null, null);
+			loadModel(ureq);
+		}
+	}
+	
+	protected void doSetDone(Identity assessedIdentity, AssessableCourseNode assessableCourseNode, ICourse course) {
+		Roles roles = securityManager.getRoles(assessedIdentity);
+		
+		IdentityEnvironment identityEnv = new IdentityEnvironment(assessedIdentity, roles);
+		UserCourseEnvironment assessedUserCourseEnv = new UserCourseEnvironmentImpl(identityEnv, course.getCourseEnvironment(), coachCourseEnv.isCourseReadOnly());
+		assessedUserCourseEnv.getScoreAccounting().evaluateAll();
+
+		ScoreEvaluation scoreEval = assessableCourseNode.getUserScoreEvaluation(assessedUserCourseEnv);
+		ScoreEvaluation doneEval = new ScoreEvaluation(scoreEval.getScore(), scoreEval.getPassed(),
+				AssessmentEntryStatus.done, null, scoreEval.getFullyAssessed(),
+				scoreEval.getCurrentRunCompletion(), scoreEval.getCurrentRunStatus(), scoreEval.getAssessmentID());
+		assessableCourseNode.updateUserScoreEvaluation(doneEval, assessedUserCourseEnv, getIdentity(), false, Role.coach);
+		
+	}
+	
+	private void doUpdateCompletion(Double completion, AssessmentRunStatus status, Long assessedIdentityKey) {
+		List<AssessedIdentityElementRow> rows = usersTableModel.getObjects();
+		for(AssessedIdentityElementRow row:rows) {
+			if(assessedIdentityKey.equals(row.getIdentityKey())) {
+				doUpdateCompletion(completion, status, row);
+				break;
+			}
+		}
+	}
+	
+	private void doUpdateCompletion(Double completion, AssessmentRunStatus status, AssessedIdentityElementRow row) {
+		row.getCurrentCompletion().setCompletion(completion);
+		boolean endedRow = row.getCurrentCompletion().isEnded();
+		boolean endedEvent = status != null && AssessmentRunStatus.done.equals(status);
+		row.getCurrentCompletion().setEnded(endedEvent);
+		if(endedEvent && !endedRow) {
+			IdentityRef assessedIdentity = new IdentityRefImpl(row.getIdentityKey());
+			AssessmentEntry assessmentEntry = assessmentToolManager.getAssessmentEntries(assessedIdentity, courseEntry, courseNode.getIdent());
+			row.setAssessmentEntry(assessmentEntry);
+			tableEl.getComponent().setDirty(true);
 		}
 	}
 

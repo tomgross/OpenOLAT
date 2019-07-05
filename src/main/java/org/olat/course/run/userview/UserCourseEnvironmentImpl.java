@@ -28,10 +28,13 @@ package org.olat.course.run.userview;
 import java.util.Collections;
 import java.util.List;
 
+import org.olat.basesecurity.OrganisationRoles;
 import org.olat.core.CoreSpringFactory;
 import org.olat.core.commons.persistence.PersistenceHelper;
+import org.olat.core.gui.UserRequest;
 import org.olat.core.gui.control.WindowControl;
 import org.olat.core.id.IdentityEnvironment;
+import org.olat.course.ICourse;
 import org.olat.course.assessment.manager.EfficiencyStatementManager;
 import org.olat.course.certificate.CertificatesManager;
 import org.olat.course.condition.interpreter.ConditionInterpreter;
@@ -40,8 +43,11 @@ import org.olat.course.groupsandrights.CourseGroupManager;
 import org.olat.course.run.environment.CourseEnvironment;
 import org.olat.course.run.scoring.ScoreAccounting;
 import org.olat.group.BusinessGroup;
+import org.olat.modules.curriculum.CurriculumElement;
 import org.olat.repository.RepositoryEntry;
+import org.olat.repository.RepositoryEntryStatusEnum;
 import org.olat.repository.model.RepositoryEntryLifecycle;
+import org.olat.repository.model.RepositoryEntrySecurity;
 
 /**
  * Initial Date:  Feb 6, 2004
@@ -58,6 +64,7 @@ public class UserCourseEnvironmentImpl implements UserCourseEnvironment {
 	private List<BusinessGroup> coachedGroups;
 	private List<BusinessGroup> participatingGroups;
 	private List<BusinessGroup> waitingLists;
+	private List<CurriculumElement> coachedCurriculums;
 	
 	private final WindowControl windowControl;
 	
@@ -70,7 +77,7 @@ public class UserCourseEnvironmentImpl implements UserCourseEnvironment {
 	public UserCourseEnvironmentImpl(IdentityEnvironment identityEnvironment, CourseEnvironment courseEnvironment) {
 		this(identityEnvironment, courseEnvironment, null, null, null, null, null, null, null, null);
 		if(courseEnvironment != null) {
-			courseReadOnly = courseEnvironment.getCourseGroupManager().getCourseEntry().getRepositoryEntryStatus().isClosed();
+			courseReadOnly = courseEnvironment.getCourseGroupManager().getCourseEntry().getEntryStatus() == RepositoryEntryStatusEnum.closed;
 		}
 	}
 	
@@ -93,6 +100,33 @@ public class UserCourseEnvironmentImpl implements UserCourseEnvironment {
 		this.participant = participant;
 		this.windowControl = windowControl;
 		this.courseReadOnly = courseReadOnly;
+	}
+	
+	public static UserCourseEnvironmentImpl load(UserRequest ureq, ICourse course, RepositoryEntrySecurity reSecurity, WindowControl wControl) {
+		CourseGroupManager cgm = course.getCourseEnvironment().getCourseGroupManager();
+		List<BusinessGroup> coachedGroups;
+		if(reSecurity.isGroupCoach()) {
+			coachedGroups = cgm.getOwnedBusinessGroups(ureq.getIdentity());
+		} else {
+			coachedGroups = Collections.emptyList();
+		}
+		List<BusinessGroup> participatedGroups;
+		if(reSecurity.isGroupParticipant()) {
+			participatedGroups = cgm.getParticipatingBusinessGroups(ureq.getIdentity());
+		} else {
+			participatedGroups = Collections.emptyList();
+		}
+		List<BusinessGroup> waitingLists;
+		if(reSecurity.isGroupWaiting()) {
+			waitingLists = cgm.getWaitingListGroups(ureq.getIdentity());
+		} else {
+			waitingLists = Collections.emptyList();
+		}
+
+		return new UserCourseEnvironmentImpl(ureq.getUserSession().getIdentityEnvironment(), course.getCourseEnvironment(), wControl,
+				coachedGroups, participatedGroups, waitingLists,
+				reSecurity.isCoach(), reSecurity.isEntryAdmin() || reSecurity.isPrincipal() || reSecurity.isMasterCoach() , reSecurity.isParticipant(),
+				reSecurity.isReadOnly() || reSecurity.isOnlyPrincipal() || reSecurity.isOnlyMasterCoach());
 	}
 
 	/**
@@ -140,6 +174,12 @@ public class UserCourseEnvironmentImpl implements UserCourseEnvironment {
 	}
 
 	@Override
+	public boolean isInOrganisation(String organisationIdentifier, OrganisationRoles... roles) {
+		CourseGroupManager cgm = courseEnvironment.getCourseGroupManager();
+		return cgm.isIdentityInOrganisation(identityEnvironment.getIdentity(), organisationIdentifier, roles);
+	}
+
+	@Override
 	public boolean isCoach() {
 		if(coach != null) {
 			return coach.booleanValue();
@@ -147,7 +187,7 @@ public class UserCourseEnvironmentImpl implements UserCourseEnvironment {
 		//lazy loading
 		CourseGroupManager cgm = courseEnvironment.getCourseGroupManager();
 		boolean coachLazy = cgm.isIdentityCourseCoach(identityEnvironment.getIdentity());
-		coach = new Boolean(coachLazy);
+		coach = Boolean.valueOf(coachLazy);
 		return coachLazy;
 	}
 
@@ -159,7 +199,7 @@ public class UserCourseEnvironmentImpl implements UserCourseEnvironment {
 		//lazy loading
 		CourseGroupManager cgm = courseEnvironment.getCourseGroupManager();
 		boolean admiLazy = cgm.isIdentityCourseAdministrator(identityEnvironment.getIdentity());
-		admin = new Boolean(admiLazy);
+		admin = Boolean.valueOf(admiLazy);
 		return admiLazy;
 	}
 
@@ -171,21 +211,21 @@ public class UserCourseEnvironmentImpl implements UserCourseEnvironment {
 		//lazy loading
 		CourseGroupManager cgm = courseEnvironment.getCourseGroupManager();
 		boolean partLazy = cgm.isIdentityCourseParticipant(identityEnvironment.getIdentity());
-		participant = new Boolean(partLazy);
+		participant = Boolean.valueOf(partLazy);
 		return partLazy;
 	}
 
 	@Override
-	public boolean isAdminOfAnyCourse() {
+	public boolean isAdministratorOfAnyCourse() {
 		if(adminAnyCourse != null) {
 			return adminAnyCourse.booleanValue();
 		}
 
 		CourseGroupManager cgm = courseEnvironment.getCourseGroupManager();
-		boolean adminLazy = identityEnvironment.getRoles().isOLATAdmin()
-				|| identityEnvironment.getRoles().isInstitutionalResourceManager()
+		boolean adminLazy = identityEnvironment.getRoles().isAdministrator()
+				|| identityEnvironment.getRoles().isLearnResourceManager()
 				|| cgm.isIdentityAnyCourseAdministrator(identityEnvironment.getIdentity());
-		adminAnyCourse = new Boolean(adminLazy);
+		adminAnyCourse = Boolean.valueOf(adminLazy);
 		return adminLazy;
 	}
 
@@ -197,7 +237,7 @@ public class UserCourseEnvironmentImpl implements UserCourseEnvironment {
 
 		CourseGroupManager cgm = courseEnvironment.getCourseGroupManager();
 		boolean coachLazy = cgm.isIdentityAnyCourseCoach(identityEnvironment.getIdentity());
-		coachAnyCourse = new Boolean(coachLazy);
+		coachAnyCourse = Boolean.valueOf(coachLazy);
 		return coachLazy;
 	}
 
@@ -209,7 +249,7 @@ public class UserCourseEnvironmentImpl implements UserCourseEnvironment {
 
 		CourseGroupManager cgm = courseEnvironment.getCourseGroupManager();
 		boolean participantLazy = cgm.isIdentityAnyCourseParticipant(identityEnvironment.getIdentity());
-		participantAnyCourse = new Boolean(participantLazy);
+		participantAnyCourse = Boolean.valueOf(participantLazy);
 		return participantLazy;
 	}
 
@@ -230,11 +270,8 @@ public class UserCourseEnvironmentImpl implements UserCourseEnvironment {
 		}
 		return courseRepoEntry;
 	}
-	
-	public int sizeCoachedGroups() {
-		return coachedGroups == null ? 0 : coachedGroups.size();
-	}
 
+	@Override
 	public List<BusinessGroup> getCoachedGroups() {
 		if(coachedGroups == null) {
 			return Collections.emptyList();
@@ -256,9 +293,20 @@ public class UserCourseEnvironmentImpl implements UserCourseEnvironment {
 		return waitingLists;
 	}
 	
+	/**
+	 * The curriculum elements are lazy loaded.
+	 */
+	@Override
+	public List<CurriculumElement> getCoachedCurriculumElements() {
+		if(coachedCurriculums == null) {
+			coachedCurriculums = courseEnvironment.getCourseGroupManager().getCoachedCurriculumElements(identityEnvironment.getIdentity());
+		}
+		return coachedCurriculums;
+	}
+
 	@Override
 	public boolean isCourseReadOnly() {
-		return courseReadOnly == null ? false : courseReadOnly.booleanValue();
+		return courseReadOnly != null && courseReadOnly.booleanValue();
 	}
 	
 	public void setCourseReadOnly(Boolean courseReadOnly) {
@@ -290,8 +338,8 @@ public class UserCourseEnvironmentImpl implements UserCourseEnvironment {
 	}
 	
 	public void setUserRoles(boolean admin, boolean coach, boolean participant) {
-		this.admin = new Boolean(admin);
-		this.coach = new Boolean(coach);
-		this.participant = new Boolean(participant);
+		this.admin = Boolean.valueOf(admin);
+		this.coach = Boolean.valueOf(coach);
+		this.participant = Boolean.valueOf(participant);
 	}
 }

@@ -36,8 +36,8 @@ import org.apache.http.client.methods.HttpGet;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
-import org.olat.basesecurity.BaseSecurityManager;
-import org.olat.core.commons.persistence.DBFactory;
+import org.olat.basesecurity.BaseSecurity;
+import org.olat.core.commons.persistence.DB;
 import org.olat.core.id.Identity;
 import org.olat.course.CourseFactory;
 import org.olat.course.ICourse;
@@ -48,8 +48,10 @@ import org.olat.modules.fo.restapi.ForumVO;
 import org.olat.modules.fo.restapi.ForumVOes;
 import org.olat.modules.fo.restapi.MessageVOes;
 import org.olat.repository.RepositoryEntry;
-import org.olat.restapi.repository.course.CoursesWebService;
-import org.olat.test.OlatJerseyTestCase;
+import org.olat.repository.RepositoryEntryStatusEnum;
+import org.olat.test.JunitTestHelper;
+import org.olat.test.OlatRestTestCase;
+import org.springframework.beans.factory.annotation.Autowired;
 
 /**
  * 
@@ -60,7 +62,7 @@ import org.olat.test.OlatJerseyTestCase;
  *
  * @author srosse, stephane.rosse@frentix.com, http://www.frentix.com
  */
-public class CoursesForumsTest  extends OlatJerseyTestCase {
+public class CoursesForumsTest  extends OlatRestTestCase {
 
 	private static ICourse course1;
 	private static CourseNode forumNode;
@@ -68,14 +70,19 @@ public class CoursesForumsTest  extends OlatJerseyTestCase {
 	
 	private RestConnection conn;
 	
+	@Autowired
+	private DB dbInstance;
+	@Autowired
+	private BaseSecurity securityManager;
+	
 	@Before
 	public void setUp() throws Exception {
-		super.setUp();
 		conn = new RestConnection();
 		
-		admin = BaseSecurityManager.getInstance().findIdentityByName("administrator");
-		course1 = CoursesWebService.createEmptyCourse(admin, "Course forum 1", "Course forum 1 long name", null);
-		DBFactory.getInstance().intermediateCommit();
+		admin = securityManager.findIdentityByName("administrator");
+		RepositoryEntry courseEntry = JunitTestHelper.deployBasicCourse(admin);
+		course1 = CourseFactory.loadCourse(courseEntry);
+		dbInstance.intermediateCommit();
 		
 		//create a folder
 		CourseNodeConfiguration newNodeConfig = CourseNodeFactory.getInstance().getCourseNodeConfiguration("fo");
@@ -85,9 +92,9 @@ public class CoursesForumsTest  extends OlatJerseyTestCase {
 		forumNode.setNoAccessExplanation("You don't have access");
 		course1.getEditorTreeModel().addCourseNode(forumNode, course1.getRunStructure().getRootNode());
 		
-		CourseFactory.publishCourse(course1, RepositoryEntry.ACC_USERS, false, admin, Locale.ENGLISH);
+		CourseFactory.publishCourse(course1, RepositoryEntryStatusEnum.published, true, false, admin, Locale.ENGLISH);
 		
-		DBFactory.getInstance().intermediateCommit();
+		dbInstance.intermediateCommit();
 	}
 	
   @After

@@ -33,6 +33,8 @@ import org.olat.core.gui.control.WindowControl;
 import org.olat.core.util.Formatter;
 import org.olat.core.util.StringHelper;
 import org.olat.course.nodes.CourseNode;
+import org.olat.modules.edusharing.EdusharingProvider;
+import org.olat.repository.ui.settings.LazyRepositoryEdusharingProvider;
 
 /**
  * Provides a FlexiForm that lets the user configure details for a course node.
@@ -45,9 +47,9 @@ public class NodeConfigFormController extends FormBasicController {
 	/**
 	 * Maximum length of a course's short title.
 	 */
-	public final static int SHORT_TITLE_MAX_LENGTH =25;
+	public static final int SHORT_TITLE_MAX_LENGTH =25;
 	
-	private final static String[] displayOptionsKeys = new String[]{
+	private static final String[] displayOptionsKeys = new String[]{
 		CourseNode.DISPLAY_OPTS_SHORT_TITLE_DESCRIPTION_CONTENT,
 		CourseNode.DISPLAY_OPTS_TITLE_DESCRIPTION_CONTENT,
 		CourseNode.DISPLAY_OPTS_SHORT_TITLE_CONTENT,
@@ -81,6 +83,9 @@ public class NodeConfigFormController extends FormBasicController {
 	 * Selection fot the options title
 	 */
 	private SingleSelection displayOptions;
+
+	private Long repositoryEntryKey;
+	private String nodeIdent;
 	
 	/**
 	 * Initializes this controller.
@@ -88,14 +93,17 @@ public class NodeConfigFormController extends FormBasicController {
 	 * @param ureq The user request.
 	 * @param wControl The window control.
 	 * @param courseNode The course node this controller will access.
+	 * @param repoKey 
 	 * @param withCancel Decides whether to show a <i>cancel</i> button.
 	 */
-	public NodeConfigFormController(UserRequest ureq, WindowControl wControl, CourseNode courseNode) {
+	public NodeConfigFormController(UserRequest ureq, WindowControl wControl, CourseNode courseNode, Long repoKey) {
 		super(ureq, wControl, FormBasicController.LAYOUT_DEFAULT);
 		menuTitle = Formatter.truncate(courseNode.getShortTitle(), SHORT_TITLE_MAX_LENGTH);
 		displayTitle = courseNode.getLongTitle();
 		learningObjectives = courseNode.getLearningObjectives();
 		displayOption = courseNode.getDisplayOption();
+		nodeIdent = courseNode.getIdent();
+		repositoryEntryKey = repoKey;
 		initForm(ureq);
 	}
 	
@@ -153,6 +161,8 @@ public class NodeConfigFormController extends FormBasicController {
 		// add the learning objectives rich text input element
 		objectives = uifactory.addRichTextElementForStringData("nodeConfigForm.learningobjectives", "nodeConfigForm.learningobjectives", (learningObjectives==null?"":learningObjectives), 10, -1, false, null, null, formLayout, ureq.getUserSession(), getWindowControl());
 		objectives.setMaxLength(4000);
+		EdusharingProvider provider = new LazyRepositoryEdusharingProvider(repositoryEntryKey, "course-learning-objectives-" + nodeIdent);
+		objectives.getEditorConfiguration().enableEdusharing(getIdentity(), provider);
 		
 		String[] values = new String[]{
 				translate("nodeConfigForm.short_title_desc_content"),
@@ -161,10 +171,14 @@ public class NodeConfigFormController extends FormBasicController {
 				translate("nodeConfigForm.title_content"),
 				translate("nodeConfigForm.content_only")};
 		displayOptions = uifactory.addDropdownSingleselect("displayOptions", "nodeConfigForm.display_options", formLayout, displayOptionsKeys, values, null);
-		displayOptions.select(displayOption, true);
+		for(String displayOptionsKey:displayOptionsKeys) {
+			if(displayOptionsKey.equals(displayOption)) {
+				displayOptions.select(displayOption, true);
+			}
+		}
 		
 		// Create submit and cancel buttons
-		final FormLayoutContainer buttonLayout = FormLayoutContainer.createButtonLayout("buttonLayout", getTranslator());
+		FormLayoutContainer buttonLayout = FormLayoutContainer.createButtonLayout("buttonLayout", getTranslator());
 		formLayout.add(buttonLayout);
 		uifactory.addFormSubmitButton("nodeConfigForm.save", buttonLayout)
 			.setElementCssClass("o_sel_node_editor_submit");
@@ -176,20 +190,23 @@ public class NodeConfigFormController extends FormBasicController {
 	 */
 	@Override
 	protected boolean validateFormLogic(UserRequest ureq) {
-		boolean shortTitleOk = true;
+		boolean allOk = super.validateFormLogic(ureq);
+
+		shortTitle.clearError();
 		if (!StringHelper.containsNonWhitespace(shortTitle.getValue())) {
 			// the short title is mandatory
-			shortTitle.setErrorKey("nodeConfigForm.menumust", new String[] {});
-			shortTitleOk = false;
+			shortTitle.setErrorKey("nodeConfigForm.menumust", null);
+			allOk &= false;
 		} else if (shortTitle.hasError()) {
-			shortTitleOk = false;
+			allOk &= false;
 		}
-		if (shortTitleOk && super.validateFormLogic(ureq)) {
-			shortTitle.clearError();
-			return true;
-		} else {
-			return false;
+		
+		if(!displayOptions.isOneSelected()) {
+			displayOptions.setErrorKey("form.legende.mandatory", null);
+			allOk &= false;
 		}
+
+		return allOk;
 	}
 
 	/**

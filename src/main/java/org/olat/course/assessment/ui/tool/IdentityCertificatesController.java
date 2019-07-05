@@ -49,6 +49,7 @@ import org.olat.course.certificate.Certificate;
 import org.olat.course.certificate.CertificateEvent;
 import org.olat.course.certificate.CertificateTemplate;
 import org.olat.course.certificate.CertificatesManager;
+import org.olat.course.certificate.model.CertificateConfig;
 import org.olat.course.certificate.model.CertificateInfos;
 import org.olat.course.certificate.ui.DownloadCertificateCellRenderer;
 import org.olat.course.config.CourseConfig;
@@ -88,10 +89,12 @@ public class IdentityCertificatesController extends BasicController implements G
 	@Autowired
 	private BaseSecurity securityManager;
 	@Autowired
+	private CoordinatorManager coordinatorManager;
+	@Autowired
 	private CertificatesManager certificatesManager;
 	
 	public IdentityCertificatesController(UserRequest ureq, WindowControl wControl,
-			RepositoryEntry courseEntry, Identity assessedIdentity) {
+			UserCourseEnvironment coachCourseEnv, RepositoryEntry courseEntry, Identity assessedIdentity) {
 		super(ureq, wControl);
 		setTranslator(Util.createPackageTranslator(AssessmentModule.class, getLocale(), getTranslator()));
 
@@ -99,24 +102,24 @@ public class IdentityCertificatesController extends BasicController implements G
 		this.assessedIdentity = assessedIdentity;
 		
 		CourseConfig courseConfig = CourseFactory.loadCourse(courseEntry).getCourseConfig();
-		canDelete = courseConfig.isManualCertificationEnabled();
+		canDelete = courseConfig.isManualCertificationEnabled() && !coachCourseEnv.isCourseReadOnly();
 		mainVC = createVelocityContainer("certificate_overview");
 		formatter = Formatter.getInstance(getLocale());
 
-		if(courseConfig.isManualCertificationEnabled()) {
+		if(courseConfig.isManualCertificationEnabled() && !coachCourseEnv.isCourseReadOnly()) {
 			generateLink = LinkFactory.createLink("generate.certificate", "generate", getTranslator(), mainVC, this, Link.BUTTON);
 			generateLink.setElementCssClass("o_sel_certificate_generate");
 		}
 		loadList();
 		putInitialPanel(mainVC);
 		
-		CoordinatorManager.getInstance().getCoordinator().getEventBus()
+		coordinatorManager.getCoordinator().getEventBus()
 			.registerFor(this, getIdentity(), CertificatesManager.ORES_CERTIFICATE_EVENT);
 	}
 	
 	@Override
 	protected void doDispose() {
-		CoordinatorManager.getInstance().getCoordinator().getEventBus()
+		coordinatorManager.getCoordinator().getEventBus()
 			.deregisterFor(this, CertificatesManager.ORES_CERTIFICATE_EVENT);
 	}
 
@@ -234,7 +237,15 @@ public class IdentityCertificatesController extends BasicController implements G
 		Float score = scoreEval == null ? null : scoreEval.getScore();
 		Boolean passed = scoreEval == null ? null : scoreEval.getPassed();
 		CertificateInfos certificateInfos = new CertificateInfos(assessedIdentity, score, passed);
-		certificatesManager.generateCertificate(certificateInfos, courseEntry, template, true);
+		CertificateConfig config = CertificateConfig.builder()
+				.withCustom1(course.getCourseConfig().getCertificateCustom1())
+				.withCustom2(course.getCourseConfig().getCertificateCustom2())
+				.withCustom3(course.getCourseConfig().getCertificateCustom3())
+				.withSendEmailBcc(true)
+				.withSendEmailLinemanager(true)
+				.withSendEmailIdentityRelations(true)
+				.build();
+		certificatesManager.generateCertificate(certificateInfos, courseEntry, template, config);
 		loadList();
 		showInfo("msg.certificate.pending");
 		fireEvent(ureq, Event.CHANGED_EVENT);

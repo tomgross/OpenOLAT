@@ -57,6 +57,7 @@ import org.olat.course.site.model.LanguageConfiguration;
 import org.olat.repository.RepositoryEntry;
 import org.olat.repository.RepositoryManager;
 import org.olat.repository.controllers.ReferencableEntriesSearchController;
+import org.springframework.beans.factory.annotation.Autowired;
 
 /**
  * 
@@ -79,6 +80,9 @@ public class CourseSiteAdminController extends FormBasicController {
 	
 	private CourseSiteConfiguration siteConfiguration;
 	private final RepositoryManager repositoryManager;
+	
+	@Autowired
+	private I18nModule i18nModule;
 	
 	public CourseSiteAdminController(UserRequest ureq, WindowControl wControl, CourseSiteConfiguration siteConfiguration) {
 		super(ureq, wControl);
@@ -128,7 +132,7 @@ public class CourseSiteAdminController extends FormBasicController {
 			}
 		}
 		
-		for(String langKey:I18nModule.getEnabledLanguageKeys()) {
+		for(String langKey:i18nModule.getEnabledLanguageKeys()) {
 			if(langToConfigMap.containsKey(langKey)) {
 				LanguageConfiguration langConfig = langToConfigMap.get(langKey);
 				RepositoryEntry re = repositoryManager.lookupRepositoryEntryBySoftkey(langConfig.getRepoSoftKey(), false);
@@ -218,7 +222,7 @@ public class CourseSiteAdminController extends FormBasicController {
 	private void doSelecCourse(UserRequest ureq, LanguageConfigurationRow row) {
 		removeAsListenerAndDispose(selectCtrl);
 		selectCtrl = new ReferencableEntriesSearchController(getWindowControl(), ureq, new String[]{ "CourseModule" }, translate("select"),
-				true, true, false, true);
+				true, true, false, false, true);
 		selectCtrl.setUserObject(row);
 		listenTo(selectCtrl);
 		
@@ -234,7 +238,7 @@ public class CourseSiteAdminController extends FormBasicController {
 	}
 	
 	public CourseSiteConfiguration saveConfiguration() {
-		List<LanguageConfiguration> langConfigList = new ArrayList<LanguageConfiguration>();
+		List<LanguageConfiguration> langConfigList = new ArrayList<>();
 		for(LanguageConfigurationRow row:model.getObjects()) {
 			if(StringHelper.containsNonWhitespace(row.getSoftKey())) {
 				langConfigList.add(row.getRawObject());

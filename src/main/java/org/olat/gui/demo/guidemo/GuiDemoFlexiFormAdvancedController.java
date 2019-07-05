@@ -29,13 +29,13 @@ import org.olat.core.gui.components.form.flexible.FormItem;
 import org.olat.core.gui.components.form.flexible.FormItemContainer;
 import org.olat.core.gui.components.form.flexible.elements.FileElement;
 import org.olat.core.gui.components.form.flexible.elements.FormLink;
+import org.olat.core.gui.components.form.flexible.elements.MultipleSelectionElement;
 import org.olat.core.gui.components.form.flexible.elements.RichTextElement;
 import org.olat.core.gui.components.form.flexible.elements.SingleSelection;
 import org.olat.core.gui.components.form.flexible.elements.TextElement;
 import org.olat.core.gui.components.form.flexible.impl.FormBasicController;
 import org.olat.core.gui.components.form.flexible.impl.FormEvent;
 import org.olat.core.gui.components.form.flexible.impl.FormLayoutContainer;
-import org.olat.core.gui.components.form.flexible.impl.rules.RulesFactory;
 import org.olat.core.gui.components.link.Link;
 import org.olat.core.gui.control.Controller;
 import org.olat.core.gui.control.WindowControl;
@@ -59,16 +59,18 @@ public class GuiDemoFlexiFormAdvancedController extends FormBasicController {
 	// Usually, the keys are i18n keys and the options correspond to their
 	// translated values. To avoid unnecessary translation these dummy values are
 	// defined right here.
-	private final static String[] keys = new String[] { "a", "b", "c" };
-	private final static String[] options = new String[] { "A", "B", "C" };
+	private static final String[] keys = new String[] { "a", "b", "c" };
+	private static final String[] options = new String[] { "A", "B", "C" };
 	// For yes and no we'll use i18n keys and translate the values
-	private final static String[] yesOrNoKeys = new String[] { "advanced_form.yes", "advanced_form.no" };
+	private static final String[] yesOrNoKeys = new String[] { "advanced_form.yes", "advanced_form.no" };
 
-	private RichTextElement richTextElement, disabledRichTextElement;
+	private RichTextElement richTextElement;
+	private FormLayoutContainer subLayout;
 	
 	public GuiDemoFlexiFormAdvancedController(UserRequest ureq, WindowControl wControl) {
 		super(ureq, wControl);
 		initForm(ureq);
+		updateSubLayoutVisibility();
 	}
 
 	/**
@@ -101,33 +103,35 @@ public class GuiDemoFlexiFormAdvancedController extends FormBasicController {
 		setFormContextHelp("Introduction");
 
 		// Mandatory and read-only text fields		
-		this.addTextFields(formLayout);
+		addTextFields(formLayout);
 
 		// More form items: Date, link and file selector
-		this.addDateLinkAndFileItems(formLayout);
+		addDateLinkAndFileItems(formLayout);
 
 		// Separator with line
 		uifactory.addSpacerElement("spacer", formLayout, false);
 
 		// Single and multible selections (radio buttons and checkboxes)
-		this.addSelections(formLayout);
+		addSelections(formLayout);
 		
 		// Separator without line
 		uifactory.addSpacerElement("spacernoline", formLayout, true);
 
 		// Sublayout (shown if no is selected)
-		this.addSublayout(formLayout);
+		subLayout = FormLayoutContainer.createDefaultFormLayout("why_not_form", getTranslator());
+		formLayout.add(subLayout);
+		// Add a text element
+		uifactory.addTextElement("why_not", "advanced_form.why_not?", 512, null, subLayout);
 
 		// Here's a text area
 		uifactory.addTextAreaElement("guidemo.form.textarea", 0, 2, null, formLayout);
 
 		// Add some rich text elements
 		richTextElement = uifactory.addRichTextElementForStringData("guidemo.form.richtext.simple", "guidemo.form.richtext.simple", "click <i>to</i> <b>edit</b>. This one has an event listener and an <b>external menu with auto hide</b>", -1, -1, false, null, null, formLayout, ureq.getUserSession(), getWindowControl());
-		//richTextElement.addActionListener(FormEvent.ONCHANGE);
-
+		
 		uifactory.addRichTextElementForStringData("guidemo.form.richtext.simple2", null, "one <i>with</i> <b>height</b> and <span style='color:red'>no</span> event listener and an <b>internal</b> menu", 10, 40, true, null, null, formLayout, ureq.getUserSession(), getWindowControl());
 
-		disabledRichTextElement = uifactory.addRichTextElementForStringData("guidemo.form.richtext.simple3", "guidemo.form.richtext.simple", "this <i>is</i> <b>disabled</b>", -1, -1, false, null, null, formLayout, ureq.getUserSession(), getWindowControl());
+		TextElement disabledRichTextElement = uifactory.addRichTextElementForStringData("guidemo.form.richtext.simple3", "guidemo.form.richtext.simple", "this <i>is</i> <b>disabled</b>", -1, -1, false, null, null, formLayout, ureq.getUserSession(), getWindowControl());
 		disabledRichTextElement.setEnabled(false);
 
 		// Button layout
@@ -202,6 +206,26 @@ public class GuiDemoFlexiFormAdvancedController extends FormBasicController {
 		for (int i = 0; i < yesOrNoKeys.length; i++) {
 			yesOrNoOptions[i] = translate(yesOrNoKeys[i]);
 		}
+	
+		// Drop down checkboxes 
+		String[] keys = new String[] { "phone", "clock", "book", "letter" };
+		String[] values = new String[] {
+				getTranslator().translate("guidemo.cbdropdown.phone"), 
+				getTranslator().translate("guidemo.cbdropdown.clock"),
+				getTranslator().translate("guidemo.cbdropdown.book"),
+				getTranslator().translate("guidemo.cbdropdown.letter")};
+		String[] cssClasses = new String[] {"", "", "", "o_userbulk_changedcell"};
+		String[] iconLeftCSS = new String[] {
+				"o_icon o_icon-fw o_icon_phone",
+				"o_icon o_icon-fw o_icon_time",
+				"o_icon o_icon-fw o_icon_lecture",
+				"o_icon o_icon-fw o_icon_mail"};
+		MultipleSelectionElement checkboxesDropdown = uifactory.addCheckboxesDropdown("dropdown", "advanced_form.cbdropdown", form, keys, values,
+				cssClasses, iconLeftCSS);
+		checkboxesDropdown.setNonSelectedText(getTranslator().translate("guidemo.cbdropdown.non.selected"));
+		checkboxesDropdown.select(keys[0], true);
+		checkboxesDropdown.setEnabled("book", false);
+		checkboxesDropdown.addActionListener(FormEvent.ONCLICK);
 
 		// Horizontal radio buttons. Choice between Yes or No.
 		horizontalRadioButtons = uifactory.addRadiosHorizontal("guidemo.form.radio2", form, yesOrNoKeys,
@@ -210,30 +234,11 @@ public class GuiDemoFlexiFormAdvancedController extends FormBasicController {
 		horizontalRadioButtons.select(yesOrNoKeys[0], true);
 		horizontalRadioButtons.addActionListener(FormEvent.ONCLICK); // Radios/Checkboxes need onclick because of IE bug OLAT-5753
 	}
-
-	/**
-	 * Adds a sublayout to the form. If the user selects no from the vertical
-	 * radio buttons, the sublayout shows up and the user is asked to provide more
-	 * information.
-	 * 
-	 * @param formItemsFactory
-	 * @param form
-	 */
-	private void addSublayout(FormItemContainer form) {
-		// Default Sublayout
-		final FormLayoutContainer subLayout = FormLayoutContainer.createDefaultFormLayout("why_not_form", getTranslator());
-		// This doesn't work for some reason
-		// subLayout.setVisible(false);
-		form.add(subLayout);
-
-		// Add a text element
-		uifactory.addTextElement("why_not", "advanced_form.why_not?", 512, null, subLayout);
-
-		// Let's try some show/hide rules. If 'No' is selected, the sublayout shows
-		// up. Note: It's important to set the horizontal radio buttons to a default
-		// value.
-		RulesFactory.createHideRule(horizontalRadioButtons, yesOrNoKeys[0], subLayout, form);
-		RulesFactory.createShowRule(horizontalRadioButtons, yesOrNoKeys[1], subLayout, form);
+	
+	private void updateSubLayoutVisibility() {
+		boolean visible = horizontalRadioButtons.isOneSelected()
+				&& horizontalRadioButtons.isSelected(1);
+		subLayout.setVisible(visible);
 	}
 
 	/**
@@ -245,11 +250,13 @@ public class GuiDemoFlexiFormAdvancedController extends FormBasicController {
 	 * @param source
 	 * @param event
 	 */
+	@Override
 	protected void formInnerEvent(UserRequest ureq, FormItem source, FormEvent event) {
-		if (source == verticalRadioButtons) {
+		if(horizontalRadioButtons == source) {
+			updateSubLayoutVisibility();
+		} else if (source == verticalRadioButtons) {
 			if (event.wasTriggerdBy(FormEvent.ONCLICK)) {
-				int selectedIndex = verticalRadioButtons.getSelected();
-				String selection = options[selectedIndex];
+				String selection = verticalRadioButtons.getSelectedKey();
 				showInfo("advanced_form.your_selection_is", selection);
 			}
 		} else if (source == richTextElement) {

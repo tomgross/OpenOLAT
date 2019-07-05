@@ -34,7 +34,7 @@ import java.util.Locale;
 import org.olat.core.gui.UserRequest;
 import org.olat.core.gui.components.Component;
 import org.olat.core.gui.components.form.flexible.elements.DateChooser;
-import org.olat.core.logging.OLog;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.Formatter;
 import org.olat.core.util.StringHelper;
@@ -42,8 +42,6 @@ import org.olat.core.util.ValidationStatus;
 import org.olat.core.util.ValidationStatusImpl;
 
 /**
- * Description:<br>
- * TODO: patrickb Class Description for JSDateChooser
  * <P>
  * Initial Date: 19.01.2007 <br>
  * 
@@ -51,7 +49,7 @@ import org.olat.core.util.ValidationStatusImpl;
  */
 public class JSDateChooser extends TextElementImpl implements DateChooser {
 
-	private static final OLog log = Tracing.createLoggerFor(JSDateChooser.class);
+	private static final Logger log = Tracing.createLoggerFor(JSDateChooser.class);
 	/**
 	 * the java script date chooser
 	 */
@@ -63,9 +61,12 @@ public class JSDateChooser extends TextElementImpl implements DateChooser {
 
 	private Locale locale;
 	private boolean dateChooserTimeEnabled;
+	private boolean defaultTimeAtEndOfDay;
 	private String forValidDateErrorKey;
 	private boolean checkForValidDate;
-	private int minute, hour;
+	private int minute;
+	private int hour;
+	private DateChooser defaultDateValue;
 	
 	public JSDateChooser(String name, Locale locale) {
 		this(null, name, null, locale);
@@ -92,6 +93,12 @@ public class JSDateChooser extends TextElementImpl implements DateChooser {
 	}
 
 	@Override
+	public void setDomReplacementWrapperRequired(boolean required) {
+		jscomponent.setDomReplacementWrapperRequired(required);
+		super.setDomReplacementWrapperRequired(required);
+	}
+
+	@Override
 	public void setDisplaySize(int dispSize){
 		displaySize = dispSize;
 	}
@@ -105,8 +112,18 @@ public class JSDateChooser extends TextElementImpl implements DateChooser {
 		return dateComponent;
 	}
 
+	@Override
+	public DateChooser getDefaultValue() {
+		return defaultDateValue;
+	}
+
+	@Override
+	public void setDefaultValue(DateChooser dateChooser) {
+		defaultDateValue = dateChooser;
+	}
+
 	/**
-	 * @see org.olat.core.gui.components.form.flexible.elements.AbstractTextElement#validate(java.util.List)
+	 * @see org.olat.core.gui.components.form.flexible.elements.AbstractTextElement#validate(java.util.List, Identity)
 	 */
 	@Override
 	public void validate(List<ValidationStatus> validationResults) {
@@ -220,6 +237,15 @@ public class JSDateChooser extends TextElementImpl implements DateChooser {
 	 */
 	public void setDateChooserTimeEnabled(boolean dateChooserTimeEnabled) {
 		this.dateChooserTimeEnabled = dateChooserTimeEnabled;
+	}
+
+	public boolean isDefaultTimeAtEndOfDay() {
+		return defaultTimeAtEndOfDay;
+	}
+
+	@Override
+	public void setDefaultTimeAtEndOfDay(boolean defaultTimeAtEndOfDay) {
+		this.defaultTimeAtEndOfDay = defaultTimeAtEndOfDay;
 	}
 
 	/* (non-Javadoc)

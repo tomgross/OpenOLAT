@@ -32,11 +32,11 @@
 
 package de.tuchemnitz.wizard.workflows.coursecreation;
 
+import org.apache.logging.log4j.Logger;
 import org.olat.core.CoreSpringFactory;
 import org.olat.core.commons.services.help.HelpModule;
 import org.olat.core.gui.UserRequest;
 import org.olat.core.gui.translator.Translator;
-import org.olat.core.logging.OLog;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.Util;
 import org.olat.core.util.mail.MailBundle;
@@ -56,7 +56,7 @@ import de.tuchemnitz.wizard.workflows.coursecreation.model.CourseCreationConfigu
  */
 public class CourseCreationMailHelper {
 	
-	private static final OLog log = Tracing.createLoggerFor(CourseCreationMailHelper.class);
+	private static final Logger log = Tracing.createLoggerFor(CourseCreationMailHelper.class);
 
 	/**
 	 * Get the success info message.
@@ -78,7 +78,7 @@ public class CourseCreationMailHelper {
 	 */
 	public static final MailerResult sentNotificationMail(final UserRequest ureq, final CourseCreationConfiguration config) {
 		Translator translator = Util.createPackageTranslator(CourseCreationMailHelper.class, ureq.getLocale());
-		log.info("Course creation with wizard finished. [User: " + ureq.getIdentity().getName() + "] [Course name: " + config.getCourseTitle() + "]");
+		log.info("Course creation with wizard finished. [identity: " + ureq.getIdentity().getKey() + "] [Course name: " + config.getCourseTitle() + "]");
 		String subject = translator.translate("mail.subject", new String[] {config.getCourseTitle()});
 		String body = translator.translate("mail.body.0", new String[] {config.getCourseTitle()});
 		body += translator.translate("mail.body.1");

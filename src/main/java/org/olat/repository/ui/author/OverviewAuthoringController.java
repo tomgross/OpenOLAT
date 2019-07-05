@@ -35,12 +35,13 @@ import org.olat.core.gui.control.WindowControl;
 import org.olat.core.gui.control.controller.BasicController;
 import org.olat.core.gui.control.generic.dtabs.Activateable2;
 import org.olat.core.id.OLATResourceable;
+import org.olat.core.id.Roles;
 import org.olat.core.id.context.BusinessControlFactory;
 import org.olat.core.id.context.ContextEntry;
 import org.olat.core.id.context.StateEntry;
 import org.olat.core.logging.activity.ThreadLocalUserActivityLogger;
-import org.olat.core.util.UserSession;
 import org.olat.core.util.Util;
+import org.olat.core.util.coordinate.CoordinatorManager;
 import org.olat.core.util.event.EventBus;
 import org.olat.core.util.event.GenericEventListener;
 import org.olat.core.util.resource.OresHelper;
@@ -62,12 +63,14 @@ public class OverviewAuthoringController extends BasicController implements Acti
 	private MainPanel mainPanel;
 	private final VelocityContainer mainVC;
 	private final SegmentViewComponent segmentView;
+	private Link deletedLink;
 	private Link favoriteLink;
-	private final Link myEntriesLink, searchLink, deletedLink;
+	private final Link searchLink;
+	private final Link myEntriesLink;
 	private AuthorListController currentCtrl, markedCtrl, myEntriesCtrl, searchEntriesCtrl;
 	private AuthorDeletedListController deletedEntriesCtrl;
 
-	private final boolean isOlatAdmin;
+	private final boolean isAdministrator;
 	private final boolean isGuestOnly;
 	private boolean favoritDirty, myDirty, deletedDirty;
 	private final EventBus eventBus;
@@ -76,9 +79,9 @@ public class OverviewAuthoringController extends BasicController implements Acti
 		super(ureq, wControl);
 		setTranslator(Util.createPackageTranslator(RepositoryManager.class, getLocale(), getTranslator()));
 		
-		UserSession usess = ureq.getUserSession();
-		isGuestOnly = usess.getRoles().isGuestOnly();
-		isOlatAdmin = usess.getRoles().isOLATAdmin();
+		Roles roles = ureq.getUserSession().getRoles();
+		isGuestOnly = roles.isGuestOnly();
+		isAdministrator = roles.isAdministrator() || roles.isLearnResourceManager();
 		
 		mainPanel = new MainPanel("authoringMainPanel");
 		mainPanel.setDomReplaceable(false);
@@ -96,26 +99,32 @@ public class OverviewAuthoringController extends BasicController implements Acti
 		segmentView.addSegment(myEntriesLink, false);
 		searchLink = LinkFactory.createLink("search.generic", mainVC, this);
 		segmentView.addSegment(searchLink, false);
-		deletedLink = LinkFactory.createLink("search.deleted", mainVC, this);
-		segmentView.addSegment(deletedLink, false);
+		if(roles.isAuthor() || isAdministrator) {
+			deletedLink = LinkFactory.createLink("search.deleted", mainVC, this);
+			segmentView.addSegment(deletedLink, false);
+		}
 
 		eventBus = ureq.getUserSession().getSingleUserEventCenter();
 		eventBus.registerFor(this, getIdentity(), RepositoryService.REPOSITORY_EVENT_ORES);
-
+		
+		CoordinatorManager.getInstance().getCoordinator().getEventBus().registerFor(this, getIdentity(), RepositoryService.REPOSITORY_EVENT_ORES);
 		putInitialPanel(mainPanel);
 	}
 	
 	@Override
 	protected void doDispose() {
 		eventBus.deregisterFor(this, RepositoryService.REPOSITORY_EVENT_ORES);
+		CoordinatorManager.getInstance().getCoordinator().getEventBus().deregisterFor(this, RepositoryService.REPOSITORY_EVENT_ORES);
 	}
 	
 	@Override
 	public void event(Event event) {
 		if(EntryChangedEvent.CHANGE_CMD.equals(event.getCommand()) && event instanceof EntryChangedEvent) {
 			EntryChangedEvent ece = (EntryChangedEvent)event;
-			if(ece.getChange() == Change.addBookmark || ece.getChange() == Change.removeBookmark
-					|| ece.getChange() == Change.added || ece.getChange() == Change.deleted) {
+			if(ece.getChange() == Change.addBookmark
+					|| ece.getChange() == Change.removeBookmark
+					|| ece.getChange() == Change.added
+					|| ece.getChange() == Change.deleted) {
 				if(markedCtrl != null && !markedCtrl.getI18nName().equals(ece.getSource())) {
 					favoritDirty = true;
 				}
@@ -124,6 +133,18 @@ public class OverviewAuthoringController extends BasicController implements Acti
 				}
 				if(deletedEntriesCtrl != null && !deletedEntriesCtrl.getI18nName().equals(ece.getSource())) {
 					deletedDirty = true;
+				}
+			} else if(ece.getChange() == Change.modifiedAccess
+					|| ece.getChange() == Change.modifiedAtPublish
+					|| ece.getChange() == Change.modifiedDescription) {
+				if(markedCtrl != null) {
+					markedCtrl.addDirtyRows(ece.getRepositoryEntryKey());
+				}
+				if(myEntriesCtrl != null) {
+					myEntriesCtrl.addDirtyRows(ece.getRepositoryEntryKey());
+				}
+				if(deletedEntriesCtrl != null) {
+					deletedEntriesCtrl.addDirtyRows(ece.getRepositoryEntryKey());
 				}
 			}
 		}
@@ -148,9 +169,13 @@ public class OverviewAuthoringController extends BasicController implements Acti
 			}
 			if(favoritDirty && markedCtrl != null) {
 				markedCtrl.reloadRows();
+			} else if(markedCtrl != null) {
+				markedCtrl.reloadDirtyRows();
 			}
 			if(myDirty && myEntriesCtrl != null) {
 				myEntriesCtrl.reloadRows();
+			} else if(myEntriesCtrl != null) {
+				myEntriesCtrl.reloadDirtyRows();
 			}
 			addToHistory(ureq, currentCtrl);
 		} else {
@@ -171,7 +196,7 @@ public class OverviewAuthoringController extends BasicController implements Acti
 			} else if("Search".equals(segment)) {
 				doSearchEntries(ureq).activate(ureq, subEntries, entry.getTransientState());
 				segmentView.select(searchLink);
-			} else if("Deleted".equals(segment)) {
+			} else if("Deleted".equals(segment) && deletedLink != null) {
 				doOpenDeletedEntries(ureq).activate(ureq, subEntries, entry.getTransientState());
 				segmentView.select(deletedLink);
 			} else {
@@ -211,10 +236,12 @@ public class OverviewAuthoringController extends BasicController implements Acti
 			OLATResourceable ores = OresHelper.createOLATResourceableInstance("Favorits", 0l);
 			ThreadLocalUserActivityLogger.addLoggingResourceInfo(LoggingResourceable.wrapBusinessPath(ores));
 			WindowControl bwControl = BusinessControlFactory.getInstance().createBusinessWindowControl(ores, null, getWindowControl());
-			markedCtrl = new AuthorListController(ureq, bwControl, "search.mark", searchParams, false);
+			markedCtrl = new AuthorListController(ureq, bwControl, "search.mark", searchParams, false, true);
 			listenTo(markedCtrl);
 		} else if(favoritDirty) {
 			markedCtrl.reloadRows();
+		} else {
+			markedCtrl.reloadDirtyRows();
 		}
 		favoritDirty = false;
 		
@@ -233,10 +260,12 @@ public class OverviewAuthoringController extends BasicController implements Acti
 			OLATResourceable ores = OresHelper.createOLATResourceableInstance("My", 0l);
 			ThreadLocalUserActivityLogger.addLoggingResourceInfo(LoggingResourceable.wrapBusinessPath(ores));
 			WindowControl bwControl = BusinessControlFactory.getInstance().createBusinessWindowControl(ores, null, getWindowControl());
-			myEntriesCtrl = new AuthorListController(ureq, bwControl, "search.my", searchParams, false);
+			myEntriesCtrl = new AuthorListController(ureq, bwControl, "search.my", searchParams, false, true);
 			listenTo(myEntriesCtrl);	
 		} else if(myDirty) {
 			myEntriesCtrl.reloadRows();
+		} else {
+			myEntriesCtrl.reloadDirtyRows();
 		}
 		myDirty = false;
 		
@@ -255,7 +284,7 @@ public class OverviewAuthoringController extends BasicController implements Acti
 			OLATResourceable ores = OresHelper.createOLATResourceableInstance("Search", 0l);
 			ThreadLocalUserActivityLogger.addLoggingResourceInfo(LoggingResourceable.wrapBusinessPath(ores));
 			WindowControl bwControl = BusinessControlFactory.getInstance().createBusinessWindowControl(ores, null, getWindowControl());
-			searchEntriesCtrl = new AuthorListController(ureq, bwControl, "search.generic", searchParams, true);
+			searchEntriesCtrl = new AuthorListController(ureq, bwControl, "search.generic", searchParams, true, false);
 			listenTo(searchEntriesCtrl);
 		}
 		
@@ -269,7 +298,7 @@ public class OverviewAuthoringController extends BasicController implements Acti
 		if(deletedEntriesCtrl == null) {
 			SearchAuthorRepositoryEntryViewParams searchParams
 				= new SearchAuthorRepositoryEntryViewParams(getIdentity(), ureq.getUserSession().getRoles());
-			if(!isOlatAdmin) {
+			if(!isAdministrator) {
 				searchParams.setOwnedResourcesOnly(true);
 			}
 			searchParams.setDeleted(true);
@@ -281,6 +310,8 @@ public class OverviewAuthoringController extends BasicController implements Acti
 			listenTo(deletedEntriesCtrl);	
 		} else if(deletedDirty) {
 			deletedEntriesCtrl.reloadRows();
+		} else {
+			deletedEntriesCtrl.reloadDirtyRows();
 		}
 		deletedDirty = false;
 		

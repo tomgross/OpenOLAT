@@ -35,7 +35,7 @@ import org.olat.core.commons.services.notifications.model.SubscriptionListItem;
 import org.olat.core.commons.services.notifications.model.TitleItem;
 import org.olat.core.gui.translator.Translator;
 import org.olat.core.gui.util.CSSHelper;
-import org.olat.core.logging.OLog;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.Util;
 import org.olat.course.CourseFactory;
@@ -46,6 +46,7 @@ import org.olat.course.run.environment.CourseEnvironment;
 import org.olat.group.BusinessGroup;
 import org.olat.group.BusinessGroupService;
 import org.olat.repository.RepositoryManager;
+import org.olat.user.UserManager;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 /**
@@ -57,13 +58,15 @@ import org.springframework.stereotype.Service;
 @Service
 public class PFNotificationsHandler implements NotificationsHandler {
 
-	private static final OLog log = Tracing.createLoggerFor(PFNotificationsHandler.class);
+	private static final Logger log = Tracing.createLoggerFor(PFNotificationsHandler.class);
 	protected static final String CSS_CLASS_ICON = "o_pf_icon";
 
 	@Autowired
 	private NotificationsManager notificationsManager;
 	@Autowired 
 	private PFManager pfManager;
+	@Autowired
+	private UserManager userManager;
 
 	public PFNotificationsHandler() {
 
@@ -82,7 +85,7 @@ public class PFNotificationsHandler implements NotificationsHandler {
 		 	final Translator translator = Util.createPackageTranslator(PFRunController.class, locale);
 			
 		 	PFNotifications notifications = new PFNotifications(subscriber, locale, compareDate, 
-		 			pfManager, notificationsManager);
+		 			pfManager, notificationsManager, userManager);
 		 	List<SubscriptionListItem> items = notifications.getItems();
 			
 			if (items.isEmpty()) {
@@ -105,12 +108,12 @@ public class PFNotificationsHandler implements NotificationsHandler {
 			if("BusinessGroup".equals(p.getResName())) {
 				BusinessGroup bg = CoreSpringFactory.getImpl(BusinessGroupService.class).loadBusinessGroup(p.getResId());
 				if(bg == null) {
-					log.info("deactivating publisher with key; " + p.getKey(), null);
+					log.info("deactivating publisher with key; " + p.getKey());
 					NotificationsManager.getInstance().deactivate(p);
 				}
 			} else if ("CourseModule".equals(p.getResName())) {
 				if(!NotificationsUpgradeHelper.checkCourse(p)) {
-					log.info("deactivating publisher with key; " + p.getKey(), null);
+					log.info("deactivating publisher with key; " + p.getKey());
 					NotificationsManager.getInstance().deactivate(p);
 				}
 			}

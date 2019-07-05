@@ -26,20 +26,23 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
+import javax.persistence.TypedQuery;
+
 import org.apache.commons.io.FileUtils;
+import org.apache.logging.log4j.Logger;
 import org.olat.admin.layout.LayoutModule;
-import org.olat.basesecurity.BaseSecurity;
-import org.olat.basesecurity.Constants;
 import org.olat.basesecurity.Group;
 import org.olat.basesecurity.GroupMembership;
 import org.olat.basesecurity.GroupRoles;
 import org.olat.basesecurity.Policy;
+import org.olat.basesecurity.PolicyImpl;
 import org.olat.basesecurity.SecurityGroup;
 import org.olat.basesecurity.SecurityGroupMembershipImpl;
 import org.olat.basesecurity.manager.GroupDAO;
 import org.olat.basesecurity.model.GroupImpl;
 import org.olat.basesecurity.model.GroupMembershipImpl;
 import org.olat.core.commons.persistence.DB;
+import org.olat.core.logging.Tracing;
 import org.olat.core.util.StringHelper;
 import org.olat.core.util.WebappHelper;
 import org.olat.portfolio.manager.EPMapPolicy;
@@ -64,6 +67,10 @@ import org.springframework.beans.factory.annotation.Autowired;
  */
 public class OLATUpgrade_10_0_0 extends OLATUpgrade {
 	
+	private static final Logger log = Tracing.createLoggerFor(OLATUpgrade_10_0_0.class);
+
+	private static final String PERMISSION_READ = "read";
+	
 	private static final int BATCH_SIZE = 50;
 	private static final String TASK_BUSINESS_GROUPS = "Upgrade business groups";
 	private static final String TASK_REPOENTRIES = "Upgrade repository entries";
@@ -74,16 +81,14 @@ public class OLATUpgrade_10_0_0 extends OLATUpgrade {
 	private static final String VERSION = "OLAT_10.0.0";
 	
 
-	private static String PROPERTY_CATEGORY = "_o3_";
-	private static String PNAME_LOGOURI = "customizing.img.uri";
-	private static String PNAME_LOGOALT = "customizing.img.alt";
-	private static String PNAME_LINKURI = "customizing.link.uri";
-	private static String PNAME_FOOTERLINE = "customizing.footer.text";
+	private static final String PROPERTY_CATEGORY = "_o3_";
+	private static final String PNAME_LOGOURI = "customizing.img.uri";
+	private static final String PNAME_LOGOALT = "customizing.img.alt";
+	private static final String PNAME_LINKURI = "customizing.link.uri";
+	private static final String PNAME_FOOTERLINE = "customizing.footer.text";
 
 	@Autowired
 	private DB dbInstance;
-	@Autowired
-	private BaseSecurity securityManager;
 	@Autowired
 	private GroupDAO groupDao;
 	@Autowired
@@ -100,11 +105,6 @@ public class OLATUpgrade_10_0_0 extends OLATUpgrade {
 	@Override
 	public String getVersion() {
 		return VERSION;
-	}
-	
-	@Override
-	public boolean doPreSystemInitUpgrade(UpgradeManager upgradeManager) {
-		return false;
 	}
 
 	@Override
@@ -128,9 +128,9 @@ public class OLATUpgrade_10_0_0 extends OLATUpgrade {
 		uhd.setInstallationComplete(allOk);
 		upgradeManager.setUpgradesHistory(uhd, VERSION);
 		if(allOk) {
-			log.audit("Finished OLATUpgrade_10_0_0 successfully!");
+			log.info(Tracing.M_AUDIT, "Finished OLATUpgrade_10_0_0 successfully!");
 		} else {
-			log.audit("OLATUpgrade_10_0_0 not finished, try to restart OpenOLAT!");
+			log.info(Tracing.M_AUDIT, "OLATUpgrade_10_0_0 not finished, try to restart OpenOLAT!");
 		}
 		return allOk;
 	}
@@ -184,7 +184,7 @@ public class OLATUpgrade_10_0_0 extends OLATUpgrade {
 					processBusinessGroup(businessGroup); 
 				}
 				counter += businessGroups.size();
-				log.audit("Business groups processed: " + businessGroups.size() + ", total processed (" + counter + ")");
+				log.info(Tracing.M_AUDIT, "Business groups processed: " + businessGroups.size() + ", total processed (" + counter + ")");
 				dbInstance.commitAndCloseSession();
 			} while(businessGroups.size() == BATCH_SIZE);
 			uhd.setBooleanDataValue(TASK_BUSINESS_GROUPS, true);
@@ -226,7 +226,7 @@ public class OLATUpgrade_10_0_0 extends OLATUpgrade {
 					processRepositoryEntry(repoEntry);
 				}
 				counter += repoEntries.size();
-				log.audit("Repository entries processed: " + repoEntries.size() + ", total processed (" + counter + ")");
+				log.info(Tracing.M_AUDIT, "Repository entries processed: " + repoEntries.size() + ", total processed (" + counter + ")");
 				dbInstance.commitAndCloseSession();
 			} while(repoEntries.size() == BATCH_SIZE);
 			uhd.setBooleanDataValue(TASK_REPOENTRIES, true);
@@ -287,7 +287,7 @@ public class OLATUpgrade_10_0_0 extends OLATUpgrade {
 					processRelationToRepo(businessGroup);
 				}
 				counter += businessGroups.size();
-				log.audit("Business groups relations processed: " + businessGroups.size() + ", total processed (" + counter + ")");
+				log.info(Tracing.M_AUDIT, "Business groups relations processed: " + businessGroups.size() + ", total processed (" + counter + ")");
 				dbInstance.commitAndCloseSession();
 			} while(businessGroups.size() == BATCH_SIZE);
 			uhd.setBooleanDataValue(TASK_REPOENTRY_TO_BUSINESSGROUP, true);
@@ -323,7 +323,7 @@ public class OLATUpgrade_10_0_0 extends OLATUpgrade {
 			}
 			dbInstance.commit();
 		} catch (Exception e) {
-			e.printStackTrace();
+			log.error("", e);
 			throw e;
 		}
 	}
@@ -350,7 +350,7 @@ public class OLATUpgrade_10_0_0 extends OLATUpgrade {
 					}
 				}
 				counter += invitations.size();
-				log.audit("Invitations processed: " + invitations.size() + ", total processed (" + counter + ")");
+				log.info(Tracing.M_AUDIT, "Invitations processed: " + invitations.size() + ", total processed (" + counter + ")");
 				dbInstance.commitAndCloseSession();
 			} while(invitations.size() == BATCH_SIZE);
 			uhd.setBooleanDataValue(TASK_INVITATION, true);
@@ -386,7 +386,7 @@ public class OLATUpgrade_10_0_0 extends OLATUpgrade {
 					processMap(businessGroup);
 				}
 				counter += businessGroups.size();
-				log.audit("Maps processed: " + businessGroups.size() + ", total processed (" + counter + ")");
+				log.info(Tracing.M_AUDIT, "Maps processed: " + businessGroups.size() + ", total processed (" + counter + ")");
 				dbInstance.commitAndCloseSession();
 			} while(businessGroups.size() == BATCH_SIZE);
 			uhd.setBooleanDataValue(TASK_UPGRADE_MAP, true);
@@ -418,9 +418,9 @@ public class OLATUpgrade_10_0_0 extends OLATUpgrade {
 			}
 			
 			//create policy -> relation
-			List<Policy> policies = securityManager.getPoliciesOfResource(map.getOlatResource(), null);
+			List<Policy> policies = getPoliciesOfResource(map.getOlatResource(), null);
 			for(Policy policy:policies) {
-				if(policy.getPermission().contains(Constants.PERMISSION_READ)) {
+				if(policy.getPermission().contains(PERMISSION_READ)) {
 					EPMapUpgradeToGroupRelation policyRelation = processMapPolicy(policy, map);
 					if(policyRelation != null) {
 						relations.add(policyRelation);
@@ -432,6 +432,23 @@ public class OLATUpgrade_10_0_0 extends OLATUpgrade {
 				dbInstance.getCurrentEntityManager().persist(relation);
 			}
 		}
+	}
+	
+	private List<Policy> getPoliciesOfResource(OLATResource resource, SecurityGroup secGroup) {
+		StringBuilder sb = new StringBuilder();
+		sb.append("select poi from ").append(PolicyImpl.class.getName()).append(" poi where ")
+			.append(" poi.olatResource.key=:resourceKey ");
+		if(secGroup != null) {
+			sb.append(" and poi.securityGroup.key=:secGroupKey");
+		}
+		
+		TypedQuery<Policy> query = dbInstance.getCurrentEntityManager()
+				.createQuery(sb.toString(), Policy.class)
+				.setParameter("resourceKey", resource.getKey());
+		if(secGroup != null) {
+			query.setParameter("secGroupKey", secGroup.getKey());
+		}
+		return query.getResultList();
 	}
 	
 	private boolean hasGroupsRelations(EPMapUpgrade map) {

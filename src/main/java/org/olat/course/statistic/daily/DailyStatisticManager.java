@@ -32,11 +32,14 @@ import java.util.Calendar;
 import java.util.Date;
 import java.util.List;
 
+import javax.persistence.TemporalType;
+import javax.persistence.TypedQuery;
+
+import org.apache.logging.log4j.Logger;
 import org.olat.core.commons.persistence.DBFactory;
-import org.olat.core.commons.persistence.DBQuery;
 import org.olat.core.gui.UserRequest;
 import org.olat.core.gui.components.table.ColumnDescriptor;
-import org.olat.core.manager.BasicManager;
+import org.olat.core.logging.Tracing;
 import org.olat.course.ICourse;
 import org.olat.course.statistic.IStatisticManager;
 import org.olat.course.statistic.StatisticDisplayController;
@@ -50,20 +53,22 @@ import org.olat.course.statistic.TotalAwareColumnDescriptor;
  * Initial Date:  12.02.2010 <br>
  * @author Stefan
  */
-public class DailyStatisticManager extends BasicManager implements IStatisticManager {
+public class DailyStatisticManager implements IStatisticManager {
+	
+	private static final Logger log = Tracing.createLoggerFor(DailyStatisticManager.class);
 
 	/** the SimpleDateFormat with which the column headers will be created formatted by the database, 
 	 * so change this in coordination with any db changes if you really need to 
 	 **/
-	private final SimpleDateFormat columnHeaderFormat_ = new SimpleDateFormat("yyyy-MM-dd hh:mm:ss");
+	private final SimpleDateFormat columnHeaderFormat = new SimpleDateFormat("yyyy-MM-dd hh:mm:ss");
 
 	@Override
 	public StatisticResult generateStatisticResult(UserRequest ureq, ICourse course, long courseRepositoryEntryKey) {
-		DBQuery dbQuery = DBFactory.getInstance().createQuery("select businessPath,day,value from org.olat.course.statistic.daily.DailyStat sv "
-				+ "where sv.resId=:resId");
-		dbQuery.setLong("resId", courseRepositoryEntryKey);
-
-		return new StatisticResult(course, dbQuery.list());
+		String q = "select businessPath,day,value from org.olat.course.statistic.daily.DailyStat sv where sv.resId=:resId";
+		List<Object[]> raw = DBFactory.getInstance().getCurrentEntityManager()
+				.createQuery(q, Object[].class)
+				.setParameter("resId", courseRepositoryEntryKey).getResultList();
+		return new StatisticResult(course, raw);
 	}
 	
 	@Override
@@ -74,21 +79,22 @@ public class DailyStatisticManager extends BasicManager implements IStatisticMan
 		
 		String header = headerId;
 		try{
-			Date d = columnHeaderFormat_.parse(headerId);
+			Date d = columnHeaderFormat.parse(headerId);
 
 			Calendar c = Calendar.getInstance(ureq.getLocale());
 			c.setTime(d);
 			DateFormat df = DateFormat.getDateInstance(DateFormat.SHORT, ureq.getLocale());
 			header = df.format(c.getTime());
 		} catch(ParseException pe) {
-			getLogger().warn("createColumnDescriptor: ParseException while parsing "+headerId+".", pe);
+			log.warn("createColumnDescriptor: ParseException while parsing "+headerId+".", pe);
 		}
 		TotalAwareColumnDescriptor cd = new TotalAwareColumnDescriptor(header, column, 
-				StatisticDisplayController.CLICK_TOTAL_ACTION+column, ureq.getLocale(), ColumnDescriptor.ALIGNMENT_RIGHT);	
+				StatisticDisplayController.CLICK_TOTAL_ACTION+column, ureq.getLocale(), ColumnDescriptor.ALIGNMENT_RIGHT);
 		cd.setTranslateHeaderKey(false);
 		return cd;
 	}
 
+	@Override
 	public StatisticResult generateStatisticResult(UserRequest ureq, ICourse course, long courseRepositoryEntryKey, Date fromDate, Date toDate) {
 		if (fromDate==null && toDate==null) {
 			// no restrictions, return the defaults
@@ -97,25 +103,26 @@ public class DailyStatisticManager extends BasicManager implements IStatisticMan
 			return statisticResult;
 		}
 		
-		StringBuffer dateClause = new StringBuffer();
-		if (fromDate!=null) {
-			dateClause.append(" and (day>=:fromDate) ");
+		StringBuilder sb = new StringBuilder();
+		sb.append("select businessPath,day,value from org.olat.course.statistic.daily.DailyStat sv where sv.resId=:resId");
+		if (fromDate != null) {
+			sb.append(" and (day>=:fromDate) ");
 		}
-		if (toDate!=null) {
-			dateClause.append(" and (day<=:toDate) ");
-		}
-		DBQuery dbQuery = DBFactory.getInstance().createQuery("select businessPath,day,value from org.olat.course.statistic.daily.DailyStat sv "
-				+ "where sv.resId=:resId "
-				+ dateClause);
-		dbQuery.setLong("resId", courseRepositoryEntryKey);
-		if (fromDate!=null) {
-			dbQuery.setDate("fromDate", fromDate);
-		}
-		if (toDate!=null) {
-			dbQuery.setDate("toDate", toDate);
+		if (toDate != null) {
+			sb.append(" and (day<=:toDate) ");
 		}
 		
-		StatisticResult statisticResult = new StatisticResult(course, dbQuery.list());
+		TypedQuery<Object[]> dbQuery = DBFactory.getInstance()
+				.getCurrentEntityManager().createQuery(sb.toString(), Object[].class)
+				.setParameter("resId", courseRepositoryEntryKey);
+		if (fromDate != null) {
+			dbQuery.setParameter("fromDate", fromDate, TemporalType.TIMESTAMP);
+		}
+		if (toDate != null) {
+			dbQuery.setParameter("toDate", toDate, TemporalType.TIMESTAMP);
+		}
+		
+		StatisticResult statisticResult = new StatisticResult(course, dbQuery.getResultList());
 		fillGapsInColumnHeaders(statisticResult);
 		return statisticResult;
 	}
@@ -132,19 +139,19 @@ public class DailyStatisticManager extends BasicManager implements IStatisticMan
 		}
 		try{
 			String firstDate = columnHeaders.get(0);
-			Date fromDate = columnHeaderFormat_.parse(firstDate);
+			Date fromDate = columnHeaderFormat.parse(firstDate);
 			Date previousDate = new Date(fromDate.getTime()); // copy fromDate
-			final long DAY_DIFF = 24*60*60*1000;
+			final long DAY_DIFF = 24l * 60l * 60l * 1000l;
 			for (int i = 1; i < columnHeaders.size(); i++) {
 				String aDate = columnHeaders.get(i);
-				Date currDate = columnHeaderFormat_.parse(aDate);
+				Date currDate = columnHeaderFormat.parse(aDate);
 				long diff = currDate.getTime() - previousDate.getTime();
 				// note that we should have full days - we have the HH:MM:SS set to 00:00:00 - hence the
 				// difference should always be a full day
 				if (diff>DAY_DIFF) {
 					// then we should add a few days in here
 					Date additionalDate = new Date(previousDate.getTime() + DAY_DIFF);
-					String additionalDateStr = columnHeaderFormat_.format(additionalDate);
+					String additionalDateStr = columnHeaderFormat.format(additionalDate);
 					columnHeaders.add(i, additionalDateStr);
 					previousDate = additionalDate;
 				} else {
@@ -154,8 +161,7 @@ public class DailyStatisticManager extends BasicManager implements IStatisticMan
 			
 			statisticResult.setColumnHeaders(columnHeaders);
 		} catch(ParseException e) {
-			getLogger().warn("fillGapsInColumnHeaders: Got a ParseException while trying to fill gaps. Giving up. ",e);
+			log.warn("fillGapsInColumnHeaders: Got a ParseException while trying to fill gaps. Giving up. ",e);
 		}
 	}
-
 }

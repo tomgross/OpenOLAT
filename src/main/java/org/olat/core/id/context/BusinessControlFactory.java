@@ -41,13 +41,13 @@ import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import org.apache.logging.log4j.Logger;
 import org.olat.core.gui.UserRequest;
 import org.olat.core.gui.control.WindowControl;
 import org.olat.core.helpers.Settings;
 import org.olat.core.id.Identity;
 import org.olat.core.id.OLATResourceable;
 import org.olat.core.logging.AssertException;
-import org.olat.core.logging.OLog;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.StringHelper;
 import org.olat.core.util.WebappHelper;
@@ -65,7 +65,7 @@ import org.olat.core.util.servlets.URLEncoder;
  */
 public class BusinessControlFactory {
 	
-	private static final OLog log = Tracing.createLoggerFor(BusinessControlFactory.class);
+	private static final Logger log = Tracing.createLoggerFor(BusinessControlFactory.class);
 	
 	private static final BusinessControlFactory INSTANCE = new BusinessControlFactory();
 	final BusinessControl EMPTY; // for performance
@@ -272,7 +272,7 @@ public class BusinessControlFactory {
 	}
 
 	public List<ContextEntry> cloneContextEntries(final List<ContextEntry> ces) {
-		final List<ContextEntry> clones = new ArrayList<ContextEntry>(ces.size());
+		final List<ContextEntry> clones = new ArrayList<>(ces.size());
 		for(ContextEntry ce:ces) {
 			OLATResourceable clone = OresHelper.clone(ce.getOLATResourceable());
 			clones.add(new MyContextEntry(clone));
@@ -351,7 +351,7 @@ public class BusinessControlFactory {
 	 * @return
 	 */
 	public List<ContextEntry> createCEListFromResourceType(String resourceType) {
-		List<ContextEntry> entries = new ArrayList<ContextEntry>(3);
+		List<ContextEntry> entries = new ArrayList<>(3);
 		if(StringHelper.containsNonWhitespace(resourceType)) {
 			OLATResourceable ores = OresHelper.createOLATResourceableInstanceWithoutCheck(resourceType, 0l);
 			ContextEntry entry = createContextEntry(ores);
@@ -366,7 +366,7 @@ public class BusinessControlFactory {
 	 * @return
 	 */
 	public List<ContextEntry> createCEListFromString(String businessControlString) {
-		List<ContextEntry> entries = new ArrayList<ContextEntry>();
+		List<ContextEntry> entries = new ArrayList<>();
 		if(!StringHelper.containsNonWhitespace(businessControlString)) {
 			return entries;
 		}
@@ -538,6 +538,14 @@ public class BusinessControlFactory {
 	}
 	
 	public String getURLFromBusinessPathString(String bPathString){
+		return getURLFromBusinessPathString("url", bPathString);
+	}
+	
+	public String getAuthenticatedURLFromBusinessPathString(String bPathString){
+		return getURLFromBusinessPathString("auth", bPathString);
+	}
+	
+	private String getURLFromBusinessPathString(String dispatcherPath, String bPathString) {
 		if(!StringHelper.containsNonWhitespace(bPathString)) {
 			return null;
 		}
@@ -547,7 +555,11 @@ public class BusinessControlFactory {
 			List<ContextEntry> ceList = bCF.createCEListFromString(bPathString);
 			String busPath = getBusinessPathAsURIFromCEList(ceList); 
 			
-			return Settings.getServerContextPathURI()+"/url/"+busPath;
+			StringBuilder sb = new StringBuilder(64);
+			sb.append(Settings.getServerContextPathURI())
+			  .append("/").append(dispatcherPath).append("/")
+			  .append(busPath);
+			return sb.toString();
 		} catch(Exception e) {
 			log.error("Error with business path: " + bPathString, e);
 			return null;

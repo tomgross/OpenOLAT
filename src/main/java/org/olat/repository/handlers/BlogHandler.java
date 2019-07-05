@@ -24,6 +24,7 @@ import java.util.Locale;
 
 import org.olat.core.CoreSpringFactory;
 import org.olat.core.commons.persistence.DBFactory;
+import org.olat.core.commons.services.notifications.SubscriptionContext;
 import org.olat.core.gui.UserRequest;
 import org.olat.core.gui.components.stack.TooledStackedPanel;
 import org.olat.core.gui.control.Controller;
@@ -34,6 +35,7 @@ import org.olat.core.gui.media.MediaResource;
 import org.olat.core.gui.translator.Translator;
 import org.olat.core.id.Identity;
 import org.olat.core.id.OLATResourceable;
+import org.olat.core.id.Organisation;
 import org.olat.core.id.Roles;
 import org.olat.core.logging.AssertException;
 import org.olat.core.util.Util;
@@ -41,24 +43,27 @@ import org.olat.core.util.coordinate.CoordinatorManager;
 import org.olat.core.util.coordinate.LockResult;
 import org.olat.core.util.resource.OLATResourceableJustBeforeDeletedEvent;
 import org.olat.core.util.vfs.VFSContainer;
-import org.olat.course.assessment.AssessmentMode;
 import org.olat.course.assessment.manager.UserCourseInformationsManager;
 import org.olat.fileresource.FileResourceManager;
 import org.olat.fileresource.types.BlogFileResource;
 import org.olat.fileresource.types.FileResource;
 import org.olat.fileresource.types.ResourceEvaluation;
+import org.olat.modules.webFeed.Feed;
+import org.olat.modules.webFeed.FeedChangedEvent;
 import org.olat.modules.webFeed.FeedResourceSecurityCallback;
 import org.olat.modules.webFeed.FeedSecurityCallback;
-import org.olat.modules.webFeed.managers.FeedManager;
+import org.olat.modules.webFeed.manager.FeedManager;
+import org.olat.modules.webFeed.manager.ValidatedURL;
+import org.olat.modules.webFeed.manager.ValidatedURL.State;
 import org.olat.modules.webFeed.ui.FeedMainController;
 import org.olat.modules.webFeed.ui.FeedRuntimeController;
 import org.olat.modules.webFeed.ui.blog.BlogUIFactory;
 import org.olat.repository.ErrorList;
 import org.olat.repository.RepositoryEntry;
+import org.olat.repository.RepositoryEntryStatusEnum;
 import org.olat.repository.RepositoryManager;
 import org.olat.repository.RepositoryService;
 import org.olat.repository.model.RepositoryEntrySecurity;
-import org.olat.repository.ui.RepositoryEntryRuntimeController.RuntimeControllerCreator;
 import org.olat.resource.OLATResource;
 import org.olat.resource.OLATResourceManager;
 import org.olat.resource.references.ReferenceManager;
@@ -71,11 +76,10 @@ import org.olat.resource.references.ReferenceManager;
  * 
  * @author Gregor Wassmann
  */
-// Loads of parameters are unused
 public class BlogHandler implements RepositoryHandler {
 
 	@Override
-	public boolean isCreate() {
+	public boolean supportCreate(Identity identity, Roles roles) {
 		return true;
 	}
 
@@ -85,11 +89,12 @@ public class BlogHandler implements RepositoryHandler {
 	}
 
 	@Override
-	public RepositoryEntry createResource(Identity initialAuthor, String displayname, String description, Object createObject, Locale locale) {
+	public RepositoryEntry createResource(Identity initialAuthor, String displayname, String description,
+			Object createObject, Organisation organisation, Locale locale) {
 		OLATResourceable ores = FeedManager.getInstance().createBlogResource();
 		OLATResource resource = OLATResourceManager.getInstance().findOrPersistResourceable(ores);
 		RepositoryEntry re = CoreSpringFactory.getImpl(RepositoryService.class)
-				.create(initialAuthor, null, "", displayname, description, resource, RepositoryEntry.ACC_OWNERS);
+				.create(initialAuthor, null, "", displayname, description, resource, RepositoryEntryStatusEnum.preparation, organisation);
 		DBFactory.getInstance().commit();
 		return re;
 	}
@@ -98,23 +103,64 @@ public class BlogHandler implements RepositoryHandler {
 	public boolean isPostCreateWizardAvailable() {
 		return false;
 	}
+	
+	@Override
+	public boolean supportImport() {
+		return true;
+	}
 
 	@Override
 	public ResourceEvaluation acceptImport(File file, String filename) {
 		return BlogFileResource.evaluate(file, filename);
 	}
+	
+	@Override
+	public boolean supportImportUrl() {
+		return true;
+	}
+	
+	@Override
+	public ResourceEvaluation acceptImport(String url) {
+		ResourceEvaluation eval = new ResourceEvaluation();
+		ValidatedURL vUrl = FeedManager.getInstance().validateFeedUrl(url, BlogFileResource.TYPE_NAME);
+		if(vUrl.getState() == State.VALID) {
+			eval.setValid(true);
+			eval.setDisplayname(vUrl.getTitle());
+		}
+		return eval;
+	}
 
 	@Override
 	public RepositoryEntry importResource(Identity initialAuthor, String initialAuthorAlt, String displayname,
-			String description, boolean withReferences, Locale locale, File file, String filename) {
+			String description, boolean withReferences, Organisation organisation, Locale locale, File file, String filename) {
 
 		OLATResource resource = OLATResourceManager.getInstance().createAndPersistOLATResourceInstance(new BlogFileResource());
 		File fResourceFileroot = FileResourceManager.getInstance().getFileResourceRootImpl(resource).getBasefile();
 		File blogRoot = new File(fResourceFileroot, FeedManager.getInstance().getFeedKind(resource));
 		FileResource.copyResource(file, filename, blogRoot);
+		FeedManager.getInstance().importFeedFromXML(resource, true);
 		RepositoryEntry re = CoreSpringFactory.getImpl(RepositoryService.class)
-				.create(initialAuthor, null, "", displayname, description, resource, RepositoryEntry.ACC_OWNERS);
+				.create(initialAuthor, null, "", displayname, description, resource, RepositoryEntryStatusEnum.preparation, organisation);
 		DBFactory.getInstance().commit();
+
+		return re;
+	}
+	
+	@Override
+	public RepositoryEntry importResource(Identity initialAuthor, String initialAuthorAlt, String displayname,
+			String description, Organisation organisation, Locale locale, String url) {
+
+		OLATResourceable ores = FeedManager.getInstance().createBlogResource();
+		OLATResource resource = OLATResourceManager.getInstance().findOrPersistResourceable(ores);
+		RepositoryEntry re = CoreSpringFactory.getImpl(RepositoryService.class)
+				.create(initialAuthor, null, "", displayname, description, resource, RepositoryEntryStatusEnum.preparation, organisation);
+		DBFactory.getInstance().commit();
+		
+		Feed feed = FeedManager.getInstance().loadFeed(ores);
+		feed = FeedManager.getInstance().updateFeedMode(Boolean.TRUE, feed);
+		FeedManager.getInstance().updateExternalFeedUrl(feed, url);
+		DBFactory.getInstance().commit();
+		
 		return re;
 	}
 
@@ -134,15 +180,12 @@ public class BlogHandler implements RepositoryHandler {
 	@Override
 	public boolean cleanupOnDelete(RepositoryEntry entry, OLATResourceable res) {
 		CoordinatorManager.getInstance().getCoordinator().getEventBus().fireEventToListenersOf(new OLATResourceableJustBeforeDeletedEvent(res), res);
-		// For now, notifications are not implemented since a blog feed is meant
-		// to be subscriped to anyway.
-		// NotificationsManager.getInstance().deletePublishersOf(res);
-		FeedManager.getInstance().delete(res);
+		FeedManager.getInstance().deleteFeed(res);
 		return true;
 	}
 
 	@Override
-	public MediaResource getAsMediaResource(OLATResourceable res, boolean backwardsCompatible) {
+	public MediaResource getAsMediaResource(OLATResourceable res) {
 		FeedManager manager = FeedManager.getInstance();
 		return manager.getFeedArchiveMediaResource(res);
 	}
@@ -158,27 +201,19 @@ public class BlogHandler implements RepositoryHandler {
 		return null;
 	}
 
-	/**
-	 * @see org.olat.repository.handlers.RepositoryHandler#getLaunchController(org.olat.core.id.OLATResourceable,
-	 *      java.lang.String, org.olat.core.gui.UserRequest,
-	 *      org.olat.core.gui.control.WindowControl)
-	 */
 	@Override
 	public MainLayoutController createLaunchController(final RepositoryEntry re, RepositoryEntrySecurity reSecurity,
 			UserRequest ureq, WindowControl wControl) {
-		boolean isAdmin = ureq.getUserSession().getRoles().isOLATAdmin();
-		boolean isOwner = RepositoryManager.getInstance().isOwnerOfRepositoryEntry(ureq.getIdentity(), re);	
-		final FeedSecurityCallback callback = new FeedResourceSecurityCallback(isAdmin, isOwner);
-		return new FeedRuntimeController(ureq, wControl, re, reSecurity,
-				new RuntimeControllerCreator() {
-					@Override
-					public Controller create(UserRequest uureq, WindowControl wwControl, TooledStackedPanel toolbarPanel,
-							RepositoryEntry entry, RepositoryEntrySecurity security, AssessmentMode assessmentMode) {
-						CoreSpringFactory.getImpl(UserCourseInformationsManager.class)
-							.updateUserCourseInformations(entry.getOlatResource(), uureq.getIdentity());
-						return new FeedMainController(entry.getOlatResource(), uureq, wwControl, null, null,
-							BlogUIFactory.getInstance(uureq.getLocale()), callback, null);
-					}
+		
+		boolean isAdministrator = reSecurity.isEntryAdmin();
+		final FeedSecurityCallback callback = new FeedResourceSecurityCallback(isAdministrator);
+		SubscriptionContext subsContext = new SubscriptionContext(re.getOlatResource(), re.getSoftkey());
+		callback.setSubscriptionContext(subsContext);
+		return new FeedRuntimeController(ureq, wControl, re, reSecurity, (uureq, wwControl, toolbarPanel, entry,  security,  assessmentMode) -> {
+				CoreSpringFactory.getImpl(UserCourseInformationsManager.class)
+					.updateUserCourseInformations(entry.getOlatResource(), uureq.getIdentity());
+				return new FeedMainController(entry.getOlatResource(), uureq, wwControl, null, null,
+					BlogUIFactory.getInstance(uureq.getLocale()), callback, null);
 			});
 	}
 
@@ -216,7 +251,7 @@ public class BlogHandler implements RepositoryHandler {
 	}
 
 	@Override
-	public EditionSupport supportsEdit(OLATResourceable resource) {
+	public EditionSupport supportsEdit(OLATResourceable resource, Identity identity, Roles roles) {
 		return EditionSupport.embedded;
 	}
 	
@@ -234,4 +269,14 @@ public class BlogHandler implements RepositoryHandler {
 	public boolean isLocked(OLATResourceable ores) {
 		return FeedManager.getInstance().isLocked(ores);
 	}
+
+	@Override
+	public void onDescriptionChanged(RepositoryEntry entry) {
+		Feed feed = FeedManager.getInstance().updateFeedWithRepositoryEntry(entry);
+		DBFactory.getInstance().commitAndCloseSession();
+
+		CoordinatorManager.getInstance().getCoordinator().getEventBus()
+				.fireEventToListenersOf(new FeedChangedEvent(feed.getKey()), feed);
+	}
+	
 }

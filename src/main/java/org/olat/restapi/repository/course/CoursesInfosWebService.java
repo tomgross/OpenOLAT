@@ -42,13 +42,13 @@ import javax.ws.rs.core.Request;
 import javax.ws.rs.core.Response;
 import javax.ws.rs.core.Response.Status;
 
+import org.apache.logging.log4j.Logger;
 import org.olat.core.CoreSpringFactory;
 import org.olat.core.commons.services.notifications.NotificationsManager;
 import org.olat.core.commons.services.notifications.Subscriber;
 import org.olat.core.id.Identity;
 import org.olat.core.id.IdentityEnvironment;
 import org.olat.core.id.Roles;
-import org.olat.core.logging.OLog;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.nodes.INode;
 import org.olat.core.util.tree.Visitor;
@@ -71,6 +71,7 @@ import org.olat.restapi.support.MediaTypeVariants;
 import org.olat.restapi.support.vo.CourseInfoVO;
 import org.olat.restapi.support.vo.CourseInfoVOes;
 import org.olat.restapi.support.vo.FolderVO;
+import org.springframework.stereotype.Component;
 
 /**
  * 
@@ -81,10 +82,11 @@ import org.olat.restapi.support.vo.FolderVO;
  *
  * @author srosse, stephane.rosse@frentix.com, http://www.frentix.com
  */
+@Component
 @Path("repo/courses/infos")
 public class CoursesInfosWebService {
 	
-	private static final OLog log = Tracing.createLoggerFor(CoursesInfosWebService.class);
+	private static final Logger log = Tracing.createLoggerFor(CoursesInfosWebService.class);
 	
 	/**
 	 * Get courses informations viewable by the authenticated user
@@ -112,10 +114,10 @@ public class CoursesInfosWebService {
 		if(MediaTypeVariants.isPaged(httpRequest, request)) {
 			int totalCount = rm.countGenericANDQueryWithRolesRestriction(params);
 			List<RepositoryEntry> repoEntries = rm.genericANDQueryWithRolesRestriction(params, start, limit, true);
-			List<CourseInfoVO> infos = new ArrayList<CourseInfoVO>();
+			List<CourseInfoVO> infos = new ArrayList<>();
 
-			final Set<Long> forumNotified = new HashSet<Long>();
-			final Map<Long,Set<String>> courseNotified = new HashMap<Long,Set<String>>();
+			final Set<Long> forumNotified = new HashSet<>();
+			final Map<Long,Set<String>> courseNotified = new HashMap<>();
 			collectSubscriptions(identity, forumNotified, courseNotified);
 
 			for(RepositoryEntry entry:repoEntries) {
@@ -208,8 +210,8 @@ public class CoursesInfosWebService {
 		if(result.isAccessible()) {
 			try {
 				final ICourse course = CourseFactory.loadCourse(entry);
-				final List<FolderVO> folders = new ArrayList<FolderVO>();
-				final List<ForumVO> forums = new ArrayList<ForumVO>();
+				final List<FolderVO> folders = new ArrayList<>();
+				final List<ForumVO> forums = new ArrayList<>();
 				final IdentityEnvironment ienv = new IdentityEnvironment(identity, roles);
 
 				new CourseTreeVisitor(course, ienv).visit(new Visitor() {

@@ -38,11 +38,11 @@ import java.util.zip.ZipOutputStream;
 
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.IOUtils;
-import org.apache.commons.lang.StringEscapeUtils;
+import org.olat.core.CoreSpringFactory;
 import org.olat.core.id.Identity;
 import org.olat.core.id.UserConstants;
 import org.olat.core.logging.AssertException;
-import org.olat.core.logging.OLog;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.StringHelper;
 import org.olat.core.util.WebappHelper;
@@ -51,6 +51,7 @@ import org.olat.core.util.filter.FilterFactory;
 import org.olat.core.util.nodes.INode;
 import org.olat.core.util.vfs.VFSContainer;
 import org.olat.core.util.vfs.VFSItem;
+import org.olat.core.util.vfs.filters.VFSSystemItemFilter;
 import org.olat.modules.fo.archiver.MessageNode;
 import org.olat.modules.fo.manager.ForumManager;
 
@@ -62,10 +63,9 @@ import org.olat.modules.fo.manager.ForumManager;
  */
 public class ForumStreamedRTFFormatter extends ForumFormatter {
 	
-	private static final OLog log = Tracing.createLoggerFor(ForumStreamedRTFFormatter.class);
+	private static final Logger log = Tracing.createLoggerFor(ForumStreamedRTFFormatter.class);
 
 	private ZipOutputStream exportStream;
-	private ForumManager fm = ForumManager.getInstance();
 	
 	final Pattern PATTERN_HTML_BOLD = Pattern.compile("<strong>(.*?)</strong>", Pattern.CASE_INSENSITIVE);
 	final Pattern PATTERN_HTML_ITALIC = Pattern.compile("<em>(.*?)</em>", Pattern.CASE_INSENSITIVE);
@@ -80,9 +80,10 @@ public class ForumStreamedRTFFormatter extends ForumFormatter {
 	final Pattern PATTERN_THREEPOINTS = Pattern.compile("&#8230;", Pattern.CASE_INSENSITIVE);
 	final String THREEPOINTS = "...";
 	
-	//TODO: (LD) translate this!
 	private String HIDDEN_STR = "VERBORGEN";
 	private final String path;
+	
+	private final ForumManager forumManager;
 		
 	/**
 	 * 
@@ -93,6 +94,9 @@ public class ForumStreamedRTFFormatter extends ForumFormatter {
 	public ForumStreamedRTFFormatter(ZipOutputStream exportStream, String path, boolean filePerThread, Locale locale) {
 		// init String Buffer in ForumFormatter
 		super(locale);
+		
+		forumManager = CoreSpringFactory.getImpl(ForumManager.class);
+		
 		// where to write
 		this.exportStream = exportStream;
 		this.filePerThread = filePerThread;
@@ -102,9 +106,7 @@ public class ForumStreamedRTFFormatter extends ForumFormatter {
 	
 	private String fileName;
 
-	/**
-	 * @see org.olat.core.util.tree.Visitor#visit(org.olat.core.util.nodes.INode)
-	 */
+	@Override
 	public void visit(INode node) {
 		MessageNode mn = (MessageNode)node;
 		if (isTopThread) {
@@ -153,9 +155,9 @@ public class ForumStreamedRTFFormatter extends ForumFormatter {
 		}
 		sb.append(" \\par}");
 		// attachment(s)
-		VFSContainer msgContainer = fm.getMessageContainer(getForumKey(), mn.getKey());
-		List<VFSItem> attachments = msgContainer.getItems();
-		if (attachments != null && attachments.size() > 0){
+		VFSContainer msgContainer = forumManager.getMessageContainer(getForumKey(), mn.getKey());
+		List<VFSItem> attachments = msgContainer.getItems(new VFSSystemItemFilter());
+		if (attachments != null && !attachments.isEmpty()){
 			sb.append("{\\pard \\f0\\fs15 Attachment(s): ");
 			boolean commaFlag = false;
 			for (VFSItem attachment: attachments) {
@@ -185,14 +187,11 @@ public class ForumStreamedRTFFormatter extends ForumFormatter {
 				}
 			}
 		} catch (IOException e) {
-			e.printStackTrace();
+			log.error("", e);
 		}
 	}
 
-	/**
-	 * 
-	 * @see org.olat.modules.fo.archiver.formatters.ForumFormatter#openThread()
-	 */
+	@Override
 	public void openThread() {
 		super.openThread();
 		if(filePerThread){
@@ -203,10 +202,7 @@ public class ForumStreamedRTFFormatter extends ForumFormatter {
 		sb.append("{\\pard \\brdrb \\brdrs \\brdrdb \\brsp20 \\par}{\\pard\\par}");
 	}
 
-	/**
-	 * 
-	 * @see org.olat.modules.fo.archiver.formatters.ForumFormatter#getThreadResult()
-	 */
+	@Override
 	public StringBuilder closeThread() {
 		String footerThread = "{\\pard \\brdrb \\brdrs \\brdrw20 \\brsp20 \\par}{\\pard\\par}";
 		sb.append(footerThread);
@@ -218,10 +214,7 @@ public class ForumStreamedRTFFormatter extends ForumFormatter {
 		return sb;
 	}
 	
-	/**
-	 * 
-	 * @see org.olat.modules.fo.archiver.formatters.ForumFormatter#openForum()
-	 */
+	@Override
 	public void openForum(){
 		if(!filePerThread){
 			//make one ForumFile
@@ -233,10 +226,7 @@ public class ForumStreamedRTFFormatter extends ForumFormatter {
 		}
 	}
 
-	/**
-	 * 
-	 * @see org.olat.modules.fo.archiver.formatters.ForumFormatter#closeForum()
-	 */
+	@Override
 	public StringBuilder closeForum(){
 		if(!filePerThread){
 			String footerForum = "}";
@@ -266,7 +256,7 @@ public class ForumStreamedRTFFormatter extends ForumFormatter {
 			}
 			String encoded = out.toString();
 			exportStream.putNextEntry(new ZipEntry(path + "/" + fileName));
-			IOUtils.write(encoded, exportStream);
+			IOUtils.write(encoded, exportStream, "UTF-8");
 			exportStream.closeEntry();
 		} catch (UnsupportedEncodingException ueEx) {
 			throw new AssertException("could not encode stream from forum export file: " + ueEx);
@@ -352,7 +342,7 @@ public class ForumStreamedRTFFormatter extends ForumFormatter {
 		// Remove all &nbsp;
 		Matcher tmp = HTML_SPACE_PATTERN.matcher(htmlText);
 		htmlText = tmp.replaceAll(" ");
-		htmlText = StringEscapeUtils.unescapeHtml(htmlText);
+		htmlText = StringHelper.unescapeHtml(htmlText);
 
 		return htmlText;
 	}
@@ -397,7 +387,7 @@ public class ForumStreamedRTFFormatter extends ForumFormatter {
 	 * @return
 	 */
 	private List<String> addImagesToVFSContainer(MessageNode messageNode) {
-		List<String> fileNameList = new ArrayList<String>();
+		List<String> fileNameList = new ArrayList<>();
 		String iconPath = null;
 		if(messageNode.isClosed() && messageNode.isSticky()) {
 			iconPath = getImagePath("fo_sticky_closed");
@@ -418,7 +408,6 @@ public class ForumStreamedRTFFormatter extends ForumFormatter {
 	}
 	
 	/**
-	 * TODO: LD: to clarify whether there it a better way to get the image path?
 	 * Gets the image path.
 	 * @param val
 	 * @return the path of the static icon image.

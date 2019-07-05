@@ -28,19 +28,25 @@ import javax.persistence.TypedQuery;
 import org.olat.basesecurity.GroupRoles;
 import org.olat.basesecurity.IdentityImpl;
 import org.olat.basesecurity.IdentityRef;
+import org.olat.basesecurity.OrganisationRoles;
 import org.olat.core.commons.persistence.DB;
 import org.olat.core.commons.persistence.PersistenceHelper;
+import org.olat.core.commons.persistence.QueryBuilder;
 import org.olat.core.commons.services.mark.impl.MarkImpl;
 import org.olat.core.id.Identity;
 import org.olat.core.id.Roles;
-import org.olat.core.logging.OLog;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.StringHelper;
+import org.olat.modules.lecture.LectureModule;
 import org.olat.repository.RepositoryEntry;
 import org.olat.repository.RepositoryEntryAuthorView;
+import org.olat.repository.RepositoryEntryAuthorViewResults;
+import org.olat.repository.RepositoryEntryStatusEnum;
 import org.olat.repository.model.RepositoryEntryAuthorImpl;
 import org.olat.repository.model.SearchAuthorRepositoryEntryViewParams;
 import org.olat.repository.model.SearchAuthorRepositoryEntryViewParams.OrderBy;
+import org.olat.repository.model.SearchAuthorRepositoryEntryViewParams.ResourceUsage;
 import org.olat.user.UserImpl;
 import org.olat.user.UserManager;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -59,43 +65,57 @@ import org.springframework.stereotype.Service;
 @Service
 public class RepositoryEntryAuthorQueries {
 	
-	private static final OLog log = Tracing.createLoggerFor(RepositoryEntryAuthorQueries.class);
+	private static final Logger log = Tracing.createLoggerFor(RepositoryEntryAuthorQueries.class);
 	
 	@Autowired
 	private DB dbInstance;
 	@Autowired
 	private UserManager userManager;
+	@Autowired
+	private LectureModule lectureModule;
 	
 	public int countViews(SearchAuthorRepositoryEntryViewParams params) {
 		if(params.getIdentity() == null) {
 			log.error("No identity defined for query");
 			return 0;
 		}
-		
+
 		TypedQuery<Number> query = createViewQuery(params, Number.class);
 		Number count = query.getSingleResult();
 		return count == null ? 0 : count.intValue();
 	}
 
-	public List<RepositoryEntryAuthorView> searchViews(SearchAuthorRepositoryEntryViewParams params, int firstResult, int maxResults) {
+	public RepositoryEntryAuthorViewResults searchViews(SearchAuthorRepositoryEntryViewParams params, int firstResult, int maxResults) {
 		if(params.getIdentity() == null) {
 			log.error("No identity defined for query");
-			return Collections.emptyList();
+			return new RepositoryEntryAuthorViewResults(Collections.emptyList(), true);
 		}
 
-		TypedQuery<Object[]> query = createViewQuery(params, Object[].class);
+		TypedQuery<Object[]> query = createViewQuery(params,  Object[].class);
 		query.setFirstResult(firstResult);
 		if(maxResults > 0) {
 			query.setMaxResults(maxResults);
 		}
+		
 		List<Object[]> objects =  query.getResultList();
 		List<RepositoryEntryAuthorView> views = new ArrayList<>(objects.size());
 		for(Object[] object:objects) {
 			RepositoryEntry re = (RepositoryEntry)object[0];
+			
 			Number numOfMarks = (Number)object[1];
-			boolean hasMarks = numOfMarks == null ? false : numOfMarks.longValue() > 0;
+			boolean hasMarks = numOfMarks != null && numOfMarks.longValue() > 0;
 			Number numOffers = (Number)object[2];
 			long offers = numOffers == null ? 0l : numOffers.longValue();
+			
+			Number numOfReferences = (Number)object[3];
+			int references = numOfReferences == null ? 0 : numOfReferences.intValue();
+			
+			boolean lectureEnabled = false;
+			boolean rollCallEnabled = false;
+			if(object.length > 4) {
+				lectureEnabled = PersistenceHelper.extractBoolean(object, 4, false);
+				rollCallEnabled = PersistenceHelper.extractBoolean(object, 5, false);
+			}
 			
 			String deletedByName = null;
 			if(params.isDeleted()) {
@@ -105,23 +125,20 @@ public class RepositoryEntryAuthorQueries {
 				}
 			}
 			
-			views.add(new RepositoryEntryAuthorImpl(re, hasMarks, offers, deletedByName));
+			views.add(new RepositoryEntryAuthorImpl(re, hasMarks, offers, references, deletedByName, lectureEnabled, rollCallEnabled));
 		}
-		return views;
+		return new RepositoryEntryAuthorViewResults(views, maxResults <= 0);
 	}
 
-	protected <T> TypedQuery<T> createViewQuery(SearchAuthorRepositoryEntryViewParams params,
-			Class<T> type) {
+	protected <T> TypedQuery<T> createViewQuery(SearchAuthorRepositoryEntryViewParams params, Class<T> type) {
 
 		IdentityRef identity = params.getIdentity();
-		Roles roles = params.getRoles();
 		List<String> resourceTypes = params.getResourceTypes();
 		boolean oracle = "oracle".equals(dbInstance.getDbVendor());
-		boolean admin = (roles != null && (roles.isInstitutionalResourceManager() || roles.isOLATAdmin()));
 
 		boolean count = Number.class.equals(type);
 		boolean needIdentity = false;
-		StringBuilder sb = new StringBuilder();
+		QueryBuilder sb = new QueryBuilder(2048);
 		if(count) {
 			sb.append("select count(v.key) ")
 			  .append(" from repositoryentry as v")
@@ -138,9 +155,16 @@ public class RepositoryEntryAuthorQueries {
 				needIdentity = true;
 			}
 			sb.append(" (select count(offer.key) from acoffer as offer ")
-			  .append("   where offer.resource=res and offer.valid=true")
-			  .append(" ) as offers")
-			  .append(" from repositoryentry as v")
+			  .append("   where offer.resource.key=res.key and offer.valid=true")
+			  .append(" ) as offers,")
+			  .append(" (select count(ref.key) from references as ref ")
+			  .append("   where ref.target.key=res.key")
+			  .append(" ) as references");
+			if(lectureModule.isEnabled()) {
+				sb.append(", lectureConfig.lectureEnabled")
+				  .append(", case when lectureConfig.rollCallEnabled=true then true else ").append(lectureModule.isRollCallDefaultEnabled()).append(" end as rollCallEnabled");
+			}
+			sb.append(" from repositoryentry as v")
 			  .append(" inner join ").append(oracle ? "" : "fetch").append(" v.olatResource as res")
 			  .append(" inner join fetch v.statistics as stats")
 			  .append(" left join fetch v.lifecycle as lifecycle ");
@@ -148,39 +172,21 @@ public class RepositoryEntryAuthorQueries {
 				sb.append(" left join fetch v.deletedBy as deletedBy")
 				  .append(" left join fetch deletedBy.user as deletedByUser");
 			}
+			if(lectureModule.isEnabled()) {
+				sb.append(" left join fetch lectureentryconfig as lectureConfig on (lectureConfig.entry.key=v.key) ");
+			}
 		}
 
 		sb.append(" where");
-		if(params.isOwnedResourcesOnly()) {
-			needIdentity = true;
-			sb.append(" v.key in (select rel.entry.key from repoentrytogroup as rel, bgroupmember as membership")
-			  .append("    where rel.group.key=membership.group.key and membership.identity.key=:identityKey")
-			  .append("      and membership.role='").append(GroupRoles.owner.name()).append("'")
-			  .append(" )");
-			if(params.isDeleted()) {
-				sb.append(" and v.access=").append(RepositoryEntry.DELETED);
-			} else {
-				sb.append(" and v.access>=").append(RepositoryEntry.ACC_OWNERS);
-			}
-		} else if(admin) {
-			if(params.isDeleted()) {
-				sb.append(" v.access=").append(RepositoryEntry.DELETED);
-			} else {
-				sb.append(" v.access>=").append(RepositoryEntry.ACC_OWNERS);
-			}
-		} else {
-			needIdentity = true;
-			sb.append(" (v.access>=").append(RepositoryEntry.ACC_OWNERS_AUTHORS)
-			  .append(" or (v.access=").append(RepositoryEntry.ACC_OWNERS)
-			  .append("   and v.key in (select rel.entry.key from repoentrytogroup as rel, bgroupmember as membership")
-			  .append("     where rel.group.key=membership.group.key and membership.identity.key=:identityKey")
-			  .append("       and membership.role='").append(GroupRoles.owner.name()).append("'")
-			  .append("   )")
-			  .append(" ))");
-		}
 		
-		if(params.getRepoEntryKeys() != null && params.getRepoEntryKeys().size() > 0) {
-			sb.append(" and v.key in (:repoEntryKeys)");
+		needIdentity |= appendAccessSubSelect(sb, params);
+		
+		if(params.getResourceUsage() != null && params.getResourceUsage() != ResourceUsage.all) {
+			sb.append(" and res.resName!='CourseModule' and");	
+			if(params.getResourceUsage() == ResourceUsage.notUsed) {
+				sb.append(" not");
+			}
+			sb.append(" exists (select ref.key from references as ref where ref.target.key=res.key)");
 		}
 
 		if (params.isResourceTypesDefined()) {
@@ -192,10 +198,16 @@ public class RepositoryEntryAuthorQueries {
 			  .append("   where mark2.creator.key=:identityKey and mark2.resId=v.key and mark2.resName='RepositoryEntry'")
 			  .append(" )");
 		}
+		if (params.isLicenseTypeDefined()) {
+			sb.append(" and exists (");
+			sb.append(" select license.key from license as license");
+			sb.append("  where license.resId=res.resId and license.resName=res.resName");
+			sb.append("    and license.licenseType.key in (:licenseTypeKeys))");
+		}
 		
-		String author = params.getAuthor();
-		if (StringHelper.containsNonWhitespace(author)) { // fuzzy author search
-			author = PersistenceHelper.makeFuzzyQueryString(author);
+		String author = null;
+		if (StringHelper.containsNonWhitespace(params.getAuthor())) { // fuzzy author search
+			author = PersistenceHelper.makeFuzzyQueryString(params.getAuthor());
 
 			sb.append(" and v.key in (select rel.entry.key from repoentrytogroup as rel, bgroupmember as membership, ")
 			     .append(IdentityImpl.class.getName()).append(" as identity, ").append(UserImpl.class.getName()).append(" as user")
@@ -212,8 +224,6 @@ public class RepositoryEntryAuthorQueries {
 
 		String displayname = params.getDisplayname();
 		if (StringHelper.containsNonWhitespace(displayname)) {
-			//displayName = '%' + displayName.replace('*', '%') + '%';
-			//query.append(" and v.displayname like :displayname");
 			displayname = PersistenceHelper.makeFuzzyQueryString(displayname);
 			sb.append(" and ");
 			PersistenceHelper.appendFuzzyLike(sb, "v.displayname", "displayname", dbInstance.getDbVendor());
@@ -221,8 +231,6 @@ public class RepositoryEntryAuthorQueries {
 		
 		String desc = params.getDescription();
 		if (StringHelper.containsNonWhitespace(desc)) {
-			//desc = '%' + desc.replace('*', '%') + '%';
-			//query.append(" and v.description like :desc");
 			desc = PersistenceHelper.makeFuzzyQueryString(desc);
 			sb.append(" and ");
 			PersistenceHelper.appendFuzzyLike(sb, "v.description", "desc", dbInstance.getDbVendor());
@@ -263,7 +271,7 @@ public class RepositoryEntryAuthorQueries {
 			if(StringHelper.isLong(quickRefs)) {
 				try {
 					quickId = Long.parseLong(quickRefs);
-					sb.append(" or v.key=:quickVKey or res.resId=:quickVKey)");
+					sb.append(" or v.key=:quickVKey or res.resId=:quickVKey");
 				} catch (NumberFormatException e) {
 					//
 				}
@@ -277,9 +285,6 @@ public class RepositoryEntryAuthorQueries {
 
 		TypedQuery<T> dbQuery = dbInstance.getCurrentEntityManager()
 				.createQuery(sb.toString(), type);
-		if(params.getRepoEntryKeys() != null && params.getRepoEntryKeys().size() > 0) {
-			dbQuery.setParameter("repoEntryKeys", params.getRepoEntryKeys());
-		}
 		if (params.isResourceTypesDefined()) {
 			dbQuery.setParameter("resourcetypes", resourceTypes);
 		}
@@ -302,6 +307,7 @@ public class RepositoryEntryAuthorQueries {
 		if(quickText != null) {
 			dbQuery.setParameter("quickText", quickText);
 		}
+		
 		if (StringHelper.containsNonWhitespace(author)) { // fuzzy author search
 			dbQuery.setParameter("author", author);
 		}
@@ -311,14 +317,109 @@ public class RepositoryEntryAuthorQueries {
 		if (StringHelper.containsNonWhitespace(desc)) {
 			dbQuery.setParameter("desc", desc);
 		}
-
 		if(needIdentity) {
 			dbQuery.setParameter("identityKey", identity.getKey());
+		}
+		if (params.isLicenseTypeDefined()) {
+			dbQuery.setParameter("licenseTypeKeys", params.getLicenseTypeKeys());
 		}
 		return dbQuery;
 	}
 	
-	private void appendAuthorViewOrderBy(SearchAuthorRepositoryEntryViewParams params, StringBuilder sb) {
+	private boolean appendAccessSubSelect(QueryBuilder sb, SearchAuthorRepositoryEntryViewParams params) {
+		if(dbInstance.isMySQL()) {
+			sb.append(" v.key in (select rel.entry.key from repoentrytogroup as rel, bgroupmember as membership")
+			  .append("     where rel.group.key=membership.group.key and rel.entry.key=v.key and membership.identity.key=:identityKey");
+		} else {
+			sb.append(" exists (select rel.entry.key from repoentrytogroup as rel, bgroupmember as membership")
+			  .append("     where rel.group.key=membership.group.key and rel.entry.key=v.key and membership.identity.key=:identityKey");
+		}
+		
+		if(params.isOwnedResourcesOnly()) {
+			sb.append("      and membership.role='").append(GroupRoles.owner.name()).append("'")
+			  .append(" ) and v.status");
+			if(params.isDeleted()) {
+				sb.in(RepositoryEntryStatusEnum.trash);
+			} else if(params.getClosed() != null) {
+				if(params.getClosed().booleanValue()) {
+					sb.in(RepositoryEntryStatusEnum.closed);
+				} else {
+					sb.in(RepositoryEntryStatusEnum.preparationToPublished());
+				}
+			} else {
+				sb.in(RepositoryEntryStatusEnum.preparationToClosed());
+			}
+		} else {
+			Roles roles = params.getRoles();
+			if(roles == null) {
+				sb.append(" and membership.role not ").in(OrganisationRoles.guest, OrganisationRoles.invitee, GroupRoles.waiting)
+				  .append(") and (v.allUsers=true or v.bookable=true) and v.status ");
+				
+				if(params.getClosed() != null) {
+					if(params.getClosed().booleanValue()) {
+						sb.in(RepositoryEntryStatusEnum.closed);
+					} else {
+						sb.in(RepositoryEntryStatusEnum.published);
+					}
+				} else {
+					sb.in(RepositoryEntryStatusEnum.publishedAndClosed());
+				}
+				
+			} else if(params.isDeleted() && (roles.isAdministrator() || roles.isLearnResourceManager())) {
+				sb.append("     and membership.role ").in(OrganisationRoles.administrator, OrganisationRoles.principal, OrganisationRoles.learnresourcemanager, GroupRoles.owner)
+				  .append(") and v.status ").in(RepositoryEntryStatusEnum.trash);
+			} else {
+				sb.append("   and (")
+				  // owner, principal, learn resource manager and administrator which can see all
+				  .append("     ( membership.role ").in(OrganisationRoles.administrator, OrganisationRoles.principal, OrganisationRoles.learnresourcemanager, GroupRoles.owner)
+				  .append("       and v.status ");
+				if(params.getClosed() != null) {
+					if(params.getClosed().booleanValue()) {
+						sb.in(RepositoryEntryStatusEnum.closed);
+					} else {
+						sb.in(RepositoryEntryStatusEnum.preparationToPublished());
+					}
+				} else {
+					sb.in(RepositoryEntryStatusEnum.preparationToClosed());
+				} 
+				
+				sb.append(" )");
+				  // standard users
+				sb.append("     or (membership.role not ").in(OrganisationRoles.invitee, OrganisationRoles.guest, GroupRoles.waiting)
+				  .append("       and (v.allUsers=true or v.bookable=true) and v.status ");
+
+				if(params.getClosed() != null) {
+					if(params.getClosed().booleanValue()) {
+						sb.in(RepositoryEntryStatusEnum.closed);
+					} else {
+						sb.in(RepositoryEntryStatusEnum.published);
+					}
+				} else {
+					sb.in(RepositoryEntryStatusEnum.publishedAndClosed());
+				} 
+				sb.append(" )");
+				  
+				if(roles.isAuthor()) {
+					sb.append(" or ( membership.role ='").append(OrganisationRoles.author).append("'")
+					  .append("   and v.status ");
+					if(params.getClosed() != null) {
+						if(params.getClosed().booleanValue()) {
+							sb.in(RepositoryEntryStatusEnum.closed);
+						} else {
+							sb.in(RepositoryEntryStatusEnum.reviewToPublished());
+						}
+					} else {
+						sb.in(RepositoryEntryStatusEnum.reviewToClosed());
+					}
+					sb.append(" and (v.canCopy=true or v.canReference=true or v.canDownload=true)").append(" )");
+				}
+				sb.append(" ))");
+			}
+		}
+		return true;
+	}
+	
+	private void appendAuthorViewOrderBy(SearchAuthorRepositoryEntryViewParams params, QueryBuilder sb) {
 		OrderBy orderBy = params.getOrderBy();
 		boolean asc = params.isOrderByAsc();
 		
@@ -355,11 +456,15 @@ public class RepositoryEntryAuthorQueries {
 					sb.append(" order by lower(v.location)");
 					appendAsc(sb, asc).append(", lower(v.displayname) asc");	
 					break;
+				case guests:
+					sb.append(" order by v.guests");
+					appendAsc(sb, asc).append(", lower(v.displayname) asc");	
+					break; 
 				case access:
 					if(asc) {
-						sb.append(" order by v.membersOnly asc, v.access asc, lower(v.displayname) asc");
+						sb.append(" order by v.allUsers asc, v.status asc, lower(v.displayname) asc");
 					} else {
-						sb.append(" order by v.membersOnly desc, v.access desc, lower(v.displayname) desc");
+						sb.append(" order by v.allUsers desc, v.status desc, lower(v.displayname) desc");
 					}
 					break;
 				case ac:
@@ -369,6 +474,14 @@ public class RepositoryEntryAuthorQueries {
 						sb.append(" order by offers desc, lower(v.displayname) desc");
 					}
 					break;
+				case references: {
+					if(asc) {
+						sb.append(" order by references asc, lower(v.displayname) asc");
+					} else {
+						sb.append(" order by references desc, lower(v.displayname) desc");
+					}
+					break;
+				}
 				case creationDate:
 					sb.append(" order by v.creationDate ");
 					appendAsc(sb, asc).append(", lower(v.displayname) asc");
@@ -412,11 +525,24 @@ public class RepositoryEntryAuthorQueries {
 						appendAsc(sb, asc).append(" nulls last, lower(v.displayname) asc");
 					}
 					break;
+				case lectureEnabled:
+					sb.append(" order by");
+					if(asc) {
+						sb.append(" lectureConfig.lectureEnabled").appendAsc(asc).append(" nulls first");
+					} else {
+						sb.append(" lectureConfig.lectureEnabled").appendAsc(asc).append(" nulls last");
+					}
+					sb.append(", lower(v.displayname) asc");
+					break;
+				case license:
+					sb.append(" order by v.key");
+					appendAsc(sb, asc);
+					break;
 			}
 		}
 	}
 	
-	private final StringBuilder appendAsc(StringBuilder sb, boolean asc) {
+	private final QueryBuilder appendAsc(QueryBuilder sb, boolean asc) {
 		if(asc) {
 			sb.append(" asc");
 		} else {

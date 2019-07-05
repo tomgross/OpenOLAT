@@ -26,14 +26,10 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
-import org.jboss.arquillian.container.test.api.Deployment;
 import org.jboss.arquillian.container.test.api.RunAsClient;
 import org.jboss.arquillian.drone.api.annotation.Drone;
-import org.jboss.arquillian.graphene.page.InitialPage;
-import org.jboss.arquillian.graphene.page.Page;
 import org.jboss.arquillian.junit.Arquillian;
 import org.jboss.arquillian.test.api.ArquillianResource;
-import org.jboss.shrinkwrap.api.spec.WebArchive;
 import org.junit.Assert;
 import org.junit.Ignore;
 import org.junit.Test;
@@ -52,11 +48,10 @@ import org.olat.selenium.page.course.CoursePageFragment;
 import org.olat.selenium.page.course.EnrollmentConfigurationPage;
 import org.olat.selenium.page.course.EnrollmentPage;
 import org.olat.selenium.page.course.MembersPage;
-import org.olat.selenium.page.course.PublisherPageFragment.Access;
 import org.olat.selenium.page.graphene.OOGraphene;
 import org.olat.selenium.page.group.GroupPage;
 import org.olat.selenium.page.group.MembersWizardPage;
-import org.olat.test.ArquillianDeployments;
+import org.olat.selenium.page.repository.UserAccess;
 import org.olat.test.rest.UserRestClient;
 import org.olat.user.restapi.UserVO;
 import org.openqa.selenium.By;
@@ -71,19 +66,12 @@ import org.openqa.selenium.WebElement;
  */
 @Ignore
 @RunWith(Arquillian.class)
-public class BusinessGroupTest {
-	
-	@Deployment(testable = false)
-	public static WebArchive createDeployment() {
-		return ArquillianDeployments.createDeployment();
-	}
+public class BusinessGroupTest extends Deployments {
 
 	@Drone
 	private WebDriver browser;
 	@ArquillianResource
 	private URL deploymentUrl;
-	@Page
-	private NavigationPage navBar;
 
 	/**
 	 * Create a group, search it and delete it.
@@ -94,16 +82,18 @@ public class BusinessGroupTest {
 	 */
 	@Test
 	@RunAsClient
-	public void createDeleteBusinessGroup(@InitialPage LoginPage loginPage)
+	public void createDeleteBusinessGroup()
 	throws IOException, URISyntaxException {
 		
 		UserVO author = new UserRestClient(deploymentUrl).createAuthor();
+		LoginPage loginPage = LoginPage.load(browser, deploymentUrl);
 		loginPage
 			.loginAs(author.getLogin(), author.getPassword())
 			.resume();
 		
 		//go to groups
 		String groupName = "Delete-1-" + UUID.randomUUID();
+		NavigationPage navBar = NavigationPage.load(browser);
 		navBar
 			.openGroups(browser)
 			.createGroup(groupName, "A very little group to delete");
@@ -128,19 +118,20 @@ public class BusinessGroupTest {
 	 */
 	@Test
 	@RunAsClient
-	public void groupMembersVisibility(@InitialPage LoginPage loginPage,
-			@Drone @Participant WebDriver participantBrowser)
+	public void groupMembersVisibility(@Drone @Participant WebDriver participantBrowser)
 	throws IOException, URISyntaxException {
 		
 		UserVO author = new UserRestClient(deploymentUrl).createRandomUser("Selena");
 		UserVO participant = new UserRestClient(deploymentUrl).createRandomUser("Aoi");
-		
+
+		LoginPage loginPage = LoginPage.load(browser, deploymentUrl);
 		loginPage
 			.loginAs(author.getLogin(), author.getPassword())
 			.resume();
 		
 		//go to groups
 		String groupName = "Group-1-" + UUID.randomUUID();
+		NavigationPage navBar = NavigationPage.load(browser);
 		GroupPage group = navBar
 			.openGroups(browser)
 			.createGroup(groupName, "A very little group");
@@ -152,18 +143,18 @@ public class BusinessGroupTest {
 			.addMember();
 		
 		members.searchMember(participant, false)
-			.next()
-			.next()
-			.next()
+			.nextUsers()
+			.nextOverview()
+			.nextPermissions()
 			.finish();
 		
-		LoginPage participantLoginPage = LoginPage.getLoginPage(participantBrowser, deploymentUrl);
+		LoginPage participantLoginPage = LoginPage.load(participantBrowser, deploymentUrl);
 		//tools
 		participantLoginPage
 			.loginAs(participant.getLogin(), participant.getPassword())
 			.resume();
 		
-		NavigationPage participantNavBar = new NavigationPage(participantBrowser);
+		NavigationPage participantNavBar = NavigationPage.load(participantBrowser);
 		participantNavBar
 				.openGroups(participantBrowser)
 				.selectGroup(groupName);
@@ -187,16 +178,18 @@ public class BusinessGroupTest {
 	 */
 	@Test
 	@RunAsClient
-	public void collaborativeTools(@InitialPage LoginPage loginPage)
+	public void collaborativeTools()
 	throws IOException, URISyntaxException {
 		UserVO author = new UserRestClient(deploymentUrl).createRandomUser("Selena");
-		
+
+		LoginPage loginPage = LoginPage.load(browser, deploymentUrl);
 		loginPage
 			.loginAs(author.getLogin(), author.getPassword())
 			.resume();
 		
 		//go to groups
 		String groupName = "Group-1-" + UUID.randomUUID();
+		NavigationPage navBar = NavigationPage.load(browser);
 		GroupPage group = navBar
 			.openGroups(browser)
 			.createGroup(groupName, "A very little group");
@@ -235,7 +228,7 @@ public class BusinessGroupTest {
 			.createDirectory(directoryName)
 			.assertOnDirectory(directoryName)
 			.createHTMLFile("New file", "Some really cool content.")
-			.assertOnFile("new file.html");
+			.assertOnFile("New file.html");
 		
 		//check forum
 		String threadBodyMarker = UUID.randomUUID().toString();
@@ -290,20 +283,21 @@ public class BusinessGroupTest {
 	 */
 	@Test
 	@RunAsClient
-	public void createGroupWithWaitingList(@InitialPage LoginPage loginPage,
-			@Drone @Participant WebDriver participantBrowser,
+	public void createGroupWithWaitingList(@Drone @Participant WebDriver participantBrowser,
 			@Drone @Student WebDriver studentBrowser)
 	throws IOException, URISyntaxException {
 		UserVO author = new UserRestClient(deploymentUrl).createRandomUser("Selena");
 		UserVO participant = new UserRestClient(deploymentUrl).createRandomUser("Ryomou");
 		UserVO student = new UserRestClient(deploymentUrl).createRandomUser("Asuka");
-	
+
+		LoginPage loginPage = LoginPage.load(browser, deploymentUrl);
 		loginPage
 			.loginAs(author.getLogin(), author.getPassword())
 			.resume();
 		
 		//go to groups
 		String groupName = "Group-1-" + UUID.randomUUID();
+		NavigationPage navBar = NavigationPage.load(browser);
 		GroupPage group = navBar
 			.openGroups(browser)
 			.createGroup(groupName, "A group with a waiting list")
@@ -332,13 +326,13 @@ public class BusinessGroupTest {
 		
 
 		//participant search published groups
-		LoginPage participantLoginPage = LoginPage.getLoginPage(participantBrowser, deploymentUrl);
+		LoginPage participantLoginPage = LoginPage.load(participantBrowser, deploymentUrl);
 		//tools
 		participantLoginPage
 			.loginAs(participant.getLogin(), participant.getPassword())
 			.resume();
 		//groups
-		NavigationPage participantNavBar = new NavigationPage(participantBrowser);
+		NavigationPage participantNavBar = NavigationPage.load(participantBrowser);
 		participantNavBar
 				.openGroups(participantBrowser)
 				.publishedGroups()
@@ -350,13 +344,13 @@ public class BusinessGroupTest {
 		
 		
 		//student search published groups
-		LoginPage studentLoginPage = LoginPage.getLoginPage(studentBrowser, deploymentUrl);
+		LoginPage studentLoginPage = LoginPage.load(studentBrowser, deploymentUrl);
 		//tools
 		studentLoginPage
 			.loginAs(student.getLogin(), student.getPassword())
 			.resume();
 		//groups
-		NavigationPage studentNavBar = new NavigationPage(studentBrowser);
+		NavigationPage studentNavBar = NavigationPage.load(studentBrowser);
 		studentNavBar
 				.openGroups(studentBrowser)
 				.publishedGroups()
@@ -394,8 +388,7 @@ public class BusinessGroupTest {
 	 */
 	@Test
 	@RunAsClient
-	public void confirmMembershipByGroup(@InitialPage LoginPage loginPage,
-			@Drone @User WebDriver ryomouBrowser,
+	public void confirmMembershipByGroup(@Drone @User WebDriver ryomouBrowser,
 			@Drone @Participant WebDriver participantBrowser,
 			@Drone @Student WebDriver reiBrowser)
 	throws IOException, URISyntaxException {
@@ -405,23 +398,24 @@ public class BusinessGroupTest {
 		
 		//admin make the confirmation of membership mandatory
 		//for groups created by standard users.
+		LoginPage loginPage = LoginPage.load(browser, deploymentUrl);
 		loginPage
 			.loginAs("administrator", "openolat")
 			.resume();
-		AdministrationPage administration = new NavigationPage(browser)
+		AdministrationPage administration = NavigationPage.load(browser)
 			.openAdministration()
 			.openGroupSettings()
 			.setGroupConfirmationForUser(true);
 		
 		//a standard user create a group
-		LoginPage ryomouLoginPage = LoginPage.getLoginPage(ryomouBrowser, deploymentUrl);
+		LoginPage ryomouLoginPage = LoginPage.load(ryomouBrowser, deploymentUrl);
 		ryomouLoginPage
 			.loginAs(ryomou.getLogin(), ryomou.getPassword())
 			.resume();
 		
 		//go to groups
 		String groupName = "Group-1-" + UUID.randomUUID();
-		NavigationPage rymouNavBar = new NavigationPage(ryomouBrowser);
+		NavigationPage rymouNavBar = NavigationPage.load(ryomouBrowser);
 		GroupPage group = rymouNavBar
 			.openGroups(ryomouBrowser)
 			.createGroup(groupName, "Confirmation group");
@@ -433,25 +427,25 @@ public class BusinessGroupTest {
 		group.openAdminMembers()
 			.addMember()
 			.searchMember(participant, false)
-			.next()
-			.next()
-			.next()
+			.nextUsers()
+			.nextOverview()
+			.nextPermissions()
 			.finish();
 		
 		group.addMember()
 			.searchMember(rei, false)
-			.next()
-			.next()
-			.next()
+			.nextUsers()
+			.nextOverview()
+			.nextPermissions()
 			.finish();
 		
 		//participant login
-		LoginPage participantLoginPage = LoginPage.getLoginPage(participantBrowser, deploymentUrl);
+		LoginPage participantLoginPage = LoginPage.load(participantBrowser, deploymentUrl);
 		participantLoginPage
 			.loginAs(participant.getLogin(), participant.getPassword())
 			.assertOnMembershipConfirmation()
 			.confirmMembership();
-		NavigationPage participantNavBar = new NavigationPage(participantBrowser);
+		NavigationPage participantNavBar = NavigationPage.load(participantBrowser);
 		participantNavBar
 			.openGroups(participantBrowser)
 			.selectGroup(groupName)
@@ -463,7 +457,7 @@ public class BusinessGroupTest {
 			.loginAs(rei.getLogin(), rei.getPassword())
 			.assertOnMembershipConfirmation()
 			.confirmMembership();
-		NavigationPage reiNavBar = new NavigationPage(reiBrowser);
+		NavigationPage reiNavBar = NavigationPage.load(reiBrowser);
 		reiNavBar
 			.openGroups(reiBrowser)
 			.selectGroup(groupName)
@@ -486,20 +480,21 @@ public class BusinessGroupTest {
 	 */
 	@Test
 	@RunAsClient
-	public void groupChat(@InitialPage LoginPage loginPage,
-			@Drone @Participant WebDriver kanuBrowser,
+	public void groupChat(@Drone @Participant WebDriver kanuBrowser,
 			@Drone @User WebDriver ryomouBrowser)
 	throws IOException, URISyntaxException {
 		UserVO author = new UserRestClient(deploymentUrl).createAuthor();
 		UserVO kanu = new UserRestClient(deploymentUrl).createRandomUser("Kanu");
 		UserVO ryomou = new UserRestClient(deploymentUrl).createRandomUser("Ryomou");
-		
+
+		LoginPage loginPage = LoginPage.load(browser, deploymentUrl);
 		loginPage
 			.loginAs(author.getLogin(), author.getPassword())
 			.resume();
 		
 		//go to groups
 		String groupName = "Group-Chat-1-" + UUID.randomUUID();
+		NavigationPage navBar = NavigationPage.load(browser);
 		GroupPage group = navBar
 			.openGroups(browser)
 			.createGroup(groupName, "A very little group to chat");
@@ -515,30 +510,36 @@ public class BusinessGroupTest {
 			.openAdminMembers()
 			.addMember()
 			.searchMember(kanu, true)
-			.next().next().next().finish();
+			.nextUsers()
+			.nextOverview()
+			.nextPermissions()
+			.finish();
 		//add Ryomou
 		group.addMember()
 			.searchMember(ryomou, true)
-			.next().next().next().finish();
+			.nextUsers()
+			.nextOverview()
+			.nextPermissions()
+			.finish();
 		
 		//Kanu open the group
-		LoginPage kanuLoginPage = LoginPage.getLoginPage(kanuBrowser, deploymentUrl);
+		LoginPage kanuLoginPage = LoginPage.load(kanuBrowser, deploymentUrl);
 		kanuLoginPage
 			.loginAs(kanu.getLogin(), kanu.getPassword())
 			.resume();
 		
-		NavigationPage kanuNavBar = new NavigationPage(kanuBrowser);
+		NavigationPage kanuNavBar = NavigationPage.load(kanuBrowser);
 		GroupPage kanuGroup = kanuNavBar
 			.openGroups(kanuBrowser)
 			.selectGroup(groupName);
 		
 		//Ryomou open the group
-		LoginPage ryomouLoginPage = LoginPage.getLoginPage(ryomouBrowser, deploymentUrl);
+		LoginPage ryomouLoginPage = LoginPage.load(ryomouBrowser, deploymentUrl);
 		ryomouLoginPage
 			.loginAs(ryomou.getLogin(), ryomou.getPassword())
 			.resume();
 		
-		NavigationPage ryomouNavBar = new NavigationPage(ryomouBrowser);
+		NavigationPage ryomouNavBar = NavigationPage.load(ryomouBrowser);
 		IMPage ryomouIM = ryomouNavBar
 			.openGroups(ryomouBrowser)
 			.selectGroup(groupName)
@@ -588,15 +589,17 @@ public class BusinessGroupTest {
 	 */
 	@Test
 	@RunAsClient
-	public void groupCalendar_addEditEvent(@InitialPage LoginPage loginPage)
+	public void groupCalendar_addEditEvent()
 	throws IOException, URISyntaxException {
 		UserVO coach = new UserRestClient(deploymentUrl).createAuthor();
+		LoginPage loginPage = LoginPage.load(browser, deploymentUrl);
 		loginPage
 			.loginAs(coach.getLogin(), coach.getPassword())
 			.resume();
 		
 		//go to groups
 		String groupName = "iCal-1-" + UUID.randomUUID();
+		NavigationPage navBar = NavigationPage.load(browser);
 		GroupPage group = navBar
 			.openGroups(browser)
 			.createGroup(groupName, "A very little group to delete");
@@ -638,15 +641,17 @@ public class BusinessGroupTest {
 	 */
 	@Test
 	@RunAsClient
-	public void groupCalendar_recurringEvent(@InitialPage LoginPage loginPage)
+	public void groupCalendar_recurringEvent()
 	throws IOException, URISyntaxException {
 		UserVO coach = new UserRestClient(deploymentUrl).createAuthor();
+		LoginPage loginPage = LoginPage.load(browser, deploymentUrl);
 		loginPage
 			.loginAs(coach.getLogin(), coach.getPassword())
 			.resume();
 		
 		//go to groups
 		String groupName = "iCal-2-" + UUID.randomUUID();
+		NavigationPage navBar = NavigationPage.load(browser);
 		GroupPage group = navBar
 			.openGroups(browser)
 			.createGroup(groupName, "Calendar with a recurring event");
@@ -706,12 +711,13 @@ public class BusinessGroupTest {
 	 */
 	@Test
 	@RunAsClient
-	public void enrollmentWithWaitingList(@InitialPage LoginPage authorLoginPage,
-			@Drone @User WebDriver ryomouBrowser,
+	public void enrollmentWithWaitingList(@Drone @User WebDriver ryomouBrowser,
 			@Drone @Participant WebDriver reiBrowser,
 			@Drone @Student WebDriver kanuBrowser)
 	throws IOException, URISyntaxException {
 		UserVO author = new UserRestClient(deploymentUrl).createAuthor();
+
+		LoginPage authorLoginPage = LoginPage.load(browser, deploymentUrl);
 		authorLoginPage.loginAs(author.getLogin(), author.getPassword());
 		UserVO rei = new UserRestClient(deploymentUrl).createRandomUser("Rei");
 		UserVO kanu = new UserRestClient(deploymentUrl).createRandomUser("kanu");
@@ -719,13 +725,14 @@ public class BusinessGroupTest {
 		
 		//create a course
 		String courseTitle = "Enrolment-1-" + UUID.randomUUID();
+		NavigationPage navBar = NavigationPage.load(browser);
 		navBar
 			.openAuthoringEnvironment()
 			.createCourse(courseTitle)
 			.clickToolbarBack();
 
 		//create a course element of type Enrolment
-		String enNodeTitle = "Enrolment-1";
+		String enNodeTitle = "Enrol-1";
 		CourseEditorPageFragment courseEditor = CoursePageFragment.getCourse(browser)
 			.edit();
 		courseEditor
@@ -740,7 +747,7 @@ public class BusinessGroupTest {
 		//publish the course
 		courseEditor
 			.publish()
-			.quickPublish(Access.users);
+			.quickPublish(UserAccess.registred);
 		courseEditor.clickToolbarBack();
 		
 		GroupPage authorGroup = navBar
@@ -760,11 +767,11 @@ public class BusinessGroupTest {
 		};
 		for(Enrollment enrollment:participantDrivers) {
 			WebDriver driver = enrollment.getDriver();
-			LoginPage.getLoginPage(driver, deploymentUrl)
+			LoginPage.load(driver, deploymentUrl)
 				.loginAs(enrollment.getUser())
 				.resume();
 			
-			NavigationPage participantNavBar = new NavigationPage(driver);
+			NavigationPage participantNavBar = NavigationPage.load(driver);
 			participantNavBar
 				.openMyCourses()
 				.openSearch()
@@ -805,6 +812,7 @@ public class BusinessGroupTest {
 		Assert.assertEquals(1, participants);
 		Assert.assertEquals(2, waitingList);
 	}
+	
 	/**
 	 * An author create a course, with an enrollment course element. It
 	 * configure it and create 3 groups and set the maximum enrollment counter to 2<br>
@@ -817,26 +825,26 @@ public class BusinessGroupTest {
 	 * @throws IOException
 	 * @throws URISyntaxException
 	 */
-
 	@Test
 	@RunAsClient
-	public void enrollmentWithMultiEnrollment(@InitialPage LoginPage authorLoginPage,
-			@Drone @User WebDriver ryomouBrowser)
+	public void enrollmentWithMultiEnrollment(@Drone @User WebDriver ryomouBrowser)
 	throws IOException, URISyntaxException {
 		
-		UserVO author = new UserRestClient(deploymentUrl).createAuthor();
+		UserVO author = new UserRestClient(deploymentUrl).createRandomAuthor();
+		LoginPage authorLoginPage = LoginPage.load(browser, deploymentUrl);
 		authorLoginPage.loginAs(author.getLogin(), author.getPassword());
 		UserVO ryomou = new UserRestClient(deploymentUrl).createRandomUser("Ryomou");
 		
 		//create a course
 		String courseTitle = "Enrolment-3-" + UUID.randomUUID();
+		NavigationPage navBar = NavigationPage.load(browser);
 		navBar
 			.openAuthoringEnvironment()
 			.createCourse(courseTitle)
 			.clickToolbarBack();
 
 		//create a course element of type Enrolment
-		String enNodeTitle = "Enrolment-3";
+		String enNodeTitle = "Enrol-3";
 		CourseEditorPageFragment courseEditor = CoursePageFragment.getCourse(browser)
 			.edit();
 		courseEditor
@@ -858,7 +866,7 @@ public class BusinessGroupTest {
 		//publish the course
 		courseEditor
 			.publish()
-			.quickPublish(Access.users);
+			.quickPublish(UserAccess.registred);
 		courseEditor.clickToolbarBack();
 		
 
@@ -873,11 +881,11 @@ public class BusinessGroupTest {
 		}
 				
 		//Ryomou open the course	
-		LoginPage.getLoginPage(ryomouBrowser, deploymentUrl)
+		LoginPage.load(ryomouBrowser, deploymentUrl)
 			.loginAs(ryomou)
 			.resume();
 		
-		NavigationPage participantNavBar = new NavigationPage(ryomouBrowser);
+		NavigationPage participantNavBar = NavigationPage.load(ryomouBrowser);
 		participantNavBar
 			.openMyCourses()
 			.openSearch()
@@ -921,8 +929,7 @@ public class BusinessGroupTest {
 	 */
 	@Test
 	@RunAsClient
-	public void enrollment(@InitialPage LoginPage authorLoginPage,
-			@Drone @User WebDriver ryomouBrowser,
+	public void enrollment(@Drone @User WebDriver ryomouBrowser,
 			@Drone @Participant WebDriver reiBrowser,
 			@Drone @Student WebDriver kanuBrowser)
 	throws IOException, URISyntaxException {
@@ -931,11 +938,13 @@ public class BusinessGroupTest {
 		UserVO rei = new UserRestClient(deploymentUrl).createRandomUser("Rei");
 		UserVO kanu = new UserRestClient(deploymentUrl).createRandomUser("kanu");
 		UserVO ryomou = new UserRestClient(deploymentUrl).createRandomUser("Ryomou");
-		
+
+		LoginPage authorLoginPage = LoginPage.load(browser, deploymentUrl);
 		authorLoginPage.loginAs(author.getLogin(), author.getPassword());
 		
 		//create a course
 		String courseTitle = "Enrollment-2-" + UUID.randomUUID();
+		NavigationPage navBar = NavigationPage.load(browser);
 		navBar
 			.openAuthoringEnvironment()
 			.createCourse(courseTitle)
@@ -969,7 +978,7 @@ public class BusinessGroupTest {
 		//publish the course
 		courseEditor
 			.publish()
-			.quickPublish(Access.users);
+			.quickPublish(UserAccess.registred);
 		
 		GroupPage authorGroup = navBar
 			.openGroups(browser)
@@ -987,11 +996,11 @@ public class BusinessGroupTest {
 		};
 		for(Enrollment enrollment:participantDrivers) {
 			WebDriver driver = enrollment.getDriver();
-			LoginPage.getLoginPage(driver, deploymentUrl)
+			LoginPage.load(driver, deploymentUrl)
 				.loginAs(enrollment.getUser())
 				.resume();
 			
-			NavigationPage participantNavBar = new NavigationPage(driver);
+			NavigationPage participantNavBar = NavigationPage.load(driver);
 			participantNavBar
 				.openMyCourses()
 				.openSearch()
@@ -1053,8 +1062,7 @@ public class BusinessGroupTest {
 	 */
 	@Test
 	@RunAsClient
-	public void enrollmentWithUnlimitedBusinessGroups(@InitialPage LoginPage authorLoginPage,
-			@Drone @User WebDriver ryomouBrowser,
+	public void enrollmentWithUnlimitedBusinessGroups(@Drone @User WebDriver ryomouBrowser,
 			@Drone @Participant WebDriver reiBrowser,
 			@Drone @Student WebDriver kanuBrowser)
 	throws IOException, URISyntaxException {
@@ -1063,11 +1071,13 @@ public class BusinessGroupTest {
 		UserVO rei = new UserRestClient(deploymentUrl).createRandomUser("Rei");
 		UserVO kanu = new UserRestClient(deploymentUrl).createRandomUser("kanu");
 		UserVO ryomou = new UserRestClient(deploymentUrl).createRandomUser("Ryomou");
-		
+
+		LoginPage authorLoginPage = LoginPage.load(browser, deploymentUrl);
 		authorLoginPage.loginAs(author.getLogin(), author.getPassword());
 		
 		//create a course
 		String courseTitle = "Enrollment-3-" + UUID.randomUUID();
+		NavigationPage navBar = NavigationPage.load(browser);
 		navBar
 			.openAuthoringEnvironment()
 			.createCourse(courseTitle)
@@ -1101,7 +1111,7 @@ public class BusinessGroupTest {
 		//publish the course
 		courseEditor
 			.publish()
-			.quickPublish(Access.users);
+			.quickPublish(UserAccess.registred);
 		
 		GroupPage authorGroup = navBar
 			.openGroups(browser)
@@ -1119,11 +1129,11 @@ public class BusinessGroupTest {
 		};
 		for(Enrollment enrollment:participantDrivers) {
 			WebDriver driver = enrollment.getDriver();
-			LoginPage.getLoginPage(driver, deploymentUrl)
+			LoginPage.load(driver, deploymentUrl)
 				.loginAs(enrollment.getUser())
 				.resume();
 			
-			NavigationPage participantNavBar = new NavigationPage(driver);
+			NavigationPage participantNavBar = NavigationPage.load(driver);
 			participantNavBar
 				.openMyCourses()
 				.openSearch()

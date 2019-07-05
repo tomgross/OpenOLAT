@@ -42,7 +42,6 @@ import javax.persistence.TypedQuery;
 
 import org.olat.basesecurity.IdentityRef;
 import org.olat.core.commons.modules.bc.FolderConfig;
-import org.olat.core.commons.modules.bc.vfs.OlatRootFolderImpl;
 import org.olat.core.commons.persistence.DB;
 import org.olat.core.commons.persistence.PersistenceHelper;
 import org.olat.core.commons.services.mark.MarkingService;
@@ -51,7 +50,7 @@ import org.olat.core.commons.services.text.TextService;
 import org.olat.core.id.Identity;
 import org.olat.core.id.OLATResourceable;
 import org.olat.core.logging.AssertException;
-import org.olat.core.logging.OLog;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.Encoder;
 import org.olat.core.util.Encoder.Algorithm;
@@ -60,6 +59,7 @@ import org.olat.core.util.coordinate.CoordinatorManager;
 import org.olat.core.util.resource.OresHelper;
 import org.olat.core.util.vfs.VFSContainer;
 import org.olat.core.util.vfs.VFSItem;
+import org.olat.core.util.vfs.VFSManager;
 import org.olat.login.LoginModule;
 import org.olat.modules.fo.Forum;
 import org.olat.modules.fo.ForumChangedEvent;
@@ -89,9 +89,8 @@ import org.springframework.stereotype.Service;
  */
 @Service
 public class ForumManager {
-	private static final OLog log = Tracing.createLoggerFor(ForumManager.class);
-	
-	private static ForumManager INSTANCE;
+	private static final Logger log = Tracing.createLoggerFor(ForumManager.class);
+
 	@Autowired
 	private DB dbInstance;
 	@Autowired
@@ -102,20 +101,6 @@ public class ForumManager {
 	private UserManager userManager;
 	@Autowired
 	private MarkingService markingService;
-
-	/**
-	 * [spring]
-	 */
-	private ForumManager() {
-		INSTANCE = this;
-	}
-
-	/**
-	 * @return the singleton
-	 */
-	public static ForumManager getInstance() {
-		return INSTANCE;
-	}
 	
 	public int countThread(Long messageKey) {
 		String query = "select count(msg) from fomessage as msg where msg.key=:messageKey or msg.threadtop.key=:messageKey";
@@ -261,8 +246,8 @@ public class ForumManager {
 	/**
 	 * Return the title of a message of the forum.
 	 */
-	public Integer countMessagesByForumID(Long forum_id) {
-		return countMessagesByForumID(forum_id, false);
+	public int countMessagesByForumID(Long forumId) {
+		return countMessagesByForumID(forumId, false);
 	}
 	
 	public List<MessagePeekview> getPeekviewMessages(Forum forum, int maxResults) {
@@ -373,6 +358,19 @@ public class ForumManager {
 				.setParameter("messageKey", messageKey)
 				.getResultList();
 		return messages == null || messages.isEmpty() ? null : messages.get(0);
+	}
+	
+	public List<Message> getMessageByCreator(IdentityRef creator) {
+		StringBuilder query = new StringBuilder();
+		query.append("select msg from fomessage as msg")
+		     .append(" inner join msg.creator as creator")
+		     .append(" inner join fetch msg.forum as forum")
+		     .append(" where msg.creator.key=:identityKey");
+		
+		return dbInstance.getCurrentEntityManager()
+				.createQuery(query.toString(), Message.class)
+				.setParameter("identityKey", creator.getKey())
+				.getResultList();
 	}
 
 	public boolean isPseudonymProtected(String pseudonym) {
@@ -694,12 +692,12 @@ public class ForumManager {
 	public List<Message> getNewMessageInfo(Long forumKey, Date latestRead) {
 		StringBuilder query = new StringBuilder();
 		query.append("select msg from fomessage as msg ")
-		     .append(" inner join fetch msg.creator as creator")
+		     .append(" left join fetch msg.creator as creator")
 		     .append(" where msg.forum.key=:forumKey and msg.lastModified>:latestRead order by msg.lastModified desc");
 
 		return dbInstance.getCurrentEntityManager()
 				.createQuery(query.toString(), Message.class)
-				.setParameter("forumKey", forumKey.longValue())
+				.setParameter("forumKey", forumKey)
 				.setParameter("latestRead", latestRead, TemporalType.TIMESTAMP)
 				.getResultList();
 	}
@@ -780,12 +778,11 @@ public class ForumManager {
 	 * @param creator
 	 * @param replyToMessage
 	 */
-	public void replyToMessage(Message newMessage, Message replyToMessage) {
+	public Message replyToMessage(Message newMessage, Message replyToMessage) {
 		Message top = replyToMessage.getThreadtop();
 		newMessage.setThreadtop((top != null ? top : replyToMessage));
 		newMessage.setParent(replyToMessage);
-		
-		saveMessage(newMessage);
+		return saveMessage(newMessage);
 	}
 
 	/**
@@ -793,10 +790,10 @@ public class ForumManager {
 	 * @param forum
 	 * @param topMessage
 	 */
-	public void addTopMessage(Message topMessage) {
+	public Message addTopMessage(Message topMessage) {
 		topMessage.setParent(null);
 		topMessage.setThreadtop(null);
-		saveMessage(topMessage);
+		return saveMessage(topMessage);
 	}
 
 	/**
@@ -873,6 +870,7 @@ public class ForumManager {
 
 	private void deleteMessageRecursion(final Long forumKey, Message m) {
 		deleteMessageContainer(forumKey, m.getKey());
+		deleteReadMessages(m.getKey());
 		
 		String query = "select msg from fomessage as msg where msg.parent.key=:parentKey";
 		List<Message> messages = dbInstance.getCurrentEntityManager().createQuery(query, Message.class)
@@ -885,7 +883,6 @@ public class ForumManager {
 		Message reloadedMessage = dbInstance.getCurrentEntityManager().find(MessageImpl.class, m.getKey());
 		if(reloadedMessage != null) {
 			// delete all properties of one single message
-			deleteMessageProperties(forumKey, reloadedMessage);
 			dbInstance.getCurrentEntityManager().remove(reloadedMessage);
 			
 			//delete all flags
@@ -893,8 +890,8 @@ public class ForumManager {
 			markingService.getMarkManager().deleteMarks(ores, m.getKey().toString());
 		}
 		
-		if(log.isDebug()){
-			log.debug("Deleting message ", m.getKey().toString());
+		if(log.isDebugEnabled()){
+			log.debug("Deleting message: " + m.getKey());
 		}
 	}
 
@@ -933,11 +930,10 @@ public class ForumManager {
 	/**
 	 * deletes entry of one message
 	 */
-	private void deleteMessageProperties(Long forumKey, Message m) {
-		String query = "delete from foreadmessage as rmsg where rmsg.forum.key=:forumKey and rmsg.message.key=:messageKey";
+	private void deleteReadMessages(Long messageKey) {
+		String query = "delete from foreadmessage as rmsg where rmsg.message.key=:messageKey";
 		dbInstance.getCurrentEntityManager().createQuery(query)
-			.setParameter("forumKey", forumKey)
-			.setParameter("messageKey", m.getKey())
+			.setParameter("messageKey", messageKey)
 			.executeUpdate();
 	}
 
@@ -978,16 +974,16 @@ public class ForumManager {
 
 	private void deleteMessageContainer(Long forumKey, Long messageKey) {
 		VFSContainer mContainer = getMessageContainer(forumKey, messageKey);
-		mContainer.delete();
+		mContainer.deleteSilently();
 	}
 
 	private void deleteForumContainer(Long forumKey) {
 		VFSContainer fContainer = getForumContainer(forumKey);
-		fContainer.delete();
+		fContainer.deleteSilently();
 	}
 
 	public VFSContainer getForumContainer(Long forumKey) {
-		OlatRootFolderImpl fContainer = new OlatRootFolderImpl("/forum", null);
+		VFSContainer fContainer = VFSManager.olatRootContainer("/forum", null);
 		VFSItem forumContainer = fContainer.resolve(forumKey.toString());
 		if(forumContainer == null) {
 			return fContainer.createChildContainer(forumKey.toString());

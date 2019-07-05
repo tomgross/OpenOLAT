@@ -38,6 +38,7 @@ import org.olat.core.id.context.StateEntry;
 import org.olat.modules.portfolio.Binder;
 import org.olat.modules.portfolio.BinderDeliveryOptions;
 import org.olat.modules.portfolio.PortfolioService;
+import org.olat.repository.ui.settings.ReloadSettingsEvent;
 import org.springframework.beans.factory.annotation.Autowired;
 
 /**
@@ -51,8 +52,10 @@ public class BinderDeliveryOptionsController extends FormBasicController impleme
 	private static final String[] onKeys = new String[] { "on" };
 	private static final String[] onValues = new String[] { "" };
 	
+	private MultipleSelectionElement templatesEl;
 	private MultipleSelectionElement newEntriesEl;
 	private MultipleSelectionElement deleteBinderEl;
+	private MultipleSelectionElement mandatoryTemplatesPageEl;
 	
 	private CloseableModalController deleteOptionCmcCtrl;
 	private ConfirmDeleteOptionController deleteOptionCtrl;
@@ -76,6 +79,7 @@ public class BinderDeliveryOptionsController extends FormBasicController impleme
 	@Override
 	protected void initForm(FormItemContainer formLayout, Controller listener, UserRequest ureq) {
 		setFormContextHelp("Portfolio template: Administration and editing#configuration");
+		setFormTitle("portfolio.template.options.title");
 		
 		newEntriesEl = uifactory.addCheckboxesHorizontal("canAddEntries", "allow.new.entries", formLayout, onKeys, onValues);
 		if(deliveryOptions.isAllowNewEntries()) {
@@ -88,9 +92,23 @@ public class BinderDeliveryOptionsController extends FormBasicController impleme
 			deleteBinderEl.select(onKeys[0], true);
 		}
 		
+		templatesEl = uifactory.addCheckboxesHorizontal("canTemplates", "allow.templates.folder", formLayout, onKeys, onValues);
+		templatesEl.addActionListener(FormEvent.ONCHANGE);
+		if(deliveryOptions.isAllowTemplatesFolder()) {
+			templatesEl.select(onKeys[0], true);
+		}
+		
+		mandatoryTemplatesPageEl = uifactory.addCheckboxesHorizontal("mandatoryTemplates", "allow.templates.mandatory", formLayout, onKeys, onValues);
+		mandatoryTemplatesPageEl.setVisible(templatesEl.isAtLeastSelected(1));
+		mandatoryTemplatesPageEl.setEnabled(templatesEl.isAtLeastSelected(1));
+		if(!deliveryOptions.isOptionalTemplateForEntry()) {
+			mandatoryTemplatesPageEl.select(onKeys[0], true);
+		}
+		
 		FormLayoutContainer buttonsLayout = FormLayoutContainer.createButtonLayout("buttons", getTranslator());
 		buttonsLayout.setRootForm(mainForm);
 		formLayout.add(buttonsLayout);
+		uifactory.addFormCancelButton("cancel", buttonsLayout, ureq, getWindowControl());
 		uifactory.addFormSubmitButton("save", buttonsLayout);
 	}
 	
@@ -110,6 +128,9 @@ public class BinderDeliveryOptionsController extends FormBasicController impleme
 			if(deleteBinderEl.isAtLeastSelected(1)) {
 				doConfirmDeleteOption(ureq);
 			}
+		} else if(source == templatesEl) {
+			mandatoryTemplatesPageEl.setVisible(templatesEl.isAtLeastSelected(1));
+			mandatoryTemplatesPageEl.setEnabled(templatesEl.isAtLeastSelected(1));
 		}
 		super.formInnerEvent(ureq, source, event);
 	}
@@ -120,9 +141,19 @@ public class BinderDeliveryOptionsController extends FormBasicController impleme
 		deliveryOptions.setAllowNewEntries(allowNewEntries);
 		boolean allowDeleteBinder = deleteBinderEl.isAtLeastSelected(1);
 		deliveryOptions.setAllowDeleteBinder(allowDeleteBinder);
+		boolean allowTemplatesFolder = templatesEl.isAtLeastSelected(1);
+		deliveryOptions.setAllowTemplatesFolder(allowTemplatesFolder);
+		boolean mandatoryTemplates = mandatoryTemplatesPageEl.isAtLeastSelected(1);
+		deliveryOptions.setOptionalTemplateForEntry(!mandatoryTemplates);
 		portfolioService.setDeliveryOptions(binder.getOlatResource(), deliveryOptions);
+		fireEvent(ureq, new ReloadSettingsEvent());
 	}
-	
+
+	@Override
+	protected void formCancelled(UserRequest ureq) {
+		fireEvent(ureq, Event.CANCELLED_EVENT);
+	}
+
 	@Override
 	protected void event(UserRequest ureq, Controller source, Event event) {
 		if(deleteOptionCtrl == source) {
@@ -181,7 +212,7 @@ public class BinderDeliveryOptionsController extends FormBasicController impleme
 
 		@Override
 		protected boolean validateFormLogic(UserRequest ureq) {
-			boolean allOk = true;
+			boolean allOk = super.validateFormLogic(ureq);
 			
 			acknowledgeEl.clearError();
 			if(!acknowledgeEl.isAtLeastSelected(1)) {
@@ -189,7 +220,7 @@ public class BinderDeliveryOptionsController extends FormBasicController impleme
 				allOk &= false;
 			}
 			
-			return allOk & super.validateFormLogic(ureq);
+			return allOk;
 		}
 
 		@Override

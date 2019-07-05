@@ -19,15 +19,16 @@
  */
 package org.olat.portfolio.manager;
 
-import java.io.File;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 
+import org.apache.logging.log4j.Logger;
 import org.olat.basesecurity.IdentityRef;
 import org.olat.collaboration.CollaborationTools;
 import org.olat.core.commons.persistence.DB;
@@ -38,7 +39,6 @@ import org.olat.core.id.IdentityEnvironment;
 import org.olat.core.id.OLATResourceable;
 import org.olat.core.id.Roles;
 import org.olat.core.logging.AssertException;
-import org.olat.core.logging.OLog;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.StringHelper;
 import org.olat.core.util.coordinate.Coordinator;
@@ -54,6 +54,7 @@ import org.olat.course.run.userview.UserCourseEnvironmentImpl;
 import org.olat.group.BusinessGroup;
 import org.olat.group.DeletableGroupData;
 import org.olat.modules.assessment.AssessmentService;
+import org.olat.modules.assessment.Role;
 import org.olat.modules.assessment.model.AssessmentEntryStatus;
 import org.olat.modules.webFeed.portfolio.LiveBlogArtefactHandler;
 import org.olat.portfolio.PortfolioModule;
@@ -98,7 +99,7 @@ import org.springframework.stereotype.Service;
 @Service("epFrontendManager")
 public class EPFrontendManager implements UserDataDeletable, DeletableGroupData {
 	
-	private static final OLog log = Tracing.createLoggerFor(EPFrontendManager.class);
+	private static final Logger log = Tracing.createLoggerFor(EPFrontendManager.class);
 
 	@Autowired
 	private Coordinator coordinator;
@@ -172,7 +173,7 @@ public class EPFrontendManager implements UserDataDeletable, DeletableGroupData 
 	}
 	
 	@Override
-	public void deleteUserData(Identity identity, String newDeletedUserName, File archivePath) {
+	public void deleteUserData(Identity identity, String newDeletedUserName) {
 		deleteUsersArtefacts(identity);
 
 		List<PortfolioStructure> userPersonalMaps = getStructureElementsForUser(identity, ElementType.DEFAULT_MAP, ElementType.STRUCTURED_MAP);
@@ -505,8 +506,8 @@ public class EPFrontendManager implements UserDataDeletable, DeletableGroupData 
 	 * @param filterSettings Settings for the filter to work on
 	 * @return
 	 */
-	public List<AbstractArtefact> filterArtefactsByFilterSettings(EPFilterSettings filterSettings, Identity identity, Roles roles) {
-		List<Long> artefactKeys = fulltextSearchAfterArtefacts(filterSettings, identity, roles);
+	public List<AbstractArtefact> filterArtefactsByFilterSettings(EPFilterSettings filterSettings, Identity identity, Roles roles, Locale locale) {
+		List<Long> artefactKeys = fulltextSearchAfterArtefacts(filterSettings, identity, roles, locale);
 		if(artefactKeys == null || artefactKeys.isEmpty()) {
 			List<AbstractArtefact> allArtefacts = artefactManager.getArtefactPoolForUser(identity);
 			return artefactManager.filterArtefactsByFilterSettings(allArtefacts, filterSettings);
@@ -518,16 +519,16 @@ public class EPFrontendManager implements UserDataDeletable, DeletableGroupData 
 		return artefactManager.filterArtefactsByFilterSettings(artefacts, settings);
 	}
 	
-	private List<Long> fulltextSearchAfterArtefacts(EPFilterSettings filterSettings, Identity identity, Roles roles) {
+	private List<Long> fulltextSearchAfterArtefacts(EPFilterSettings filterSettings, Identity identity, Roles roles, Locale locale) {
 		String query = filterSettings.getTextFilter();
 		if (StringHelper.containsNonWhitespace(query)) {
 			try {
-				List<String> queries = new ArrayList<String>();
+				List<String> queries = new ArrayList<>();
 				appendAnd(queries, AbstractOlatDocument.RESERVED_TO, ":\"", identity.getKey().toString(), "\"");
 				appendAnd(queries, "(", AbstractOlatDocument.DOCUMENTTYPE_FIELD_NAME, ":(", PortfolioArtefactIndexer.TYPE, "*))");
-				SearchResults searchResults = searchClient.doSearch(query, queries, identity, roles, 0, 1000, false);
+				SearchResults searchResults = searchClient.doSearch(query, queries, identity, roles, locale, 0, 1000, false);
 
-				List<Long> keys = new ArrayList<Long>();
+				List<Long> keys = new ArrayList<>();
 				if (searchResults != null) {
 					String marker = AbstractArtefact.class.getSimpleName();
 					for (ResultDocument doc : searchResults.getList()) {
@@ -576,9 +577,9 @@ public class EPFrontendManager implements UserDataDeletable, DeletableGroupData 
 	 */
 	public Map<String, String> getUsersMostUsedTags(Identity ident, Integer amount) {
 		amount = (amount == 0) ? 5 : amount;
-		List<String> outp = new ArrayList<String>();
+		List<String> outp = new ArrayList<>();
 		
-		Map<String, String> res = new HashMap<String, String>();
+		Map<String, String> res = new HashMap<>();
 		List<Map<String, Integer>> bla = taggingManager.getUserTagsWithFrequency(ident);
 		for (Map<String, Integer> map : bla) {
 			String caption = map.get("tag") + " (" + map.get("nr") + ")";
@@ -1148,10 +1149,10 @@ public class EPFrontendManager implements UserDataDeletable, DeletableGroupData 
 	 * @param map
 	 */
 	public void submitMap(PortfolioStructureMap map) {
-		submitMap(map, true);
+		submitMap(map, true, Role.user);
 	}
 	
-	private void submitMap(PortfolioStructureMap map, boolean logActivity) {
+	private void submitMap(PortfolioStructureMap map, boolean logActivity, Role by) {
 		if(!(map instanceof EPStructuredMap)) return;//add an exception
 		
 		EPStructuredMap submittedMap = (EPStructuredMap)map;
@@ -1170,7 +1171,7 @@ public class EPFrontendManager implements UserDataDeletable, DeletableGroupData 
 				ienv.setIdentity(owner);
 				UserCourseEnvironment uce = new UserCourseEnvironmentImpl(ienv, course.getCourseEnvironment());
 				if(logActivity) {
-					am.incrementNodeAttempts(courseNode, owner, uce);
+					am.incrementNodeAttempts(courseNode, owner, uce, by);
 				} else {
 					am.incrementNodeAttemptsInBackground(courseNode, owner, uce);
 				}
@@ -1180,7 +1181,7 @@ public class EPFrontendManager implements UserDataDeletable, DeletableGroupData 
 				assessmentService.updateAssessmentEntry(owner, courseEntry, courseNode.getIdent(), referenceEntry, AssessmentEntryStatus.inReview);
 			}
 			assessmentNotificationsHandler.markPublisherNews(owner, course.getResourceableId());
-			log.audit("Map " + map + " from " + owner.getName() + " has been submitted.");
+			log.info(Tracing.M_AUDIT, "Map " + map + " from " + owner.getKey() + " has been submitted.");
 		}
 	}
 	
@@ -1192,7 +1193,7 @@ public class EPFrontendManager implements UserDataDeletable, DeletableGroupData 
 		List<PortfolioStructureMap> mapsToClose = structureManager.getOpenStructuredMapAfterDeadline();
 		int count = 0;
 		for(PortfolioStructureMap mapToClose:mapsToClose) {
-			submitMap(mapToClose, false);
+			submitMap(mapToClose, false, Role.auto);
 			if(count % 5 == 0) {
 				// this possibly takes longer than connection timeout, so do intermediatecommits.
 				dbInstance.intermediateCommit();

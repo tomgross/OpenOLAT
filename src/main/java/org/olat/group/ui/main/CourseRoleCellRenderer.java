@@ -43,42 +43,61 @@ public class CourseRoleCellRenderer implements CustomCellRenderer, FlexiCellRend
 	}
 	
 	@Override
+	public void render(StringOutput sb, Renderer renderer, Object val, Locale locale, int alignment, String action) {
+		if (val instanceof CourseMembership) {
+			render(sb, (CourseMembership) val);
+		}
+	}
+
+	@Override
 	public void render(Renderer renderer, StringOutput target, Object cellValue, int row,
 			FlexiTableComponent source, URLBuilder ubu, Translator trans) {
 		if (cellValue instanceof CourseMembership) {
 			render(target, (CourseMembership) cellValue);
 		}
 	}
-
-	@Override
-	public void render(StringOutput sb, Renderer renderer, Object val, Locale locale, int alignment, String action) {
-		if (val instanceof CourseMembership) {
-			render(sb, (CourseMembership) val);
-		}
-	}
 	
 	private void render(StringOutput sb, CourseMembership membership) {
 		boolean and = false;
-		if(membership.isOwner()) {
+		
+		// default repository entry group
+		if(membership.isRepositoryEntryOwner()) {
 			and = and(sb, and);
 			sb.append(translator.translate("role.repo.owner"));
 		}
-		if(membership.isRepoTutor()) {
+		if(membership.isRepositoryEntryCoach()) {
 			and = and(sb, and);
 			sb.append(translator.translate("role.repo.tutor"));
 		}
-		if(membership.isGroupTutor()) {
-			and = and(sb, and);
-			sb.append(translator.translate("role.group.tutor"));
-		}
-		if(membership.isRepoParticipant()) {
+		if(membership.isRepositoryEntryParticipant()) {
 			and = and(sb, and);
 			sb.append(translator.translate("role.repo.participant"));
 		}
-		if(membership.isGroupParticipant()) {
+		
+		// business groups
+		if(membership.isBusinessGroupCoach()) {
+			and = and(sb, and);
+			sb.append(translator.translate("role.group.tutor"));
+		}
+		if(membership.isBusinessGroupParticipant()) {
 			and = and(sb, and);
 			sb.append(translator.translate("role.group.participant"));
 		}
+		
+		// curriculum
+		if(membership.isCurriculumElementParticipant()) {
+			and = and(sb, and);
+			sb.append(translator.translate("role.curriculum.participant"));
+		}
+		if(membership.isCurriculumElementCoach()) {
+			and = and(sb, and);
+			sb.append(translator.translate("role.curriculum.coach"));
+		}
+		if(membership.isCurriculumElementOwner()) {
+			and = and(sb, and);
+			sb.append(translator.translate("role.curriculum.owner"));
+		}
+		
 		if(membership.isWaiting()) {
 			and = and(sb, and);
 			sb.append(translator.translate("role.group.waiting"));

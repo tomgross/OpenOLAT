@@ -25,7 +25,6 @@ import static org.olat.ims.qti21.ui.components.AssessmentRenderFunctions.testFee
 import java.io.OutputStream;
 import java.io.OutputStreamWriter;
 import java.io.UnsupportedEncodingException;
-import java.net.URI;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
@@ -38,7 +37,7 @@ import javax.xml.transform.TransformerFactoryConfigurationError;
 import javax.xml.transform.dom.DOMSource;
 import javax.xml.transform.stream.StreamResult;
 
-import org.apache.commons.lang.StringEscapeUtils;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.gui.components.Component;
 import org.olat.core.gui.components.form.flexible.impl.Form;
 import org.olat.core.gui.components.form.flexible.impl.FormJSHelper;
@@ -49,10 +48,13 @@ import org.olat.core.gui.render.StringOutput;
 import org.olat.core.gui.render.URLBuilder;
 import org.olat.core.gui.translator.Translator;
 import org.olat.core.logging.OLATRuntimeException;
-import org.olat.core.logging.OLog;
 import org.olat.core.logging.Tracing;
+import org.olat.core.util.Formatter;
 import org.olat.core.util.StringHelper;
+import org.olat.core.util.WebappHelper;
+import org.olat.course.assessment.AssessmentHelper;
 import org.olat.ims.qti21.AssessmentTestSession;
+import org.olat.ims.qti21.QTI21Constants;
 import org.olat.ims.qti21.model.audit.CandidateEvent;
 import org.olat.ims.qti21.model.audit.CandidateTestEventType;
 import org.olat.ims.qti21.ui.CandidateSessionContext;
@@ -67,6 +69,7 @@ import uk.ac.ed.ph.jqtiplus.node.content.variable.RubricBlock;
 import uk.ac.ed.ph.jqtiplus.node.item.AssessmentItem;
 import uk.ac.ed.ph.jqtiplus.node.item.template.declaration.TemplateDeclaration;
 import uk.ac.ed.ph.jqtiplus.node.outcome.declaration.OutcomeDeclaration;
+import uk.ac.ed.ph.jqtiplus.node.test.AssessmentItemRef;
 import uk.ac.ed.ph.jqtiplus.node.test.AssessmentSection;
 import uk.ac.ed.ph.jqtiplus.node.test.NavigationMode;
 import uk.ac.ed.ph.jqtiplus.node.test.TestFeedback;
@@ -83,6 +86,7 @@ import uk.ac.ed.ph.jqtiplus.state.TestPlanNode.TestNodeType;
 import uk.ac.ed.ph.jqtiplus.state.TestPlanNodeKey;
 import uk.ac.ed.ph.jqtiplus.state.TestSessionState;
 import uk.ac.ed.ph.jqtiplus.types.Identifier;
+import uk.ac.ed.ph.jqtiplus.value.FloatValue;
 import uk.ac.ed.ph.jqtiplus.value.Value;
 
 /**
@@ -93,7 +97,7 @@ import uk.ac.ed.ph.jqtiplus.value.Value;
  */
 public class AssessmentTestComponentRenderer extends AssessmentObjectComponentRenderer {
 	
-	private static final OLog log = Tracing.createLoggerFor(AssessmentTestComponentRenderer.class);
+	private static final Logger log = Tracing.createLoggerFor(AssessmentTestComponentRenderer.class);
 	
 	@Override
 	public void render(Renderer renderer, StringOutput sb, Component source, URLBuilder ubu,
@@ -103,7 +107,7 @@ public class AssessmentTestComponentRenderer extends AssessmentObjectComponentRe
 		TestSessionController testSessionController = cmp.getTestSessionController();
 
 		if(testSessionController.getTestSessionState().isEnded()) {
-			renderTerminated(sb, translator);
+			renderTestTerminated(sb, cmp, translator);
 		} else {
 	        /* Create appropriate options that link back to this controller */
 	        TestSessionState testSessionState = testSessionController.getTestSessionState();
@@ -113,7 +117,7 @@ public class AssessmentTestComponentRenderer extends AssessmentObjectComponentRe
 	        if (candidateSession.isExploded()) {
 	            renderExploded(sb, translator);
 	        } else if (candidateSessionContext.isTerminated()) {
-	            renderTerminated(sb, translator);
+	        	renderTestTerminated(sb, cmp, translator);
 	        } else {
 				/* Touch the session's duration state if appropriate */
 				if (testSessionState.isEntered() && !testSessionState.isEnded()) {
@@ -124,6 +128,11 @@ public class AssessmentTestComponentRenderer extends AssessmentObjectComponentRe
 				/* Render event */
 				AssessmentRenderer renderHints = new AssessmentRenderer(renderer);
 				renderTestEvent(testSessionController, renderHints, sb, cmp, ubu, translator);
+
+				if(renderHints.isMathJax()
+	            		|| (WebappHelper.isMathJaxMarkers() && (sb.contains("\\(") || sb.contains("\\[") || sb.contains("$$")))) {
+					sb.append(Formatter.elementLatexFormattingScript("o_c".concat(cmp.getDispatchID())));
+				}
 			}
 		}
 	}
@@ -138,7 +147,7 @@ public class AssessmentTestComponentRenderer extends AssessmentObjectComponentRe
         /* If session has terminated, render appropriate state and exit */
         final TestSessionState testSessionState = testSessionController.getTestSessionState();
         if (candidateSessionContext.isTerminated() || testSessionState.isExited()) {
-        	renderTerminated(target, translator);
+        	renderTestTerminated(target, component, translator);
         } else if (testEventType == CandidateTestEventType.REVIEW_ITEM) {
         	renderer.setReviewMode(true);
         	TestPlanNodeKey itemKey = extractTargetItemKey(candidateEvent);
@@ -179,6 +188,21 @@ public class AssessmentTestComponentRenderer extends AssessmentObjectComponentRe
         }
     }
 	
+	private void renderTestTerminated(StringOutput sb, AssessmentTestComponent component, Translator translator) {
+		renderTerminated(sb, translator);
+
+		CandidateSessionContext candidateSessionContext = component.getCandidateSessionContext();
+		final AssessmentTestSession candidateSession = candidateSessionContext.getCandidateSession();
+		if(candidateSession.isAuthorMode()) {
+			sb.append("<div class='o_button_group'>");
+			String title = translator.translate("assessment.test.restart.test");
+			String explanation = translator.translate("assessment.test.restart.test.explanation");
+			renderControl(sb, component, title, explanation, true, "o_sel_enter_test",
+					new NameValuePair("cid", Event.restart.name())); 
+			sb.append("</div>");
+		}
+	}
+	
 	private void renderTestEntry(StringOutput sb, AssessmentTestComponent component, Translator translator) {
 		int numOfParts = component.getAssessmentTest().getTestParts().size();
 		sb.append("<h4>").append(translator.translate("test.entry.page.title")).append("</h4>")
@@ -187,18 +211,22 @@ public class AssessmentTestComponentRenderer extends AssessmentObjectComponentRe
 		  .append("</div><div class='o_button_group'>");
 		//precondition -> up to
 		String title = translator.translate("assessment.test.enter.test");
-		renderControl(sb, component, title, true, "o_sel_enter_test",
+		renderControl(sb, component, title, null, true, "o_sel_enter_test",
 				new NameValuePair("cid", Event.advanceTestPart.name())); 
 		
 		sb.append("</div>");
 	}
 	
-	private void renderControl(StringOutput sb, AssessmentTestComponent component, String title, boolean primary, String cssClass, NameValuePair... pairs) {
+	private void renderControl(StringOutput sb, AssessmentTestComponent component, String title, String explanation, boolean primary, String cssClass, NameValuePair... pairs) {
 		Form form = component.getQtiItem().getRootForm();
 		String dispatchId = component.getQtiItem().getFormDispatchId();
-		sb.append("<button type='button' onclick=\"");
-		sb.append(FormJSHelper.getXHRFnCallFor(form, dispatchId, 1, true, true, pairs))
-		  .append(";\" class='btn ").append("btn-primary ", "btn-default ", primary).append(cssClass).append("'").append("><span>").append(title).append("</span></button>");
+		sb.append("<button type='button' ")
+		  .onClickKeyEnter(FormJSHelper.getXHRFnCallFor(form, dispatchId, 1, true, true, pairs))
+		  .append(" class='btn ").append("btn-primary ", "btn-default ", primary).append(cssClass).append("'");
+		if(StringHelper.containsNonWhitespace(explanation)) {
+			sb.append(" title=\"").append(explanation).append("\"");
+		}
+		sb.append("><span>").append(title).append("</span></button>");
 	}
 	
 	private void renderTestItem(AssessmentRenderer renderer, StringOutput sb, AssessmentTestComponent component,
@@ -235,129 +263,190 @@ public class AssessmentTestComponentRenderer extends AssessmentObjectComponentRe
 		//advanceTestItemAllowed /* && testSessionState.getCurrentItemKey() != null && testSessionController.mayAdvanceItemLinear() */
 		if(options.isAdvanceTestItemAllowed() ) {//TODO need to find if there is a next question
 			String title = translator.translate("assessment.test.nextQuestion");
-			renderControl(sb, component, title, false, "o_sel_next_question", new NameValuePair("cid", Event.finishItem.name()));
+			renderControl(sb, component, title, null, false, "o_sel_next_question", new NameValuePair("cid", Event.finishItem.name()));
 		}
 		//nextItem
 		if(options.isNextItemAllowed() && testSessionController.hasFollowingNonLinearItem()) {
 			String title = translator.translate("assessment.test.nextQuestion");
-			renderControl(sb, component, title, false, "o_sel_next_question", new NameValuePair("cid", Event.nextItem.name()));
+			renderControl(sb, component, title, null, false, "o_sel_next_question", new NameValuePair("cid", Event.nextItem.name()));
 		}
 		//testPartNavigationAllowed"
 		if(options.isTestPartNavigationAllowed() && component.isRenderNavigation()) {
 			String title = translator.translate("assessment.test.questionMenu");
-			renderControl(sb, component, title, false, "o_sel_question_menu", new NameValuePair("cid", Event.testPartNavigation.name()));
+			renderControl(sb, component, title, null, false, "o_sel_question_menu", new NameValuePair("cid", Event.testPartNavigation.name()));
 		}
 		//endTestPartAllowed
 		if(options.isEndTestPartAllowed()) {
 			String title = component.hasMultipleTestParts()
 					? translator.translate("assessment.test.end.testPart") : translator.translate("assessment.test.end.test");
-			renderControl(sb, component, title, false, "o_sel_end_testpart", new NameValuePair("cid", Event.endTestPart.name()));
+			renderControl(sb, component, title, null, false, "o_sel_end_testpart", new NameValuePair("cid", Event.endTestPart.name()));
 		}
 		
 		//reviewMode
 		if(options.isReviewMode()) {
 			String title = translator.translate("assessment.test.backToTestFeedback");
-			renderControl(sb, component, title, false, "o_sel_back_test_feedback", new NameValuePair("cid", Event.reviewTestPart.name()));
+			renderControl(sb, component, title, null, false, "o_sel_back_test_feedback", new NameValuePair("cid", Event.reviewTestPart.name()));
 		}
 		
 		// <xsl:variable name="provideItemSolutionButton" as="xs:boolean" select="$reviewMode and $showSolution and not($solutionMode)"/>
 		if(options.isReviewMode() && effectiveItemSessionControl.isShowSolution() && !options.isSolutionMode()) {
 			String title = translator.translate("assessment.solution.show");
-			renderControl(sb, component, title, false, "o_sel_show_solution",
+			renderControl(sb, component, title, null, false, "o_sel_show_solution",
 					new NameValuePair("cid", Event.itemSolution.name()), new NameValuePair("item", key));
 		}
 		if(options.isReviewMode() && options.isSolutionMode()) {
 			String title = translator.translate("assessment.solution.hide");
-			renderControl(sb, component, title, false, "o_sel_solution_hide",
+			renderControl(sb, component, title, null, false, "o_sel_solution_hide",
 					new NameValuePair("cid", Event.reviewItem.name()), new NameValuePair("item", key));
 		}
 		sb.append("</div>");//end controls
 		sb.append("</div>");// end assessmentItem
 	}
 	
-	private void renderSectionRubrics(AssessmentRenderer renderer, StringOutput sb, AssessmentTestComponent component, TestPlanNode itemRefNode, URLBuilder ubu, Translator translator) {
-		boolean writeRubrics = false;
-		boolean writeTitles = false;
+	private void renderSectionRubrics(AssessmentRenderer renderer, StringOutput sb, AssessmentTestComponent component,
+			TestPlanNode itemRefNode, URLBuilder ubu, Translator translator) {
 		List<AssessmentSection> sectionParentLine = new ArrayList<>();
 		for(TestPlanNode parentNode=itemRefNode.getParent(); parentNode.getParent() != null; parentNode = parentNode.getParent()) {
-			AssessmentSection selectedSection = component.getAssessmentSection(parentNode.getIdentifier());
-			if(selectedSection != null && selectedSection.getVisible()) {
-				sectionParentLine.add(selectedSection);
-				if(selectedSection.getRubricBlocks().size() > 0) {
-					for(RubricBlock rubric:selectedSection.getRubricBlocks()) {
-						if(rubric.getBlocks().size() > 0) {
-							writeRubrics = true;
-						}
+			AssessmentSection section = component.getAssessmentSection(parentNode.getIdentifier());
+			if(section != null && section.getVisible()) {
+				boolean writeRubrics = false;
+				for(RubricBlock rubric:section.getRubricBlocks()) {
+					if(!rubric.getBlocks().isEmpty()) {
+						writeRubrics = true;
 					}
 				}
-				if(StringHelper.containsNonWhitespace(selectedSection.getTitle())) {
-					writeTitles = true;
+				
+				if(writeRubrics) {
+					sectionParentLine.add(section);
 				}
 			}
 		}
 		
-		if(writeRubrics) {
-			sb.append("<div class='o_info o_assessmentsection_rubrics'>");
-			//write the titles first
-			if(writeTitles) {
-				sb.append("<h4>");
-				for(int i=0; i<sectionParentLine.size(); i++) {
-					if(i == 1) {
-						sb.append("<small>");
-					} else if(i > 1) {
-						sb.append(" / ");
-					}
-					sb.append(sectionParentLine.get(i).getTitle());
-				}
-				
-				if(sectionParentLine.size() > 1) {
-					sb.append("</small>");
-				}
-				sb.append("</h4>");
-			}
-			
-
+		if (!sectionParentLine.isEmpty()) {
+			sb.append("<div class='o_assessmentsection_rubrics_wrapper'>");
 			for(int i=sectionParentLine.size(); i-->0; ) {
-				AssessmentSection selectedSection = sectionParentLine.get(i);
-				for(RubricBlock rubricBlock:selectedSection.getRubricBlocks()) {
-					sb.append("<div class='rubric'>");//@view (candidate)
-					rubricBlock.getBlocks().forEach((block) -> renderBlock(renderer, sb, component, null, null, block, ubu, translator));
-					sb.append("</div>");
-				}
+				AssessmentSection section = sectionParentLine.get(i);
+				renderRubricSection(renderer, sb, component, section, ubu, translator);
 			}
 			sb.append("</div>");
 		}
 	}
 	
+	private void renderRubricSection(AssessmentRenderer renderer, StringOutput sb, AssessmentTestComponent component,
+			AssessmentSection section, URLBuilder ubu, Translator translator) {
+		String key = section.getIdentifier().toString();
+		Form form = component.getQtiItem().getRootForm();
+		String dispatchId = component.getQtiItem().getFormDispatchId();
+		
+		boolean show = !component.getCandidateSessionContext().isRubricHidden(section.getIdentifier());
+		String linkKey = "o_sect_".concat(key);
+		String showLinkLabel;
+		if(StringHelper.containsNonWhitespace(section.getTitle())) {
+			showLinkLabel = translator.translate("show.rubric.with.title", new String[] { section.getTitle() });
+		} else {
+			showLinkLabel = translator.translate("show.rubric");
+		}
+		
+		sb.append("<div class='o_assessmentsection_rubric_wrapper'><a id='").append(linkKey).append("' href='javascript:;' onclick=\"")
+		  .append(FormJSHelper.getXHRNFFnCallFor(form, dispatchId, 1,
+				new NameValuePair("cid", Event.rubric.name()), new NameValuePair("section", key)))
+		  .append("; return false;\" class='o_toogle_rubrics translated'><i class='o_icon o_icon-fw ");
+		if(show) {
+			sb.append("o_icon_close_togglebox'> </i> <span>").append(translator.translate("hide.rubric"));
+		} else {
+			sb.append("o_icon_open_togglebox'> </i> <span>").append(showLinkLabel);
+		}
+		sb.append("</span></a>");
+
+		sb.append("<div id='d").append(linkKey).append("' class='o_info o_assessmentsection_rubrics clearfix");
+		if(show) {
+			sb.append(" o_show");
+		} else {
+			sb.append(" o_hide");
+		}
+		sb.append("'>");
+		
+		//write the titles first
+		if(StringHelper.containsNonWhitespace(section.getTitle())) {
+			sb.append("<h4>").append(section.getTitle()).append("</h4>");
+		}
+		
+		for(RubricBlock rubricBlock:section.getRubricBlocks()) {
+			sb.append("<div class='rubric'>");//@view (candidate)
+			rubricBlock.getBlocks().forEach(block -> renderBlock(renderer, sb, component, null, null, block, ubu, translator));
+			sb.append("</div>");
+		}
+		sb.append("<a id='h").append(linkKey).append("' href='javascript:;' onclick=\"")
+		  .append(FormJSHelper.getXHRNFFnCallFor(form, dispatchId, 1,
+				new NameValuePair("cid", Event.rubric.name()), new NameValuePair("section", key)))
+		  .append("; return false;\" class='o_toogle_rubrics o_hide'><span>")
+		  .append(translator.translate("hide.rubric.short"))
+		  .append("</span></a>")
+		  .append("</div></div>");
+		// script to show/hide the rubrics with the translated linked
+		sb.append("<script type=\"text/javascript\">\n")
+		  .append("/* <![CDATA[ */ \n")
+		  .append("jQuery(function() {\n")
+		  .append(" jQuery('#").append(linkKey).append(", #h").append(linkKey).append("').on('click', function(linkIndex, linkEl) {\n")
+		  .append("   jQuery('#d").append(linkKey).append("').each(function(index, el) {\n")
+		  .append("     var current = jQuery(el).attr('class');\n")
+		  .append("     if(current.indexOf('o_hide') >= 0) {\n")
+		  .append("       jQuery(el).removeClass('o_hide').addClass('o_show');\n")
+		  .append("       jQuery('a#").append(linkKey).append(".translated i').removeClass('o_icon_open_togglebox').addClass('o_icon_close_togglebox');\n")
+		  .append("       jQuery('a#").append(linkKey).append(".translated span').html('").append(translator.translate("hide.rubric")).append("');")
+		  .append("     } else {\n")
+		  .append("   	  jQuery(el).removeClass('o_show').addClass('o_hide');\n")
+		  .append("       jQuery('a#").append(linkKey).append(".translated i').removeClass('o_icon_close_togglebox').addClass('o_icon_open_togglebox');\n")
+		  .append("       jQuery('a#").append(linkKey).append(".translated span').html('").append(showLinkLabel).append("');")
+		  .append("     }\n")
+		  .append("   });")
+		  .append(" });")
+		  .append("});\n /* ]]> */")
+		  .append("</script>");
+	}
+	
 	private void renderTestItemBody(AssessmentRenderer renderer, StringOutput sb, AssessmentTestComponent component, TestPlanNode itemNode,
 			URLBuilder ubu, Translator translator, RenderingRequest options) {
-		final ItemSessionState itemSessionState = component.getItemSessionState(itemNode.getKey());
-		
-		URI itemSystemId = itemNode.getItemSystemId();
+
+		AssessmentItemRef itemRef = component.getResolvedAssessmentTest()
+				.getItemRefsByIdentifierMap().get(itemNode.getKey().getIdentifier());
+		if(itemRef == null) {
+			log.error("Missing assessment item ref: " + itemNode.getKey());
+			renderMissingItem(sb, translator);
+			return;
+		}
 		ResolvedAssessmentItem resolvedAssessmentItem = component.getResolvedAssessmentTest()
-				.getResolvedAssessmentItemBySystemIdMap().get(itemSystemId);
+				.getResolvedAssessmentItem(itemRef);
+		if(resolvedAssessmentItem == null) {
+			log.error("Missing assessment item: " + itemNode.getKey());
+			renderMissingItem(sb, translator);
+			return;
+		}
+
+		final ItemSessionState itemSessionState = component.getItemSessionState(itemNode.getKey());
 		final AssessmentItem assessmentItem = resolvedAssessmentItem.getRootNodeLookup().extractIfSuccessful();
 
 		sb.append("<div class='o_assessmentitem_wrapper'>");
 		//title + status
 		sb.append("<h4 class='itemTitle'>");
 		renderItemStatus(sb, itemSessionState, options, translator);
-		sb.append(StringHelper.escapeHtml(itemNode.getSectionPartTitle()), component.isShowTitles())
+		renderMaxScoreItem(sb, component, itemSessionState, translator);
+		String title;
+		if(component.isShowTitles()) {
+			title = StringHelper.escapeHtml(itemNode.getSectionPartTitle());
+		} else {
+			int num = component.getCandidateSessionContext().getNumber(itemNode);
+			title = translator.translate("question.title", new String[] { Integer.toString(num) });
+		}
+		sb.append(title)
 		  .append("</h4>")
-		  .append("<div id='itemBody' class='clearfix'>");
+		  .append("<div id='itemBody' class='o_qti_item_body clearfix'>");
 
 		//render itemBody
-		assessmentItem.getItemBody().getBlocks().forEach((block)
+		assessmentItem.getItemBody().getBlocks().forEach(block
 				-> renderBlock(renderer, sb, component, resolvedAssessmentItem, itemSessionState, block, ubu, translator));
-
 		//comment
 		renderComment(renderer, sb, component, itemSessionState, translator);
-		
-		//submit button -> moved with the other buttons
-		/*if(component.isItemSessionOpen(itemSessionState, options.isSolutionMode())) {
-			Component submit = component.getQtiItem().getSubmitButton().getComponent();
-			submit.getHTMLRendererSingleton().render(renderer.getRenderer(), sb, submit, ubu, translator, new RenderResult(), null);
-		}*/
 		//end body
 		sb.append("</div>");
 
@@ -366,6 +455,24 @@ public class AssessmentTestComponentRenderer extends AssessmentObjectComponentRe
 			renderTestItemModalFeedback(renderer, sb, component, resolvedAssessmentItem, itemSessionState, ubu, translator);
 		}
 		sb.append("</div>"); // end wrapper
+	}
+	
+	protected void renderMaxScoreItem(StringOutput sb, AssessmentTestComponent component, ItemSessionState itemSessionState, Translator translator) {
+		if(component.isMaxScoreAssessmentItem()) {
+			Value val = itemSessionState.getOutcomeValue(QTI21Constants.MAXSCORE_IDENTIFIER);
+			if(val != null && val instanceof FloatValue) {
+				double dVal = ((FloatValue)val).doubleValue();
+				if(dVal > 0.0d ) {
+					String sVal;
+					if(dVal < 2.0) {
+						sVal = translator.translate("assessment.item.point", new String[] { AssessmentHelper.getRoundedScore(dVal) });
+					} else {
+						sVal = translator.translate("assessment.item.points", new String[] { AssessmentHelper.getRoundedScore(dVal) });
+					}
+					sb.append("<span class='o_qti_item_max_score'>").append(sVal).append("</span>");
+				}
+			}
+		}
 	}
 	
 	@Override
@@ -543,17 +650,17 @@ public class AssessmentTestComponentRenderer extends AssessmentObjectComponentRe
 		if(currentTestPart.getNavigationMode() == NavigationMode.NONLINEAR || itemSessionState.getEntryTime() != null) {
 			
 			sb.append("<li class='o_assessmentitem'>");
-			sb.append("<button type='button' onclick=\"");
+			sb.append("<button type='button' ");
 			String key = itemNode.getKey().toString();
-			sb.append(FormJSHelper.getXHRFnCallFor(component.getQtiItem(), true, true,
-					new NameValuePair("cid", Event.reviewItem.name()), new NameValuePair("item", key)));
-			sb.append(";\" class='btn btn-default' ").append(" disabled", !reviewable).append("><span class='questionTitle'>")
+			sb.onClickKeyEnter(FormJSHelper.getXHRFnCallFor(component.getQtiItem(), true, true,
+					new NameValuePair("cid", Event.reviewItem.name()), new NameValuePair("item", key)))
+			  .append(" class='btn btn-default' ").append(" disabled", !reviewable).append("><span class='questionTitle'>")
 			  .append(StringHelper.escapeHtml(itemNode.getSectionPartTitle())).append("</span>");
 
 			if(!reviewable) {
 				renderItemStatusMessage("reviewNotAllowed", "assessment.item.status.reviewNot", sb, translator);
-			} else if(itemSessionState.getUnboundResponseIdentifiers().size() > 0
-					|| itemSessionState.getInvalidResponseIdentifiers().size() > 0) {
+			} else if(!itemSessionState.getUnboundResponseIdentifiers().isEmpty()
+					|| !itemSessionState.getInvalidResponseIdentifiers().isEmpty()) {
 				renderItemStatusMessage("reviewInvalid", "assessment.item.status.reviewInvalidAnswer", sb, translator);
 			} else if(itemSessionState.isResponded()) {
 				renderItemStatusMessage("review", "assessment.item.status.review", sb, translator);
@@ -569,6 +676,8 @@ public class AssessmentTestComponentRenderer extends AssessmentObjectComponentRe
 	
 	private void renderTestFeebacks(AssessmentRenderer renderer, StringOutput sb, List<TestFeedback> testFeedbacks, AssessmentTestComponent component, TestFeedbackAccess access,
 			URLBuilder ubu, Translator translator) {
+		if(component.isHideFeedbacks()) return;
+		
 		for(TestFeedback testFeedback:testFeedbacks) {
 			if(testFeedback.getTestFeedbackAccess() == access) {
 				renderTestFeeback(renderer, sb, component, testFeedback, ubu, translator);
@@ -578,6 +687,8 @@ public class AssessmentTestComponentRenderer extends AssessmentObjectComponentRe
 	
 	private void renderTestFeeback(AssessmentRenderer renderer, StringOutput sb, AssessmentTestComponent component, TestFeedback testFeedback,
 			URLBuilder ubu, Translator translator) {
+		if(component.isHideFeedbacks()) return;
+		
 		TestSessionState testSessionState = component.getTestSessionController().getTestSessionState();
 		if(testFeedbackVisible(testFeedback, testSessionState)) {
 			sb.append("<div class='o_info clearfix'>");
@@ -617,18 +728,18 @@ public class AssessmentTestComponentRenderer extends AssessmentObjectComponentRe
 					&& testSessionController.mayEndCurrentTestPart();
 			
 			sb.append("<div class='o_button_group'>");
-			sb.append("<button type='button' onclick=\"");
+			sb.append("<button type='button' ");
 			if(allowedToEndTestPart) {
 				Form form = component.getQtiItem().getRootForm();
 				String dispatchId = component.getQtiItem().getFormDispatchId();
-				sb.append(FormJSHelper.getXHRFnCallFor(form, dispatchId, 1, true, true,
+				sb.onClickKeyEnter(FormJSHelper.getXHRFnCallFor(form, dispatchId, 1, true, true,
 						new NameValuePair("cid", Event.endTestPart.name())));
 			} else {
-				sb.append("javascript:");
+				sb.append(" onclick=\"javascript:;\"");
 			}
 			String endTestTitle = multiPartTest ?
 					translator.translate("assessment.test.end.testPart") : translator.translate("assessment.test.end.test");
-			sb.append(";\" class='btn btn-default o_sel_end_testpart'").append(" disabled", !allowedToEndTestPart).append("><span>")
+			sb.append(" class='btn btn-default o_sel_end_testpart'").append(" disabled", !allowedToEndTestPart).append("><span>")
 			  .append(endTestTitle).append("</span>");
 	
 			sb.append("</button>");
@@ -671,7 +782,7 @@ public class AssessmentTestComponentRenderer extends AssessmentObjectComponentRe
 	
 	private void renderItemStatusMessage(String status, String i18nKey, StringOutput sb, Translator translator) {
 		String title = translator.translate(i18nKey);
-		sb.append("<span class='o_assessmentitem_status ").append(status).append(" ' title=\"").append(StringEscapeUtils.escapeHtml(title))
+		sb.append("<span class='o_assessmentitem_status ").append(status).append(" ' title=\"").append(StringHelper.escapeHtml(title))
 		.append("\"><i class='o_icon o_icon-fw o_icon_qti_").append(status).append("'> </i><span>").append(title).append("</span></span>");
 	}
 

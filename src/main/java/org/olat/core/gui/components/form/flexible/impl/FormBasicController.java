@@ -25,10 +25,8 @@
 */ 
 package org.olat.core.gui.components.form.flexible.impl;
 
-import java.lang.ref.WeakReference;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.function.Consumer;
 
 import org.checkerframework.checker.initialization.qual.UnderInitialization;
 import org.checkerframework.checker.initialization.qual.UnknownInitialization;
@@ -39,6 +37,7 @@ import org.olat.core.gui.components.Component;
 import org.olat.core.gui.components.form.flexible.FormItem;
 import org.olat.core.gui.components.form.flexible.FormItemContainer;
 import org.olat.core.gui.components.form.flexible.FormUIFactory;
+import org.olat.core.gui.components.form.flexible.elements.FormLink;
 import org.olat.core.gui.components.form.flexible.elements.InlineElement;
 import org.olat.core.gui.components.panel.StackedPanel;
 import org.olat.core.gui.control.Controller;
@@ -49,6 +48,7 @@ import org.olat.core.gui.control.controller.BasicController;
 import org.olat.core.gui.translator.Translator;
 import org.olat.core.logging.AssertException;
 import org.olat.core.logging.activity.ThreadLocalUserActivityLoggerInstaller;
+import org.olat.core.util.ValidationStatus;
 
 /**
  * Description:<br>
@@ -76,7 +76,7 @@ import org.olat.core.logging.activity.ThreadLocalUserActivityLoggerInstaller;
  * 
  * @author patrickb
  */
-public abstract class FormBasicController extends BasicController implements IFormFragmentContainer {
+public abstract class FormBasicController extends BasicController {
 
 	
 	public static final int LAYOUT_DEFAULT = 0;
@@ -94,8 +94,6 @@ public abstract class FormBasicController extends BasicController implements IFo
 	protected Form mainForm;
 
 	protected StackedPanel initialPanel;
-
-	private List<FragmentRef> fragments;
 
 	protected final FormUIFactory uifactory = FormUIFactory.getInstance();
 	
@@ -310,6 +308,7 @@ public abstract class FormBasicController extends BasicController implements IFo
 	}
 	
 	
+	@Override
 	protected void removeAsListenerAndDispose(Controller controller) {
 		super.removeAsListenerAndDispose(controller);
 		
@@ -343,6 +342,8 @@ public abstract class FormBasicController extends BasicController implements IFo
 	 * called if form validation was not ok.<br>
 	 * default implementation does nothing. Each element is assumed to set
 	 * errormessages. Needed only if complex business logic is checked even
+	 * 
+	 * @param ureq 
 	 */
 	protected void formNOK(UserRequest ureq) {
 	// by default nothing to do -> e.g. looping until form is ok
@@ -371,6 +372,7 @@ public abstract class FormBasicController extends BasicController implements IFo
 	/**
 	 * called if an element inside of the form triggered an event
 	 * 
+	 * @param ureq 
 	 * @param source
 	 * @param event
 	 */
@@ -380,7 +382,6 @@ public abstract class FormBasicController extends BasicController implements IFo
 
 	@Override
 	protected void event(UserRequest ureq,Controller source, Event event) {
-		routeEventToFragments(ureq, source, event);
 		super.event(ureq, source, event);
 	}
 
@@ -391,7 +392,6 @@ public abstract class FormBasicController extends BasicController implements IFo
 	 */
 	@Override
 	public void event(UserRequest ureq, Component source, Event event) {
-		routeEventToFragments(ureq, source, event);
 		if (source == mainForm.getInitialComponent()) {
 			// general form events
 			if (event == org.olat.core.gui.components.form.Form.EVNT_VALIDATION_OK) {
@@ -448,8 +448,13 @@ public abstract class FormBasicController extends BasicController implements IFo
 	
 	protected void propagateDirtinessToContainer(FormItem fiSrc, @SuppressWarnings("unused") FormEvent fe) {
 		// check for InlineElments remove as the tag library has been replaced
-		if(fiSrc instanceof InlineElement){
-			if(!((InlineElement) fiSrc).isInlineEditingElement()){ //OO-137
+		if(fiSrc instanceof FormLink) {
+			FormLink link = (FormLink)fiSrc;
+			if(!link.isPopup() && !link.isNewWindow()) {
+				flc.setDirty(true);
+			}
+		} else if(fiSrc instanceof InlineElement) {
+			if(!((InlineElement) fiSrc).isInlineEditingElement()) {
 				//the container need to be redrawn because every form item element
 				//is made of severals components. If a form item is set to invisible
 				//the layout which glue the different components stay visible
@@ -476,9 +481,10 @@ public abstract class FormBasicController extends BasicController implements IFo
 		if (i18nKey == null) {
 			flc.contextRemove("off_title");
 		} else {
-			flc.contextPut("off_title", getTranslator().translate(i18nKey));			
+			flc.contextPut("off_title", getTranslator().translate(i18nKey));
 		}
 	}
+	
 	/**
 	 * Set an optional form title that is rendered as a fieldset legend. If you
 	 * use a custom template this will have no effect
@@ -491,6 +497,14 @@ public abstract class FormBasicController extends BasicController implements IFo
 			flc.contextRemove("off_title");
 		} else {
 			flc.contextPut("off_title", getTranslator().translate(i18nKey, args));
+		}
+	}
+	
+	protected void setFormTranslatedTitle(String translatedTitle) {
+		if(translatedTitle == null) {
+			flc.contextRemove("off_title");
+		} else {
+			flc.contextPut("off_title", translatedTitle);
 		}
 	}
 	
@@ -532,6 +546,14 @@ public abstract class FormBasicController extends BasicController implements IFo
 			flc.contextRemove("off_desc");
 		} else {
 			flc.contextPut("off_desc", getTranslator().translate(i18nKey, args));
+		}
+	}
+	
+	protected void setFormTranslatedDescription(String translatedDescription) {
+		if (translatedDescription == null) {
+			flc.contextRemove("off_desc");
+		} else {
+			flc.contextPut("off_desc", translatedDescription);
 		}
 	}
 
@@ -630,6 +652,13 @@ public abstract class FormBasicController extends BasicController implements IFo
 	protected boolean validateFormLogic(UserRequest ureq) {
 		return true;
 	}
+	
+	protected boolean validateFormItem(FormItem item) {
+		if(!item.isEnabled() || !item.isVisible()) return true;
+		List<ValidationStatus> validationResults = new ArrayList<>(2);
+		item.validate(validationResults);
+		return validationResults.isEmpty();
+	}
 
 	/**
 	 * Adding disposing of form items that implement the disposable interface.
@@ -643,137 +672,19 @@ public abstract class FormBasicController extends BasicController implements IFo
 	@Override
 	public void dispose() {
 		super.dispose();
-		ThreadLocalUserActivityLoggerInstaller.runWithUserActivityLogger(new Runnable() {
-			public void run() {
-				// Dispose also disposable form items (such as file uploads that needs to
-				// cleanup temporary files)
-				Iterable<FormItem> formItems = FormBasicController.this.flc.getFormItems();
-				for (FormItem formItem : formItems) {
-					if (formItem instanceof Disposable) {
-						Disposable disposableFormItem = (Disposable) formItem;
-						disposableFormItem.dispose();				
-					}
+		ThreadLocalUserActivityLoggerInstaller.runWithUserActivityLogger(() -> {
+			// Dispose also disposable form items (such as file uploads that needs to
+			// cleanup temporary files)
+			for (FormItem formItem : FormBasicController.this.flc.getFormItems()) {
+				if (formItem instanceof Disposable) {
+					Disposable disposableFormItem = (Disposable) formItem;
+					disposableFormItem.dispose();				
 				}
-				
-				forEachFragment(fragment -> {
-					// do nothing for now
-				});
 			}
 		}, getUserActivityLogger());
 	}
 	
-	// ------------------------------------------------------------------------
-	// IFormFragmentContainer implementation
-	
-	/**
-	 * A lifecycle method used to signal the controller that it should read the contents
-	 * of its configuration and apply it to its view. The idea is that the structure of a
-	 * form can be created separately from assigning contents to its fields.
-	 * <p>This is particularly useful when dealing with fragments which know how to 
-	 * load/store data from a given configuration themselves.
-	 * @param ureq
-	 */
-	public void readFormData(UserRequest ureq) {
-		// do nothing by default
-	}
-	
-	/**
-	 * A lifecycle used to signal the form controller that it should visit the view's
-	 * content and save all relevant data into its current configuration. 
-	 * <p>This is particularly useful when dealing with fragments which know how to 
-	 * load/store data from a given configuration themselves.
-	 * @param ureq
-	 */
-	public void storeFormData(UserRequest ureq) {
-		// do nothing by default
-	}
-
-	@Override
-	public IFormFragmentHost getFragmentHostInterface() {
-		// this is to document the missing method implementation in a subclass
-		throw new IllegalStateException("In order to host from fragments the controller must override getFragmentHostInterface(): " + this.getClass().getSimpleName() );
-	}
-	
-	private static class FragmentRef extends WeakReference<IFormFragment>{
-		public FragmentRef(IFormFragment referent) {
-			super(referent);
-		}
-	}
-	
-	@Override
 	public void setNeedsLayout() {
 		flc.setDirty(true);
 	}
-
-	@Override
-	public void registerFormFragment(IFormFragment fragment) {
-		if(fragments == null) {
-			fragments = new ArrayList<>(5);
-		}
-		fragments.add(new FragmentRef(fragment));
-	}
-	
-	@Override
-	public FormItemContainer formItemsContainer() {
-		return flc;
-	}
-
-	// Helpers
-	@Override
-	protected void fireEvent(UserRequest ureq, Event event) {
-		super.fireEvent(ureq, event);
-	}
-	
-	// Redefinition of a the super method to provide access with the same
-	// package (this is required for the Form Fragments)
-	@Override
-	public Controller listenTo(Controller controller) {
-		return super.listenTo(controller);
-	}
-	
-	@Override
-	public void forEachFragment(Consumer<IFormFragment> handler) {
-		if(fragments == null) return;
-		
-		fragments.stream()
-			.filter(ref -> ref.get() != null)
-			.forEach(ref -> {
-				IFormFragment frag = ref.get();
-				if (frag != null) {					
-					handler.accept(frag);
-				}
-			});
-	}
-
-	protected boolean routeEventToFragments(UserRequest ureq, Component source, Event event) {
-		if(fragments == null) return false;
-		
-		// implement shortcut?!
-		Boolean processed = 
-				fragments.stream()
-					.reduce(Boolean.FALSE
-							, (t, u) -> {
-								IFormFragment frag = u.get();
-								return frag == null ? Boolean.FALSE : frag.processEvent(ureq, source, event);
-							}, (t, u) -> t & u)
-					;
-		return processed;
-	}
-
-
-	protected boolean routeEventToFragments(UserRequest ureq, Controller source, Event event) {
-		if(fragments == null) return false;
-		
-		// implement shortcut?!
-		Boolean processed = 
-			fragments.stream()
-				.reduce(Boolean.FALSE
-						, (t, u) -> {
-							IFormFragment frag = u.get();
-							return frag == null ? Boolean.FALSE : frag.processEvent(ureq, source, event);
-						}, (t, u) -> t & u)
-				;
-		return processed;
-	}
-	
 }

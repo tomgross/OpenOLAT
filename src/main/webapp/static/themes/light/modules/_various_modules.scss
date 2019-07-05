@@ -9,7 +9,7 @@ a.o_chelp {
 	font-weight: $o-chelp-font-weight;
 	line-height: floor($o-chelp-font-size *1.5);
 	color: $o-chelp-color;
-  	background-color: $o-chelp-bg;
+	background-color: $o-chelp-bg;
 	border: 1px solid $o-chelp-border;
 	border-radius: $o-chelp-border-radius;
 	cursor: help;
@@ -18,12 +18,12 @@ a.o_chelp {
 	&:active,
 	&:hover,
 	&:focus {
-    	text-decoration: none;
-	    color: $o-chelp-color;
-    	background-color: darken($o-chelp-bg, 8%);
-        border-color: darken($o-chelp-border, 12%);
-  	}
-  	
+		text-decoration: none;
+		color: $o-chelp-color;
+		background-color: darken($o-chelp-bg, 8%);
+		border-color: darken($o-chelp-border, 12%);
+	}
+	
 	i {
 		font-size: $o-chelp-font-size !important;
 	}
@@ -48,11 +48,13 @@ a.o_chelp {
 	border: $o-drawing-border-width solid $o-drawing-border-color;
 	border-radius: 50%;
 	position: absolute !important;
+	box-sizing: border-box;
 }
 
 .o_draw_rectangle {
 	border: $o-drawing-border-width solid $o-drawing-border-color;
 	position: absolute !important;
+	box-sizing: border-box;
 }
 
 
@@ -98,11 +100,11 @@ ul.o_dropdown {
 	/* revert padding from popover */
 	margin: -5px -14px;
 	.divider {
-    	@include nav-divider($dropdown-divider-bg);
-  	}
-  	
-  	> li > a {
-    	display: block;
+		@include nav-divider($dropdown-divider-bg);
+	}
+	
+	> li > a {
+		display: block;
 		padding: 5px 14px;
 		clear: both;
 		font-weight: normal;
@@ -113,9 +115,19 @@ ul.o_dropdown {
 		&:hover,
 		&:focus {
 			text-decoration: none;
-		    color: $dropdown-link-hover-color;
-		    background-color: $dropdown-link-hover-bg;
+			color: $dropdown-link-hover-color;
+			background-color: $dropdown-link-hover-bg;
 		}
+	}
+	
+	> li > i.o_icon_check {
+		display: inline-block;
+		padding-left: 14px;
+	}
+	
+	> li > i.o_icon_check + a {
+		display: inline-block;
+		padding-left: 5px;
 	}
 }
 
@@ -254,34 +266,36 @@ ul.o_dropdown {
 	}
 }
 
-/* Dummy user portrait (avatar) display - portrait sizes must match with DisplayPortraitManager.WIDTH_PORTRAIT_SMALL  DisplayPortraitManager.WIDTH_PORTRAIT_BIG
+/* Dummy user portrait (avatar) display - portrait sizes must match with DisplayPortraitManager.WIDTH_PORTRAIT_SMALLDisplayPortraitManager.WIDTH_PORTRAIT_BIG
 
-   Dummy is used for registered users which have no personal avatar image. 
-   - dummy is used if gender is not known
-   - dummy_female is used for femal users
-   - dummy_male is used for male users
-   
-   Anonymous is used for guest users and in anonymous chat / forum postings
+Dummy is used for registered users which have no personal avatar image. 
+- dummy is used if gender is not known
+- dummy_female is used for femal users
+- dummy_male is used for male users
+
+Anonymous is used for guest users and in anonymous chat / forum postings
+
+The "important!" avoids hiding the image by bootstrap.
 */
 .o_portrait_avatar,
 .o_portrait_dummy,
 .o_portrait_dummy_female_big,
 .o_portrait_dummy_male_big,
-.o_portrait_anonymous 			 {width: 100px; height: 100px;}
-.o_portrait_dummy                {background-image: url('#{$o-images-path}portrait/dummy.png');}
-.o_portrait_dummy_female_big     {background-image: url('#{$o-images-path}portrait/dummy_female_big.png');}
-.o_portrait_dummy_male_big       {background-image: url('#{$o-images-path}portrait/dummy_male_big.png');}
-.o_portrait_anonymous 			 {background-image: url('#{$o-images-path}portrait/anonymous.png'); }
+.o_portrait_anonymous 			{width: 100px; height: 100px;}
+.o_portrait_dummy				{background-image: url('#{$o-images-path}portrait/dummy.png') !important;}
+.o_portrait_dummy_female_big	{background-image: url('#{$o-images-path}portrait/dummy_female_big.png') !important;}
+.o_portrait_dummy_male_big		{background-image: url('#{$o-images-path}portrait/dummy_male_big.png') !important;}
+.o_portrait_anonymous 			{background-image: url('#{$o-images-path}portrait/anonymous.png') !important; }
 
 .o_portrait_avatar_small,
 .o_portrait_dummy_small,
 .o_portrait_dummy_female_small,
 .o_portrait_dummy_male_small,
-.o_portrait_anonymous_small 	 {width: 30px; height: 30px;}
-.o_portrait_dummy_small          {background-image: url('#{$o-images-path}portrait/dummy_small.png');}
-.o_portrait_dummy_female_small   {background-image: url('#{$o-images-path}portrait/dummy_female_small.png');}
-.o_portrait_dummy_male_small     {background-image: url('#{$o-images-path}portrait/dummy_male_small.png');}
-.o_portrait_anonymous_small 	 {background-image: url('#{$o-images-path}portrait/anonymous_small.png'); } 
+.o_portrait_anonymous_small 	{width: 30px; height: 30px;}
+.o_portrait_dummy_small			{background-image: url('#{$o-images-path}portrait/dummy_small.png') !important;}
+.o_portrait_dummy_female_small	{background-image: url('#{$o-images-path}portrait/dummy_female_small.png') !important;}
+.o_portrait_dummy_male_small	{background-image: url('#{$o-images-path}portrait/dummy_male_small.png') !important;}
+.o_portrait_anonymous_small 	{background-image: url('#{$o-images-path}portrait/anonymous_small.png') !important; }
 
 /* Date component, used in info course element, blog etc */
 .o_datecomp {
@@ -313,7 +327,7 @@ ul.o_dropdown {
 		height: floor($line-height-computed * 1.5);
 		line-height: floor($line-height-computed * 1.5);
 		font-size: $font-size-large;
-		border-top: 1px solid $o-datecomp-border;  
+		border-top: 1px solid $o-datecomp-border;
 		background-color: $o-datecomp-day-bg;
 		color: $o-datecomp-day-color;
 	}
@@ -414,6 +428,9 @@ ul.o_certificates li {
 	.o_content {
 		@include clearfix();
 	}
+	.o_enclosure {
+		clear: both;
+	}
 }
 
 /* Glossary */
@@ -429,8 +446,8 @@ ul.o_certificates li {
 	dl {
 		dt {
 			&:first-letter { 
-    			font-size: ceil(($font-size-base * 1.5));;
-    		}
+				font-size: ceil(($font-size-base * 1.5));;
+			}
 			small {
 				color: $text-muted;
 			}
@@ -466,9 +483,27 @@ div.o_assessment_user_type_filter {
 	}
 }
 
+div.panel.o_assessment_modes {
+	.o_table_body {
+		margin-top: 0;
+	}
+	
+	.o_table_wrapper {
+		margin-bottom: 5px;
+	}
+}
+
+div.o_assessment_mode_row {
+	padding: 0 15px;
+	
+	&.o_assessment_today {
+		padding: 0 20px 0 12px;
+		border-left: 3px solid $o-assessment-mode-today-border-color;
+		background-color: $o-assessment-mode-today-bg;
+	}
+}
 
 /* vitero */
-/* onyx   */
 .vitero_iframe {
 	width: 100%;
 	height: 100%;
@@ -484,8 +519,8 @@ div.o_assessment_user_type_filter {
 /* Segmented view wrapper */
 .o_segments.btn-group a span {
 	overflow: hidden;
-    display: block;
-    text-overflow: ellipsis;
+	display: block;
+	text-overflow: ellipsis;
 }
 .o_segments_content {
 	margin-top: $line-height-computed;
@@ -590,6 +625,17 @@ div.o_assessment_user_type_filter {
 	}
 }
 
+/* list */
+ul.o_assessment_docs {
+	margin-bottom: 0;
+}
+ul.o_assessment_docs>li {
+	margin-bottom: 0.33em;
+}
+ul.o_assessment_docs>li:last-child {
+	margin-bottom: 0em;
+}
+
 /* personal mail box tool */
 .o_mail_message {
 	.o_mail_meta {
@@ -638,3 +684,87 @@ div.o_assessment_user_type_filter {
 		font-size: 80%;
 	}
 }	
+
+/* indicator on progress bar */
+.progress .o_progress_marker {
+	position: absolute; 
+	height: 100%;
+	top: 0;
+	width: 3px; 	
+	background: $o-progress-marker-color;
+}
+
+.progress .progress-bar {
+	text-shadow: 1px 1px 2px #000000;
+}
+
+.o_progress_label_right {
+	float:left;
+	margin-right: 10px;
+}
+
+
+/* web documents */
+.o_web_content {
+	padding-bottom: floor($grid-gutter-width / 2);
+}
+
+/* label */
+%o_labeled,
+.o_labeled,
+a.o_labeled {
+	display: inline-block;
+	text-transform: uppercase;
+	text-align: center;
+	text-decoration: none;
+	vertical-align: middle;
+	font-size: 75%;
+	line-height: 1;
+	white-space: nowrap;
+	border: 1px solid;
+	border-radius: 3px;
+	padding: 2px 5px;
+	background-color: $o-labeled_bg-color;
+	color: $o-labeled_color;
+	position: relative;
+}
+%o_labeled_light,
+.o_labeled_light,
+a.o_labeled_light {
+	@extend %o_labeled;
+	font-weight: bold;
+	background-color: 	$o-labeled-light-bg-color;
+ }
+ 
+ /* Multiselect dropdown element */
+ .o_ms_button {
+ 	max-width: 100%;
+ 	width: 100%;
+ 	display: flex;
+	span:not(.o_ms_carret) {
+ 		text-overflow: ellipsis;
+		overflow: hidden;
+		white-space: nowrap; 
+	}
+	.o_ms_carret {
+		margin: auto 0 auto auto;
+	}
+}
+.o_ms_list {
+	width: 100%;
+	height: auto;
+	max-height: 300px;
+	overflow-x: hidden;
+	top: unset;
+}
+
+
+/* disclaimer formatting */
+.o_disclaimer .o_disclaimer_content {
+	max-height: 50vh;
+	overflow: auto;
+	font-family: $font-family-monospace;
+	background: #fbfbfb;
+	padding: 10px;
+	border: 1px solid #c2c2c2;
+}

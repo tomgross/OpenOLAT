@@ -1,0 +1,38 @@
+/bin/
+/target/
+/cargo/
+/.settings/
+/.externalToolBuilders/
+
+# deprecated scripting files
+*.pl
+*.php
+
+# editor backup files
+*~
+*.bak
+*.swp
+
+# sundry useless files
+*.out
+mvn*.log
+
+# Mac idiosyncrasies
+.DS_Store
+
+#ignore project/.classpath file at this gets created by maven
+.classpath
+.project
+src/main/java/olat.local.properties
+src/test/java/org/olat/selenium/SeleniumTest.java
+
+.classpath
+/.project
+/.settings
+*/target
+*.sw?
+*/.classpath
+
+*/.project
+.idea
+

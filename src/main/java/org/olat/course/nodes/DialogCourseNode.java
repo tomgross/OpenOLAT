@@ -31,7 +31,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.zip.ZipOutputStream;
 
-import org.olat.core.commons.modules.bc.vfs.OlatRootFolderImpl;
+import org.olat.core.CoreSpringFactory;
 import org.olat.core.commons.services.notifications.NotificationsManager;
 import org.olat.core.commons.services.notifications.SubscriptionContext;
 import org.olat.core.gui.UserRequest;
@@ -55,27 +55,21 @@ import org.olat.course.editor.CourseEditorEnv;
 import org.olat.course.editor.NodeEditController;
 import org.olat.course.editor.StatusDescription;
 import org.olat.course.export.CourseEnvironmentMapper;
-import org.olat.course.nodes.dialog.DialogConfigForm;
-import org.olat.course.nodes.dialog.DialogCourseNodeEditController;
-import org.olat.course.nodes.dialog.DialogCourseNodeRunController;
+import org.olat.course.nodes.dialog.DialogElement;
+import org.olat.course.nodes.dialog.DialogElementsManager;
+import org.olat.course.nodes.dialog.ui.DialogCourseNodeEditController;
+import org.olat.course.nodes.dialog.ui.DialogCourseNodeRunController;
 import org.olat.course.run.navigation.NodeRunConstructionResult;
 import org.olat.course.run.userview.NodeEvaluation;
 import org.olat.course.run.userview.UserCourseEnvironment;
 import org.olat.modules.ModuleConfiguration;
-import org.olat.modules.dialog.DialogElement;
-import org.olat.modules.dialog.DialogElementsPropertyManager;
-import org.olat.modules.dialog.DialogPropertyElements;
 import org.olat.modules.fo.archiver.ForumArchiveManager;
 import org.olat.modules.fo.archiver.formatters.ForumFormatter;
 import org.olat.modules.fo.archiver.formatters.ForumRTFFormatter;
 import org.olat.modules.fo.archiver.formatters.ForumStreamedRTFFormatter;
-import org.olat.modules.fo.manager.ForumManager;
 import org.olat.repository.RepositoryEntry;
 
 /**
- * Description:<br>
- * TODO: guido Class Description for DialogCourseNode
- * <P>
  * Initial Date: 02.11.2005 <br>
  * 
  * @author Guido Schnider
@@ -90,37 +84,23 @@ public class DialogCourseNode extends AbstractAccessableCourseNode {
 		updateModuleConfigDefaults(true);
 	}
 
-	/**
-	 * @see org.olat.course.nodes.GenericCourseNode#createEditController(org.olat.core.gui.UserRequest,
-	 *      org.olat.core.gui.control.WindowControl, org.olat.course.ICourse,
-	 *      org.olat.course.run.userview.UserCourseEnvironment)
-	 */
 	@Override
 	public TabbableController createEditController(UserRequest ureq, WindowControl wControl, BreadcrumbPanel stackPanel, ICourse course, UserCourseEnvironment euce) {
 		updateModuleConfigDefaults(false);
-		DialogCourseNodeEditController childTabCntrllr = new DialogCourseNodeEditController(ureq, wControl, this,
-				course, euce);
+		DialogCourseNodeEditController childTabCntrllr = new DialogCourseNodeEditController(ureq, wControl, this, course, euce);
 		CourseNode chosenNode = course.getEditorTreeModel().getCourseNode(euce.getCourseEditorEnv().getCurrentCourseNodeId());
 		return new NodeEditController(ureq, wControl, course.getEditorTreeModel(), course, chosenNode, euce, childTabCntrllr);
 	}
 
-	/**
-	 * @see org.olat.course.nodes.GenericCourseNode#createNodeRunConstructionResult(org.olat.core.gui.UserRequest,
-	 *      org.olat.core.gui.control.WindowControl,
-	 *      org.olat.course.run.userview.UserCourseEnvironment,
-	 *      org.olat.course.run.userview.NodeEvaluation, java.lang.String)
-	 */
+	@Override
 	public NodeRunConstructionResult createNodeRunConstructionResult(UserRequest ureq, WindowControl wControl,
 			UserCourseEnvironment userCourseEnv, NodeEvaluation ne, String nodecmd) {
-		//FIXME:gs:a nodecmd has now the subsubId in it -> pass to DialogCourseNodeRunController below
-		DialogCourseNodeRunController ctrl = new DialogCourseNodeRunController(ureq, userCourseEnv, wControl, this, ne);
+		DialogCourseNodeRunController ctrl = new DialogCourseNodeRunController(ureq, wControl, this, userCourseEnv, ne);
 		Controller wrappedCtrl = TitledWrapperHelper.getWrapper(ureq, wControl, ctrl, this, "o_dialog_icon");
 		return new NodeRunConstructionResult(wrappedCtrl);
 	}
 
-	/**
-	 * @see org.olat.course.nodes.GenericCourseNode#isConfigValid(org.olat.course.editor.CourseEditorEnv)
-	 */
+	@Override
 	public StatusDescription[] isConfigValid(CourseEditorEnv cev) {
 		oneClickStatusCache = null;
 		// only here we know which translator to take for translating condition
@@ -131,23 +111,17 @@ public class DialogCourseNode extends AbstractAccessableCourseNode {
 		return oneClickStatusCache;
 	}
 
-	/**
-	 * @see org.olat.course.nodes.CourseNode#getReferencedRepositoryEntry()
-	 */
+	@Override
 	public RepositoryEntry getReferencedRepositoryEntry() {
 		return null;
 	}
 
-	/**
-	 * @see org.olat.course.nodes.CourseNode#needsReferenceToARepositoryEntry()
-	 */
+	@Override
 	public boolean needsReferenceToARepositoryEntry() {
 		return false;
 	}
 
-	/**
-	 * @see org.olat.course.nodes.CourseNode#isConfigValid()
-	 */
+	@Override
 	public StatusDescription isConfigValid() {
 		/*
 		 * first check the one click cache
@@ -165,13 +139,13 @@ public class DialogCourseNode extends AbstractAccessableCourseNode {
 	 *          from previous node configuration version, set default to maintain
 	 *          previous behaviour
 	 */
+	@Override
 	public void updateModuleConfigDefaults(boolean isNewNode) {
 		ModuleConfiguration config = getModuleConfiguration();
 		if (isNewNode) {
 			// use defaults for new course building blocks
 			//REVIEW:pb version should go to 2 now and the handling for 1er should be to remove 
 			config.setConfigurationVersion(1);
-			config.set(DialogConfigForm.DIALOG_CONFIG_INTEGRATION, DialogConfigForm.CONFIG_INTEGRATION_VALUE_INLINE);
 		}
 	}
 	
@@ -191,6 +165,7 @@ public class DialogCourseNode extends AbstractAccessableCourseNode {
 		postExportCondition(preConditionReader, envMapper, backwardsCompatible);
 	}
 
+	@Override
 	public String informOnDelete(Locale locale, ICourse course) {
 		return null;
 	}
@@ -199,24 +174,19 @@ public class DialogCourseNode extends AbstractAccessableCourseNode {
 	 * life cycle of node data e.g properties stuff should be deleted if node gets
 	 * deleted life cycle: create - delete - migrate
 	 */
+	@Override
 	public void cleanupOnDelete(ICourse course) {
-		DialogElementsPropertyManager depm = DialogElementsPropertyManager.getInstance();
+		super.cleanupOnDelete(course);
 		
-		//remove all possible forum subscriptions
-		DialogPropertyElements findDialogElements = depm.findDialogElements(course.getResourceableId(), getIdent());
-		if(findDialogElements != null){
-			List<DialogElement> dialogElments = findDialogElements.getDialogPropertyElements();
-			for (DialogElement dialogElement : dialogElments) {
-				Long forumKey = dialogElement.getForumKey();
-				SubscriptionContext subsContext = CourseModule.createSubscriptionContext(course.getCourseEnvironment(), this, forumKey.toString());
-				NotificationsManager.getInstance().delete(subsContext);
-				//also delete forum -> was archived in archiveNodeData step
-				ForumManager.getInstance().deleteForum(forumKey);
-			}
+		DialogElementsManager depm = CoreSpringFactory.getImpl(DialogElementsManager.class);
+		RepositoryEntry entry = course.getCourseEnvironment().getCourseGroupManager().getCourseEntry();
+		List<DialogElement> dialogElements = depm.getDialogElements(entry, getIdent());
+		for (DialogElement dialogElement : dialogElements) {
+			Long forumKey = dialogElement.getForum().getKey();
+			SubscriptionContext subsContext = CourseModule.createSubscriptionContext(course.getCourseEnvironment(), this, forumKey.toString());
+			NotificationsManager.getInstance().delete(subsContext);
+			depm.deleteDialogElement(dialogElement);
 		}
-		
-		//delete property
-		depm.deleteProperty(course.getResourceableId(), this.getIdent());
 	}
 
 	/**
@@ -225,32 +195,34 @@ public class DialogCourseNode extends AbstractAccessableCourseNode {
 	 * @param exportDirectory
 	 */
 	public void doArchiveElement(DialogElement element, File exportDirectory, Locale locale) {
-		VFSContainer forumContainer = getForumContainer(element.getForumKey());
+		DialogElementsManager depm = CoreSpringFactory.getImpl(DialogElementsManager.class);
+		VFSContainer dialogContainer = depm.getDialogContainer(element);
 		//there is only one file (leave) in the top forum container 
-		VFSItem dialogFile = forumContainer.getItems(new VFSLeafFilter()).get(0);
+		VFSItem dialogFile = dialogContainer.getItems(new VFSLeafFilter()).get(0);
 		VFSContainer exportContainer = new LocalFolderImpl(exportDirectory);
 		
 		// append export timestamp to avoid overwriting previous export 
-		String exportDirName = Formatter.makeStringFilesystemSave(getShortTitle())+"_"+element.getForumKey()+"_"+Formatter.formatDatetimeFilesystemSave(new Date(System.currentTimeMillis()));
+		String exportDirName = Formatter.makeStringFilesystemSave(getShortTitle())+"_"+element.getForum().getKey()+"_"+Formatter.formatDatetimeFilesystemSave(new Date(System.currentTimeMillis()));
 		VFSContainer diaNodeElemExportContainer = exportContainer.createChildContainer(exportDirName);
 		// don't check quota
 		diaNodeElemExportContainer.setLocalSecurityCallback(new FullAccessCallback());
 		diaNodeElemExportContainer.copyFrom(dialogFile);
 
-		ForumArchiveManager fam = ForumArchiveManager.getInstance();
+		ForumArchiveManager fam = CoreSpringFactory.getImpl(ForumArchiveManager.class);
 		ForumFormatter ff = new ForumRTFFormatter(diaNodeElemExportContainer, false, locale);
-		fam.applyFormatter(ff, element.getForumKey(), null);
+		fam.applyFormatter(ff, element.getForum().getKey(), null);
 	}
 	
 	@Override
-	public boolean archiveNodeData(Locale locale, ICourse course, ArchiveOptions options, ZipOutputStream exportStream, String charset) {
+	public boolean archiveNodeData(Locale locale, ICourse course, ArchiveOptions options,
+			ZipOutputStream exportStream, String archivePath, String charset) {
 		boolean dataFound = false;
-		List<DialogElement> list = DialogElementsPropertyManager.getInstance()
-				.findDialogElements(course.getCourseEnvironment().getCoursePropertyManager(), this)
-				.getDialogPropertyElements();
-		if(list.size() > 0) {
+		RepositoryEntry entry = course.getCourseEnvironment().getCourseGroupManager().getCourseEntry();
+		List<DialogElement> list = CoreSpringFactory.getImpl(DialogElementsManager.class)
+				.getDialogElements(entry, getIdent());
+		if(!list.isEmpty()) {
 			for (DialogElement element:list) {
-				doArchiveElement(element, exportStream, locale);
+				doArchiveElement(element, exportStream, archivePath, locale);
 				dataFound = true;
 			}
 		}
@@ -262,20 +234,21 @@ public class DialogCourseNode extends AbstractAccessableCourseNode {
 	 * @param element
 	 * @param exportDirectory
 	 */
-	public void doArchiveElement(DialogElement element, ZipOutputStream exportStream, Locale locale) {
-		// append export timestamp to avoid overwriting previous export 
+	public void doArchiveElement(DialogElement element, ZipOutputStream exportStream, String archivePath, Locale locale) {
+		DialogElementsManager depm = CoreSpringFactory.getImpl(DialogElementsManager.class);
 		String exportDirName = Formatter.makeStringFilesystemSave(getShortTitle())
-				+ "_" + element.getForumKey()
-				+ "_" + Formatter.formatDatetimeFilesystemSave(new Date(System.currentTimeMillis()));
+				+ "_" + element.getForum().getKey()
+				+ "_" + Formatter.formatDatetimeFilesystemSave(new Date());
+		exportDirName = ZipUtil.concat(archivePath, exportDirName);
 		
-		VFSContainer forumContainer = getForumContainer(element.getForumKey());
+		VFSContainer forumContainer =  depm.getDialogContainer(element);
 		for(VFSItem item: forumContainer.getItems(new VFSLeafFilter())) {
 			ZipUtil.addToZip(item, exportDirName, exportStream);
 		}
 
-		ForumArchiveManager fam = ForumArchiveManager.getInstance();
+		ForumArchiveManager fam = CoreSpringFactory.getImpl(ForumArchiveManager.class);
 		ForumFormatter ff = new ForumStreamedRTFFormatter(exportStream, exportDirName, false, locale);
-		fam.applyFormatter(ff, element.getForumKey(), null);
+		fam.applyFormatter(ff, element.getForum().getKey(), null);
 	}
 
 	@Override
@@ -363,23 +336,4 @@ public class DialogCourseNode extends AbstractAccessableCourseNode {
 		preConditionReader.setConditionId("reader");
 		this.preConditionReader = preConditionReader;
 	}
-
-	/**
-	 * to save content
-	 * 
-	 * @param forumKey
-	 * @return
-	 */
-	private OlatRootFolderImpl getForumContainer(Long forumKey) {
-		StringBuilder sb = new StringBuilder();
-		sb.append("/forum/");
-		sb.append(forumKey);
-		sb.append("/");
-		String pathToForumDir = sb.toString();
-		OlatRootFolderImpl forumContainer = new OlatRootFolderImpl(pathToForumDir, null);
-		File baseFile = forumContainer.getBasefile();
-		baseFile.mkdirs();
-		return forumContainer;
-	}
-
 }

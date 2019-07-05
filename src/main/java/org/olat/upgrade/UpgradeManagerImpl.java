@@ -28,8 +28,11 @@ package org.olat.upgrade;
 import org.olat.core.commons.persistence.DB;
 import org.springframework.beans.factory.annotation.Autowired;
 
-import javax.inject.Provider;
-import java.util.Iterator;
+import org.olat.core.CoreSpringFactory;
+import org.olat.core.commons.persistence.DBFactory;
+import org.olat.core.commons.services.taskexecutor.TaskExecutorManager;
+import org.apache.logging.log4j.Logger;
+import org.olat.core.logging.Tracing;
 
 /**
  * 
@@ -42,51 +45,45 @@ public class UpgradeManagerImpl extends UpgradeManager {
 
 	private final Provider<DB> dbInstance;
 	
-	@Autowired
-	public UpgradeManagerImpl(Provider<DB> dbInstance) {
-		super(dbInstance);
-		this.dbInstance = dbInstance;
-	}
-
+	private static final Logger log = Tracing.createLoggerFor(UpgradeManagerImpl.class);
+	
 	/**
-	 * Execute the pre system init code of all upgrades in the order as they were configured
-	 * in the configuration file
+	 * used by spring
 	 */
-	public void doPreSystemInitUpgrades() {
-		Iterator<OLATUpgrade> iter = upgrades.iterator();
-		OLATUpgrade upgrade = null;
-		try {
-			while (iter.hasNext()) {
-				upgrade = iter.next();
-				if (upgrade.doPreSystemInitUpgrade(this))
-					logAudit("Successfully installed PreSystemInitUpgrade::" + upgrade.getVersion());
-				//no DB Module is initialized in PreSystemInit State - no intermediate commit necessary.
-			}
-		} catch (Throwable e) {
-			logWarn("Error upgrading PreSystemInitUpgrade::" + upgrade.getVersion(), e);
-			abort(e);
-		}
+	public UpgradeManagerImpl() {
+		//
 	}
 
 	/**
 	 * Execute the post system init code of all upgrades in the order as they were configured
 	 * in the configuration file
 	 */
+	@Override
 	public void doPostSystemInitUpgrades() {
-		Iterator<OLATUpgrade> iter = upgrades.iterator();
-		OLATUpgrade upgrade = null; 
-		try {
-			while (iter.hasNext()) {
-				upgrade = iter.next();
-				if (upgrade.doPostSystemInitUpgrade(this))
-					logAudit("Successfully installed PostSystemInitUpgrade::" + upgrade.getVersion());
-				//just in case a doPostSystemInitUpgrade did forget it.
-				dbInstance.get().commitAndCloseSession();
+		UpgradesTask task = new UpgradesTask();
+		CoreSpringFactory.getImpl(TaskExecutorManager.class).execute(task);
+	}
+	
+	private class UpgradesTask implements Runnable {
+
+		@Override
+		public void run() {
+			Iterator<OLATUpgrade> iter = upgrades.iterator();
+			OLATUpgrade upgrade = null; 
+			try {
+				while (iter.hasNext()) {
+					upgrade = iter.next();
+					if (upgrade.doPostSystemInitUpgrade(UpgradeManagerImpl.this)) {
+						log.info(Tracing.M_AUDIT, "Successfully installed PostSystemInitUpgrade::" + upgrade.getVersion());
+					}
+					//just in case a doPostSystemInitUpgrade did forget it.
+					DBFactory.getInstance().commitAndCloseSession();
+				}
+			} catch (Throwable e) {
+				DBFactory.getInstance().rollbackAndCloseSession();
+				log.warn("Error upgrading PostSystemInitUpgrade::" + (upgrade == null ? "NULL" : upgrade.getVersion()), e);
+				abort(e);
 			}
-		} catch (Throwable e) {
-			dbInstance.get().rollbackAndCloseSession();
-			logWarn("Error upgrading PostSystemInitUpgrade::" + upgrade.getVersion(), e);
-			abort(e);
-		} 
+		}
 	}
 }

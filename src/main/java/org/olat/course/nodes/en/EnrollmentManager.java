@@ -36,7 +36,8 @@ import org.olat.core.gui.control.WindowControl;
 import org.olat.core.gui.translator.Translator;
 import org.olat.core.id.Identity;
 import org.olat.core.id.Roles;
-import org.olat.core.manager.BasicManager;
+import org.apache.logging.log4j.Logger;
+import org.olat.core.logging.Tracing;
 import org.olat.core.util.Formatter;
 import org.olat.core.util.StringHelper;
 import org.olat.core.util.filter.FilterFactory;
@@ -54,7 +55,6 @@ import org.olat.course.properties.CoursePropertyManager;
 import org.olat.group.BusinessGroup;
 import org.olat.group.BusinessGroupService;
 import org.olat.group.area.BGAreaManager;
-import org.olat.group.model.BGMembership;
 import org.olat.group.model.BusinessGroupRefImpl;
 import org.olat.group.model.EnrollState;
 import org.olat.group.model.SearchBusinessGroupParams;
@@ -75,7 +75,9 @@ import org.springframework.stereotype.Service;
  * @author Christian Guretzki
  */
 @Service("enrollmentManager")
-public class EnrollmentManager extends BasicManager {
+public class EnrollmentManager {
+	
+	private static final Logger log = Tracing.createLoggerFor(EnrollmentManager.class);
 
 	@Autowired
 	private DB dbInstance;
@@ -91,13 +93,13 @@ public class EnrollmentManager extends BasicManager {
 			WindowControl wControl, Translator trans, List<Long> groupKeys, List<Long> areaKeys, CourseGroupManager cgm) {
 		
 		final EnrollStatus enrollStatus = new EnrollStatus();
-		if (isLogDebugEnabled()) logDebug("doEnroll");
+		if (log.isDebugEnabled()) log.debug("doEnroll");
 		// check if the user is able to be enrolled
 		int groupsEnrolledCount = getBusinessGroupsWhereEnrolled(identity, groupKeys, areaKeys, cgm.getCourseEntry()).size();
 		int waitingListCount = getBusinessGroupsWhereInWaitingList(identity, groupKeys, areaKeys).size();
 		int enrollCountConfig = enNode.getModuleConfiguration().getIntegerSafe(ENCourseNode.CONFIG_ALLOW_MULTIPLE_ENROLL_COUNT, 1);
 		if ( (groupsEnrolledCount + waitingListCount) < enrollCountConfig ) {
-			if (isLogDebugEnabled()) logDebug("Identity is not enrolled identity=" + identity.getName() + "  group=" + group.getName());
+			if (log.isDebugEnabled()) log.debug("Identity is not enrolled identity=" + identity.getKey() + "  group=" + group.getName());
 			// 1. Check if group has max size defined. If so check if group is full
 			// o_clusterREVIEW cg please review it - also where does the group.getMaxParticipants().equals("") come from??
 			// and: why can't we just have a group here and a max participants count and an identity to enrol?
@@ -108,10 +110,10 @@ public class EnrollmentManager extends BasicManager {
 			if(state.isFailed()) {
 				enrollStatus.setErrorMessage(trans.translate(state.getI18nErrorMessage()));
 			} else {
-				if(state.getEnrolled() == BGMembership.participant) {
+				if(state.getEnrolled() == GroupRoles.participant) {
 					addUserToParticipantList(identity, group, enNode, coursePropertyManager, wControl, trans);
 					enrollStatus.setIsEnrolled(true);
-				} else if(state.getEnrolled() == BGMembership.waiting) {
+				} else if(state.getEnrolled() == GroupRoles.waiting) {
 					addUserToWaitingList(identity, group, enNode, coursePropertyManager, wControl, trans);
 					enrollStatus.setIsInWaitingList(true);
 				}
@@ -119,21 +121,21 @@ public class EnrollmentManager extends BasicManager {
 		} else {
 			enrollStatus.setErrorMessage(trans.translate("error.group.already.enrolled"));
 		}
-		if (isLogDebugEnabled()) logDebug("doEnroll finished");
+		if (log.isDebugEnabled()) log.debug("doEnroll finished");
 		return enrollStatus;
 	}
 
 	public void doCancelEnrollment(final Identity identity, final BusinessGroup enrolledGroup, final ENCourseNode enNode,
 			final CoursePropertyManager coursePropertyManager, WindowControl wControl, Translator trans) {
-		if (isLogDebugEnabled()) logDebug("doCancelEnrollment");
+		if (log.isDebugEnabled()) log.debug("doCancelEnrollment");
 		// 1. Remove group membership, fire events, do loggin etc.
 		// Remove participant. This will also check if a waiting-list with auto-close-ranks is configurated
 		// and move the users accordingly
 		MailPackage doNotSendmailPackage = new MailPackage(false);
 		businessGroupService.removeParticipants(identity, Collections.singletonList(identity), enrolledGroup, doNotSendmailPackage);
-		logInfo(" doCancelEnrollment in group " + enrolledGroup, identity.getName());
+		log.info(identity.getKey() + " doCancelEnrollment in group " + enrolledGroup);
 
-		logInfo(" doCancelEnrollment in group " + enrolledGroup, identity.getName());
+		log.info(identity.getKey() + " doCancelEnrollment in group " + enrolledGroup);
 		// 2. Remove enrollmentdate property
 		// only remove last time date, not firsttime
 		Property lastTime = coursePropertyManager.findCourseNodeProperty(enNode, identity, null, ENCourseNode.PROPERTY_RECENT_ENROLLMENT_DATE);
@@ -150,7 +152,7 @@ public class EnrollmentManager extends BasicManager {
 		if(bundle != null) {
 			mailManager.sendMessage(bundle);
 		}
-		MailHelper.printErrorsAndWarnings(result, wControl, trans.getLocale());
+		MailHelper.printErrorsAndWarnings(result, wControl, false, trans.getLocale());
 	}
 
 	public void doCancelEnrollmentInWaitingList(final Identity identity, final BusinessGroup enrolledWaitingListGroup, final ENCourseNode enNode,
@@ -174,7 +176,7 @@ public class EnrollmentManager extends BasicManager {
 		if(bundle != null) {
 			mailManager.sendMessage(bundle);
 		}
-		MailHelper.printErrorsAndWarnings(result, wControl, trans.getLocale());
+		MailHelper.printErrorsAndWarnings(result, wControl, false, trans.getLocale());
 	}
 
 	// Helper Methods
@@ -186,7 +188,7 @@ public class EnrollmentManager extends BasicManager {
 	 * @return List<BusinessGroup> in which the identity is enrolled
 	 */
 	protected List<BusinessGroup> getBusinessGroupsWhereEnrolled(Identity identity, List<Long> groupKeys, List<Long> areaKeys, RepositoryEntry courseResource) {
-		List<BusinessGroup> groups = new ArrayList<BusinessGroup>();
+		List<BusinessGroup> groups = new ArrayList<>();
 		//search in the enrollable bg keys for the groups where identity is attendee
 		if(groupKeys != null && !groupKeys.isEmpty()) {
 			SearchBusinessGroupParams params = new SearchBusinessGroupParams();
@@ -210,7 +212,7 @@ public class EnrollmentManager extends BasicManager {
 	 */
 	protected List<BusinessGroup> getBusinessGroupsWhereInWaitingList(Identity identity, List<Long> groupKeys, List<Long> areaKeys) {
 		List<BusinessGroup> groups = loadGroupsFromNames(groupKeys, areaKeys);
-		List<BusinessGroup> waitingInTheseGroups = new ArrayList<BusinessGroup> ();
+		List<BusinessGroup> waitingInTheseGroups = new ArrayList<> ();
 		// loop over all business-groups
 		for (BusinessGroup businessGroup:groups) {
 			if (businessGroupService.hasRoles(identity, businessGroup, GroupRoles.waiting.name())) { 
@@ -300,8 +302,10 @@ public class EnrollmentManager extends BasicManager {
 			String name = (String)row[1];
 			String desc = (String)row[2];
 			if(StringHelper.containsNonWhitespace(desc) && descriptionMaxSize > 0) {
-				desc = FilterFactory.getHtmlTagsFilter().filter(desc);
-				desc = Formatter.truncate(desc, 256);
+				String asciiDesc = FilterFactory.getHtmlTagsFilter().filter(desc);
+				if(asciiDesc.length() > descriptionMaxSize) {
+					desc = Formatter.truncate(asciiDesc, descriptionMaxSize);
+				}
 			}
 
 			int maxParticipants = row[3] == null ? -1 : ((Number)row[3]).intValue();
@@ -396,7 +400,7 @@ public class EnrollmentManager extends BasicManager {
 		if(bundle != null) {
 			mailManager.sendMessage(bundle);
 		}
-		MailHelper.printErrorsAndWarnings(result, wControl, trans.getLocale());
+		MailHelper.printErrorsAndWarnings(result, wControl, false, trans.getLocale());
 		return true;
 	}
 
@@ -433,7 +437,7 @@ public class EnrollmentManager extends BasicManager {
 		if(bundle != null) {
 			mailManager.sendMessage(bundle);
 		}
-		MailHelper.printErrorsAndWarnings(result, wControl, trans.getLocale());
+		MailHelper.printErrorsAndWarnings(result, wControl, false, trans.getLocale());
 		return true;
 	}
 

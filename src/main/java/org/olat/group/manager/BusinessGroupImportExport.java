@@ -29,12 +29,12 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
+import org.apache.logging.log4j.Logger;
 import org.olat.collaboration.CollaborationTools;
 import org.olat.collaboration.CollaborationToolsFactory;
 import org.olat.core.commons.persistence.DB;
 import org.olat.core.logging.AssertException;
 import org.olat.core.logging.OLATRuntimeException;
-import org.olat.core.logging.OLog;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.FileUtils;
 import org.olat.core.util.StringHelper;
@@ -55,7 +55,7 @@ import org.olat.repository.RepositoryEntry;
  */
 public class BusinessGroupImportExport {
 	
-	private static final OLog log = Tracing.createLoggerFor(BusinessGroupImportExport.class);
+	private static final Logger log = Tracing.createLoggerFor(BusinessGroupImportExport.class);
 
 	private final GroupXStream xstream = new GroupXStream();
 
@@ -72,8 +72,7 @@ public class BusinessGroupImportExport {
 		this.groupModule = groupModule;
 	}
 	
-	public void exportGroups(List<BusinessGroup> groups, List<BGArea> areas, File fExportFile,
-			BusinessGroupEnvironment env, boolean runtimeDatas, boolean backwardsCompatible) {
+	public void exportGroups(List<BusinessGroup> groups, List<BGArea> areas, File fExportFile, boolean runtimeDatas) {
 		if (groups == null || groups.isEmpty()) {
 			return; // nothing to do... says Florian.
 		}
@@ -84,14 +83,8 @@ public class BusinessGroupImportExport {
 		root.getAreas().setGroups(new ArrayList<Area>());
 		for (BGArea area : areas) {
 			Area newArea = new Area();
-			newArea.key = backwardsCompatible ? null : area.getKey();
+			newArea.key = area.getKey();
 			newArea.name = area.getName();
-			if(backwardsCompatible && env != null) {
-				String newName = env.getAreaName(area.getKey());
-				if(StringHelper.containsNonWhitespace(newName)) {
-					newArea.name = newName;
-				}
-			}
 			newArea.description = Collections.singletonList(area.getDescription());
 			root.getAreas().getGroups().add(newArea);
 		}
@@ -101,19 +94,15 @@ public class BusinessGroupImportExport {
 		root.getGroups().setGroups(new ArrayList<Group>());
 		for (BusinessGroup group : groups) {
 			String groupName = null;
-			if(backwardsCompatible && env != null) {
-				groupName = env.getGroupName(group.getKey());
-			}
-			Group newGroup = exportGroup(fExportFile, group, groupName, runtimeDatas, backwardsCompatible);
+			Group newGroup = exportGroup(fExportFile, group, groupName, runtimeDatas);
 			root.getGroups().getGroups().add(newGroup);
 		}
 		saveGroupConfiguration(fExportFile, root);
 	}
 	
-	private Group exportGroup(File fExportFile, BusinessGroup group, String groupName,
-			boolean runtimeDatas, boolean backwardsCompatible) {
+	private Group exportGroup(File fExportFile, BusinessGroup group, String groupName, boolean runtimeDatas) {
 		Group newGroup = new Group();
-		newGroup.key = backwardsCompatible ? null : group.getKey();
+		newGroup.key = group.getKey();
 		newGroup.name = StringHelper.containsNonWhitespace(groupName) ? groupName : group.getName();
 		if (group.getMinParticipants() != null) {
 			newGroup.minParticipants = group.getMinParticipants();
@@ -218,7 +207,7 @@ public class BusinessGroupImportExport {
 		}
 		
 		BusinessGroupEnvironment env = new BusinessGroupEnvironment();
-		Set<BGArea> areaSet = new HashSet<BGArea>();
+		Set<BGArea> areaSet = new HashSet<>();
 		// get areas
 		
 		int dbCount = 0;
@@ -312,7 +301,7 @@ public class BusinessGroupImportExport {
 						if (area != null) {
 							areaManager.addBGToBGArea(newGroup, area);
 						} else {
-							log.error("Area not found", null);
+							log.error("Area not found");
 						}
 					}
 				}

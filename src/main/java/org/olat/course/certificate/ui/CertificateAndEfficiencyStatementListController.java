@@ -56,6 +56,7 @@ import org.olat.core.gui.render.StringOutput;
 import org.olat.core.gui.render.URLBuilder;
 import org.olat.core.gui.translator.Translator;
 import org.olat.core.id.Identity;
+import org.olat.core.util.StringHelper;
 import org.olat.core.util.Util;
 import org.olat.core.util.coordinate.CoordinatorManager;
 import org.olat.core.util.event.GenericEventListener;
@@ -109,8 +110,9 @@ public class CertificateAndEfficiencyStatementListController extends FormBasicCo
 	private DialogBoxController confirmDeleteCtr;
 	private ArtefactWizzardStepsController ePFCollCtrl;
 	
+	private final boolean canModify;
 	private final boolean linkToCoachingTool;
-	private Identity assessedIdentity;
+	private final Identity assessedIdentity;
 	
 	@Autowired
 	private EfficiencyStatementManager esm;
@@ -128,13 +130,14 @@ public class CertificateAndEfficiencyStatementListController extends FormBasicCo
 	private EfficiencyStatementMediaHandler mediaHandler;
 	
 	public CertificateAndEfficiencyStatementListController(UserRequest ureq, WindowControl wControl) {
-		this(ureq, wControl, ureq.getUserSession().getIdentity(), false);
+		this(ureq, wControl, ureq.getUserSession().getIdentity(), false, true);
 	}
 	
 	public CertificateAndEfficiencyStatementListController(UserRequest ureq, WindowControl wControl,
-			Identity assessedIdentity, boolean linkToCoachingTool) {
+			Identity assessedIdentity, boolean linkToCoachingTool, boolean canModify) {
 		super(ureq, wControl, "cert_statement_list");
 		setTranslator(Util.createPackageTranslator(AssessmentModule.class, getLocale(), getTranslator()));
+		this.canModify = canModify;
 		this.assessedIdentity = assessedIdentity;
 		this.linkToCoachingTool = linkToCoachingTool;
 		
@@ -190,26 +193,31 @@ public class CertificateAndEfficiencyStatementListController extends FormBasicCo
 		tableColumnModel.addFlexiColumnModel(new DefaultFlexiColumnModel("table.header.show",
 				translate("table.header.show"), CMD_SHOW));
 		tableColumnModel.addFlexiColumnModel(new DefaultFlexiColumnModel(Cols.lastModified));
-		tableColumnModel.addFlexiColumnModel(new DefaultFlexiColumnModel(Cols.certificate, new DownloadCertificateCellRenderer(assessedIdentity)));
+		tableColumnModel.addFlexiColumnModel(new DefaultFlexiColumnModel(Cols.lastUserUpdate));
+		tableColumnModel.addFlexiColumnModel(new DefaultFlexiColumnModel(Cols.certificate, new DownloadCertificateCellRenderer(assessedIdentity, getLocale())));
 		tableColumnModel.addFlexiColumnModel(new DefaultFlexiColumnModel(Cols.recertification, new DateFlexiCellRenderer(getLocale())));
 		tableColumnModel.addFlexiColumnModel(new DefaultFlexiColumnModel("table.header.launchcourse",
 				translate("table.header.launchcourse"), CMD_LAUNCH_COURSE));
 		
-		DefaultFlexiColumnModel deleteColumn = new DefaultFlexiColumnModel(Cols.deleteEfficiencyStatement.i18nHeaderKey(), Cols.deleteEfficiencyStatement.ordinal(), CMD_DELETE,
-				new BooleanCellRenderer(new StaticFlexiCellRenderer(translate("table.action.delete"), CMD_DELETE), null));
-		tableColumnModel.addFlexiColumnModel(deleteColumn);
+		if(canModify) {
+			DefaultFlexiColumnModel deleteColumn = new DefaultFlexiColumnModel(Cols.deleteEfficiencyStatement.i18nHeaderKey(), Cols.deleteEfficiencyStatement.ordinal(), CMD_DELETE,
+					new BooleanCellRenderer(new StaticFlexiCellRenderer(translate("table.action.delete"), CMD_DELETE), null));
+			tableColumnModel.addFlexiColumnModel(deleteColumn);
+		}
 		
 		//artefact
-		if(portfolioV2Module.isEnabled()) {
-			tableColumnModel.addFlexiColumnModel(new DefaultFlexiColumnModel("table.header.artefact",
-					Cols.efficiencyStatement.ordinal(), CMD_MEDIA,
-					new StaticFlexiCellRenderer(CMD_MEDIA, new AsArtefactCellRenderer())));
-		} else {
-			EPArtefactHandler<?> artHandler = portfolioModule.getArtefactHandler(EfficiencyStatementArtefact.ARTEFACT_TYPE);
-			if(portfolioModule.isEnabled() && artHandler != null && artHandler.isEnabled() && assessedIdentity.equals(getIdentity())) {
+		if(assessedIdentity.equals(getIdentity())) {
+			if(portfolioV2Module.isEnabled()) {
 				tableColumnModel.addFlexiColumnModel(new DefaultFlexiColumnModel("table.header.artefact",
-						Cols.efficiencyStatement.ordinal(), CMD_ARTEFACT,
-						new StaticFlexiCellRenderer(CMD_ARTEFACT, new AsArtefactCellRenderer())));
+						Cols.efficiencyStatement.ordinal(), CMD_MEDIA,
+						new StaticFlexiCellRenderer(CMD_MEDIA, new AsArtefactCellRenderer())));
+			} else {
+				EPArtefactHandler<?> artHandler = portfolioModule.getArtefactHandler(EfficiencyStatementArtefact.ARTEFACT_TYPE);
+				if(portfolioModule.isEnabled() && artHandler != null && artHandler.isEnabled() && assessedIdentity.equals(getIdentity())) {
+					tableColumnModel.addFlexiColumnModel(new DefaultFlexiColumnModel("table.header.artefact",
+							Cols.efficiencyStatement.ordinal(), CMD_ARTEFACT,
+							new StaticFlexiCellRenderer(CMD_ARTEFACT, new AsArtefactCellRenderer())));
+				}
 			}
 		}
 		
@@ -231,7 +239,7 @@ public class CertificateAndEfficiencyStatementListController extends FormBasicCo
 			wrapper.setEfficiencyStatementKey(efficiencyStatement.getKey());
 			wrapper.setResourceKey(efficiencyStatement.getArchivedResourceKey());
 			wrapper.setLastModified(efficiencyStatement.getLastModified());
-			
+			wrapper.setLastUserModified(efficiencyStatement.getLastUserModified());
 			statments.add(wrapper);
 			resourceKeyToStatments.put(efficiencyStatement.getArchivedResourceKey(), wrapper);
 		}
@@ -246,12 +254,22 @@ public class CertificateAndEfficiencyStatementListController extends FormBasicCo
 				resourceKeyToStatments.put(resourceKey, wrapper);
 				statments.add(wrapper);
 			} else {
+				if(!StringHelper.containsNonWhitespace(wrapper.getDisplayName())) {
+					wrapper.setDisplayName(certificate.getCourseTitle());
+				}
 				wrapper.setResourceKey(resourceKey);
 			}
 			if(resourceKey != null && wrapper.getResourceKey() == null) {
 				wrapper.setResourceKey(resourceKey);
 			}
 			wrapper.setCertificate(certificate);
+		}
+		
+		for(CertificateAndEfficiencyStatement statment:statments) {
+			if(!StringHelper.containsNonWhitespace(statment.getDisplayName()) && statment.getResourceKey() != null) {
+				String displayName = repositoryManager.lookupDisplayNameByResourceKey(statment.getResourceKey());
+				statment.setDisplayName(displayName);
+			}
 		}
 		
 		tableModel.setObjects(statments);
@@ -349,7 +367,7 @@ public class CertificateAndEfficiencyStatementListController extends FormBasicCo
 		RepositoryEntry entry = repositoryService.loadByResourceKey(resourceKey);
 		if(entry == null) {
 			showWarning("efficiencyStatements.course.noexists");
-		} else if (!repositoryManager.isAllowedToLaunch(ureq, entry)) {
+		} else if (!repositoryManager.isAllowedToLaunch(getIdentity(), ureq.getUserSession().getRoles(), entry)) {
 			showWarning("efficiencyStatements.course.noaccess");
 		} else {
 			try {

@@ -32,7 +32,7 @@ import javax.servlet.http.HttpServletResponse;
 import org.olat.basesecurity.Group;
 import org.olat.core.gui.media.MediaResource;
 import org.olat.core.logging.OLATRuntimeException;
-import org.olat.core.logging.OLog;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.Formatter;
 import org.olat.core.util.StringHelper;
@@ -62,10 +62,10 @@ import org.olat.ims.qti.export.helper.QTIObjectTreeBuilder;
  */
 public class QTIStatisticsResource implements MediaResource {
 	
-	private static final OLog log = Tracing.createLoggerFor(QTIStatisticsResource.class);
+	private static final Logger log = Tracing.createLoggerFor(QTIStatisticsResource.class);
+	private static final String encoding = "UTF-8";
 	
 	private final Locale locale;
-	private final String encoding = "UTF-8";
 	
 	private final QTIStatisticResourceResult resourceResult;
 	
@@ -74,6 +74,11 @@ public class QTIStatisticsResource implements MediaResource {
 		this.locale = locale;
 	}
 	
+	@Override
+	public long getCacheControlDuration() {
+		return 0;
+	}
+
 	@Override
 	public boolean acceptRanges() {
 		return false;
@@ -166,7 +171,7 @@ public class QTIStatisticsResource implements MediaResource {
 	 * @param itemList
 	 * @return
 	 */
-	private final static Map<Class<?>, QTIExportItemFormatConfig> getQTIItemConfigs(List<QTIItemObject> itemList){
+	private static final Map<Class<?>, QTIExportItemFormatConfig> getQTIItemConfigs(List<QTIItemObject> itemList){
 		Map<Class<?>, QTIExportItemFormatConfig> itConfigs = new HashMap<>();
   	
 		for (Iterator<QTIItemObject> iter = itemList.iterator(); iter.hasNext();) {

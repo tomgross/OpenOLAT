@@ -42,9 +42,9 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
 
-import org.olat.core.logging.LogDelegator;
 import org.olat.core.logging.OLATRuntimeException;
-import org.olat.core.util.FileUtils;
+import org.apache.logging.log4j.Logger;
+import org.olat.core.logging.Tracing;
 import org.olat.core.util.StringHelper;
 import org.olat.modules.scorm.manager.ScormManager;
 import org.olat.modules.scorm.server.beans.LMSDataFormBean;
@@ -62,11 +62,13 @@ import ch.ethz.pfplms.scorm.api.ApiAdapter;
  *
  * @author guido
  */
-public	class OLATApiAdapter extends LogDelegator implements ch.ethz.pfplms.scorm.api.ApiAdapterInterface {
-	private final	ApiAdapter core; 
-	//private ScormTrackingManager scormTracking;
+public	class OLATApiAdapter implements ch.ethz.pfplms.scorm.api.ApiAdapterInterface {
+
+	private static final Logger log = Tracing.createLoggerFor(OLATApiAdapter.class);
 	
-	private Hashtable<String,String> olatScoCmi = new Hashtable<String,String>();
+	private final ApiAdapter core; 
+
+	private Hashtable<String,String> olatScoCmi = new Hashtable<>();
 
 	private String  olatStudentId;
 	private String  olatStudentName;
@@ -81,7 +83,7 @@ public	class OLATApiAdapter extends LogDelegator implements ch.ethz.pfplms.scorm
 	private LMSDataHandler odatahandler;
 	private ScormManager scormManager;
 	private SettingsHandlerImpl scormSettingsHandler;
-	private final List<ScormAPICallback> apiCallbacks = new ArrayList<ScormAPICallback>(2);
+	private final List<ScormAPICallback> apiCallbacks = new ArrayList<>(2);
 	// 
 	private Properties scoresProp; // keys: sahsId; values = raw score of an sco
 	private Properties lessonStatusProp;
@@ -126,30 +128,20 @@ public	class OLATApiAdapter extends LogDelegator implements ch.ethz.pfplms.scorm
 		scorePropsFile = new File(savePath, "_olat_score.properties");
 		scoresProp = new Properties();
 		if (scorePropsFile.exists()) {
-			InputStream is = null;
-			try {
-				is = new BufferedInputStream(new FileInputStream(scorePropsFile));
+			try(InputStream is = new BufferedInputStream(new FileInputStream(scorePropsFile))) {
 				scoresProp.load(is);
 			} catch (IOException e) {
 				throw e;
-			}
-			finally {
-				if (is != null) FileUtils.closeSafely(is);
 			}
 		}
 		
 		lessonStatusPropsFile = new File(savePath, "_olat_lesson_status.properties");
 		lessonStatusProp = new Properties();
 		if (lessonStatusPropsFile.exists()) {
-			InputStream is = null;
-			try {
-				is = new BufferedInputStream(new FileInputStream(lessonStatusPropsFile));
+			try(InputStream is = new BufferedInputStream(new FileInputStream(lessonStatusPropsFile))) {
 				lessonStatusProp.load(is);
 			} catch (IOException e) {
 				throw e;
-			}
-			finally {
-				if (is != null) FileUtils.closeSafely(is);
 			}
 		}
 		
@@ -170,7 +162,7 @@ public	class OLATApiAdapter extends LogDelegator implements ch.ethz.pfplms.scorm
 
 	private final void say (String s) {
 		
-			logDebug("core: "+s);
+			log.debug("core: "+s);
 		
 	}
 
@@ -215,7 +207,7 @@ public	class OLATApiAdapter extends LogDelegator implements ch.ethz.pfplms.scorm
 						key = strArr[i][0];
 						value = strArr[i][1];
 						olatScoCmi.put(key, value);
-						logDebug("passing cmi data to api adapter: "+key +": "+ value);
+						log.debug("passing cmi data to api adapter: "+key +": "+ value);
 		
 				}
 			}
@@ -274,12 +266,10 @@ public	class OLATApiAdapter extends LogDelegator implements ch.ethz.pfplms.scorm
 		
 		LMSDataFormBean lmsDataBean = new LMSDataFormBean();
 		lmsDataBean.setItemID(olatScoId);
-		//TODO:gs pass the dataBean for use, and do not get it a second time
 		lmsDataBean.setNextAction("5");
 		lmsDataBean.setLmsAction("update");
-		Map <String,String>cmiData = new HashMap<String,String>();
+		Map <String,String>cmiData = new HashMap<>();
 		
-		//TODO:gs:c make it possible only to update the changed cmi data.
 		if (ins.size() > 0){
 			Set <String> set = ins.keySet();
 			for(Iterator<String> it = set.iterator();it.hasNext();){
@@ -320,29 +310,19 @@ public	class OLATApiAdapter extends LogDelegator implements ch.ethz.pfplms.scorm
 				synchronized(this) { //o_clusterOK by:fj: instance is spawned by the ScormAPIandDisplayController
 					if(StringHelper.containsNonWhitespace(rawScore)) {
 						scoresProp.put(olatScoId, rawScore);
-						OutputStream os = null;
-						try {
-							os = new BufferedOutputStream(new FileOutputStream(scorePropsFile));
+						try(OutputStream os = new BufferedOutputStream(new FileOutputStream(scorePropsFile))) {
 							scoresProp.store(os, null);
 						} catch (IOException e) {
 							throw new OLATRuntimeException(this.getClass(), "could not save scorm-properties-file: "+scorePropsFile.getAbsolutePath(), e);
-						}
-						finally {
-							FileUtils.closeSafely(os);
 						}
 					}
 
 					if(StringHelper.containsNonWhitespace(lessonStatus)) {
 						lessonStatusProp.put(olatScoId, lessonStatus);
-						OutputStream os = null;
-						try {
-							os = new BufferedOutputStream(new FileOutputStream(lessonStatusPropsFile));
+						try(OutputStream os = new BufferedOutputStream(new FileOutputStream(lessonStatusPropsFile))) {
 							lessonStatusProp.store(os, null);
 						} catch (IOException e) {
 							throw new OLATRuntimeException(this.getClass(), "could not save scorm-properties-file: "+scorePropsFile.getAbsolutePath(), e);
-						}
-						finally {
-							FileUtils.closeSafely(os);
 						}
 					}
 					// notify
@@ -380,7 +360,7 @@ public	class OLATApiAdapter extends LogDelegator implements ch.ethz.pfplms.scorm
 			odatahandler.updateCMIData(olatScoId);
 			return "true";
 		} catch (Exception e) {
-			logError("Error during commit", e);
+			log.error("Error during commit", e);
 			return "false";
 		}
 	}
@@ -410,7 +390,7 @@ public	class OLATApiAdapter extends LogDelegator implements ch.ethz.pfplms.scorm
 				success = item.archiveScoData();
 			}
 		} catch (Exception e) {
-			logError("Error at OLATApiAdapter.archiveScoData(): ", e);
+			log.error("Error at OLATApiAdapter.archiveScoData(): ", e);
 		}
 		return success;
 	}
@@ -421,7 +401,6 @@ public	class OLATApiAdapter extends LogDelegator implements ch.ethz.pfplms.scorm
 	 * @return true if the item is completed
 	 */
 	public boolean isItemCompleted(String itemId){
-		//TODO:gs make method faster by caching lmsBean, but when to set out of date?
 		LMSDataFormBean lmsDataBean = new LMSDataFormBean();
 		lmsDataBean.setItemID(itemId);
 		lmsDataBean.setLmsAction("get");
@@ -435,7 +414,6 @@ public	class OLATApiAdapter extends LogDelegator implements ch.ethz.pfplms.scorm
 	 * @return true if item has any not fullfilled preconditions
 	 */
 	public boolean hasItemPrerequisites(String itemId) {
-		//TODO:gs make method faster by caching lmsBean, but when to set out of date?
 		LMSDataFormBean lmsDataBean = new LMSDataFormBean();
 		lmsDataBean.setItemID(itemId);
 		lmsDataBean.setLmsAction("get");
@@ -453,7 +431,7 @@ public	class OLATApiAdapter extends LogDelegator implements ch.ethz.pfplms.scorm
 		odatahandler = new LMSDataHandler(scormManager, lmsDataBean, scormSettingsHandler);
 		LMSResultsBean lmsBean = odatahandler.getResultsBean();
 		String[][] preReqTbl = lmsBean.getPreReqTable();
-		Map <String,String>itemsStatus = new HashMap<String,String>();
+		Map <String,String>itemsStatus = new HashMap<>();
 		//put table into map 
 		for(int i=0; i < preReqTbl.length; i++){
 			if(preReqTbl[i][1].equals("not attempted")) preReqTbl[i][1] ="not_attempted";
@@ -467,7 +445,6 @@ public	class OLATApiAdapter extends LogDelegator implements ch.ethz.pfplms.scorm
 	 * @return the previos Sco itemId
 	 */
 	public Integer getPreviousSco(String recentId) {
-		//		TODO:gs make method faster by caching lmsBean, but when to set out of date?
 		LMSDataFormBean lmsDataBean = new LMSDataFormBean();
 		lmsDataBean.setItemID(recentId);
 		lmsDataBean.setLmsAction("get");
@@ -481,7 +458,7 @@ public	class OLATApiAdapter extends LogDelegator implements ch.ethz.pfplms.scorm
 				break;
 			}
 		}
-		return new Integer(previousNavScoId);
+		return Integer.valueOf(previousNavScoId);
 	}
 
 	/**
@@ -489,7 +466,6 @@ public	class OLATApiAdapter extends LogDelegator implements ch.ethz.pfplms.scorm
 	 * @return the next Sco itemId
 	 */
 	public Integer getNextSco(String recentId) {
-		//		TODO:gs make method faster by chaching lmsBean, but when to set out of date?
 		LMSDataFormBean lmsDataBean = new LMSDataFormBean();
 		lmsDataBean.setItemID(recentId);
 		lmsDataBean.setLmsAction("get");
@@ -503,7 +479,7 @@ public	class OLATApiAdapter extends LogDelegator implements ch.ethz.pfplms.scorm
 				break;
 			}
 		}
-		return new Integer(nextNavScoId);
+		return Integer.valueOf(nextNavScoId);
 	}
 	
 	/****************************************************************************************
@@ -533,7 +509,7 @@ public	class OLATApiAdapter extends LogDelegator implements ch.ethz.pfplms.scorm
 			say ("LMSCommit("+s+")="+rv);
 			return rv;
 		} catch (Exception e) {
-			logError("LMSCommit failed: " + s, e);
+			log.error("LMSCommit failed: " + s, e);
 			return "false";
 		}
 	}
@@ -551,7 +527,7 @@ public	class OLATApiAdapter extends LogDelegator implements ch.ethz.pfplms.scorm
 			core.reset();
 			return rv;
 		} catch (Exception e) {
-			logError("LMSFinish failed: " + s, e);
+			log.error("LMSFinish failed: " + s, e);
 			return "false";
 		}
 	}

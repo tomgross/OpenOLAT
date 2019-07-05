@@ -27,7 +27,6 @@ package org.olat.course.nodes.bc;
 
 import org.olat.admin.quota.QuotaConstants;
 import org.olat.core.commons.modules.bc.FolderRunController;
-import org.olat.core.commons.modules.bc.vfs.OlatNamedContainerImpl;
 import org.olat.core.gui.UserRequest;
 import org.olat.core.gui.components.Component;
 import org.olat.core.gui.components.link.Link;
@@ -140,10 +139,6 @@ public class BCCourseNodeEditController extends ActivateableTabbableDefaultContr
 		vfButton = LinkFactory.createButton("folder.view", folderContent, this);
 	}
 
-	/**
-	 * @see org.olat.core.gui.control.DefaultController#event(org.olat.core.gui.UserRequest,
-	 *      org.olat.core.gui.components.Component, org.olat.core.gui.control.Event)
-	 */
 	@Override
 	public void event(UserRequest ureq, Component source, Event event) {
 		if (source == vfButton){
@@ -154,7 +149,7 @@ public class BCCourseNodeEditController extends ActivateableTabbableDefaultContr
 	private void doOpenFolder(UserRequest ureq) {
 		VFSContainer namedContainer = null;
 		if(bcNode.getModuleConfiguration().getBooleanSafe(CONFIG_AUTO_FOLDER)){
-			OlatNamedContainerImpl directory = BCCourseNode.getNodeFolderContainer(bcNode, course.getCourseEnvironment());
+			VFSContainer directory = BCCourseNode.getNodeFolderContainer(bcNode, course.getCourseEnvironment());
 			directory.setLocalSecurityCallback(getSecurityCallbackWithQuota(directory.getRelPath()));
 			namedContainer = directory;
 		} else {
@@ -183,26 +178,26 @@ public class BCCourseNodeEditController extends ActivateableTabbableDefaultContr
 			}
 		}
 		
-		folderCtrl = new FolderRunController(namedContainer, false, ureq, getWindowControl());
-		listenTo(folderCtrl);
-		cmc = new CloseableModalController(getWindowControl(), translate("close"), folderCtrl.getInitialComponent());
-		listenTo(cmc);
-		cmc.activate();
+		if(namedContainer == null) {
+			showWarning("warning.no.linkedfolder");
+		} else {
+			folderCtrl = new FolderRunController(namedContainer, false, ureq, getWindowControl());
+			listenTo(folderCtrl);
+			cmc = new CloseableModalController(getWindowControl(), translate("close"), folderCtrl.getInitialComponent());
+			listenTo(cmc);
+			cmc.activate();
+		}
 	}
 	
 	private VFSSecurityCallback getSecurityCallbackWithQuota(String relPath) {
 		Quota quota = quotaManager.getCustomQuota(relPath);
 		if (quota == null) {
-			Quota defQuota = QuotaManager.getInstance().getDefaultQuota(QuotaConstants.IDENTIFIER_DEFAULT_NODES);
-			quota = QuotaManager.getInstance().createQuota(relPath, defQuota.getQuotaKB(), defQuota.getUlLimitKB());
+			Quota defQuota = quotaManager.getDefaultQuota(QuotaConstants.IDENTIFIER_DEFAULT_NODES);
+			quota = quotaManager.createQuota(relPath, defQuota.getQuotaKB(), defQuota.getUlLimitKB());
 		}
 		return new FullAccessWithQuotaCallback(quota);
 	}
 
-	/**
-	 * @see org.olat.core.gui.control.DefaultController#event(org.olat.core.gui.UserRequest,
-	 *      org.olat.core.gui.control.Controller, org.olat.core.gui.control.Event)
-	 */
 	@Override
 	public void event(UserRequest urequest, Controller source, Event event) {
 		if (source == uploaderCondContr) {

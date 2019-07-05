@@ -28,7 +28,6 @@ package org.olat.core.gui.components.table;
 
 import java.util.List;
 
-import org.apache.commons.lang.StringEscapeUtils;
 import org.olat.core.gui.components.Component;
 import org.olat.core.gui.components.DefaultComponentRenderer;
 import org.olat.core.gui.components.form.flexible.impl.NameValuePair;
@@ -38,8 +37,9 @@ import org.olat.core.gui.render.Renderer;
 import org.olat.core.gui.render.StringOutput;
 import org.olat.core.gui.render.URLBuilder;
 import org.olat.core.gui.translator.Translator;
-import org.olat.core.logging.OLog;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
+import org.olat.core.util.StringHelper;
 
 /**
  * enclosing_type Description: <br>
@@ -50,7 +50,7 @@ public class TableRenderer extends DefaultComponentRenderer {
 
 	protected static final String TABLE_MULTISELECT_GROUP = "tb_ms";
 	
-	private static final OLog log = Tracing.createLoggerFor(TableRenderer.class);
+	private static final Logger log = Tracing.createLoggerFor(TableRenderer.class);
 
 	/**
 	 * @see org.olat.core.gui.render.ui.ComponentRenderer#render(org.olat.core.gui.render.Renderer, org.olat.core.gui.render.StringOutput, org.olat.core.gui.components.Component,
@@ -60,7 +60,7 @@ public class TableRenderer extends DefaultComponentRenderer {
 	public void render(final Renderer renderer, final StringOutput target, final Component source, final URLBuilder ubu, final Translator translator, final RenderResult renderResult,
 			final String[] args) {
 		long start = 0;
-		if (log.isDebug()) {
+		if (log.isDebugEnabled()) {
 			start = System.currentTimeMillis();
 		}
 		assert (source instanceof Table);
@@ -110,7 +110,7 @@ public class TableRenderer extends DefaultComponentRenderer {
 	         .append("</form>");
 		appendViewportResizeJsFix(target, source, rows, usePageing);
 		
-		if (log.isDebug()) {
+		if (log.isDebugEnabled()) {
 			long duration = System.currentTimeMillis() - start;
 			log.debug("Perf-Test: render takes " + duration);
 		}
@@ -138,7 +138,7 @@ public class TableRenderer extends DefaultComponentRenderer {
 				String multiSelectActionIdentifer = action.getAction();
 				String value;
 				if(action.getI18nKey() != null) {
-					value = StringEscapeUtils.escapeHtml(translator.translate(action.getI18nKey()));
+					value = StringHelper.escapeHtml(translator.translate(action.getI18nKey()));
 				} else {
 					value = action.getLabel();
 				}
@@ -208,15 +208,14 @@ public class TableRenderer extends DefaultComponentRenderer {
 			boolean ajaxEnabled, URLBuilder ubu) {
 		if (table.isMultiSelect() && !table.isMultiSelectAsDisabled()) {
 			target.append("<div class='o_table_checkall input-sm'>")
-			  .append("<label class='checkbox-inline'>")
 			  .append("<a href='#' onclick=\"javascript:o_table_toggleCheck('").append(formName).append("', true)\">")
 			  .append("<i class='o_icon o_icon-lg o_icon_check_on'> </i> ")
 			  .append(translator.translate("checkall"))
-			  .append("</a></label>");
-			target.append("<label class='checkbox-inline'><a href=\"#\" onclick=\"javascript:o_table_toggleCheck('").append(formName).append("', false)\">")
+			  .append("</a>");
+			target.append("<a href=\"#\" onclick=\"javascript:o_table_toggleCheck('").append(formName).append("', false)\">")
 			  .append("<i class='o_icon o_icon-lg o_icon_check_off'> </i> ")
 			  .append(translator.translate("uncheckall"))
-			  .append("</a></label>")
+			  .append("</a>")
 			  .append("</div>");
 		}
 
@@ -237,7 +236,7 @@ public class TableRenderer extends DefaultComponentRenderer {
 			int startRowId, int endRowId) {
 		target.append("<tbody>");
 		long startRowLoop = 0;
-		if (log.isDebug()) {
+		if (log.isDebugEnabled()) {
 			startRowLoop = System.currentTimeMillis();
 		}
 		for (int i = startRowId; i < endRowId; i++) {
@@ -259,7 +258,7 @@ public class TableRenderer extends DefaultComponentRenderer {
 			appendSingleDataRow(renderer, target, ubu, table, iframePostEnabled, cols, i, currentPosInModel, isMark);
 			target.append("</tr>");
 		}
-		if (log.isDebug()) {
+		if (log.isDebugEnabled()) {
 			long durationRowLoop = System.currentTimeMillis() - startRowLoop;
 			log.debug("Perf-Test: render.durationRowLoop takes " + durationRowLoop);
 		}
@@ -329,7 +328,9 @@ public class TableRenderer extends DefaultComponentRenderer {
 				header = cd.getHeaderKey();
 			}
 
-			target.append("<th>");
+			int alignment = cd.getHeaderAlignment();
+			String cssHeaderClass = (alignment == ColumnDescriptor.ALIGNMENT_LEFT ? "text-left" : (alignment == ColumnDescriptor.ALIGNMENT_RIGHT ? "text-right" : "text-center"));
+			target.append("<th class='").append(cssHeaderClass).append("'>");
 			// header either a link or not
 			if (table.isSortingEnabled() && cd.isSortingAllowed()) {
 				target.append("<a class='o_orderby' ");

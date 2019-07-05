@@ -19,6 +19,8 @@
  */
 package org.olat.ims.qti21.ui.editor.interactions;
 
+import java.io.File;
+import java.net.URI;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
@@ -32,7 +34,9 @@ import org.olat.core.gui.components.form.flexible.impl.FormEvent;
 import org.olat.core.gui.components.form.flexible.impl.FormLayoutContainer;
 import org.olat.core.gui.control.Controller;
 import org.olat.core.gui.control.WindowControl;
+import org.olat.core.util.CodeHelper;
 import org.olat.core.util.Formatter;
+import org.olat.core.util.StringHelper;
 import org.olat.core.util.Util;
 import org.olat.core.util.filter.FilterFactory;
 import org.olat.ims.qti21.model.xml.AssessmentHtmlBuilder;
@@ -40,6 +44,8 @@ import org.olat.ims.qti21.model.xml.AssessmentItemBuilder;
 import org.olat.ims.qti21.model.xml.ScoreBuilder;
 import org.olat.ims.qti21.model.xml.interactions.ChoiceAssessmentItemBuilder;
 import org.olat.ims.qti21.model.xml.interactions.SimpleChoiceAssessmentItemBuilder.ScoreEvaluation;
+import org.olat.ims.qti21.ui.ResourcesMapper;
+import org.olat.ims.qti21.ui.components.FlowFormItem;
 import org.olat.ims.qti21.ui.editor.AssessmentTestEditorController;
 import org.olat.ims.qti21.ui.editor.SyncAssessmentItem;
 import org.olat.ims.qti21.ui.editor.events.AssessmentItemEvent;
@@ -65,21 +71,31 @@ public class ChoiceScoreController extends AssessmentItemRefEditorController imp
 	private TextElement minScoreEl;
 	private TextElement maxScoreEl;
 	private SingleSelection assessmentModeEl;
+	private SingleSelection maxChoicesEl, minChoicesEl;
 	private FormLayoutContainer scoreCont;
 	private final List<ChoiceWrapper> wrappers = new ArrayList<>();
 	
+	private int count = 0;
+	private final File itemFileRef;
+	private final String mapperUri;
 	private final ChoiceAssessmentItemBuilder itemBuilder;
 	
 	private int counter = 0;
 	private final String contextHelpUrl;
 	
 	public ChoiceScoreController(UserRequest ureq, WindowControl wControl,
-			ChoiceAssessmentItemBuilder itemBuilder, AssessmentItemRef itemRef, boolean restrictedEdit,
-			String contextHelpUrl) {
-		super(ureq, wControl, itemRef, restrictedEdit);
+			ChoiceAssessmentItemBuilder itemBuilder, AssessmentItemRef itemRef, File itemFileRef,
+			boolean restrictedEdit, boolean readOnly, String contextHelpUrl) {
+		super(ureq, wControl, itemRef, restrictedEdit, readOnly);
 		setTranslator(Util.createPackageTranslator(AssessmentTestEditorController.class, getLocale()));
 		this.itemBuilder = itemBuilder;
+		this.itemFileRef = itemFileRef;
 		this.contextHelpUrl = contextHelpUrl;
+		
+		URI assessmentObjectUri = itemFileRef.toURI();
+		mapperUri = registerCacheableMapper(null, "ChoiceScoreController::" + CodeHelper.getRAMUniqueID(),
+				new ResourcesMapper(assessmentObjectUri));
+		
 		initForm(ureq);
 	}
 
@@ -88,21 +104,32 @@ public class ChoiceScoreController extends AssessmentItemRefEditorController imp
 		setFormContextHelp(contextHelpUrl);
 		super.initForm(formLayout, listener, ureq);
 		
-		minScoreEl = uifactory.addTextElement("min.score", "min.score", 8, "0.0", formLayout);
-		minScoreEl.setEnabled(false);
-		minScoreEl.setEnabled(!restrictedEdit);
+		ScoreBuilder minScore = itemBuilder.getMinScoreBuilder();
+		String minValue = minScore == null ? "" : (minScore.getScore() == null ? "" : minScore.getScore().toString());
+		minScoreEl = uifactory.addTextElement("min.score", "min.score", 8, minValue, formLayout);
+		minScoreEl.setElementCssClass("o_sel_assessment_item_min_score");
+		minScoreEl.setEnabled(!restrictedEdit && !readOnly);
 		
 		ScoreBuilder maxScore = itemBuilder.getMaxScoreBuilder();
 		String maxValue = maxScore == null ? "" : (maxScore.getScore() == null ? "" : maxScore.getScore().toString());
 		maxScoreEl = uifactory.addTextElement("max.score", "max.score", 8, maxValue, formLayout);
-		maxScoreEl.setEnabled(!restrictedEdit);
+		maxScoreEl.setElementCssClass("o_sel_assessment_item_max_score");
+		maxScoreEl.setEnabled(!restrictedEdit && !readOnly);
+		
+		String[] choiceKeys = new String[0];
+		String[] choiceValues = new String[0];
+		maxChoicesEl = uifactory.addDropdownSingleselect("max.choices", formLayout, choiceKeys, choiceValues, null);
+		maxChoicesEl.setEnabled(!restrictedEdit && !readOnly);
+		minChoicesEl = uifactory.addDropdownSingleselect("min.choices", formLayout, choiceKeys, choiceValues, null);
+		minChoicesEl.setEnabled(!restrictedEdit && !readOnly);
+		updateMinMaxChoices();
 		
 		String[] modeValues = new String[]{
 				translate("form.score.assessment.all.correct"),
 				translate("form.score.assessment.per.answer")
 		};
 		assessmentModeEl = uifactory.addRadiosHorizontal("assessment.mode", "form.score.assessment.mode", formLayout, modeKeys, modeValues);
-		assessmentModeEl.setEnabled(!restrictedEdit);
+		assessmentModeEl.setEnabled(!restrictedEdit && !readOnly);
 		assessmentModeEl.addActionListener(FormEvent.ONCHANGE);
 		if(itemBuilder.getScoreEvaluationMode() == ScoreEvaluation.perAnswer) {
 			assessmentModeEl.select(ScoreEvaluation.perAnswer.name(), true);
@@ -120,14 +147,65 @@ public class ChoiceScoreController extends AssessmentItemRefEditorController imp
 			wrappers.add(wrapper);
 		}
 		scoreCont.contextPut("choices", wrappers);
-		scoreCont.contextPut("restrictedEdit", restrictedEdit);
+		scoreCont.contextPut("restrictedEdit", restrictedEdit || readOnly);
 		scoreCont.setVisible(assessmentModeEl.isSelected(1));
 
 		// Submit Button
 		FormLayoutContainer buttonsContainer = FormLayoutContainer.createButtonLayout("buttons", getTranslator());
 		buttonsContainer.setRootForm(mainForm);
+		buttonsContainer.setVisible(!readOnly);
 		formLayout.add(buttonsContainer);
 		uifactory.addFormSubmitButton("submit", buttonsContainer);
+	}
+	
+	private void updateMinMaxChoices() {
+		int maxPossibleChoices = itemBuilder.getMaxPossibleCorrectAnswers();
+		String[] maxChoiceKeys = new String[maxPossibleChoices];
+		String[] maxChoicesValues = new String[maxPossibleChoices];
+		for(int i=0; i<maxPossibleChoices; i++) {
+			maxChoiceKeys[i] = maxChoicesValues[i] = Integer.toString(i);
+		}
+		if(maxChoicesValues.length > 0) {
+			maxChoicesValues[0] = translate("max.choices.unlimited");
+		}
+		maxChoicesEl.setKeysAndValues(maxChoiceKeys, maxChoicesValues, null);
+		maxChoicesEl.setVisible(itemBuilder.getMaxPossibleCorrectAnswers() > 1);
+		
+		boolean found = false;
+		String maxChoices = Integer.toString(itemBuilder.getMaxChoices());
+		for(String choiceKey:maxChoiceKeys) {
+			if(choiceKey.equals(maxChoices)) {
+				maxChoicesEl.select(choiceKey, true);
+				found = true;
+			}
+		}
+		
+		if(!found && maxChoiceKeys.length > 0) {
+			maxChoicesEl.select(maxChoiceKeys[0], true);
+		}
+		
+		String[] minChoiceKeys = new String[maxPossibleChoices];
+		String[] minChoicesValues = new String[maxPossibleChoices];
+		for(int i=0; i<maxPossibleChoices; i++) {
+			minChoiceKeys[i] = minChoicesValues[i] = Integer.toString(i);
+		}
+		if(minChoicesValues.length > 0) {
+			minChoicesValues[0] = translate("min.choices.unlimited");
+		}
+		minChoicesEl.setKeysAndValues(minChoiceKeys, minChoicesValues, null);
+		minChoicesEl.setVisible(itemBuilder.getMaxPossibleCorrectAnswers() > 1);
+		boolean minFound = false;
+		String minChoices = Integer.toString(itemBuilder.getMinChoices());
+		for(String choiceKey:minChoiceKeys) {
+			if(choiceKey.equals(minChoices)) {
+				minChoicesEl.select(choiceKey, true);
+				minFound = true;
+			}
+		}
+		
+		if(!minFound && minChoiceKeys.length > 0) {
+			minChoicesEl.select(minChoiceKeys[0], true);
+		}
 	}
 	
 	@Override
@@ -148,6 +226,8 @@ public class ChoiceScoreController extends AssessmentItemRefEditorController imp
 					wrapperIt.remove();
 				}
 			}
+			
+			updateMinMaxChoices();
 		}
 	}
 	
@@ -160,7 +240,7 @@ public class ChoiceScoreController extends AssessmentItemRefEditorController imp
 		String pointElId = "points_" + counter++;
 		TextElement pointEl = uifactory.addTextElement(pointElId, null, 5, points, scoreCont);
 		pointEl.setDisplaySize(5);
-		pointEl.setEnabled(!restrictedEdit);
+		pointEl.setEnabled(!restrictedEdit && !readOnly);
 		scoreCont.add(pointElId, pointEl);
 		return new ChoiceWrapper(choice, pointEl);
 	}
@@ -177,7 +257,7 @@ public class ChoiceScoreController extends AssessmentItemRefEditorController imp
 	@Override
 	protected boolean validateFormLogic(UserRequest ureq) {
 		boolean allOk = true;
-		allOk &= validateDouble(maxScoreEl);
+		allOk &= validateMinMaxScores(minScoreEl, maxScoreEl);
 
 		if(assessmentModeEl.isOneSelected() && assessmentModeEl.isSelected(1)) {
 			for(ChoiceWrapper wrapper:wrappers) {
@@ -198,13 +278,23 @@ public class ChoiceScoreController extends AssessmentItemRefEditorController imp
 
 	@Override
 	protected void formOK(UserRequest ureq) {
-		if(restrictedEdit) return;
+		if(restrictedEdit || readOnly) return;
 		
 		super.formOK(ureq);
 		String maxScoreValue = maxScoreEl.getValue();
 		Double maxScore = Double.parseDouble(maxScoreValue);
 		itemBuilder.setMaxScore(maxScore);
-		itemBuilder.setMinScore(new Double(0d));
+		String minScoreValue = minScoreEl.getValue();
+		Double minScore = Double.parseDouble(minScoreValue);
+		itemBuilder.setMinScore(minScore);
+		if(maxChoicesEl != null && maxChoicesEl.isOneSelected()) {
+			int maxChoices = Integer.parseInt(maxChoicesEl.getSelectedKey());
+			itemBuilder.setMaxChoices(maxChoices);
+		}
+		if(minChoicesEl != null && minChoicesEl.isOneSelected()) {
+			int minChoices = Integer.parseInt(minChoicesEl.getSelectedKey());
+			itemBuilder.setMinChoices(minChoices);
+		}
 		
 		if(assessmentModeEl.isOneSelected() && assessmentModeEl.isSelected(1)) {
 			itemBuilder.setScoreEvaluationMode(ScoreEvaluation.perAnswer);
@@ -232,6 +322,7 @@ public class ChoiceScoreController extends AssessmentItemRefEditorController imp
 		private String summary;
 		private Choice choice;
 		private final TextElement pointsEl;
+		private FlowFormItem summaryEl;
 		
 		public ChoiceWrapper(Choice choice, TextElement pointsEl) {
 			setChoice(choice);
@@ -247,6 +338,10 @@ public class ChoiceScoreController extends AssessmentItemRefEditorController imp
 			return summary;
 		}
 		
+		public FlowFormItem getSummaryEl() {
+			return summaryEl;
+		}
+		
 		public TextElement getPointsEl() {
 			return pointsEl;
 		}
@@ -258,15 +353,29 @@ public class ChoiceScoreController extends AssessmentItemRefEditorController imp
 		public void setChoice(Choice choice) {
 			this.choice = choice;
 			if(choice instanceof SimpleChoice) {
-				String answer = new AssessmentHtmlBuilder().flowStaticString(((SimpleChoice)choice).getFlowStatics());
+				SimpleChoice simpleChoice = (SimpleChoice)choice;
+				String answer = new AssessmentHtmlBuilder().flowStaticString(simpleChoice.getFlowStatics());
 				answer = FilterFactory.getHtmlTagAndDescapingFilter().filter(answer);
 				answer = answer.trim();
 				summary = Formatter.truncate(answer, 128);
+				if(!StringHelper.containsNonWhitespace(summary)) {
+					summaryEl = new FlowFormItem("summary" + count++, itemFileRef);
+					summaryEl.setFlowStatics(simpleChoice.getFlowStatics());
+					summaryEl.setMapperUri(mapperUri);
+					scoreCont.add(summaryEl);
+				}
 			} else if(choice instanceof Hottext) {
-				String answer = new AssessmentHtmlBuilder().inlineStaticString(((Hottext)choice).getInlineStatics());
+				Hottext hottext = (Hottext)choice;
+				String answer = new AssessmentHtmlBuilder().inlineStaticString(hottext.getInlineStatics());
 				answer = FilterFactory.getHtmlTagAndDescapingFilter().filter(answer);
 				answer = answer.trim();
 				summary = Formatter.truncate(answer, 128);
+				if(!StringHelper.containsNonWhitespace(summary)) {
+					summaryEl = new FlowFormItem("summary" + count++, itemFileRef);
+					summaryEl.setInlineStatics(hottext.getInlineStatics());
+					summaryEl.setMapperUri(mapperUri);
+					scoreCont.add(summaryEl);
+				}
 			} else {
 				summary = "";
 			}

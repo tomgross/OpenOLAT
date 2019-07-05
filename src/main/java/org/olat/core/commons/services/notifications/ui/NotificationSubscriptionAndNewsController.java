@@ -22,8 +22,8 @@ package org.olat.core.commons.services.notifications.ui;
 import java.util.Date;
 import java.util.List;
 
-import org.olat.commons.rss.RSSUtil;
 import org.olat.core.commons.services.notifications.NotificationUIFactory;
+import org.olat.core.commons.services.notifications.PersonalRSSUtil;
 import org.olat.core.gui.UserRequest;
 import org.olat.core.gui.components.Component;
 import org.olat.core.gui.components.panel.Panel;
@@ -103,7 +103,7 @@ public class NotificationSubscriptionAndNewsController extends BasicController i
 				// Lazy initialize the notification subscription controller when the
 				// user clicks the tab the first time
 				if (tabbedEvent.getNewComponent() == subscriptionPanel && subscriptionCtr == null) {
-					subscriptionCtr = new NotificationSubscriptionController(ureq, getWindowControl(), subscriberIdentity, false);
+					subscriptionCtr = new NotificationSubscriptionController(ureq, getWindowControl(), subscriberIdentity, false, false);
 					listenTo(subscriptionCtr);
 					subscriptionPanel.setContent(subscriptionCtr.getInitialComponent());
 				}
@@ -111,7 +111,7 @@ public class NotificationSubscriptionAndNewsController extends BasicController i
 				// user clicks the tab the first time
 				else if (tabbedEvent.getNewComponent() == rssPanel && rssPanel.getContent() == null) {
 					VelocityContainer notificationsRssVC = createVelocityContainer("notificationsRSS");
-					String rssLink = RSSUtil.getPersonalRssLink(ureq);
+					String rssLink = PersonalRSSUtil.getPersonalRssLink(ureq);
 					notificationsRssVC.contextPut("rssLink", rssLink);
 					User user = subscriberIdentity.getUser();
 					String fullName = user.getProperty(UserConstants.FIRSTNAME, getLocale()) + " " + user.getProperty(UserConstants.LASTNAME, getLocale()); 

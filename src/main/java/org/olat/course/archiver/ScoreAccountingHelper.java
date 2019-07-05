@@ -25,10 +25,21 @@
 
 package org.olat.course.archiver;
 
+import java.io.File;
+import java.io.IOException;
 import java.io.OutputStream;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Date;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Set;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipOutputStream;
 
 import org.apache.commons.io.IOUtils;
 import org.olat.basesecurity.GroupRoles;
@@ -38,8 +49,12 @@ import org.olat.core.id.Identity;
 import org.olat.core.id.IdentityEnvironment;
 import org.olat.core.id.context.BusinessControlFactory;
 import org.olat.core.id.context.ContextEntry;
+import org.apache.logging.log4j.Logger;
+import org.olat.core.logging.Tracing;
 import org.olat.core.util.StringHelper;
 import org.olat.core.util.Util;
+import org.olat.core.util.ZipUtil;
+import org.olat.core.util.io.ShieldOutputStream;
 import org.olat.core.util.openxml.OpenXMLWorkbook;
 import org.olat.core.util.openxml.OpenXMLWorksheet;
 import org.olat.core.util.openxml.OpenXMLWorksheet.Row;
@@ -48,21 +63,21 @@ import org.olat.course.assessment.AssessmentHelper;
 import org.olat.course.assessment.AssessmentManager;
 import org.olat.course.assessment.manager.UserCourseInformationsManager;
 import org.olat.course.groupsandrights.CourseGroupManager;
-import org.olat.course.nodes.*;
-import org.olat.course.nodes.gta.GTAManager;
-import org.olat.course.nodes.gta.GTARelativeToDates;
-import org.olat.course.nodes.gta.Task;
-import org.olat.course.nodes.gta.TaskList;
-import org.olat.course.nodes.gta.model.TaskDefinition;
+import org.olat.course.nodes.ArchiveOptions;
+import org.olat.course.nodes.AssessableCourseNode;
+import org.olat.course.nodes.CourseNode;
+import org.olat.course.nodes.IQTESTCourseNode;
+import org.olat.course.nodes.MSCourseNode;
+import org.olat.course.nodes.STCourseNode;
 import org.olat.course.run.environment.CourseEnvironment;
 import org.olat.course.run.scoring.ScoreAccounting;
 import org.olat.course.run.scoring.ScoreEvaluation;
 import org.olat.course.run.userview.UserCourseEnvironment;
 import org.olat.course.run.userview.UserCourseEnvironmentImpl;
-import org.olat.group.BusinessGroup;
 import org.olat.group.BusinessGroupService;
 import org.olat.modules.ModuleConfiguration;
 import org.olat.repository.RepositoryEntry;
+import org.olat.repository.RepositoryEntryRelationType;
 import org.olat.repository.RepositoryService;
 import org.olat.repository.model.RepositoryEntryLifecycle;
 import org.olat.resource.OLATResource;
@@ -74,7 +89,40 @@ import org.olat.user.propertyhandlers.UserPropertyHandler;
  * Comment: Provides functionality to get a course results overview.
  */
 public class ScoreAccountingHelper {
+	
+	private static final Logger log = Tracing.createLoggerFor(ScoreAccountingHelper.class);
+	
+	public static void createCourseResultsOverview(List<Identity> identities, List<AssessableCourseNode> nodes, ICourse course, Locale locale, ZipOutputStream zout) {
+		try(OutputStream out = new ShieldOutputStream(zout)) {
+			zout.putNextEntry(new ZipEntry("Course_results.xlsx"));
+			createCourseResultsOverviewXMLTable(identities, nodes, course, locale, out);
+			zout.closeEntry();
+		} catch(IOException e) {
+			log.error("", e);
+		}
 
+		for(AssessableCourseNode node:nodes) {
+			String dir = "Assessment_documents/" + StringHelper.transformDisplayNameToFileSystemName(node.getShortName());
+			if(node instanceof IQTESTCourseNode
+					|| node.getModuleConfiguration().getBooleanSafe(MSCourseNode.CONFIG_KEY_HAS_INDIVIDUAL_ASSESSMENT_DOCS, false)) {
+				for(Identity assessedIdentity:identities) {
+					List<File> assessmentDocuments = course.getCourseEnvironment()
+							.getAssessmentManager().getIndividualAssessmentDocuments(node, assessedIdentity);
+					if(assessmentDocuments != null && !assessmentDocuments.isEmpty()) {
+						String name = assessedIdentity.getUser().getLastName()
+								+ "_" + assessedIdentity.getUser().getFirstName()
+								+ "_" + assessedIdentity.getName();
+						String userDirName = dir + "/" + StringHelper.transformDisplayNameToFileSystemName(name);
+						for(File document:assessmentDocuments) {
+							String path = userDirName + "/" + document.getName(); 
+							ZipUtil.addFileToZip(path, document, zout);
+						}
+					}
+				}
+			}
+		}
+	}
+	
 	/**
 	 * The results from assessable nodes are written to one row per user into an excel-sheet. An
      * assessable node will only appear if it is producing at least one of the
@@ -366,10 +414,13 @@ public class ScoreAccountingHelper {
 			if(acnode instanceof STCourseNode || !acnode.hasScoreConfigured()) {
 				minVal = maxVal = cutVal = "-";
 			} else {
-				minVal = acnode.getMinScoreConfiguration() == null ? "-" : AssessmentHelper.getRoundedScore(acnode.getMinScoreConfiguration());
-				maxVal = acnode.getMaxScoreConfiguration() == null ? "-" : AssessmentHelper.getRoundedScore(acnode.getMaxScoreConfiguration());
+				Float minScoreConfig = acnode.getMinScoreConfiguration();
+				Float maxScoreConfig = acnode.getMaxScoreConfiguration();
+				minVal = minScoreConfig == null ? "-" : AssessmentHelper.getRoundedScore(minScoreConfig);
+				maxVal = maxScoreConfig == null ? "-" : AssessmentHelper.getRoundedScore(maxScoreConfig);
 				if (acnode.hasPassedConfigured()) {
-					cutVal = acnode.getCutValueConfiguration() == null ? "-" : AssessmentHelper.getRoundedScore(acnode.getCutValueConfiguration());
+					Float cutValueConfig = acnode.getCutValueConfiguration();
+					cutVal = cutValueConfig == null ? "-" : AssessmentHelper.getRoundedScore(cutValueConfig);
 				} else {
 					cutVal = "-";
 				}
@@ -390,6 +441,24 @@ public class ScoreAccountingHelper {
 		
 		IOUtils.closeQuietly(workbook);
 	}
+	
+	
+	/**
+	 * Load all participant from all known learning groups into a list
+	 * 
+	 * @param courseEnv
+	 * @return The list of participants from this course
+	 */
+	public static List<Identity> loadParticipants(CourseEnvironment courseEnv) {
+		CourseGroupManager gm = courseEnv.getCourseGroupManager();
+		RepositoryEntry re = gm.getCourseEntry();
+		Set<Identity> userSet = new HashSet<>();
+		if(re != null) {
+			RepositoryService repositoryService = CoreSpringFactory.getImpl(RepositoryService.class);
+			userSet.addAll(repositoryService.getMembers(re, RepositoryEntryRelationType.all, GroupRoles.participant.name()));
+		}
+		return new ArrayList<>(userSet);
+	}
     
 	
 	/**
@@ -399,22 +468,13 @@ public class ScoreAccountingHelper {
 	 * @return The list of identities from this course
 	 */
 	public static List<Identity> loadUsers(CourseEnvironment courseEnv) {
-		CourseGroupManager gm = courseEnv.getCourseGroupManager();
-		List<BusinessGroup> groups = gm.getAllBusinessGroups();
-		
-		BusinessGroupService businessGroupService = CoreSpringFactory.getImpl(BusinessGroupService.class);
-		Set<Identity> userSet = new HashSet<>(businessGroupService.getMembers(groups, GroupRoles.participant.name()));
-		RepositoryEntry re = gm.getCourseEntry();
-		if(re != null) {
-			RepositoryService repositoryService = CoreSpringFactory.getImpl(RepositoryService.class);
-			userSet.addAll(repositoryService.getMembers(re, GroupRoles.participant.name()));
-		}
-
+		List<Identity> participants = loadParticipants(courseEnv);
+		Set<Identity> userSet = new HashSet<>(participants);
 		List<Identity> assessedList = courseEnv.getCoursePropertyManager().getAllIdentitiesWithCourseAssessmentData(userSet);
-		if(assessedList.size() > 0) {
+		if(!assessedList.isEmpty()) {
 			userSet.addAll(assessedList);
 		}
-		return new ArrayList<Identity>(userSet);
+		return new ArrayList<>(userSet);
 	}
 	
 	public static List<Identity> loadUsers(CourseEnvironment courseEnv, ArchiveOptions options) {
@@ -440,7 +500,7 @@ public class ScoreAccountingHelper {
 	 */
 	public static List<AssessableCourseNode> loadAssessableNodes(CourseEnvironment courseEnv) {
 		CourseNode rootNode = courseEnv.getRunStructure().getRootNode();
-		List<AssessableCourseNode> nodeList = new ArrayList<AssessableCourseNode>();
+		List<AssessableCourseNode> nodeList = new ArrayList<>();
 		collectAssessableCourseNodes(rootNode, nodeList);
 		return nodeList;
 	}

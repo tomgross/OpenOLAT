@@ -25,13 +25,11 @@
 
 package org.olat.user;
 
-import java.util.Iterator;
 import java.util.List;
 
 import org.olat.basesecurity.Authentication;
 import org.olat.basesecurity.BaseSecurity;
 import org.olat.basesecurity.BaseSecurityModule;
-import org.olat.basesecurity.Constants;
 import org.olat.core.gui.UserRequest;
 import org.olat.core.gui.components.Component;
 import org.olat.core.gui.components.velocity.VelocityContainer;
@@ -41,13 +39,16 @@ import org.olat.core.gui.control.WindowControl;
 import org.olat.core.gui.control.controller.BasicController;
 import org.olat.core.gui.control.generic.messages.SimpleMessageController;
 import org.olat.core.id.Identity;
+import org.olat.core.logging.Tracing;
+import org.olat.core.util.UserSession;
 import org.olat.core.util.WebappHelper;
-import org.olat.core.util.resource.OresHelper;
 import org.olat.ldap.LDAPError;
 import org.olat.ldap.LDAPLoginManager;
 import org.olat.ldap.LDAPLoginModule;
 import org.olat.ldap.ui.LDAPAuthenticationController;
+import org.olat.login.LoginModule;
 import org.olat.login.SupportsAfterLoginInterceptor;
+import org.olat.login.auth.AuthenticationProvider;
 import org.olat.login.auth.OLATAuthManager;
 import org.springframework.beans.factory.annotation.Autowired;
 
@@ -76,6 +77,8 @@ public class ChangePasswordController extends BasicController implements Support
 	@Autowired
 	private UserModule userModule;
 	@Autowired
+	private LoginModule loginModule;
+	@Autowired
 	private BaseSecurity securityManager;
 	@Autowired
 	private LDAPLoginModule ldapLoginModule;
@@ -84,10 +87,6 @@ public class ChangePasswordController extends BasicController implements Support
 	@Autowired
 	private OLATAuthManager olatAuthenticationSpi;
 
-	/**
-	 * @param ureq
-	 * @param wControl
-	 */
 	public ChangePasswordController(UserRequest ureq, WindowControl wControl) {
 		super(ureq, wControl);
 
@@ -96,21 +95,12 @@ public class ChangePasswordController extends BasicController implements Support
 			String text = translate("notallowedtochangepwd", new String[] { WebappHelper.getMailConfig("mailSupport") });
 			Controller simpleMsg = new SimpleMessageController(ureq, wControl, text, "o_warning");
 			listenTo(simpleMsg); //register controller to be disposed automatically on dispose of Change password controller
-			putInitialPanel(simpleMsg.getInitialComponent());
-		} else if (!securityManager.isIdentityPermittedOnResourceable(
-				ureq.getIdentity(), 
-				Constants.PERMISSION_ACCESS, 
-				OresHelper.lookupType(this.getClass()))) {
-			String text = "Insufficient permission to access ChangePasswordController";
-			Controller simpleMsg = new SimpleMessageController(ureq, wControl, text, "o_warning");
-			listenTo(simpleMsg); //register controller to be disposed automatically on dispose of Change password controller
-			putInitialPanel(simpleMsg.getInitialComponent());			
+			putInitialPanel(simpleMsg.getInitialComponent());	
 		} else {
 			myContent = createVelocityContainer("pwd");
 			//adds "provider_..." variables to myContent
 			exposePwdProviders(ureq.getIdentity());
-
-			chPwdForm = new ChangePasswordForm(ureq, wControl);
+			chPwdForm = new ChangePasswordForm(ureq, wControl, getIdentity());
 			listenTo(chPwdForm);
 			myContent.put("chpwdform", chPwdForm.getInitialComponent());
 			putInitialPanel(myContent);
@@ -119,14 +109,22 @@ public class ChangePasswordController extends BasicController implements Support
 	
 	@Override
 	public boolean isUserInteractionRequired(UserRequest ureq) {
-		return !(ureq.getUserSession().getRoles() == null
-				|| ureq.getUserSession().getRoles().isInvitee()
-				|| ureq.getUserSession().getRoles().isGuestOnly());
+		UserSession usess = ureq.getUserSession();
+		if(usess.getRoles() == null || usess.getRoles().isInvitee() || usess.getRoles().isGuestOnly()) {
+			return false;
+		}
+		if(usess.getRoles().isSystemAdmin()) {
+			return false;
+		}
+		
+		if(loginModule.isPasswordChangeOnce() || loginModule.isPasswordAgePolicyConfigured()) {
+			AuthenticationProvider olatProvider = loginModule.getAuthenticationProvider(BaseSecurityModule.getDefaultAuthProviderIdentifier());
+			return olatProvider.isEnabled() && !olatAuthenticationSpi
+					.hasValidAuthentication(getIdentity(), loginModule.isPasswordChangeOnce(), loginModule.getPasswordAgePolicy(usess.getRoles()));
+		}
+		return false;
 	}
 
-	/**
-	 * @see org.olat.core.gui.control.DefaultController#event(org.olat.core.gui.UserRequest, org.olat.core.gui.components.Component, org.olat.core.gui.control.Event)
-	 */
 	@Override
 	protected void event(UserRequest ureq, Component source, Event event) {
 		//
@@ -139,11 +137,12 @@ public class ChangePasswordController extends BasicController implements Support
 
 				String oldPwd = chPwdForm.getOldPasswordValue();
 				Identity provenIdent = null;
-
-				if (securityManager.findAuthentication(ureq.getIdentity(), LDAPAuthenticationController.PROVIDER_LDAP) != null) {
+				Authentication ldapAuthentication = securityManager.findAuthentication(ureq.getIdentity(), LDAPAuthenticationController.PROVIDER_LDAP);
+				if (ldapAuthentication != null) {
 					LDAPError ldapError = new LDAPError();
 					//fallback to OLAT if enabled happen automatically in LDAPAuthenticationController
-					provenIdent = ldapLoginManager.authenticate(ureq.getIdentity().getName(), oldPwd, ldapError);
+					String userName = ldapAuthentication.getAuthusername();
+					provenIdent = ldapLoginManager.authenticate(userName, oldPwd, ldapError);
 				} else if(securityManager.findAuthentication(ureq.getIdentity(), BaseSecurityModule.getDefaultAuthProviderIdentifier()) != null) {
 					provenIdent = olatAuthenticationSpi.authenticate(ureq.getIdentity(), ureq.getIdentity().getName(), oldPwd);
 				}
@@ -152,10 +151,9 @@ public class ChangePasswordController extends BasicController implements Support
 					showError("error.password.noauth");	
 				} else {
 					String newPwd = chPwdForm.getNewPasswordValue();
-					if(olatAuthenticationSpi.changePassword(ureq.getIdentity(), provenIdent, newPwd)) {
-						//TODO: verify that we are NOT in a transaction (changepwd should be commited immediately)				
+					if(olatAuthenticationSpi.changePassword(ureq.getIdentity(), provenIdent, newPwd)) {			
 						fireEvent(ureq, Event.DONE_EVENT);
-						getLogger().audit("Changed password for identity."+provenIdent.getName());
+						getLogger().info(Tracing.M_AUDIT, "Changed password for identity:" + provenIdent.getKey());
 						showInfo("password.successful");
 					} else {
 						showError("password.failed");
@@ -163,7 +161,7 @@ public class ChangePasswordController extends BasicController implements Support
 				}
 			} else if (event == Event.CANCELLED_EVENT) {
 				removeAsListenerAndDispose(chPwdForm);
-				chPwdForm = new ChangePasswordForm(ureq, getWindowControl());
+				chPwdForm = new ChangePasswordForm(ureq, getWindowControl(), getIdentity());
 				listenTo(chPwdForm);
 				myContent.put("chpwdform", chPwdForm.getInitialComponent());
 			}
@@ -173,9 +171,8 @@ public class ChangePasswordController extends BasicController implements Support
 	private void exposePwdProviders(Identity identity) {
 		// check if user has OLAT provider
 		List<Authentication> authentications = securityManager.getAuthentications(identity);
-		Iterator<Authentication> iter = authentications.iterator();
-		while (iter.hasNext()) {
-			myContent.contextPut("provider_" + (iter.next()).getProvider(), Boolean.TRUE);
+		for(Authentication auth: authentications) {
+			myContent.contextPut("provider_" + auth.getProvider(), Boolean.TRUE);
 		}
 		
 		//LDAP Module propagate changes to password
@@ -184,9 +181,7 @@ public class ChangePasswordController extends BasicController implements Support
 		}
 	}
 
-	/**
-	 * @see org.olat.core.gui.control.DefaultController#doDispose(boolean)
-	 */
+	@Override
 	protected void doDispose() {
 		//
 	}	

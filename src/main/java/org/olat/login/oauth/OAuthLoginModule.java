@@ -24,6 +24,7 @@ import java.util.List;
 import java.util.Set;
 
 import org.olat.core.configuration.AbstractSpringModule;
+import org.olat.core.helpers.Settings;
 import org.olat.core.util.coordinate.CoordinatorManager;
 import org.olat.login.oauth.spi.OpenIdConnectFullConfigurableProvider;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -63,7 +64,13 @@ public class OAuthLoginModule extends AbstractSpringModule {
 	private boolean adfsEnabled;
 	private boolean adfsRootEnabled;
 	private String adfsApiKey;
+	private String adfsApiSecret;
 	private String adfsOAuth2Endpoint;
+	
+	private boolean tequilaEnabled;
+	private String tequilaApiKey;
+	private String tequilaApiSecret;
+	private String tequilaOAuth2Endpoint;
 	
 	private boolean openIdConnectIFEnabled;
 	private boolean openIdConnectIFRootEnabled;
@@ -128,7 +135,15 @@ public class OAuthLoginModule extends AbstractSpringModule {
 		String adfsRootEnabledObj = getStringPropertyValue("adfsRootEnabled", true);
 		adfsRootEnabled = "true".equals(adfsRootEnabledObj);
 		adfsApiKey = getStringPropertyValue("adfsApiKey", false);
+		adfsApiSecret = getStringPropertyValue("adfsApiSecret", false);
 		adfsOAuth2Endpoint = getStringPropertyValue("adfsOAuth2Endpoint", false);
+		
+		//tequila
+		String tequilaEnabledObj = getStringPropertyValue("tequilaEnabled", true);
+		tequilaEnabled = "true".equals(tequilaEnabledObj);
+		tequilaApiKey = getStringPropertyValue("tequilaApiKey", false);
+		tequilaApiSecret = getStringPropertyValue("tequilaApiSecret", false);
+		tequilaOAuth2Endpoint = getStringPropertyValue("tequilaOAuth2Endpoint", false);
 		
 		String openIdConnectIFEnabledObj = getStringPropertyValue("openIdConnectIFEnabled", true);
 		openIdConnectIFEnabled = "true".equals(openIdConnectIFEnabledObj);
@@ -166,16 +181,8 @@ public class OAuthLoginModule extends AbstractSpringModule {
 		String endPoint = getStringPropertyValue("openIdConnectIF." + providerName + ".AuthorizationEndPoint", true);
 		String displayName = getStringPropertyValue("openIdConnectIF." + providerName + ".DisplayName", true);
 		
-		OpenIdConnectFullConfigurableProvider provider = new OpenIdConnectFullConfigurableProvider();
-		provider.setRootEnabled(rootEnabled);
-		provider.setName(providerName);
-		provider.setDisplayName(displayName);
-		provider.setProviderName(providerName);
-		provider.setAppKey(apiKey);
-		provider.setAppSecret(apiSecret);
-		provider.setIssuer(issuer);
-		provider.setEndPoint(endPoint);
-		return provider;
+		return new OpenIdConnectFullConfigurableProvider(providerName, displayName, providerName,
+				apiKey, apiSecret, issuer, endPoint, rootEnabled, this);
 	}
 	
 	public List<OAuthSPI> getAllSPIs() {
@@ -253,6 +260,10 @@ public class OAuthLoginModule extends AbstractSpringModule {
 			}
 		}
 		return spi;
+	}
+	
+	public String getCallbackUrl() {
+		return Settings.getServerContextPathURI() + OAuthConstants.CALLBACK_PATH;
 	}
 
 	public boolean isAllowUserCreation() {
@@ -407,6 +418,15 @@ public class OAuthLoginModule extends AbstractSpringModule {
 		this.adfsApiKey = adfsApiKey;
 		setStringProperty("adfsApiKey", adfsApiKey, true);
 	}
+	
+	public String getAdfsApiSecret() {
+		return adfsApiSecret;
+	}
+
+	public void setAdfsApiSecret(String adfsApiSecret) {
+		this.adfsApiSecret = adfsApiSecret;
+		setStringProperty("adfsApiSecret", adfsApiSecret, true);
+	}
 
 	public String getAdfsOAuth2Endpoint() {
 		return adfsOAuth2Endpoint;
@@ -415,6 +435,42 @@ public class OAuthLoginModule extends AbstractSpringModule {
 	public void setAdfsOAuth2Endpoint(String adfsOAuth2Endpoint) {
 		this.adfsOAuth2Endpoint = adfsOAuth2Endpoint;
 		setStringProperty("adfsOAuth2Endpoint", adfsOAuth2Endpoint, true);
+	}
+
+	public boolean isTequilaEnabled() {
+		return tequilaEnabled;
+	}
+
+	public void setTequilaEnabled(boolean tequilaEnabled) {
+		this.tequilaEnabled = tequilaEnabled;
+		setStringProperty("tequilaEnabled", tequilaEnabled ? "true" : "false", true);
+	}
+
+	public String getTequilaApiKey() {
+		return tequilaApiKey;
+	}
+
+	public void setTequilaApiKey(String tequilaApiKey) {
+		this.tequilaApiKey = tequilaApiKey;
+		setStringProperty("tequilaApiKey", tequilaApiKey, true);
+	}
+
+	public String getTequilaApiSecret() {
+		return tequilaApiSecret;
+	}
+
+	public void setTequilaApiSecret(String tequilaApiSecret) {
+		this.tequilaApiSecret = tequilaApiSecret;
+		setStringProperty("tequilaApiSecret", tequilaApiSecret, true);
+	}
+
+	public String getTequilaOAuth2Endpoint() {
+		return tequilaOAuth2Endpoint;
+	}
+
+	public void setTequilaOAuth2Endpoint(String tequilaOAuth2Endpoint) {
+		this.tequilaOAuth2Endpoint = tequilaOAuth2Endpoint;
+		setStringProperty("tequilaOAuth2Endpoint", tequilaOAuth2Endpoint, true);
 	}
 
 	public boolean isOpenIdConnectIFEnabled() {

@@ -26,9 +26,8 @@
 package org.olat.core.logging.activity;
 
 import java.util.List;
-import java.util.Set;
 
-import org.olat.core.logging.OLog;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
 
 /**
@@ -37,7 +36,7 @@ import org.olat.core.logging.Tracing;
  */
 public class LogModule {
 	
-	static final OLog log = Tracing.createLoggerFor(LogModule.class);
+	static final Logger log = Tracing.createLoggerFor(LogModule.class);
 	/**
 	 * Anonymous logging is disabled by default.
 	 */
@@ -46,11 +45,6 @@ public class LogModule {
 	 * List of operator keys like lt, le, ...
 	 */
 	private static List<String> operators;
-	
-	/**
-	 * User properties like firstName, lastName, etc to be filled from ConfigurationManager.
-	 */
-	private static Set<String> userProperties;
 	
 	private LogModule(boolean logAnonymous, List<String> logOperators) {
 		LogModule.logAnonymous = logAnonymous;
@@ -66,41 +60,6 @@ public class LogModule {
 		return logAnonymous;
 	}
 
-	/**
-	 * @param userProperties
-	 */
-	public static void setUserProperties(Set<String> userProperties) {
-		LogModule.userProperties = userProperties;
-		log.info("Log Module set userProperties to: " + userProperties);
-	}
-
-	/**
-	 * @return
-	 */
-	public static Set<String> getUserProperties() {
-		return userProperties;
-	}
-
-	/**
-	 * The position can be set to 1..n. The value 0 means that the list userProperties doesn't contain the value of attribute.
-	 * @param attribute
-	 * @return
-	 */
-	public static int getUserPropertyPosition(String attribute) {
-		int position = 0;
-		if (userProperties.contains(attribute)) {
-			int i = 0;
-			for (String userProperty : userProperties) {
-				if (userProperty.equals(attribute)) {
-					position = i + 1;
-					break;
-				}
-				i++;
-			}
-		}
-		return position;
-	}
-	
 	public static List<String> getOperatorKeys() {
 		return operators;
 	}

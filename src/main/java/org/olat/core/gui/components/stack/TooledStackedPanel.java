@@ -44,9 +44,11 @@ public class TooledStackedPanel extends BreadcrumbedStackedPanel implements Stac
 	private static final ComponentRenderer RENDERER = new TooledStackedPanelRenderer();
 	private boolean toolbarEnabled = true;
 	private boolean toolbarAutoEnabled = false;
+	private boolean breadcrumbEnabled = true;
 	
 	private String message;
 	private String messageCssClass;
+	private Component messageCmp;
 	
 	public TooledStackedPanel(String name, Translator translator, ComponentEventListener listener) {
 		this(name, translator, listener, null);
@@ -54,7 +56,7 @@ public class TooledStackedPanel extends BreadcrumbedStackedPanel implements Stac
 	
 	public TooledStackedPanel(String name, Translator translator, ComponentEventListener listener, String cssClass) {
 		super(name, translator, listener, cssClass);
-		this.setDomReplacementWrapperRequired(false); // renders own div in Renderer
+		setDomReplacementWrapperRequired(false); // renders own div in Renderer
 	}
 
 	@Override
@@ -62,6 +64,9 @@ public class TooledStackedPanel extends BreadcrumbedStackedPanel implements Stac
 		List<Component> cmps = new ArrayList<>();
 		cmps.add(getBackLink());
 		cmps.add(getContent());
+		if(messageCmp != null) {
+			cmps.add(messageCmp);
+		}
 		for(Link crumb:stack) {
 			cmps.add(crumb);
 		}
@@ -116,17 +121,39 @@ public class TooledStackedPanel extends BreadcrumbedStackedPanel implements Stac
 	
 	public void removeTool(Component toolComponent) {
 		if(toolComponent == null) return;
-
-		for(Iterator<Tool> it=getCurrentCrumb().getTools().iterator(); it.hasNext(); ) {
-			if(toolComponent == it.next().getComponent()) {
-				it.remove();
+		
+		TooledBreadCrumb breadCrumb = getCurrentCrumb();
+		if(breadCrumb != null) {
+			removeTool(toolComponent, breadCrumb);
+		}
+	}
+	
+	public void removeTool(Component toolComponent, Controller controller) {
+		for(int i=0; i<stack.size(); i++) {
+			Object uo = stack.get(i).getUserObject();
+			if(uo instanceof TooledBreadCrumb) {
+				TooledBreadCrumb crumb = (TooledBreadCrumb)uo;
+				if (controller.equals(crumb.getController())) {
+					removeTool(toolComponent, crumb);
+				}
 			}
 		}
-		setDirty(true);
+	}
+	
+	private void removeTool(Component toolComponent, TooledBreadCrumb breadCrumb) {
+		for(Iterator<Tool> it=breadCrumb.getTools().iterator(); it.hasNext(); ) {
+			if(toolComponent == it.next().getComponent()) {
+				it.remove();
+				setDirty(true);
+			}
+		}
 	}
 	
 	public void removeAllTools() {
-		getCurrentCrumb().getTools().clear();
+		TooledBreadCrumb breadCrumb = getCurrentCrumb();
+		if(breadCrumb != null) {
+			breadCrumb.getTools().clear();
+		}
 		setDirty(true);
 	}
 
@@ -135,11 +162,33 @@ public class TooledStackedPanel extends BreadcrumbedStackedPanel implements Stac
 	 * @param toolComponent
 	 */
 	public void addTool(Component toolComponent, Align align, boolean inherit, String css) {
+		addTool(toolComponent, align, inherit, css, null);
+	}
+	
+	public void addTool(Component toolComponent, Align align, boolean inherit, String css, Controller controller) {
 		if(toolComponent == null) return;
 		
 		Tool tool = new Tool(toolComponent, align, inherit, css);
-		getCurrentCrumb().addTool(tool);
+		TooledBreadCrumb breadCrumb = controller == null
+				? getCurrentCrumb()
+				: getBreadCrumb(controller);
+		if(breadCrumb != null) {
+			breadCrumb.addTool(tool);
+		}
 		setDirty(true);
+	}
+	
+	private TooledBreadCrumb getBreadCrumb(Controller controller) {
+		for(int i=0; i<stack.size(); i++) {
+			Object uo = stack.get(i).getUserObject();
+			if(uo instanceof TooledBreadCrumb) {
+				TooledBreadCrumb crumb = (TooledBreadCrumb)uo;
+				if (controller.equals(crumb.getController())) {
+					return crumb;
+				}
+			}
+		}
+		return null;
 	}
 	
 	public List<Tool> getTools() {
@@ -158,7 +207,11 @@ public class TooledStackedPanel extends BreadcrumbedStackedPanel implements Stac
 				}
 			}
 		}
-		currentTools.addAll(getCurrentCrumb().getTools());
+		
+		TooledBreadCrumb breadCrumb = getCurrentCrumb();
+		if(breadCrumb != null) {
+			currentTools.addAll(breadCrumb.getTools());
+		}
 		return currentTools;
 	}
 	
@@ -219,6 +272,14 @@ public class TooledStackedPanel extends BreadcrumbedStackedPanel implements Stac
 		}
 	}
 
+	public boolean isBreadcrumbEnabled() {
+		return breadcrumbEnabled;
+	}
+
+	public void setBreadcrumbEnabled(boolean breadcrumbEnabled) {
+		this.breadcrumbEnabled = breadcrumbEnabled;
+	}
+
 	public String getMessage() {
 		return message;
 	}
@@ -235,7 +296,16 @@ public class TooledStackedPanel extends BreadcrumbedStackedPanel implements Stac
 		this.messageCssClass = messageCssClass;
 	}
 
+	public Component getMessageComponent() {
+		return messageCmp;
+	}
 
+	public void setMessageComponent(Component messageCmp) {
+		if(this.messageCmp != messageCmp) {
+			this.messageCmp = messageCmp;
+			setDirty(true);
+		}
+	}
 
 	public static class Tool {
 		private final  Align align;

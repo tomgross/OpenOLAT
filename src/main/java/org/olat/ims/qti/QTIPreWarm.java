@@ -24,17 +24,16 @@ import java.util.List;
 
 import org.olat.core.commons.persistence.DB;
 import org.olat.core.configuration.PreWarm;
-import org.olat.core.logging.OLog;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.CodeHelper;
+import org.olat.course.nodes.iq.QTIResourceTypeModule;
 import org.olat.ims.qti.fileresource.SurveyFileResource;
 import org.olat.ims.qti.fileresource.TestFileResource;
 import org.olat.resource.OLATResource;
 import org.olat.resource.OLATResourceManager;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
-
-import de.bps.onyx.plugin.OnyxModule;
 
 /**
  * 
@@ -47,7 +46,7 @@ import de.bps.onyx.plugin.OnyxModule;
 @Service
 public class QTIPreWarm implements PreWarm {
 	
-	private static final OLog log = Tracing.createLoggerFor(QTIPreWarm.class);
+	private static final Logger log = Tracing.createLoggerFor(QTIPreWarm.class);
 	
 	@Autowired
 	private DB dbInstance;
@@ -65,7 +64,7 @@ public class QTIPreWarm implements PreWarm {
 		List<OLATResource> qtiResources = olatResourceManager.findResourceByTypes(types);
 		dbInstance.commitAndCloseSession();
 		for(OLATResource qtiResource:qtiResources) {
-			OnyxModule.isOnyxTest(qtiResource);
+			QTIResourceTypeModule.isOnyxTest(qtiResource);
 		}
 		log.info(qtiResources.size() + " QTI Resources scanned in (ms): " + CodeHelper.nanoToMilliTime(start));
 	}

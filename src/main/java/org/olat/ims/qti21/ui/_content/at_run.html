@@ -1,6 +1,6 @@
 <div id="o_qti_run" class="row">
 	<div id="o_qti_run_title" class="o_header_with_buttons">
-		<h3>$r.escapeHtml($title)</h3>
+		<h2>$r.escapeHtml($title)</h2>
 		<div class="o_button_group o_button_group_right">
 		#set( $showClose = ${qtiWorksStatus.mayCloseTest()} && $r.available("closeTest") && $r.visible("closeTest") )
 		
@@ -22,31 +22,9 @@
 		</div>
 	</div>
 
-	#if($qtiWorksStatus.assessmentTestTimeLimit && !$qtiWorksStatus.ended)
-	<div id="o_qti_assessment_test_timer" class="clearfix"><i class='o_icon o_icon_timelimit'> </i>
-		$r.translate("timelimit.running", "<span class='o_qti_timer'></span>","<span class='o_qti_timer_duration'></span>", "$qtiWorksStatus.assessmentTestEndTime")
-		<span class="o_qti_times_up" style="display:none;">$r.translate("timelimit.finished")</span>
-		<span class="o_qti_times_message o_10_minutes" style="display:none;"><i class="o_icon o_icon_timelimit_start"> </i> $r.translate("timelimit.10.minutes")</span>
-		<span class="o_qti_times_message o_5_minutes" style="display:none;"><i class="o_icon o_icon_timelimit_half"> </i> $r.translate("timelimit.5.minutes")</span>
-		<span class="o_qti_times_message o_panic" style="display:none;"><i class="o_icon o_icon_timelimit_end"> </i> $r.translate("timelimit.1.minute")</span>
-	</div>
-	<script type="text/javascript">
-	/* <![CDATA[ */
-	jQuery(function() {
-		jQuery('#o_qti_assessment_test_timer').qtiTimer({
-			startTime:$qtiWorksStatus.assessmentTestDuration,
-			availableTime: $qtiWorksStatus.assessmentTestMaximumTimeLimits,
-			formName: '${f.form.formName}',//forn name
-    		dispIdField: '{$f.form.dispatchFieldId}',//form dispatch id
-    		dispId: '${f.getFormItem("qtirun").formDispatchId}',//item id
-    		eventIdField: '${f.form.eventFieldId}' // form eventFieldId
-		})
-	});
-	/* ]]> */
-	</script>
-	#end
+	$r.render("timer")
 
-	#if (!$qtiWorksStatus.isSurvey() && (($displayScoreProgress && $qtiWorksStatus.hasMaxScore()) || $displayQuestionProgress))
+	#if (!$qtiWorksStatus.isSurvey() && (($displayScoreProgress && $qtiWorksStatus.hasMaxScore()) || $displayQuestionProgress) && !$r.visible("qtiResults"))
 	<div id="o_qti_run_infos" class="clearfix">
 		#if (!$qtiWorksStatus.isSurvey() && $displayScoreProgress && $qtiWorksStatus.score)
 		<div id="o_qti_scoreinfo">
@@ -80,15 +58,19 @@
 		<div id="o_main_center">
 			<a id="o_content"></a>
 			<div id="o_main_center_content" class="clearfix o_scrollblock">
-		       	<div id="o_main_center_content_inner">$r.render("qtiResults")</div>
+		       	<div id="o_main_center_content_inner">$r.render("qtiResults")
+		       	#if($r.visible("restartTest"))
+		       		<div class="o_button_group">$r.render("restartTest")</div>
+		       	#end
+		       	</div>
 			</div>
 		</div>
 	#elseif($r.visible("qtitree"))
-		<div id="o_main_left" style="#if($r.isNotNull($menuWidth))width: ${menuWidth}em;#end">
+		<div id="o_main_left" style="#if($r.isNotNull($menuWidth))width: ${menuWidth}em;#else width:15em; #end">
 			<div id="o_main_left_content" class="clearfix">$r.render("qtitree")</div>
 			<div id="o_main_left_toggle" class="hidden-print">
 				<span class="sr-only">Toggle content menu</span>
-				<i class="o_icon o_icon_menuhandel"></i>
+				<i class="o_icon o_icon_menuhandel"> </i>
 			</div>
 		</div>
 		<div id="o_main_center">
@@ -130,21 +112,21 @@ jQuery().ready(function() {
 	};
 	
 	window.o_showMenu = function(duration) {
-		duration = (typeof duration === "undefined") ? 500 : duration;
+		duration = (typeof duration === "undefined") ? 333 : duration;
 		if (!menuState.open) {
 			jQuery('#o_main_left_content').show();
 			var l = jQuery('#o_main_left');
-			l.transition({'x': '0', 'left': '0'}, duration, function() {
+			l.transition({'x': 0, 'y' : 0, 'left': 0}, duration, function() {
 				menuState.open = true;
 			});
 		} 
 	};
 	window.o_hideMenu = function(duration) {
-		duration = (typeof duration === "undefined") ? 500 : duration;
+		duration = (typeof duration === "undefined") ? 333 : duration;
 		if (!menuState.docked && menuState.open) {
 			var l = jQuery('#o_main_left');
 			jQuery('#o_main_left_content').hide();
-			l.transition({'x': '-' + l.css('width'), 'left': '5px'}, duration, function() {
+			l.transition({'x': '-' + l.css('width'), 'y': 0, 'left': '5px'}, duration, function() {
 				menuState.open = false;
 			});			
 		} 
@@ -186,18 +168,18 @@ jQuery().ready(function() {
 	window.o_responsiveMenu = function() {
 		if (jQuery(window).width() < 992 && !(jQuery.support.opacity == false)) {
 			// same breakpoint as bootstrap screen-md, opacity detect IE8
-			o_undockMenu(500);
+			o_undockMenu(333);
 		} else {
-			o_dockMenu(500);
+			o_dockMenu(333);
 		}
 	};
 
 	// toggle menu on toggle events
 	jQuery('#o_main_left_toggle').on('click', function() {
 		if (menuState.open) {
-			o_hideMenu(500);
+			o_hideMenu(333);
 		} else {
-			o_showMenu(500);
+			o_showMenu(333);
 		}
 	});
 	// recalculate menu when browser is resized

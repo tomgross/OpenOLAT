@@ -50,9 +50,8 @@ import org.olat.course.CourseFactory;
 import org.olat.course.ICourse;
 import org.olat.course.nodes.CourseNode;
 import org.olat.course.run.userview.UserCourseEnvironment;
-import org.olat.course.run.userview.UserCourseEnvironmentImpl;
 import org.olat.group.BusinessGroup;
-import org.olat.ims.qti.statistics.QTIType;
+import org.olat.modules.curriculum.CurriculumElement;
 import org.olat.repository.RepositoryService;
 import org.olat.repository.model.RepositoryEntrySecurity;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -68,33 +67,22 @@ public class StatisticCourseNodesController extends BasicController implements A
 	private final LayoutMain3ColsController layoutCtr;
 	private Controller currentCtrl;
 	
-	private final QTIType[] types;
+	private final StatisticType type;
 	private final StatisticResourceOption options;
 	
 	@Autowired
 	private RepositoryService repositoryService;
 	
 	public StatisticCourseNodesController(UserRequest ureq, WindowControl wControl, TooledStackedPanel stackPanel,
-			RepositoryEntrySecurity reSecurity, UserCourseEnvironment userCourseEnv, QTIType ... types) {
+			RepositoryEntrySecurity reSecurity, UserCourseEnvironment userCourseEnv, StatisticType type) {
 		super(ureq, wControl);
 
-		this.types = types;
+		this.type = type;
 		this.stackPanel = stackPanel;
 		options = new StatisticResourceOption();
 
 		if(!reSecurity.isEntryAdmin() && !reSecurity.isOwner()) {
-			List<Group> groups = new ArrayList<>();
-			UserCourseEnvironmentImpl userCourseEnvImpl = (UserCourseEnvironmentImpl)userCourseEnv;
-			if(reSecurity.isCourseCoach()) {
-				Group bGroup = repositoryService.getDefaultGroup(userCourseEnv.getCourseEnvironment().getCourseGroupManager().getCourseEntry());
-				groups.add(bGroup);
-			}
-			if(reSecurity.isGroupCoach()) {
-				List<BusinessGroup> businessGroups = userCourseEnvImpl.getCoachedGroups();
-				for(BusinessGroup businessGroup:businessGroups) {
-					groups.add(businessGroup.getBaseGroup());
-				}
-			}
+			List<Group> groups = getCoachedGroups(reSecurity, userCourseEnv);
 			options.setParticipantsGroups(groups);
 		}
 
@@ -113,6 +101,27 @@ public class StatisticCourseNodesController extends BasicController implements A
 		if (tree != null && tree.getRootNode().getChildCount() > 0) {
 			doSelectNode(ureq, (TreeNode)tree.getRootNode().getChildAt(0));
 		}
+	}
+	
+	private List<Group> getCoachedGroups(RepositoryEntrySecurity reSecurity, UserCourseEnvironment userCourseEnv) {
+		List<Group> groups = new ArrayList<>();
+		if(reSecurity.isCourseCoach()) {
+			Group bGroup = repositoryService.getDefaultGroup(userCourseEnv.getCourseEnvironment().getCourseGroupManager().getCourseEntry());
+			groups.add(bGroup);
+		}
+		if(reSecurity.isGroupCoach()) {
+			List<BusinessGroup> businessGroups = userCourseEnv.getCoachedGroups();
+			for(BusinessGroup businessGroup:businessGroups) {
+				groups.add(businessGroup.getBaseGroup());
+			}
+		}
+		if(reSecurity.isCurriculumCoach()) {
+			List<CurriculumElement> curriculumElements = userCourseEnv.getCoachedCurriculumElements();
+			for(CurriculumElement curriculumElement:curriculumElements) {
+				groups.add(curriculumElement.getGroup());
+			}
+		}
+		return groups;
 	}
 	
 	@Override
@@ -134,7 +143,7 @@ public class StatisticCourseNodesController extends BasicController implements A
 			@Override
 			public void visit(INode node) {
 				CourseNode courseNode = (CourseNode)node;
-				StatisticResourceResult result = courseNode.createStatisticNodeResult(ureq, getWindowControl(), userCourseEnv, options, types);
+				StatisticResourceResult result = courseNode.createStatisticNodeResult(ureq, getWindowControl(), userCourseEnv, options, type);
 				if(result != null) {
 					StatisticResourceNode courseNodeTreeNode = new StatisticResourceNode(courseNode, result);
 					rootTreeNode.addChild(courseNodeTreeNode);
@@ -171,6 +180,7 @@ public class StatisticCourseNodesController extends BasicController implements A
 					String ident = te.getNodeId();
 					TreeNode selectedNode = courseTree.getTreeModel().getNodeById(ident);
 					doSelectNode(ureq, selectedNode);
+					initTools();
 				}
 			}
 		}
@@ -188,6 +198,7 @@ public class StatisticCourseNodesController extends BasicController implements A
 				String selNodeId = nclr.getIdent();
 				courseTree.setSelectedNodeId(selNodeId);
 				doSelectNode(ureq, nclr);
+				initTools();
 			}
 		}
 	}
@@ -202,7 +213,9 @@ public class StatisticCourseNodesController extends BasicController implements A
 			currentCtrl = node.getResult().getController(ureq, swControl, stackPanel, node);
 		} else {
 			StatisticResourceNode node = getStatisticNodeInParentLine(selectedNode);
-			currentCtrl = node.getResult().getController(ureq, swControl, stackPanel, selectedNode);
+			if(node != null) {
+				currentCtrl = node.getResult().getController(ureq, swControl, stackPanel, selectedNode);
+			}
 		}
 		
 		if(currentCtrl != null) {

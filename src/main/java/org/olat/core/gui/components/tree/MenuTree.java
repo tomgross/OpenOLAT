@@ -41,7 +41,7 @@ import org.olat.core.gui.components.ComponentRenderer;
 import org.olat.core.gui.components.Window;
 import org.olat.core.gui.components.tree.InsertionPoint.Position;
 import org.olat.core.gui.control.JSAndCSSAdder;
-import org.olat.core.gui.control.winmgr.JSCommand;
+import org.olat.core.gui.control.winmgr.ScrollTopCommand;
 import org.olat.core.gui.render.ValidationResult;
 import org.olat.core.util.StringHelper;
 import org.olat.core.util.nodes.INode;
@@ -172,10 +172,7 @@ public class MenuTree extends AbstractComponent {
 	private void scrollTop(UserRequest ureq) {
 		Window window = Windows.getWindows(ureq).getWindow(ureq);
 		if(window != null) {
-			StringBuilder sb = new StringBuilder();
-			sb.append("try{ o_scrollToElement('#o_top'); }catch(e){}");
-			JSCommand jsCommand = new JSCommand(sb.toString());
-			window.getWindowBackOffice().sendCommandTo(jsCommand);
+			window.getWindowBackOffice().sendCommandTo(new ScrollTopCommand());
 		}
 	}
 
@@ -441,22 +438,18 @@ public class MenuTree extends AbstractComponent {
 	public TreePosition getInsertionPosition() {
 		if(insertionPoint == null) return null;
 
-		int position;
-		TreeNode parent;
 		TreeNode node = treeModel.getNodeById(insertionPoint.getNodeId());
 		if(insertionPoint.getPosition() == Position.under) {
-			parent = node;
-			position = 0;
+			return new TreePosition(node, 0);
 		} else if(insertionPoint.getPosition() == Position.up) {
-			parent = (TreeNode)node.getParent();
-			position = node.getPosition();
+			TreeNode parent = (TreeNode)node.getParent();
+			return new TreePosition(parent, node, Position.up, node.getPosition());
 		} else if(insertionPoint.getPosition() == Position.down) {
-			parent = (TreeNode)node.getParent();
-			position = node.getPosition() + 1;
-		} else {
-			return null;
+			TreeNode parent = (TreeNode)node.getParent();
+			int position = node.getPosition() + 1;
+			return new TreePosition(parent, node, Position.down, position);
 		}
-		return new TreePosition(parent, position);
+		return null;
 	}
 
 	/**

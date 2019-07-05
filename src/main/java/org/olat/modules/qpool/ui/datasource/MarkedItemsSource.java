@@ -20,12 +20,15 @@
 package org.olat.modules.qpool.ui.datasource;
 
 import java.util.List;
+import java.util.Locale;
 
 import org.olat.core.CoreSpringFactory;
 import org.olat.core.commons.services.mark.MarkManager;
+import org.olat.core.gui.translator.Translator;
 import org.olat.core.id.Identity;
 import org.olat.core.id.Roles;
 import org.olat.modules.qpool.QuestionItem;
+import org.olat.modules.qpool.QuestionStatus;
 
 /**
  * 
@@ -38,8 +41,8 @@ public class MarkedItemsSource extends DefaultItemsSource {
 	private final Identity identity;
 	private final MarkManager markManager;
 	
-	public MarkedItemsSource(Identity me, Roles roles, String name) {
-		super(me, roles, name);
+	public MarkedItemsSource(Identity me, Roles roles, Locale locale, String name) {
+		super(me, roles, locale, name);
 		identity = me;
 		getDefaultParams().setFavoritOnly(true);
 		markManager = CoreSpringFactory.getImpl(MarkManager.class);
@@ -51,19 +54,78 @@ public class MarkedItemsSource extends DefaultItemsSource {
 	}
 
 	@Override
-	public int postImport(List<QuestionItem> items, boolean editable) {
-		if(items == null || items.isEmpty()) return 0;
-		
+	public boolean askAddToSource() {
+		return true;
+	}
+
+	@Override
+	public boolean askAddToSourceDefault() {
+		return false;
+	}
+
+	@Override
+	public String getAskToSourceText(Translator translator) {
+		return translator.translate("mark.add.to.source");
+	}
+
+	@Override
+	public void addToSource(List<QuestionItem> items, boolean editable) {
 		for(QuestionItem item:items) {
 			String businessPath = "[QuestionItem:" + item.getResourceableId() + "]";
 			markManager.setMark(item, identity, null, businessPath);
 		}
-		qpoolService.index(items);
+	}
+
+	@Override
+	public int postImport(List<QuestionItem> items, boolean editable) {
+		if(items == null || items.isEmpty()) return 0;
+		addToSource(items, editable);
 		return items.size();
+	}
+
+	@Override
+	public boolean isCreateEnabled() {
+		return true;
+	}
+
+	@Override
+	public boolean isCopyEnabled() {
+		return true;
+	}
+
+	@Override
+	public boolean isImportEnabled() {
+		return true;
+	}
+
+	@Override
+	public boolean isAuthorRightsEnable() {
+		return true;
 	}
 
 	@Override
 	public boolean isDeleteEnabled() {
 		return false;
 	}
+
+	@Override
+	public boolean isBulkChangeEnabled() {
+		return true;
+	}
+
+	@Override
+	public boolean isStatusFilterEnabled() {
+		return false;
+	}
+
+	@Override
+	public QuestionStatus getStatusFilter() {
+		return null;
+	}
+	
+	@Override
+	public void setStatusFilter(QuestionStatus questionStatus) {
+		// not enabled
+	}
+
 }

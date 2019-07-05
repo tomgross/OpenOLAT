@@ -22,6 +22,7 @@ package org.olat.course.config.ui.courselayout;
 import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStream;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -29,7 +30,8 @@ import java.util.Map.Entry;
 
 import javax.imageio.ImageIO;
 
-import org.olat.core.manager.BasicManager;
+import org.apache.logging.log4j.Logger;
+import org.olat.core.logging.Tracing;
 import org.olat.core.util.FileUtils;
 import org.olat.core.util.vfs.LocalFileImpl;
 import org.olat.core.util.vfs.VFSContainer;
@@ -52,7 +54,9 @@ import com.thoughtworks.xstream.XStream;
  * Initial Date:  04.02.2011 <br>
  * @author Roman Haag, roman.haag@frentix.com, http://www.frentix.com
  */
-public class CustomConfigManager extends BasicManager {
+public class CustomConfigManager {
+	
+	private static final Logger log = Tracing.createLoggerFor(CustomConfigManager.class);
 	
 	private static final String IFRAME_CSS = "iframe.css";
 	private static final String MAIN_CSS = "main.css";
@@ -91,8 +95,8 @@ public class CustomConfigManager extends BasicManager {
 		xStream.toXML(customConfig, configTarget.getOutputStream(false));
 		
 		// compile the css-files
-		StringBuffer sbMain = new StringBuffer();
-		StringBuffer sbIFrame = new StringBuffer();
+		StringBuilder sbMain = new StringBuilder();
+		StringBuilder sbIFrame = new StringBuilder();
 		for (Entry<String, Map<String, Object>> iterator : customConfig.entrySet()) {
 			String type = iterator.getKey();
 			Map<String, Object> elementConfig = iterator.getValue();			
@@ -112,7 +116,7 @@ public class CustomConfigManager extends BasicManager {
 		FileUtils.save(iFrameFile.getOutputStream(false), sbIFrame.toString(), "utf-8");		
 	}
 
-	private void appendLogoPart(StringBuffer sb, VFSContainer themeBase) {
+	private void appendLogoPart(StringBuilder sb, VFSContainer themeBase) {
 		VFSItem vfsItem = getLogoItem(themeBase);
 		if (vfsItem != null) {
 			sb.append("#o_right_logo {\n\tbackground-image: url(").append(vfsItem.getName()).append("); \n");
@@ -156,7 +160,7 @@ public class CustomConfigManager extends BasicManager {
 				return null;
 			}
 		} catch (IOException e) {
-			logError("Problem reading uploaded image", e);
+			log.error("Problem reading uploaded image", e);
 			return null;
 		}
 		return new int[] { width, height };
@@ -170,7 +174,7 @@ public class CustomConfigManager extends BasicManager {
 	 */
 	@SuppressWarnings("unchecked")
 	public Map<String, Map<String, Object>> getCustomConfig(CourseEnvironment courseEnvironment){
-		Map<String, Map<String, Object>> defaultConf = new HashMap<String, Map<String, Object>>();
+		Map<String, Map<String, Object>> defaultConf = new HashMap<>();
 		VFSContainer base = (VFSContainer) courseEnvironment.getCourseBaseContainer().resolve(CourseLayoutHelper.LAYOUT_COURSE_SUBFOLDER);
 		if (base == null) {
 			return defaultConf;
@@ -184,7 +188,12 @@ public class CustomConfigManager extends BasicManager {
 			return defaultConf;
 		}
 		XStream xStream = XStreamHelper.createXStreamInstance();
-		return (Map<String, Map<String, Object>>) xStream.fromXML(configTarget.getInputStream());
+		try(InputStream in=configTarget.getInputStream()) {
+			return (Map<String, Map<String, Object>>) xStream.fromXML(in);
+		} catch(IOException e) {
+			log.error("", e);
+			return defaultConf;
+		}
 	}
 	
 	/**

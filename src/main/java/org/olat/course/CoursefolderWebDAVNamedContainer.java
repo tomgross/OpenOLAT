@@ -19,8 +19,8 @@
  */
 package org.olat.course;
 
+import org.apache.logging.log4j.Logger;
 import org.olat.core.id.IdentityEnvironment;
-import org.olat.core.logging.OLog;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.vfs.NamedContainerImpl;
 import org.olat.core.util.vfs.VFSContainer;
@@ -33,7 +33,7 @@ import org.olat.repository.RepositoryEntry;
  */
 class CoursefolderWebDAVNamedContainer extends NamedContainerImpl {
 	
-	private static final OLog log = Tracing.createLoggerFor(CoursefolderWebDAVNamedContainer.class);
+	private static final Logger log = Tracing.createLoggerFor(CoursefolderWebDAVNamedContainer.class);
 	
 	private RepositoryEntry entry;
 	private VFSContainer parentContainer;
@@ -44,10 +44,21 @@ class CoursefolderWebDAVNamedContainer extends NamedContainerImpl {
 		this.entry = entry;
 		this.identityEnv = identityEnv;
 	}
+	
+
+	@Override
+	public VFSItemFilter getDefaultItemFilter() {
+		return null;
+	}
 
 	@Override
 	public void setDefaultItemFilter(VFSItemFilter defaultFilter) {
 		//
+	}
+	
+	@Override
+	public boolean exists() {
+		return true;
 	}
 
 	@Override
@@ -66,11 +77,6 @@ class CoursefolderWebDAVNamedContainer extends NamedContainerImpl {
 			}
 		}
 		return super.getDelegate();
-	}
-
-	@Override
-	public VFSItemFilter getDefaultItemFilter() {
-		return null;
 	}
 
 	@Override

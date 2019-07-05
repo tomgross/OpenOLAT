@@ -52,7 +52,7 @@ import org.olat.core.gui.control.generic.closablewrapper.CloseableModalControlle
 import org.olat.core.id.OLATResourceable;
 import org.olat.core.id.context.BusinessControl;
 import org.olat.core.id.context.BusinessControlFactory;
-import org.olat.core.logging.OLog;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.StringHelper;
 import org.olat.core.util.event.EventBus;
@@ -81,7 +81,7 @@ import org.olat.search.service.searcher.SearchClient;
  */
 public class SearchInputController extends FormBasicController implements GenericEventListener {
 	
-	private static final OLog log = Tracing.createLoggerFor(SearchInputController.class);
+	private static final Logger log = Tracing.createLoggerFor(SearchInputController.class);
 	
 	private static final String FUZZY_SEARCH = "~0.7";
 	private static final String CMD_DID_YOU_MEAN_LINK = "didYouMeanLink-";
@@ -251,7 +251,7 @@ public class SearchInputController extends FormBasicController implements Generi
 	private void setSearchStore(UserRequest ureq) {
 		prefs = (Map<String,Properties>)ureq.getUserSession().getEntry(SEARCH_STORE_KEY);
 		if(prefs == null) {
-			prefs = new HashMap<String,Properties>();
+			prefs = new HashMap<>();
 			ureq.getUserSession().putEntry(SEARCH_STORE_KEY, prefs);
 		}
 	}
@@ -469,28 +469,33 @@ public class SearchInputController extends FormBasicController implements Generi
 
 			query = getQueryString(searchString, false);
 			condQueries = getCondQueryStrings(condSearchStrings, parentCtxt, docType, rsrcUrl);
-			SearchResults searchResults = searchClient.doSearch(query, condQueries, ureq.getIdentity(), ureq.getUserSession().getRoles(), firstResult, maxReturns, true);
+			SearchResults searchResults = searchClient.doSearch(query, condQueries,
+					getIdentity(), ureq.getUserSession().getRoles(), getLocale(), firstResult, maxReturns, true);
 
-			if (firstResult == 0 && searchResults.size() == 0 && !query.endsWith(FUZZY_SEARCH)) {
+			if(searchResults != null && searchResults.getException() instanceof ParseException) {
+				getWindowControl().setWarning(translate("invalid.search.query"));
+			} else if(searchResults == null || searchResults.getException() != null) {
+				getWindowControl().setWarning(translate("search.service.unexpected.error"));
+			} else if (firstResult == 0 && searchResults.size() == 0 && StringHelper.containsNonWhitespace(query) && !query.endsWith(FUZZY_SEARCH)) {
 				// result-list was empty => first try to find word via spell-checker
-		    	if (doSpellCheck) {
-		    		Set<String> didYouMeansWords = searchClient.spellCheck(searchString);
-			    	if (didYouMeansWords != null && !didYouMeansWords.isEmpty()) {
-			    		setDidYouMeanWords(didYouMeansWords);
-			    	} else {
-			    		searchResults = doFuzzySearch(ureq, searchString, null, parentCtxt, docType, rsrcUrl, firstResult, maxReturns);
-			    	}
-		    	} else {
-		    		searchResults = doFuzzySearch(ureq, searchString, null, parentCtxt, docType, rsrcUrl, firstResult, maxReturns);
-		    	}
+				if (doSpellCheck) {
+					Set<String> didYouMeansWords = searchClient.spellCheck(searchString);
+					if (didYouMeansWords != null && !didYouMeansWords.isEmpty()) {
+						setDidYouMeanWords(didYouMeansWords);
+					} else {
+						searchResults = doFuzzySearch(ureq, searchString, null, parentCtxt, docType, rsrcUrl, firstResult, maxReturns);
+					}
+				} else {
+					searchResults = doFuzzySearch(ureq, searchString, null, parentCtxt, docType, rsrcUrl, firstResult, maxReturns);
+				}
 			}
 			
-			if(firstResult == 0 && searchResults.getList().isEmpty()) {
+			if(firstResult == 0 && searchResults != null && searchResults.getException() == null && searchResults.getList().isEmpty()) {
 				showInfo("found.no.result.try.fuzzy.search");
 			}
 			return searchResults;
 		} catch (ParseException e) {
-			if(log.isDebug()) log.debug("Query cannot be parsed: " + query);
+			if(log.isDebugEnabled()) log.debug("Query cannot be parsed: " + query);
 			getWindowControl().setWarning(translate("invalid.search.query"));
 		} catch (QueryException e) {
 			getWindowControl().setWarning(translate("invalid.search.query.with.wildcard"));
@@ -508,12 +513,13 @@ public class SearchInputController extends FormBasicController implements Generi
 		hideDidYouMeanWords();
 		String query = getQueryString(searchString, true);
 		List<String> condQueries = getCondQueryStrings(condSearchStrings, parentCtxt, docType, rsrcUrl);
-		return searchClient.doSearch(query, condQueries, ureq.getIdentity(), ureq.getUserSession().getRoles(), firstResult, maxReturns, true);
+		return searchClient.doSearch(query, condQueries,
+				getIdentity(), ureq.getUserSession().getRoles(), getLocale(), firstResult, maxReturns, true);
 	}
 	
 	public Set<String> getDidYouMeanWords() {
 		if (didYouMeanLinks != null && !didYouMeanLinks.isEmpty()) {
-			Set<String> didYouMeanWords = new HashSet<String>();
+			Set<String> didYouMeanWords = new HashSet<>();
 			for(FormLink link:didYouMeanLinks) {
 				String word = (String)link.getUserObject();
 				didYouMeanWords.add(word);
@@ -531,7 +537,7 @@ public class SearchInputController extends FormBasicController implements Generi
 		// unregister existing did-you-mean links
 		hideDidYouMeanWords();
 		
-		didYouMeanLinks = new ArrayList<FormLink>(didYouMeansWords.size());
+		didYouMeanLinks = new ArrayList<>(didYouMeansWords.size());
 		int wordNumber = 0;
 		for (String word : didYouMeansWords) {
 			FormLink l = uifactory.addFormLink(CMD_DID_YOU_MEAN_LINK + wordNumber++, word, null, flc, Link.NONTRANSLATED);
@@ -563,7 +569,7 @@ public class SearchInputController extends FormBasicController implements Generi
 	}
 	
 	private List<String> getCondQueryStrings(List<String> condSearchStrings, String parentCtxt, String docType, String rsrcUrl) {
-		List<String> queries = new ArrayList<String>();
+		List<String> queries = new ArrayList<>();
 		if(condSearchStrings != null && !condSearchStrings.isEmpty()) {
 			queries.addAll(condSearchStrings);
 		}
@@ -610,7 +616,7 @@ public class SearchInputController extends FormBasicController implements Generi
 		if (url.startsWith("ROOT")) {
 			url = url.substring(4, url.length());
 		}
-		List<String> tokens = new ArrayList<String>();
+		List<String> tokens = new ArrayList<>();
 		for(StringTokenizer tokenizer = new StringTokenizer(url, "[]"); tokenizer.hasMoreTokens(); ) {
 			String token = tokenizer.nextToken();
 			if(!tokens.contains(token)) {

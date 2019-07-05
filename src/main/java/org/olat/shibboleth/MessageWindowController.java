@@ -26,8 +26,7 @@
 
 package org.olat.shibboleth;
 
-import org.olat.basesecurity.BaseSecurityModule;
-import org.olat.core.CoreSpringFactory;
+import org.olat.core.commons.services.csp.CSPModule;
 import org.olat.core.gui.UserRequest;
 import org.olat.core.gui.WindowSettings;
 import org.olat.core.gui.Windows;
@@ -42,9 +41,10 @@ import org.olat.core.gui.control.WindowBackOffice;
 import org.olat.core.gui.control.navigation.SiteInstance;
 import org.olat.core.gui.translator.Translator;
 import org.olat.core.helpers.Settings;
-import org.olat.core.logging.OLog;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.Util;
+import org.springframework.beans.factory.annotation.Autowired;
 
 /**
  * 
@@ -55,9 +55,12 @@ import org.olat.core.util.Util;
  * @author Lavinia Dumitrescu
  */
 public class MessageWindowController extends DefaultChiefController {
-	private static final OLog log = Tracing.createLoggerFor(MessageWindowController.class);
+	private static final Logger log = Tracing.createLoggerFor(MessageWindowController.class);
 	private static final String VELOCITY_ROOT = Util.getPackageVelocityRoot(MessageWindowController.class);
 
+	@Autowired
+	private CSPModule securityModule;
+	
 	public MessageWindowController(UserRequest ureq, String message, String supportEmail) {
 		this(ureq, null, message, supportEmail);
 	}
@@ -73,8 +76,7 @@ public class MessageWindowController extends DefaultChiefController {
 		Translator trans = Util.createPackageTranslator(MessageWindowController.class, ureq.getLocale());
 		VelocityContainer msg = new VelocityContainer("olatmain", VELOCITY_ROOT + "/message.html", trans, this);
 		
-		BaseSecurityModule securityModule = CoreSpringFactory.getImpl(BaseSecurityModule.class);
-		msg.contextPut("enforceTopFrame", new Boolean(securityModule.isForceTopFrame()));
+		msg.contextPut("enforceTopFrame", Boolean.valueOf(securityModule.isForceTopFrame()));
 		
 		if(th != null) {
 			log.warn(th.getMessage() + " *** User info: " + detailedmessage);
@@ -95,11 +97,6 @@ public class MessageWindowController extends DefaultChiefController {
 		
 		w.setContentPane(msg);
 		setWindow(w);
-	}
-	
-	@Override
-	public String getWindowTitle() {
-		return null;
 	}
 	
 	@Override

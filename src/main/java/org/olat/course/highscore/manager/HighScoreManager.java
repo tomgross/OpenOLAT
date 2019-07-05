@@ -26,12 +26,13 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 import org.olat.core.id.Identity;
-import org.olat.core.logging.OLog;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
 import org.olat.course.highscore.model.HighScoreRankingResults;
 import org.olat.course.highscore.ui.HighScoreTableEntry;
 import org.olat.modules.assessment.AssessmentEntry;
 import org.olat.user.UserManager;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 /**
@@ -42,7 +43,10 @@ import org.springframework.stereotype.Service;
 @Service
 public class HighScoreManager {
 
-	private static final OLog log = Tracing.createLoggerFor(HighScoreManager.class);
+	private static final Logger log = Tracing.createLoggerFor(HighScoreManager.class);
+	
+	@Autowired
+	private UserManager userManager;
 	
 	/**
 	 * Sort rank by score, then by id and last alphabetically, 
@@ -52,7 +56,7 @@ public class HighScoreManager {
 	public HighScoreRankingResults sortRankByScore (List<AssessmentEntry>  assessEntries,
 			List<HighScoreTableEntry> allMembers, List<HighScoreTableEntry> ownIdMembers,
 			List<List<HighScoreTableEntry>> allPodium, List<Integer> ownIdIndices,	
-			int tableSize, Identity ownIdentity, UserManager userManager){
+			int tableSize, Identity ownIdentity){
 		
 		HighScoreTableEntry ownTableEntry = null;
 
@@ -100,7 +104,7 @@ public class HighScoreManager {
 				.collect(Collectors.toList()));
 		
 		if (ownIdMembers.size() > 0) {
-			log.audit("2nd Highscore Table established");
+			log.info(Tracing.M_AUDIT, "2nd Highscore Table established");
 		}
 		
 		return new HighScoreRankingResults(allScores, ownTableEntry);
@@ -118,10 +122,17 @@ public class HighScoreManager {
 			double min = Math.floor(Arrays.stream(scores).min().getAsDouble());
 			double range = max - min;
 			// use original scores if range is too small else convert results to fit histogram
-			if (range <= 20) {
+			if (range <= 20 && range <0) {
 				classwidth = 1;
 				return new HighScoreRankingResults(scores, classwidth, min);
 			} else {
+				if(lowerBorder == null) {
+					lowerBorder = 0f;
+				}
+				if(upperBorder == null) {
+					upperBorder = (float)max;
+				}
+
 				// decrease amount of possible classes to avoid overlapping of large numbers(condition) on x-axis 
 				boolean largeNumbers = range > 100d || max >= 1000d;
 				int maxnumberofclasses = largeNumbers ? 12 : 20;

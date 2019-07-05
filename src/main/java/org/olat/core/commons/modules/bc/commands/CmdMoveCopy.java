@@ -32,10 +32,9 @@ import java.util.List;
 import org.olat.core.commons.modules.bc.FileSelection;
 import org.olat.core.commons.modules.bc.FolderEvent;
 import org.olat.core.commons.modules.bc.components.FolderComponent;
-import org.olat.core.commons.modules.bc.meta.MetaInfo;
-import org.olat.core.commons.modules.bc.meta.tagged.MetaTagged;
 import org.olat.core.commons.services.notifications.NotificationsManager;
 import org.olat.core.commons.services.notifications.SubscriptionContext;
+import org.olat.core.commons.services.vfs.VFSRepositoryService;
 import org.olat.core.gui.UserRequest;
 import org.olat.core.gui.components.Component;
 import org.olat.core.gui.components.link.Link;
@@ -49,17 +48,16 @@ import org.olat.core.gui.control.WindowControl;
 import org.olat.core.gui.control.generic.folder.FolderTreeModel;
 import org.olat.core.gui.translator.Translator;
 import org.olat.core.util.Util;
-import org.olat.core.util.vfs.OlatRelPathImpl;
 import org.olat.core.util.vfs.VFSConstants;
 import org.olat.core.util.vfs.VFSContainer;
 import org.olat.core.util.vfs.VFSItem;
 import org.olat.core.util.vfs.VFSLeaf;
+import org.olat.core.util.vfs.VFSLockApplicationType;
 import org.olat.core.util.vfs.VFSLockManager;
 import org.olat.core.util.vfs.VFSManager;
 import org.olat.core.util.vfs.VFSStatus;
 import org.olat.core.util.vfs.callbacks.VFSSecurityCallback;
 import org.olat.core.util.vfs.filters.VFSItemFilter;
-import org.olat.core.util.vfs.version.Versionable;
 import org.springframework.beans.factory.annotation.Autowired;
 
 public class CmdMoveCopy extends DefaultController implements FolderCommand {
@@ -77,6 +75,8 @@ public class CmdMoveCopy extends DefaultController implements FolderCommand {
 	
 	@Autowired
 	private VFSLockManager vfsLockManager;
+	@Autowired
+	private VFSRepositoryService vfsRepositoryService;
 
 	protected CmdMoveCopy(WindowControl wControl, boolean move) {
 		super(wControl);
@@ -93,7 +93,7 @@ public class CmdMoveCopy extends DefaultController implements FolderCommand {
 		main.contextPut("fileselection", fileSelection);
 		
 		//check if command is executed on a file list containing invalid filenames or paths
-		if(fileSelection.getInvalidFileNames().size()>0) {		
+		if(!fileSelection.getInvalidFileNames().isEmpty()) {		
 			main.contextPut("invalidFileNames", fileSelection.getInvalidFileNames());
 		}		
 
@@ -138,10 +138,10 @@ public class CmdMoveCopy extends DefaultController implements FolderCommand {
 
 	public String getTarget() {
 		FolderTreeModel ftm = (FolderTreeModel) selTree.getTreeModel();
-		String selectedPath = ftm.getSelectedPath(selTree.getSelectedNode());
-		return selectedPath;
+		return ftm.getSelectedPath(selTree.getSelectedNode());
 	}
 
+	@Override
 	public void event(UserRequest ureq, Component source, Event event) {
 		if(cancelButton == source) {
 			status = FolderCommandStatus.STATUS_CANCELED;
@@ -170,21 +170,12 @@ public class CmdMoveCopy extends DefaultController implements FolderCommand {
 		List<VFSItem> sources = getSanityCheckedSourceItems(target, ureq);
 		if (sources == null) return;
 		
-		boolean targetIsRelPath = (target instanceof OlatRelPathImpl);
 		for (VFSItem vfsSource:sources) {
-			if (targetIsRelPath && (target instanceof OlatRelPathImpl) && (vfsSource instanceof MetaTagged)) {
-				// copy the metainfo first
-				MetaInfo meta = ((MetaTagged)vfsSource).getMetaInfo();
-				if(meta != null) {
-					meta.moveCopyToDir((OlatRelPathImpl)target, move);
-				}
-			}
-			
 			VFSItem targetFile = target.resolve(vfsSource.getName());
-			if(vfsSource instanceof VFSLeaf && targetFile != null && targetFile instanceof Versionable
-					&& ((Versionable)targetFile).getVersions().isVersioned()) {
+			if(vfsSource instanceof VFSLeaf && targetFile != null && targetFile.canVersion() == VFSConstants.YES) {
 				//add a new version to the file
-				((Versionable)targetFile).getVersions().addVersion(null, "", ((VFSLeaf)vfsSource).getInputStream());
+				VFSLeaf sourceLeaf = (VFSLeaf)vfsSource;
+				vfsRepositoryService.addVersion(sourceLeaf, ureq.getIdentity(), "", sourceLeaf.getInputStream());
 			} else {
 				vfsStatus = target.copyFrom(vfsSource);
 			}
@@ -238,7 +229,7 @@ public class CmdMoveCopy extends DefaultController implements FolderCommand {
 	private List<VFSItem> getSanityCheckedSourceItems(VFSContainer target, UserRequest ureq) {
 		// collect all source files first
 		
-		List<VFSItem> sources = new ArrayList<VFSItem>();
+		List<VFSItem> sources = new ArrayList<>();
 		for (String sourceRelPath:fileSelection.getFiles()) {
 			VFSItem vfsSource = folderComponent.getCurrentContainer().resolve(sourceRelPath);
 			if (vfsSource == null) {
@@ -252,7 +243,7 @@ public class CmdMoveCopy extends DefaultController implements FolderCommand {
 					return null;
 				}
 			}
-			if (vfsLockManager.isLockedForMe(vfsSource, ureq.getIdentity(), ureq.getUserSession().getRoles())) {
+			if (vfsLockManager.isLockedForMe(vfsSource, ureq.getIdentity(), VFSLockApplicationType.vfs, null)) {
 				abortFailed(ureq, "lock.title");
 				return null;
 			}
@@ -279,7 +270,6 @@ public class CmdMoveCopy extends DefaultController implements FolderCommand {
 		getWindowControl().setError(translator.translate(errorMessageKey));
 		status = FolderCommandStatus.STATUS_FAILED;
 		fireEvent(ureq, FOLDERCOMMAND_FINISHED);
-		return;
 	}
 	
 	@Override

@@ -20,13 +20,16 @@
 package org.olat.core.servlets;
 
 import org.olat.admin.layout.StaticDirectory;
+import java.io.BufferedInputStream;
+import java.io.FileInputStream;
+
 import org.olat.admin.sysinfo.manager.CustomStaticFolderManager;
 import org.olat.core.CoreSpringFactory;
 import org.olat.core.gui.media.FileMediaResource;
 import org.olat.core.gui.media.MediaResource;
 import org.olat.core.gui.media.ServletUtil;
 import org.olat.core.helpers.Settings;
-import org.olat.core.logging.OLog;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.FileUtils;
 import org.olat.core.util.WebappHelper;
@@ -53,7 +56,7 @@ import java.net.URLConnection;
 public class StaticServlet extends HttpServlet {
 
 	private static final long serialVersionUID = -2430002903299685192L;
-	private static final OLog log = Tracing.createLoggerFor(StaticServlet.class);
+	private static final Logger log = Tracing.createLoggerFor(StaticServlet.class);
 	private final long CACHE_DURATION_IN_SECOND = 60 * 60 * 24 * 8; // 8 days
 	private final long CACHE_DURATION_IN_MS = CACHE_DURATION_IN_SECOND  * 1000;
 

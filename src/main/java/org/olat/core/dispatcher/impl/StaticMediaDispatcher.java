@@ -21,7 +21,6 @@ package org.olat.core.dispatcher.impl;
 
 import org.olat.core.gui.render.StringOutput;
 import org.olat.core.helpers.Settings;
-import org.olat.core.logging.LogDelegator;
 import org.olat.core.util.StringHelper;
 import org.olat.core.util.WebappHelper;
 
@@ -43,10 +42,11 @@ import org.olat.core.util.WebappHelper;
  * 
  * @author Florian Gnaegi, frentix GmbH, http://www.frentix.com
  */
-public class StaticMediaDispatcher extends LogDelegator {
+public class StaticMediaDispatcher {
 	public static String STATIC_DIR_NAME = "/static";
 	public static String NOVERSION = "_noversion_";
 	private static String mapperPath;
+	private static int forceReloadCounter = 0;
 
 	/**
 	 * Constructor
@@ -104,6 +104,9 @@ public class StaticMediaDispatcher extends LogDelegator {
 			} else {
 				target.append(Settings.getBuildIdentifier());
 			}
+			if (forceReloadCounter > 0) {
+				target.append(":").append(forceReloadCounter);
+			}
 		} else {
 			target.append(NOVERSION);			
 		}
@@ -143,8 +146,25 @@ public class StaticMediaDispatcher extends LogDelegator {
 		return so.toString();
 	}
 	
+	/**
+	 * Get the path to the static mapper. Everything after that path is
+	 * delivered by the static mapper
+	 * 
+	 * @return
+	 */
 	public static String getStaticMapperPath() {
 		return mapperPath;
+	}
+
+	/**
+	 * Change the static media mapper path to force the browsers to load all
+	 * media again. Note that this might have no effect to already initialized
+	 * controllers. The old mapper path will still work. This force-reload
+	 * mechanism is RAM only and not cluster save. It shall only be used rarely
+	 * when static files change between releases, e.g. when modifying the theme.
+	 */
+	public static void forceReloadStaticMediaDelivery() {
+		forceReloadCounter++;
 	}
 	
 }

@@ -111,7 +111,7 @@ public class GenericSelectionPropertyHandler extends AbstractUserPropertyHandler
 	 * saves the configuration of this property
 	 */
 	public void saveConfig() {
-		Map<String, String> configMap = new HashMap<String, String>();
+		Map<String, String> configMap = new HashMap<>();
 		String isMulti = (isMultiselect) ? PROP_MULTISELECT_TRUE : "0";
 		configMap.put(PROP_MULTISELECT, isMulti);
 
@@ -198,17 +198,18 @@ public class GenericSelectionPropertyHandler extends AbstractUserPropertyHandler
 	 * @return
 	 */
 	private String[] getSelectedKeys(User user) {
-		String[] keys = getInternalValue(user).split(KEY_DELIMITER);
-		return keys;
+		return getInternalValue(user).split(KEY_DELIMITER);
 	}
 
-	/**
-	 * @see org.olat.user.AbstractUserPropertyHandler#getInternalValue(org.olat.core.id.User)
-	 */
 	@Override
 	public String getInternalValue(User user) {
 		String value = super.getInternalValue(user);
 		return (value == null ? NO_SEL_KEY : value);
+	}
+
+	@Override
+	public String getUserProperty(User user, Locale locale) {
+		return getUserPropertyAsHTML(user, locale);
 	}
 
 	@Override
@@ -260,10 +261,8 @@ public class GenericSelectionPropertyHandler extends AbstractUserPropertyHandler
 		}
 		if (formItem instanceof SingleSelection) {
 			SingleSelection sel = (SingleSelection)formItem;
-			if(sel.isOneSelected()) {
+			if(sel.isOneSelected() && !NO_SEL_KEY.equals(sel.getSelectedKey())) {
 				return sel.getSelectedKey();
-			} else {
-				return null;
 			}
 		}
 		return null;
@@ -291,21 +290,18 @@ public class GenericSelectionPropertyHandler extends AbstractUserPropertyHandler
 		return values;
 	}
 
-	/**
-	 * @see org.olat.core.id.UserField#getUserFieldValueAsHTML(org.olat.core.id.User,
-	 *      java.util.Locale)
-	 */
+	@Override
 	public String getUserPropertyAsHTML(User user, Locale locale) {
+		String val = super.getInternalValue(user);// don't want "no selection" key
 		StringBuilder htmlValue = new StringBuilder();
 		Translator trans = Util.createPackageTranslator(this.getClass(), locale);
 		if (isMultiSelect()) {
-			for (String value : getInternalValue(user).split(KEY_DELIMITER)) {
+			for (String value : val.split(KEY_DELIMITER)) {
 				htmlValue.append(trans.translate(value)).append(" ");
 			}
-		} else {
-			htmlValue.append(trans.translate(getInternalValue(user)));
+		} else if(val != null && locale != null) {
+			htmlValue.append(trans.translate(val));
 		}
 		return htmlValue.toString();
 	}
-
 }

@@ -26,9 +26,9 @@ import java.io.Writer;
 import java.util.Map;
 
 import org.apache.commons.io.IOUtils;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.helpers.Settings;
 import org.olat.core.id.Identity;
-import org.olat.core.logging.OLog;
 import org.olat.core.logging.Tracing;
 import org.olat.ims.qti21.AssessmentItemSession;
 import org.olat.ims.qti21.AssessmentResponse;
@@ -49,7 +49,7 @@ import uk.ac.ed.ph.jqtiplus.types.Identifier;
  */
 public class AssessmentSessionAuditFileLog implements AssessmentSessionAuditLogger {
 
-	private static final OLog log = Tracing.createLoggerFor(AssessmentSessionAuditFileLog.class);
+	private static final Logger log = Tracing.createLoggerFor(AssessmentSessionAuditFileLog.class);
 	
 	private Writer writer;
 	private final OutputStream outputStream;
@@ -117,7 +117,35 @@ public class AssessmentSessionAuditFileLog implements AssessmentSessionAuditLogg
 	public void logTestRetrieved(AssessmentTestSession candidateSession, Identity coach) {
 		try {
 			AuditLogFormatter.logDate(writer);
-			writer.write("Test session retrieved by " + coach.getKey() + "/" + coach.getName());
+			writer.write("Test session retrieved by " + coach.getKey());
+			writer.write("\n");
+			writer.flush();
+			debugLog.logTestRetrieved(candidateSession, coach);
+		} catch (IOException e) {
+			log.error("", e);
+		}
+	}
+	
+	
+
+	@Override
+	public void logTestReopen(AssessmentTestSession candidateSession, Identity coach) {
+		try {
+			AuditLogFormatter.logDate(writer);
+			writer.write("Test session reopened by " + coach.getKey());
+			writer.write("\n");
+			writer.flush();
+			debugLog.logTestRetrieved(candidateSession, coach);
+		} catch (IOException e) {
+			log.error("", e);
+		}
+	}
+
+	@Override
+	public void logTestExtend(AssessmentTestSession candidateSession, int extraTime, Identity coach) {
+		try {
+			AuditLogFormatter.logDate(writer);
+			writer.write("Test session extened " + extraTime + " by " + coach.getKey());
 			writer.write("\n");
 			writer.flush();
 			debugLog.logTestRetrieved(candidateSession, coach);

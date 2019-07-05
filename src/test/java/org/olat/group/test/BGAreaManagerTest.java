@@ -38,6 +38,7 @@ import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
+import org.apache.logging.log4j.Logger;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
@@ -45,7 +46,6 @@ import org.olat.basesecurity.GroupRoles;
 import org.olat.core.commons.persistence.DB;
 import org.olat.core.commons.persistence.DBFactory;
 import org.olat.core.id.Identity;
-import org.olat.core.logging.OLog;
 import org.olat.core.logging.Tracing;
 import org.olat.group.BusinessGroup;
 import org.olat.group.BusinessGroupService;
@@ -64,7 +64,7 @@ import org.springframework.beans.factory.annotation.Autowired;
  */
 public class BGAreaManagerTest extends OlatTestCase {
 
-	private static OLog log = Tracing.createLoggerFor(BGAreaManagerTest.class);
+	private static final Logger log = Tracing.createLoggerFor(BGAreaManagerTest.class);
 
 	private OLATResource c1, c2;
 	
@@ -405,6 +405,52 @@ public class BGAreaManagerTest extends OlatTestCase {
 		Assert.assertNotNull(diminushedGroups);
 		Assert.assertEquals(1, diminushedGroups.size());
 		Assert.assertTrue(diminushedGroups.contains(group1));
+	}
+	
+	/**
+	 * Check that the remove resource from business group service remove
+	 * the relation to area too
+	 */
+	@Test
+	public void removeResourceFrom_withArea() {
+		//create a resource, an area, a group
+		RepositoryEntry resource1 =  JunitTestHelper.createAndPersistRepositoryEntry();
+		RepositoryEntry resource2 =  JunitTestHelper.createAndPersistRepositoryEntry();
+		String areaName = UUID.randomUUID().toString();
+		BGArea area1 = areaManager.createAndPersistBGArea("area-1-" + areaName, "description:" + areaName, resource1.getOlatResource());
+		BGArea area2 = areaManager.createAndPersistBGArea("area-1-" + areaName, "description:" + areaName, resource2.getOlatResource());
+		//create the group
+		BusinessGroup group = businessGroupService.createBusinessGroup(null, "area-1-group", "area-group-desc", 0, -1, false, false, null);
+		dbInstance.commitAndCloseSession();
+		//add relations group to courses
+		businessGroupService.addResourceTo(group, resource1);
+		businessGroupService.addResourceTo(group, resource2);
+		//add the relations to areas
+		areaManager.addBGToBGArea(group, area1);
+		areaManager.addBGToBGArea(group, area2);
+		dbInstance.commitAndCloseSession();
+		
+		//check find groups
+		List<BusinessGroup> groupArea1s = areaManager.findBusinessGroupsOfArea(area1);
+		Assert.assertNotNull(groupArea1s);
+		Assert.assertEquals(1, groupArea1s.size());
+		Assert.assertTrue(groupArea1s.contains(group));
+		
+		List<BusinessGroup> groupArea2s = areaManager.findBusinessGroupsOfArea(area2);
+		Assert.assertNotNull(groupArea2s);
+		Assert.assertEquals(1, groupArea2s.size());
+		Assert.assertTrue(groupArea2s.contains(group));
+		
+		// remove resource2 from group
+		businessGroupService.removeResourceFrom(Collections.singletonList(group), resource2);
+		
+		List<BusinessGroup> groupArea1s_remove = areaManager.findBusinessGroupsOfArea(area1);
+		Assert.assertNotNull(groupArea1s_remove);
+		Assert.assertEquals(1, groupArea1s.size());
+		Assert.assertTrue(groupArea1s_remove.contains(group));
+		
+		List<BusinessGroup> groupArea2s_remove = areaManager.findBusinessGroupsOfArea(area2);
+		Assert.assertTrue(groupArea2s_remove.isEmpty());
 	}
 	
 	@Test

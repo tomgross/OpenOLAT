@@ -31,6 +31,7 @@ import org.olat.core.id.Identity;
 import org.olat.core.util.mail.MailContext;
 import org.olat.core.util.vfs.VFSContainer;
 import org.olat.course.nodes.GTACourseNode;
+import org.olat.course.nodes.gta.model.DueDate;
 import org.olat.course.nodes.gta.model.Membership;
 import org.olat.course.nodes.gta.model.Solution;
 import org.olat.course.nodes.gta.model.TaskDefinition;
@@ -38,6 +39,7 @@ import org.olat.course.nodes.gta.ui.events.SubmitEvent;
 import org.olat.course.run.environment.CourseEnvironment;
 import org.olat.group.BusinessGroup;
 import org.olat.group.BusinessGroupRef;
+import org.olat.modules.assessment.Role;
 import org.olat.modules.assessment.model.AssessmentEntryStatus;
 import org.olat.repository.RepositoryEntry;
 import org.olat.repository.RepositoryEntryRef;
@@ -132,14 +134,13 @@ public interface GTAManager {
 	
 	public void removeSolution(Solution removedSolution, CourseEnvironment courseEnv, GTACourseNode cNode);
 	
-	
 	/**
 	 * Create a subscription context.
 	 * @param courseEnv The course environment
 	 * @param cNode The course element
 	 * @return The subscription context for this course and course element.
 	 */
-	public SubscriptionContext getSubscriptionContext(CourseEnvironment courseEnv, GTACourseNode cNode);
+	public SubscriptionContext getSubscriptionContext(CourseEnvironment courseEnv, GTACourseNode cNode, boolean markedOnly);
 	
 	/**
 	 * Create a subscription context.
@@ -147,9 +148,17 @@ public interface GTAManager {
 	 * @param cNode The course element
 	 * @return The subscription context for this course and course element.
 	 */
-	public SubscriptionContext getSubscriptionContext(OLATResource courseRes, GTACourseNode cNode);
+	public SubscriptionContext getSubscriptionContext(OLATResource courseRes, GTACourseNode cNode, boolean markedOnly);
 	
-	public PublisherData getPublisherData(CourseEnvironment courseEnv, GTACourseNode cNode);
+	public PublisherData getPublisherData(CourseEnvironment courseEnv, GTACourseNode cNode, boolean markedOnly);
+	
+	/**
+	 * Set the news on the publishers for standard and marked tasks.
+	 * 
+	 * @param courseEnv The course environment
+	 * @param cNode The course node
+	 */
+	public void markNews(CourseEnvironment courseEnv, GTACourseNode cNode);
 	
 	/**
 	 * Return the list of business groups configured in the course element
@@ -255,19 +264,37 @@ public interface GTAManager {
 	
 	public Membership getMembership(IdentityRef identity, RepositoryEntryRef entry, GTACourseNode cNode);
 	
+	public Task getTask(TaskRef task);
+	
+	public TaskDueDate getDueDatesTask(TaskRef task);
+	
 	public Task getTask(IdentityRef identity, TaskList taskList);
 	
 	public Task getTask(BusinessGroupRef businessGroup, TaskList taskList);
 	
 	public Task createTask(String taskName, TaskList taskList, TaskProcess status, BusinessGroup assessedGroup, Identity assessedIdentity, GTACourseNode cNode);
 	
-	public Task nextStep(Task task, GTACourseNode cNode);
+	public Task createAndPersistTask(String taskName, TaskList taskList, TaskProcess status, BusinessGroup assessedGroup, Identity assessedIdentity, GTACourseNode cNode);
+	
+	/**
+	 * If a temporary transient task created for coaching purpose need to be persisted,
+	 * 
+	 * @param task The transient task
+	 * @return The persisted task
+	 */
+	public Task persistTask(Task task);
+	
+	public Task nextStep(Task task, GTACourseNode cNode, Role by);
 	
 	
 
 	public List<Task> getTasks(TaskList taskList, GTACourseNode gtaNode);
 	
+	public List<Task> getTasks(IdentityRef identity);
+	
 	public List<TaskLight> getTasksLight(RepositoryEntryRef entry, GTACourseNode gtaNode);
+	
+	public List<TaskRevisionDate> getTaskRevisions(Task task);
 
 
 	public List<Identity> getCourseOwners(RepositoryEntry repositoryEntry);
@@ -299,21 +326,72 @@ public interface GTAManager {
 
 	public AssignmentResponse assignTaskAutomatically(TaskList taskList, Identity assessedIdentity, CourseEnvironment courseEnv, GTACourseNode cNode);
 
+	public boolean isDueDateEnabled(GTACourseNode cNode);
+	
+	public DueDate getAssignmentDueDate(TaskRef task, IdentityRef assessedIdentity, BusinessGroup assessedGroup,
+			GTACourseNode gtaNode, RepositoryEntry courseEntry, boolean withIndividualDueDate);
+	
+	public DueDate getSubmissionDueDate(TaskRef assignedTask, IdentityRef assessedIdentity, BusinessGroup assessedGroup,
+			GTACourseNode cNode, RepositoryEntry courseEntry, boolean withIndividualDueDate);
+	
+	public DueDate getSolutionDueDate(TaskRef assignedTask, IdentityRef assessedIdentity, BusinessGroup assessedGroup,
+			GTACourseNode cNode, RepositoryEntry courseEntry, boolean withIndividualDueDate);
+	
+	/**
+	 * Calculated a reference date relative to the specified parameters
+	 * 
+	 * @param numOfDays
+	 * @param relativeTo
+	 * @param assignedTask
+	 * @param entry
+	 * @return
+	 */
+	public DueDate getReferenceDate(int numOfDays, String relativeTo, TaskRef assignedTask,
+			IdentityRef assessedIdentity, BusinessGroup assessedGroup, RepositoryEntry entry);
+	
 	public TaskProcess firstStep(GTACourseNode cNode);
 
 	public TaskProcess previousStep(TaskProcess currentStep, GTACourseNode cNode);
 	
 	public TaskProcess nextStep(TaskProcess currentStep, GTACourseNode cNode);
+
+	public Task collectTask(Task task, GTACourseNode cNode, int numOfDocs);
 	
-	public Task updateTask(Task task, TaskProcess newStatus, GTACourseNode cNode);
+	/**
+	 * Task is reviewed and accepted.
+	 * @param task
+	 * @param cNode
+	 * @return
+	 */
+	public Task reviewedTask(Task task, GTACourseNode cNode, Role by);
 	
-	public Task updateTask(Task task, TaskProcess newStatus, int iteration, GTACourseNode cNode);
+	public Task updateTask(Task task, TaskProcess newStatus, GTACourseNode cNode, Role by);
 	
+	public TaskDueDate updateTaskDueDate(TaskDueDate taskDueDate);
+	
+	public Task submitTask(Task task, GTACourseNode cNode, int numOfDocs, Role by);
+	
+	public Task submitRevisions(Task task, GTACourseNode cNode, int numOfDocs, Role by);
+	
+	public Task updateTask(Task task, TaskProcess newStatus, int iteration, GTACourseNode cNode, Role by);
+	
+	public Task allowResetTask(Task task, Identity allower, GTACourseNode cNode);
+	
+	public Task resetTask(Task task, GTACourseNode cNode, CourseEnvironment courseEnv);
+	
+	public Task resetTaskRefused(Task task, GTACourseNode cNode);
+	
+	public boolean toggleMark(RepositoryEntry entry, GTACourseNode gtaNode, Identity marker, Identity participant);
+
+	public List<IdentityMark> getMarks(RepositoryEntry entry, GTACourseNode gtaNode, Identity marker);
+	
+	public boolean hasMarks(RepositoryEntry entry, GTACourseNode gtaNode, Identity marker);
+
 	public void log(String step, String operation, Task assignedTask, Identity actor, Identity assessedIdentity, BusinessGroup assessedGroup,
-			CourseEnvironment courseEnv, GTACourseNode cNode);
+			CourseEnvironment courseEnv, GTACourseNode cNode, Role by);
 	
 	public void log(String step, SubmitEvent event, Task assignedTask, Identity actor, Identity assessedIdentity, BusinessGroup assessedGroup,
-			CourseEnvironment courseEnv, GTACourseNode cNode);
+			CourseEnvironment courseEnv, GTACourseNode cNode, Role by);
 
 	public void addUniqueIdentities(Map<Long, Identity> map, List<Identity> list);
 

@@ -26,6 +26,7 @@ import java.util.List;
 import java.util.Map;
 
 import org.olat.core.gui.UserRequest;
+import org.olat.core.gui.components.form.flexible.FormItem;
 import org.olat.core.gui.components.form.flexible.FormItemContainer;
 import org.olat.core.gui.components.form.flexible.elements.FileElement;
 import org.olat.core.gui.components.form.flexible.elements.RichTextElement;
@@ -43,15 +44,15 @@ import org.olat.core.util.StringHelper;
 import org.olat.core.util.Util;
 import org.olat.core.util.vfs.JavaIOItem;
 import org.olat.core.util.vfs.VFSItem;
+import org.olat.modules.ceditor.PageElement;
+import org.olat.modules.ceditor.PageElementAddController;
+import org.olat.modules.ceditor.ui.AddElementInfos;
 import org.olat.modules.portfolio.Category;
 import org.olat.modules.portfolio.Media;
 import org.olat.modules.portfolio.PortfolioService;
 import org.olat.modules.portfolio.handler.FileHandler;
 import org.olat.modules.portfolio.model.MediaPart;
 import org.olat.modules.portfolio.ui.PortfolioHomeController;
-import org.olat.modules.portfolio.ui.editor.AddElementInfos;
-import org.olat.modules.portfolio.ui.editor.PageElement;
-import org.olat.modules.portfolio.ui.editor.PageElementAddController;
 import org.springframework.beans.factory.annotation.Autowired;
 
 /**
@@ -148,9 +149,6 @@ public class CollectFileMediaController extends FormBasicController implements P
 		categoriesEl.setElementCssClass("o_sel_ep_tagsinput");
 		categoriesEl.setAllowDuplicates(false);
 		
-		//String source = "Forum";
-		//uifactory.addStaticTextElement("artefact.source", "artefact.source", source, formLayout);
-		
 		Date collectDate = mediaReference == null ? new Date() : mediaReference.getCollectionDate();
 		String date = Formatter.getInstance(getLocale()).formatDate(collectDate);
 		uifactory.addStaticTextElement("artefact.collect.date", "artefact.collect.date", date, formLayout);
@@ -173,15 +171,32 @@ public class CollectFileMediaController extends FormBasicController implements P
 	
 	@Override
 	protected boolean validateFormLogic(UserRequest ureq) {
-		boolean allOk = true;
+		boolean allOk = super.validateFormLogic(ureq);
 		
 		fileEl.clearError();
 		if(fileEl.getInitialFile() == null && (fileEl.getUploadFile() == null || fileEl.getUploadSize() < 1)) {
 			fileEl.setErrorKey("form.legende.mandatory", null);
 			allOk &= false;
 		}
+		
+		titleEl.clearError();
+		if (titleEl.isEmpty()) {
+			titleEl.setErrorKey("form.legende.mandatory", null);
+			allOk &= false;
+		}
 
-		return allOk & super.validateFormLogic(ureq);
+		return allOk;
+	}
+	
+	@Override
+	protected void formInnerEvent(UserRequest ureq, FormItem source, FormEvent event) {
+		if(fileEl == source) {
+			if (titleEl.isEmpty()) {
+				titleEl.setValue(fileEl.getUploadFileName());
+				titleEl.getComponent().setDirty(true);
+			}
+		}
+		super.formInnerEvent(ureq, source, event);
 	}
 
 	@Override

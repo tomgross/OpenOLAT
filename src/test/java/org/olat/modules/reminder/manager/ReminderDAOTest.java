@@ -67,6 +67,7 @@ public class ReminderDAOTest extends OlatTestCase {
 		Assert.assertNotNull(reminder);
 		reminder.setConfiguration("<rules></rules>");
 		reminder.setDescription("Reminder - 1");
+		reminder.setEmailSubject("This is a subject");
 		reminder.setEmailBody("Hello world");
 
 		//save and check
@@ -80,6 +81,7 @@ public class ReminderDAOTest extends OlatTestCase {
 		Assert.assertEquals(entry, savedReminder.getEntry());
 		Assert.assertEquals("Reminder - 1", savedReminder.getDescription());
 		Assert.assertEquals("<rules></rules>", savedReminder.getConfiguration());
+		Assert.assertEquals("This is a subject", savedReminder.getEmailSubject());
 		Assert.assertEquals("Hello world", savedReminder.getEmailBody());
 		
 		//reload and double check
@@ -93,6 +95,7 @@ public class ReminderDAOTest extends OlatTestCase {
 		Assert.assertEquals(savedReminder, reloadedReminder);
 		Assert.assertEquals("Reminder - 1", reloadedReminder.getDescription());
 		Assert.assertEquals("<rules></rules>", reloadedReminder.getConfiguration());
+		Assert.assertEquals("This is a subject", reloadedReminder.getEmailSubject());
 		Assert.assertEquals("Hello world", reloadedReminder.getEmailBody());
 	}
 	
@@ -105,6 +108,7 @@ public class ReminderDAOTest extends OlatTestCase {
 		Reminder reminder = reminderDao.createReminder(entry, creator);
 		reminder.setConfiguration("<rules></rules>");
 		reminder.setDescription("Reminder - 2");
+		reminder.setEmailSubject("This is a subject");
 		reminder.setEmailBody("Hello world");
 		Reminder savedReminder = reminderDao.save(reminder);
 		Assert.assertNotNull(savedReminder);
@@ -153,6 +157,7 @@ public class ReminderDAOTest extends OlatTestCase {
 		Reminder reminder = reminderDao.createReminder(entry, creator);
 		reminder.setConfiguration("<rules></rules>");
 		reminder.setDescription("Reminder - 12");
+		reminder.setEmailSubject("This is a deleted subject");
 		reminder.setEmailBody("Hello, I'm deleted");
 		Reminder savedReminder = reminderDao.save(reminder);
 		Assert.assertNotNull(savedReminder);
@@ -164,7 +169,7 @@ public class ReminderDAOTest extends OlatTestCase {
 		Assert.assertTrue(loadedReminders.contains(savedReminder));
 		
 		// delete the resource
-		repositoryService.deleteSoftly(entry, creator, false);
+		repositoryService.deleteSoftly(entry, creator, false, false);
 		dbInstance.commitAndCloseSession();
 		
 		// check we don't found the reminder
@@ -181,6 +186,7 @@ public class ReminderDAOTest extends OlatTestCase {
 		Reminder reminder = reminderDao.createReminder(entry, creator);
 		reminder.setConfiguration("<rules></rules>");
 		reminder.setDescription("Reminder - 4");
+		reminder.setEmailSubject("This is a subject");
 		reminder.setEmailBody("Hello world");
 		Reminder savedReminder = reminderDao.save(reminder);
 		Assert.assertNotNull(savedReminder);
@@ -195,6 +201,7 @@ public class ReminderDAOTest extends OlatTestCase {
 		Assert.assertEquals(savedReminder, loadedReminder);
 		Assert.assertEquals(entry, loadedReminder.getEntry());
 		Assert.assertEquals("Reminder - 4", loadedReminder.getDescription());
+		Assert.assertEquals("This is a subject", loadedReminder.getEmailSubject());
 		Assert.assertEquals("Hello world", loadedReminder.getEmailBody());
 	}
 	
@@ -345,6 +352,7 @@ public class ReminderDAOTest extends OlatTestCase {
 		Assert.assertEquals(creator, reloadedDuplicate.getCreator());
 		Assert.assertEquals(entry, reloadedDuplicate.getEntry());
 		Assert.assertEquals(reminderToCopy.getEmailBody(), reloadedDuplicate.getEmailBody());
+		Assert.assertEquals(reminderToCopy.getEmailSubject(), reloadedDuplicate.getEmailSubject());
 		Assert.assertTrue(reloadedDuplicate.getDescription().startsWith(reminderToCopy.getDescription()));
 		Assert.assertEquals(reminderToCopy.getConfiguration(), reloadedDuplicate.getConfiguration());
 	}
@@ -436,6 +444,7 @@ public class ReminderDAOTest extends OlatTestCase {
 		Reminder reminder = reminderDao.createReminder(entry, creator);
 		reminder.setConfiguration("<rules></rules>");
 		reminder.setDescription("Reminder - " + num);
+		reminder.setEmailSubject("This is a subject - " + num);
 		reminder.setEmailBody("Hello world - " + num);
 		return reminderDao.save(reminder);
 	}

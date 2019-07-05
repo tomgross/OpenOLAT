@@ -19,90 +19,124 @@
  */
 package org.olat.admin.security;
 
-import org.olat.basesecurity.BaseSecurityModule;
-import org.olat.collaboration.CollaborationToolsFactory;
-import org.olat.core.CoreSpringFactory;
-import org.olat.core.commons.modules.bc.FolderModule;
+import org.olat.core.commons.services.csp.CSPModule;
+import org.olat.core.commons.services.csp.ui.CSPLogListController;
 import org.olat.core.gui.UserRequest;
-import org.olat.core.gui.components.form.flexible.FormItem;
-import org.olat.core.gui.components.form.flexible.FormItemContainer;
-import org.olat.core.gui.components.form.flexible.elements.MultipleSelectionElement;
-import org.olat.core.gui.components.form.flexible.impl.FormBasicController;
-import org.olat.core.gui.components.form.flexible.impl.FormEvent;
+import org.olat.core.gui.components.Component;
+import org.olat.core.gui.components.link.Link;
+import org.olat.core.gui.components.link.LinkFactory;
+import org.olat.core.gui.components.segmentedview.SegmentViewComponent;
+import org.olat.core.gui.components.segmentedview.SegmentViewEvent;
+import org.olat.core.gui.components.segmentedview.SegmentViewFactory;
+import org.olat.core.gui.components.stack.BreadcrumbPanel;
+import org.olat.core.gui.components.stack.BreadcrumbPanelAware;
+import org.olat.core.gui.components.velocity.VelocityContainer;
 import org.olat.core.gui.control.Controller;
+import org.olat.core.gui.control.Event;
 import org.olat.core.gui.control.WindowControl;
+import org.olat.core.gui.control.controller.BasicController;
+import org.olat.core.util.resource.OresHelper;
+import org.springframework.beans.factory.annotation.Autowired;
 
 /**
  * 
- * Initial date: 23.12.2013<br>
+ * Initial date: 19 avr. 2018<br>
  * @author srosse, stephane.rosse@frentix.com, http://www.frentix.com
  *
  */
-public class SecurityAdminController extends FormBasicController {
+public class SecurityAdminController extends BasicController implements BreadcrumbPanelAware {
 	
-	private MultipleSelectionElement wikiEl, topFrameEl, forceDownloadEl;
+	private final VelocityContainer mainVC;
+	private final SegmentViewComponent segmentView;
+	private final Link cspLink;
+	private final Link configurationLink;
+	private BreadcrumbPanel stackPanel;
+	
+	private CSPLogListController logListCtrl;
+	private SecurityAdminConfigurationController configurationCtrl;
 
-	private final FolderModule folderModule;
-	private final BaseSecurityModule securityModule;
+	@Autowired
+	private CSPModule cspModule;
 	
 	public SecurityAdminController(UserRequest ureq, WindowControl wControl) {
 		super(ureq, wControl);
-		securityModule = CoreSpringFactory.getImpl(BaseSecurityModule.class);
-		folderModule = CoreSpringFactory.getImpl(FolderModule.class);
-		initForm(ureq);
+		
+		mainVC = createVelocityContainer("security_admin");
+		
+		segmentView = SegmentViewFactory.createSegmentView("segments", mainVC, this);
+		segmentView.setDontShowSingleSegment(true);
+		configurationLink = LinkFactory.createLink("security.configuration", mainVC, this);
+		segmentView.addSegment(configurationLink, true);
+		doOpenConfiguration(ureq);
+		
+		cspLink = LinkFactory.createLink("security.csp.log", mainVC, this);
+		if(cspModule.isContentSecurityPolicyEnabled()) {
+			segmentView.addSegment(cspLink, false);
+		}
+		
+		putInitialPanel(mainVC);
 	}
 
 	@Override
-	protected void initForm(FormItemContainer formLayout, Controller listener, UserRequest ureq) {
-		setFormTitle("sec.title");
-		setFormDescription("sec.description");
-		setFormContextHelp("Security");
+	public void setBreadcrumbPanel(BreadcrumbPanel stackPanel) {
+		this.stackPanel = stackPanel;
+		if(logListCtrl != null) {
+			logListCtrl.setBreadcrumbPanel(stackPanel);
+		}
+	}
 
-		String[] keys = new String[]{ "on" };
-		String[] values = new String[]{ "" };
-		
-		// on: force top top frame (more security); off: allow in frame (less security)
-		topFrameEl = uifactory.addCheckboxesHorizontal("sec.topframe", "sec.topframe", formLayout, keys, values);
-		topFrameEl.select("on", securityModule.isForceTopFrame());
-		topFrameEl.addActionListener(FormEvent.ONCHANGE);
-		topFrameEl.setEnabled(false);
-		topFrameEl.setExampleKey("sec.top.frame.explanation", null);
-		
-		// on: block wiki (more security); off: do not block wiki (less security)
-		wikiEl = uifactory.addCheckboxesHorizontal("sec.wiki", "sec.wiki", formLayout, keys, values);
-		wikiEl.select("off", securityModule.isWikiEnabled());
-		wikiEl.addActionListener(FormEvent.ONCHANGE);
-
-		// on: force file download in folder component (more security); off: allow execution of content (less security)
-		forceDownloadEl = uifactory.addCheckboxesHorizontal("sec.download", "sec.force.download", formLayout, keys, values);
-		forceDownloadEl.select("on", folderModule.isForceDownload());
-		forceDownloadEl.addActionListener(FormEvent.ONCHANGE);
+	@Override
+	protected void event(UserRequest ureq, Component source, Event event) {
+		if(source == segmentView) {
+			if(event instanceof SegmentViewEvent) {
+				SegmentViewEvent sve = (SegmentViewEvent)event;
+				String segmentCName = sve.getComponentName();
+				Component clickedLink = mainVC.getComponent(segmentCName);
+				if (clickedLink == configurationLink) {
+					doOpenConfiguration(ureq);
+				} else if (clickedLink == cspLink){
+					doOpenCSPLog(ureq);
+				}
+			}
+		}
 	}
 	
+	@Override
+	protected void event(UserRequest ureq, Controller source, Event event) {
+		if(source == configurationCtrl) {
+			if(event == Event.DONE_EVENT || event == Event.CHANGED_EVENT) {
+				segmentView.removeSegment(cspLink);
+				if(cspModule.isContentSecurityPolicyEnabled()) {
+					segmentView.addSegment(cspLink, false);
+				}
+			}
+		}
+		super.event(ureq, source, event);
+	}
+
 	@Override
 	protected void doDispose() {
 		//
 	}
-
-	@Override
-	protected void formInnerEvent(UserRequest ureq, FormItem source, FormEvent event) {
-		if(topFrameEl == source) {
-			boolean enabled = topFrameEl.isAtLeastSelected(1);
-			securityModule.setForceTopFrame(enabled);
-		} else if(wikiEl == source) {
-			boolean enabled = wikiEl.isAtLeastSelected(1);
-			securityModule.setWikiEnabled(!enabled);
-			// update collaboration tools list
-			CollaborationToolsFactory.getInstance().initAvailableTools();
-		} else if(forceDownloadEl == source) {
-			boolean enabled = forceDownloadEl.isAtLeastSelected(1);
-			folderModule.setForceDownload(enabled);
+	
+	private void doOpenConfiguration(UserRequest ureq) {
+		if(configurationCtrl == null) {
+			WindowControl bwControl = addToHistory(ureq, OresHelper.createOLATResourceableType("Configuration"), null);
+			configurationCtrl = new SecurityAdminConfigurationController(ureq, bwControl);
+			listenTo(configurationCtrl);
 		}
-		super.formInnerEvent(ureq, source, event);
+		addToHistory(ureq, configurationCtrl);
+		mainVC.put("segmentCmp", configurationCtrl.getInitialComponent());
 	}
-
-	@Override
-	protected void formOK(UserRequest ureq) {
-		//
+	
+	private void doOpenCSPLog(UserRequest ureq) {
+		if(logListCtrl == null) {
+			WindowControl bwControl = addToHistory(ureq, OresHelper.createOLATResourceableType("CSPLog"), null);
+			logListCtrl = new CSPLogListController(ureq, bwControl);
+			logListCtrl.setBreadcrumbPanel(stackPanel);
+			listenTo(configurationCtrl);
+		}
+		addToHistory(ureq, logListCtrl);
+		mainVC.put("segmentCmp", logListCtrl.getInitialComponent());
 	}
 }

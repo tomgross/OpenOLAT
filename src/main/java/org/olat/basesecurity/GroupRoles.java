@@ -23,6 +23,8 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
+import org.olat.core.util.StringHelper;
+
 /**
  * 
  * Initial date: 26.02.2014<br>
@@ -37,6 +39,14 @@ public enum GroupRoles {
 	invitee,
 	waiting;
 	
+	public static boolean isValueOf(String val) {
+		for(GroupRoles role:values()) {
+			if(role.name().equals(val)) {
+				return true;
+			}
+		}
+		return false;
+	}
 	
 	public static List<String> toList(String... roles) {
 		if(roles != null && roles.length > 0 && !(roles.length == 1 && roles[0] == null)) {
@@ -47,5 +57,17 @@ public enum GroupRoles {
 			return roleList;
 		}
 		return Collections.emptyList();
+	}
+	
+	public static boolean isValue(String value) {
+		boolean isValue = false;
+		if(StringHelper.containsNonWhitespace(value)) {
+			for(GroupRoles role:GroupRoles.values()) {
+				if(role.name().equals(value)) {
+					isValue = true;
+				}
+			}
+		}
+		return isValue;
 	}
 }

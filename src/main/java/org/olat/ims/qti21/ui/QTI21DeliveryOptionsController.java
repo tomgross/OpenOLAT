@@ -33,7 +33,6 @@ import org.olat.core.gui.components.form.flexible.impl.FormEvent;
 import org.olat.core.gui.components.form.flexible.impl.FormLayoutContainer;
 import org.olat.core.gui.components.link.Link;
 import org.olat.core.gui.control.Controller;
-import org.olat.core.gui.control.Event;
 import org.olat.core.gui.control.WindowControl;
 import org.olat.core.gui.control.generic.dtabs.Activateable2;
 import org.olat.core.id.context.ContextEntry;
@@ -45,6 +44,7 @@ import org.olat.ims.qti21.QTI21DeliveryOptions.TestType;
 import org.olat.ims.qti21.QTI21Module;
 import org.olat.ims.qti21.QTI21Service;
 import org.olat.repository.RepositoryEntry;
+import org.olat.repository.ui.settings.ReloadSettingsEvent;
 import org.springframework.beans.factory.annotation.Autowired;
 
 /**
@@ -60,21 +60,29 @@ public class QTI21DeliveryOptionsController extends FormBasicController implemen
 	private static final String[] settingTypeKeys = new String[]{ "choose", TestType.summative.name(), TestType.formative.name() };
 	private static final String[] resultsOptionsKeys = new String[] { 
 			QTI21AssessmentResultsOptions.METADATA, QTI21AssessmentResultsOptions.SECTION_SUMMARY,
-			QTI21AssessmentResultsOptions.QUESTION_SUMMARY, QTI21AssessmentResultsOptions.QUESTIONS,
+			QTI21AssessmentResultsOptions.QUESTION_SUMMARY,
 			QTI21AssessmentResultsOptions.USER_SOLUTIONS, QTI21AssessmentResultsOptions.CORRECT_SOLUTIONS
 		};
 
 	private FormLink chooseProfileButton;
 	private SingleSelection settingTypeEl;
-	private MultipleSelectionElement showTitlesEl, showMenuEl;
+	private MultipleSelectionElement showTitlesEl;
+	private MultipleSelectionElement showMenuEl;
 	private MultipleSelectionElement personalNotesEl;
-	private MultipleSelectionElement enableCancelEl, enableSuspendEl;
-	private MultipleSelectionElement limitAttemptsEl, blockAfterSuccessEl;
-	private MultipleSelectionElement displayQuestionProgressEl, displayScoreProgressEl;
+	private MultipleSelectionElement showFeedbacksEl;
+	private MultipleSelectionElement enableCancelEl;
+	private MultipleSelectionElement enableSuspendEl;
+	private MultipleSelectionElement limitAttemptsEl;
+	private MultipleSelectionElement blockAfterSuccessEl;
+	private MultipleSelectionElement displayQuestionProgressEl;
+	private MultipleSelectionElement displayScoreProgressEl;
+	private MultipleSelectionElement displayMaxScoreItemEl;
 	private MultipleSelectionElement allowAnonymEl;
 	private MultipleSelectionElement hideLmsEl;
-	private MultipleSelectionElement digitalSignatureEl, digitalSignatureMailEl;
-	private MultipleSelectionElement showResultsOnFinishEl, assessmentResultsOnFinishEl;
+	private MultipleSelectionElement digitalSignatureEl;
+	private MultipleSelectionElement digitalSignatureMailEl;
+	private MultipleSelectionElement showResultsOnFinishEl;
+	private MultipleSelectionElement assessmentResultsOnFinishEl;
 	private TextElement maxAttemptsEl;
 	
 	private boolean changes;
@@ -147,6 +155,9 @@ public class QTI21DeliveryOptionsController extends FormBasicController implemen
 
 		displayScoreProgressEl = uifactory.addCheckboxesHorizontal("scoreProgress", "qti.form.scoreprogress", formLayout, onKeys, onValues);
 		displayScoreProgressEl.setElementCssClass("o_sel_qti_progress_score");
+		
+		displayMaxScoreItemEl = uifactory.addCheckboxesHorizontal("maxScoreItem", "qti.form.max.score.item", formLayout, onKeys, onValues);
+		displayMaxScoreItemEl.setElementCssClass("o_sel_qti_progress_max_score_item");
 
 		enableSuspendEl = uifactory.addCheckboxesHorizontal("suspend", "qti.form.enablesuspend", formLayout, onKeys, onValues);
 		enableSuspendEl.setElementCssClass("o_sel_qti_enable_suspend");
@@ -158,14 +169,17 @@ public class QTI21DeliveryOptionsController extends FormBasicController implemen
 		digitalSignatureEl.setVisible(qtiModule.isDigitalSignatureEnabled());
 		digitalSignatureEl.addActionListener(FormEvent.ONCHANGE);
 		digitalSignatureMailEl = uifactory.addCheckboxesHorizontal("digital.signature.mail", "digital.signature.mail.test.option", formLayout, onKeys, onValues);
-
+		
+		showFeedbacksEl = uifactory.addCheckboxesHorizontal("showFeedbacks", "qti.form.showfeedbacks", formLayout, onKeys, onValues);
+		showFeedbacksEl.setElementCssClass("o_sel_qti_show_feedbacks");
+		
 		showResultsOnFinishEl = uifactory.addCheckboxesHorizontal("resultOnFiniish", "qti.form.results.onfinish", formLayout, onKeys, onValues);
 		showResultsOnFinishEl.addActionListener(FormEvent.ONCHANGE);
 		showResultsOnFinishEl.setElementCssClass("o_sel_qti_show_results");
 		
 		String[] resultsOptionsValues = new String[] {
 				translate("qti.form.summary.metadata"), translate("qti.form.summary.sections"),
-				translate("qti.form.summary.questions.metadata"), translate("qti.form.summary.questions"),
+				translate("qti.form.summary.questions.metadata"),
 				translate("qti.form.summary.responses"), translate("qti.form.summary.solutions")
 		};
 		assessmentResultsOnFinishEl = uifactory.addCheckboxesVertical("typeResultOnFiniish", "qti.form.summary", formLayout,
@@ -200,12 +214,16 @@ public class QTI21DeliveryOptionsController extends FormBasicController implemen
 		applyMultipleSelection(personalNotesEl, options.isPersonalNotes());
 		applyMultipleSelection(displayQuestionProgressEl, options.isDisplayQuestionProgress());
 		applyMultipleSelection(displayScoreProgressEl, options.isDisplayScoreProgress());
+		applyMultipleSelection(displayMaxScoreItemEl, options.isDisplayMaxScoreItem());
 		applyMultipleSelection(enableSuspendEl, options.isEnableSuspend());
 		applyMultipleSelection(enableCancelEl, options.isEnableCancel());
+		applyMultipleSelection(showFeedbacksEl, !options.isHideFeedbacks());
 		
+		if(options.isShowAssessmentResultsOnFinish()) {
+			showResultsOnFinishEl.select(onKeys[0], true);
+		}
 		QTI21AssessmentResultsOptions resultsOptions = options.getAssessmentResultsOptions();
 		if(!resultsOptions.none()) {
-			showResultsOnFinishEl.select(onKeys[0], true);
 			assessmentResultsOnFinishEl.uncheckAll();
 			if(resultsOptions.isMetadata()) {
 				assessmentResultsOnFinishEl.select(resultsOptionsKeys[0], true);
@@ -216,17 +234,13 @@ public class QTI21DeliveryOptionsController extends FormBasicController implemen
 			if(resultsOptions.isQuestionSummary()) {
 				assessmentResultsOnFinishEl.select(resultsOptionsKeys[2], true);
 			}
-			if(resultsOptions.isQuestions()) {
+			if(resultsOptions.isUserSolutions()) {
 				assessmentResultsOnFinishEl.select(resultsOptionsKeys[3], true);
 			}
-			if(resultsOptions.isUserSolutions()) {
+			if(resultsOptions.isCorrectSolutions()) {
 				assessmentResultsOnFinishEl.select(resultsOptionsKeys[4], true);
 			}
-			if(resultsOptions.isCorrectSolutions()) {
-				assessmentResultsOnFinishEl.select(resultsOptionsKeys[5], true);
-			}
 		} else {
-			showResultsOnFinishEl.uncheckAll();
 			assessmentResultsOnFinishEl.uncheckAll();
 		}
 		assessmentResultsOnFinishEl.setVisible(showResultsOnFinishEl.isAtLeastSelected(1));
@@ -321,17 +335,21 @@ public class QTI21DeliveryOptionsController extends FormBasicController implemen
 		deliveryOptions.setEnableSuspend(enableSuspendEl.isAtLeastSelected(1));
 		deliveryOptions.setDisplayQuestionProgress(displayQuestionProgressEl.isAtLeastSelected(1));
 		deliveryOptions.setDisplayScoreProgress(displayScoreProgressEl.isAtLeastSelected(1));
+		deliveryOptions.setDisplayMaxScoreItem(displayMaxScoreItemEl.isAtLeastSelected(1));
 		deliveryOptions.setAllowAnonym(allowAnonymEl.isAtLeastSelected(1));
 		deliveryOptions.setHideLms(hideLmsEl.isAtLeastSelected(1));
-		
+		deliveryOptions.setHideFeedbacks(!showFeedbacksEl.isAtLeastSelected(1));//reverse logic for compatibility
+
 		if(showResultsOnFinishEl.isAtLeastSelected(1)) {
 			QTI21AssessmentResultsOptions resultsOptions = new QTI21AssessmentResultsOptions(
 					assessmentResultsOnFinishEl.isSelected(0), assessmentResultsOnFinishEl.isSelected(1),
-					assessmentResultsOnFinishEl.isSelected(2), assessmentResultsOnFinishEl.isSelected(3),
-					assessmentResultsOnFinishEl.isSelected(4), assessmentResultsOnFinishEl.isSelected(5));
+					assessmentResultsOnFinishEl.isSelected(2),
+					assessmentResultsOnFinishEl.isSelected(3), assessmentResultsOnFinishEl.isSelected(4));
 			deliveryOptions.setAssessmentResultsOptions(resultsOptions);
+			deliveryOptions.setShowAssessmentResultsOnFinish(true);
 		} else {
 			deliveryOptions.setAssessmentResultsOptions(QTI21AssessmentResultsOptions.noOptions());
+			deliveryOptions.setShowAssessmentResultsOnFinish(false);
 		}
 		deliveryOptions.setShowResultsOnFinish(null);// nullify old stuff
 
@@ -345,6 +363,6 @@ public class QTI21DeliveryOptionsController extends FormBasicController implemen
 		
 		qtiService.setDeliveryOptions(testEntry, deliveryOptions);
 		changes = true;
-		fireEvent(ureq, Event.DONE_EVENT);
+		fireEvent(ureq, new ReloadSettingsEvent());
 	}
 }

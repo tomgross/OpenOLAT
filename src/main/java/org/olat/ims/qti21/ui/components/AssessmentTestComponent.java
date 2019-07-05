@@ -26,7 +26,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import org.olat.core.logging.OLog;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
 import org.olat.ims.qti21.ui.components.AssessmentObjectComponentRenderer.RenderingRequest;
 
@@ -34,6 +34,8 @@ import uk.ac.ed.ph.jqtiplus.node.item.AssessmentItem;
 import uk.ac.ed.ph.jqtiplus.node.item.ModalFeedback;
 import uk.ac.ed.ph.jqtiplus.node.item.interaction.Interaction;
 import uk.ac.ed.ph.jqtiplus.node.result.SessionStatus;
+import uk.ac.ed.ph.jqtiplus.node.test.AbstractPart;
+import uk.ac.ed.ph.jqtiplus.node.test.AssessmentItemRef;
 import uk.ac.ed.ph.jqtiplus.node.test.AssessmentSection;
 import uk.ac.ed.ph.jqtiplus.node.test.AssessmentTest;
 import uk.ac.ed.ph.jqtiplus.node.test.TestPart;
@@ -57,7 +59,7 @@ import uk.ac.ed.ph.jqtiplus.types.Identifier;
 public class AssessmentTestComponent extends AssessmentObjectComponent  {
 	
 	private static final AssessmentTestComponentRenderer VELOCITY_RENDERER = new AssessmentTestComponentRenderer();
-	private static final OLog log = Tracing.createLoggerFor(AssessmentTestComponent.class);
+	private static final Logger log = Tracing.createLoggerFor(AssessmentTestComponent.class);
 	
 	private TestSessionController testSessionController;
 	private ResolvedAssessmentTest resolvedAssessmentTest;
@@ -128,6 +130,23 @@ public class AssessmentTestComponent extends AssessmentObjectComponent  {
 		responseIdentifiersMap.put(id, interaction);
 		return id;
 	}
+	
+	public boolean validateCommand(String cmd, TestPlanNodeKey tpnk) {
+		String id = "oo" + (tpnk.toString().replace(":", "_")) + "_";
+		return cmd.contains(id);
+	}
+	
+	public boolean validateRequest(TestPlanNodeKey tpnk) {
+		if(tpnk == null) return false;
+		
+		String id = "oo" + (tpnk.toString().replace(":", "_")) + "_";
+		for(String parameter:qtiItem.getRootForm().getRequestParameterSet()) {
+			if(parameter.contains(id)) {
+				return true;
+			}
+		}
+		return false;
+	}
 
 	@Override
 	public Interaction getInteractionOfResponseUniqueIdentifier(String responseUniqueId) {
@@ -151,10 +170,21 @@ public class AssessmentTestComponent extends AssessmentObjectComponent  {
 	 * @return
 	 */
 	public boolean willShowFeedbacks(TestPlanNode itemNode) {
+		if(isHideFeedbacks()) {
+			return false;
+		}
+		
 		try {
-			URI itemSystemId = itemNode.getItemSystemId();
+			AssessmentItemRef itemRef = getResolvedAssessmentTest().getItemRefsByIdentifierMap()
+				.get(itemNode.getKey().getIdentifier());
+			if(itemRef == null) {
+				return false;
+			}
 			ResolvedAssessmentItem resolvedAssessmentItem = getResolvedAssessmentTest()
-					.getResolvedAssessmentItemBySystemIdMap().get(itemSystemId);
+				.getResolvedAssessmentItem(itemRef);
+			if(resolvedAssessmentItem == null) {
+				return false;
+			}
 			AssessmentItem assessmentItem = resolvedAssessmentItem.getRootNodeLookup().extractIfSuccessful();
 			if(assessmentItem.getAdaptive()) {
 				return true;
@@ -247,11 +277,9 @@ public class AssessmentTestComponent extends AssessmentObjectComponent  {
 	public AssessmentSection getAssessmentSection(Identifier identifier) {
 		List<TestPart> testParts = getAssessmentTest().getTestParts();
 		for(TestPart testPart:testParts) {
-			List<AssessmentSection> sections = testPart.getAssessmentSections();
-			for(AssessmentSection section:sections) {
-				if(section.getIdentifier().equals(identifier)) {
-					return section;
-				}
+			AbstractPart section = testPart.lookupFirstDescendant(identifier);
+			if(section instanceof AssessmentSection) {
+				return (AssessmentSection)section;
 			}	
 		}
 		return null;

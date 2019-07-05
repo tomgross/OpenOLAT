@@ -19,24 +19,37 @@
  */
 package org.olat.ims.qti21.questionimport;
 
+import java.io.IOException;
+import java.io.StringReader;
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 
-import org.olat.core.logging.OLog;
+import org.apache.logging.log4j.Logger;
+import org.olat.core.gui.translator.Translator;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.StringHelper;
+import org.olat.core.util.Util;
 import org.olat.ims.qti21.QTI21Constants;
 import org.olat.ims.qti21.model.xml.AssessmentItemBuilder;
 import org.olat.ims.qti21.model.xml.AssessmentItemFactory;
+import org.olat.ims.qti21.model.xml.interactions.EssayAssessmentItemBuilder;
 import org.olat.ims.qti21.model.xml.interactions.FIBAssessmentItemBuilder;
 import org.olat.ims.qti21.model.xml.interactions.FIBAssessmentItemBuilder.EntryType;
 import org.olat.ims.qti21.model.xml.interactions.FIBAssessmentItemBuilder.TextEntry;
 import org.olat.ims.qti21.model.xml.interactions.KPrimAssessmentItemBuilder;
+import org.olat.ims.qti21.model.xml.interactions.MatchAssessmentItemBuilder;
 import org.olat.ims.qti21.model.xml.interactions.MultipleChoiceAssessmentItemBuilder;
 import org.olat.ims.qti21.model.xml.interactions.SimpleChoiceAssessmentItemBuilder;
 import org.olat.ims.qti21.model.xml.interactions.SimpleChoiceAssessmentItemBuilder.ScoreEvaluation;
 import org.olat.ims.qti21.model.xml.interactions.SingleChoiceAssessmentItemBuilder;
+import org.olat.ims.qti21.ui.editor.AssessmentItemEditorController;
+
+import com.opencsv.CSVParser;
+import com.opencsv.CSVParserBuilder;
+import com.opencsv.CSVReader;
+import com.opencsv.CSVReaderBuilder;
 
 import uk.ac.ed.ph.jqtiplus.node.content.xhtml.text.P;
 import uk.ac.ed.ph.jqtiplus.node.item.interaction.ChoiceInteraction;
@@ -44,6 +57,7 @@ import uk.ac.ed.ph.jqtiplus.node.item.interaction.choice.SimpleAssociableChoice;
 import uk.ac.ed.ph.jqtiplus.node.item.interaction.choice.SimpleChoice;
 import uk.ac.ed.ph.jqtiplus.serialization.QtiSerializer;
 import uk.ac.ed.ph.jqtiplus.types.Identifier;
+import uk.ac.ed.ph.jqtiplus.value.DirectedPairValue;
 
 /**
  * 
@@ -53,15 +67,20 @@ import uk.ac.ed.ph.jqtiplus.types.Identifier;
  */
 public class CSVToAssessmentItemConverter {
 	
-	private static final OLog log = Tracing.createLoggerFor(CSVToAssessmentItemConverter.class);
+	private static final Logger log = Tracing.createLoggerFor(CSVToAssessmentItemConverter.class);
+	private static final String[] BLOCK_MARKERS = new String[] { "<p", "<P", "<div", "<DIV", "<ul", "<UL", "<ol", "<OL" };
 
+	private int currentLine;
 	private int kprimPosition = 0;
 	private ImportOptions options;
+	private final Locale locale;
 	private final QtiSerializer qtiSerializer;
+	private List<String> questionFragements;
 	private AssessmentItemAndMetadata currentItem;
 	private final List<AssessmentItemAndMetadata> items = new ArrayList<>();
 	
-	public CSVToAssessmentItemConverter(ImportOptions options, QtiSerializer qtiSerializer) {
+	public CSVToAssessmentItemConverter(ImportOptions options, Locale locale, QtiSerializer qtiSerializer) {
+		this.locale = locale;
 		this.options = options;
 		this.qtiSerializer = qtiSerializer;
 	}
@@ -70,31 +89,64 @@ public class CSVToAssessmentItemConverter {
 		return items;
 	}
 	
+	public int getCurrentLine() {
+		return currentLine;
+	}
+	
 	public void parse(String input) {
-		String[] lines = input.split("\r?\n");
+		List<String[]> lines = getLines(input);
+		for(String[] line:lines) {
+			processLine(line);
+		}
+		buildCurrentItem();
+	}
+	
+	private List<String[]> getLines(String input) {
+		List<String[]> lines = getLines(input, '\t');
+		if(lines.isEmpty()) {
+			lines = getLines(input, ',');
+		}
+		return lines;
+	}
+	
+	private List<String[]> getLines(String input, char separator) {
+		CSVParser parser = new CSVParserBuilder()
+				.withSeparator(separator)
+				.build();
 		
-		for (int i = 0; i<lines.length; i++) {
-			String line = lines[i];
-			if (line.equals("")) {
-				continue;
+		List<String[]> lines = new ArrayList<>();
+		try(CSVReader reader = new CSVReaderBuilder(new StringReader(input))
+					.withCSVParser(parser)
+					.build()) {
+			
+			String [] nextLine;
+			while ((nextLine = reader.readNext()) != null) {
+				if(nextLine.length > 1) {
+					String[] stripedLine = stripLine(nextLine);
+					lines.add(stripedLine);
+				}
 			}
-		
-			String delimiter = "\t";
-			// use comma as fallback delimiter, e.g. for better testing
-			if (line.indexOf(delimiter) == -1) {
-				delimiter = ",";
+		} catch (IOException e) {
+			log.error("", e);
+		}
+		return lines;
+	}
+	
+	private String[] stripLine(String[] line) {
+		int lastPos = line.length;
+		for(int i=lastPos; i-->0; ) {
+			if(StringHelper.containsNonWhitespace(line[i])) {
+				lastPos = i;
+				break;
 			}
-			String[] parts = line.split(delimiter);
-			if(parts.length > 1) {
-				processLine(parts);
-			}	
 		}
 		
-		if(currentItem != null) {
-			build();
-			items.add(currentItem);
-			currentItem = null;
+		if(lastPos < (line.length - 1)) {
+			String[] newLine = new String[lastPos + 1];
+			System.arraycopy(line, 0, newLine, 0, lastPos + 1);
+			line = newLine;
 		}
+		return line;
 	}
 	
 	private void processLine(String[] parts) {
@@ -104,16 +156,25 @@ public class CSVToAssessmentItemConverter {
 			case "type": processType(parts); break;
 			case "titel":
 			case "title": processTitle(parts); break;
+			case "topic": processTopic(parts); break;
 			case "beschreibung":
 			case "description": processDescription(parts); break;
 			case "frage":
 			case "question": processQuestion(parts); break;
 			case "punkte":
 			case "points": processPoints(parts); break;
+			case "max. number of possible answers":
+			case "max. answers":
+			case "max answers": processMaxAnswers(parts); break;
+			case "min. number of possible answers":
+			case "min. answers":
+			case "min answers": processMinAnswers(parts); break;
 			case "fachbereich":
 			case "subject": processTaxonomyPath(parts); break;
 			case "feedback correct answer": processFeedbackCorrectAnswer(parts); break;
 			case "feedback wrong answer": processFeedbackWrongAnswer(parts); break;
+			case "hint": processHint(parts); break;
+			case "correct solution": processCorrectSolution(parts); break;
 			case "schlagworte":
 			case "keywords": processKeywords(parts); break;
 			case "abdeckung":
@@ -135,6 +196,8 @@ public class CSVToAssessmentItemConverter {
 			case "editor version": processEditorVersion(parts); break;
 			case "lizenz":
 			case "license": processLicense(parts); break;
+			case "min": processMin(parts); break;
+			case "max": processMax(parts); break;
 			default: processChoice(parts);
 		}
 	}
@@ -213,6 +276,26 @@ public class CSVToAssessmentItemConverter {
 		}
 	}
 	
+	private void processHint(String[] parts) {
+		if(currentItem == null || parts.length < 2) return;
+		
+		String feedback = parts[1];
+		if(StringHelper.containsNonWhitespace(feedback)) {
+			AssessmentItemBuilder itemBuilder = currentItem.getItemBuilder();
+			itemBuilder.createHint().setText(feedback);
+		}
+	}
+	
+	private void processCorrectSolution(String[] parts) {
+		if(currentItem == null || parts.length < 2) return;
+		
+		String feedback = parts[1];
+		if(StringHelper.containsNonWhitespace(feedback)) {
+			AssessmentItemBuilder itemBuilder = currentItem.getItemBuilder();
+			itemBuilder.createCorrectSolutionFeedback().setText(feedback);
+		}
+	}
+	
 	private void processDistractors(String[] parts) {
 		if(currentItem == null || parts.length < 2) return;
 		
@@ -232,7 +315,7 @@ public class CSVToAssessmentItemConverter {
 		String discriminationIndex = parts[1];
 		if(StringHelper.containsNonWhitespace(discriminationIndex)) {
 			try {
-				currentItem.setDifferentiation(new BigDecimal(discriminationIndex.trim()));
+				currentItem.setDifferentiation(new BigDecimal(discriminationIndex.replace(",", ".").trim()));
 			} catch (Exception e) {
 				log.warn("", e);
 			}
@@ -245,7 +328,7 @@ public class CSVToAssessmentItemConverter {
 		String difficulty = parts[1];
 		if(StringHelper.containsNonWhitespace(difficulty)) {
 			try {
-				BigDecimal dif = new BigDecimal(difficulty.trim());
+				BigDecimal dif = new BigDecimal(difficulty.replace(",", ".").trim());
 				if(dif.doubleValue() >= 0.0d && dif.doubleValue() <= 1.0d) {
 					currentItem.setDifficulty(dif);
 				} else {
@@ -263,7 +346,7 @@ public class CSVToAssessmentItemConverter {
 		String stddev = parts[1];
 		if(StringHelper.containsNonWhitespace(stddev)) {
 			try {
-				BigDecimal dev = new BigDecimal(stddev.trim());
+				BigDecimal dev = new BigDecimal(stddev.replace(",", ".").trim());
 				if(dev.doubleValue() >= 0.0d && dev.doubleValue() <= 1.0d) {
 					currentItem.setStdevDifficulty(dev);
 				} else {
@@ -275,12 +358,26 @@ public class CSVToAssessmentItemConverter {
 		}
 	}
 	
-	private void processType(String[] parts) {
-		if(currentItem != null) {
-			build();
-			items.add(currentItem);
-			currentItem = null;
+	private void processMin(String[] parts) {
+		if(currentItem == null || parts.length < 2) return;
+		
+		String min = parts[1];
+		if(StringHelper.isLong(min) && currentItem.getItemBuilder() instanceof EssayAssessmentItemBuilder) {
+			((EssayAssessmentItemBuilder)currentItem.getItemBuilder()).setMinStrings(Integer.valueOf(min));
 		}
+	}
+	
+	private void processMax(String[] parts) {
+		if(currentItem == null || parts.length < 2) return;
+		
+		String max = parts[1];
+		if(StringHelper.isLong(max) && currentItem.getItemBuilder() instanceof EssayAssessmentItemBuilder) {
+			((EssayAssessmentItemBuilder)currentItem.getItemBuilder()).setMaxStrings(Integer.valueOf(max));
+		}
+	}
+	
+	private void processType(String[] parts) {
+		buildCurrentItem();
 		
 		if(parts.length > 1) {
 			String type = parts[1].toLowerCase();
@@ -288,34 +385,43 @@ public class CSVToAssessmentItemConverter {
 			switch(type) {
 				case "fib": {
 					FIBAssessmentItemBuilder fibItemBuilder = new FIBAssessmentItemBuilder("Gap text", EntryType.text, qtiSerializer);
-					fibItemBuilder.setQuestion("");
-					fibItemBuilder.clearTextEntries();
-					fibItemBuilder.setScoreEvaluationMode(ScoreEvaluation.perAnswer);
-					itemBuilder = fibItemBuilder;
+					itemBuilder = initFIBAssessmentItemBuilder(fibItemBuilder);
 					break;
 				}
 				case "mc": {
 					MultipleChoiceAssessmentItemBuilder mcItemBuilder = new MultipleChoiceAssessmentItemBuilder("Multiple choice", "New answer", qtiSerializer);
-					mcItemBuilder.clearSimpleChoices();
-					mcItemBuilder.clearMapping();
-					mcItemBuilder.setShuffle(options.isShuffle());
-					mcItemBuilder.setScoreEvaluationMode(ScoreEvaluation.perAnswer);
-					itemBuilder = mcItemBuilder;
+					itemBuilder = initMultipleChoiceAssessmentItemBuilder(mcItemBuilder);
 					break;
 				}
 				case "sc": {
 					SingleChoiceAssessmentItemBuilder scItemBuilder = new SingleChoiceAssessmentItemBuilder("Single choice", "New answer", qtiSerializer);
-					scItemBuilder.clearSimpleChoices();
-					scItemBuilder.clearMapping();
-					scItemBuilder.setShuffle(options.isShuffle());
-					scItemBuilder.setScoreEvaluationMode(ScoreEvaluation.perAnswer);
-					itemBuilder = scItemBuilder;
+					itemBuilder = initSingleChoiceAssessmentItemBuilder(scItemBuilder);
 					break;
 				}
 				case "kprim": {
 					kprimPosition = 0;
-					KPrimAssessmentItemBuilder kprimItemBuilder = new KPrimAssessmentItemBuilder("Kprim", "New answer", qtiSerializer);
-					itemBuilder = kprimItemBuilder;
+					itemBuilder = new KPrimAssessmentItemBuilder("Kprim", "New answer", qtiSerializer);
+					break;
+				}
+				case "essay": {
+					itemBuilder = new EssayAssessmentItemBuilder("Essay", qtiSerializer);
+					break;
+				}
+				case "matrix": {
+					MatchAssessmentItemBuilder matchBuilder = new MatchAssessmentItemBuilder("Matrix", QTI21Constants.CSS_MATCH_MATRIX, qtiSerializer);
+					itemBuilder = initMatchAssessmentItemBuilder(matchBuilder);
+					break;
+				}
+				case "drag&drop": {
+					MatchAssessmentItemBuilder matchBuilder = new MatchAssessmentItemBuilder("Matrix", QTI21Constants.CSS_MATCH_DRAG_AND_DROP, qtiSerializer);
+					itemBuilder = initMatchAssessmentItemBuilder(matchBuilder);
+					break;
+				}
+				case "truefalse": {
+					Translator trans = Util.createPackageTranslator(AssessmentItemEditorController.class, locale);
+					MatchAssessmentItemBuilder matchBuilder = new MatchAssessmentItemBuilder("Matrix", QTI21Constants.CSS_MATCH_TRUE_FALSE,
+							trans.translate("match.unanswered"), trans.translate("match.true"), trans.translate("match.false"), qtiSerializer);
+					itemBuilder = initMatchAssessmentItemBuilderForTrueFalse(matchBuilder);
 					break;
 				}
 				default: {
@@ -332,21 +438,129 @@ public class CSVToAssessmentItemConverter {
 		}
 	}
 	
-	private void build() {
+	private FIBAssessmentItemBuilder initFIBAssessmentItemBuilder(FIBAssessmentItemBuilder fibItemBuilder) {
+		fibItemBuilder.setQuestion("");
+		fibItemBuilder.clearTextEntries();
+		fibItemBuilder.setScoreEvaluationMode(ScoreEvaluation.perAnswer);
+		return fibItemBuilder;
+	}
+	
+	private SingleChoiceAssessmentItemBuilder initSingleChoiceAssessmentItemBuilder(SingleChoiceAssessmentItemBuilder scItemBuilder) {
+		scItemBuilder.clearSimpleChoices();
+		scItemBuilder.clearMapping();
+		scItemBuilder.setShuffle(options.isShuffle());
+		scItemBuilder.setScoreEvaluationMode(ScoreEvaluation.perAnswer);
+		return scItemBuilder;
+	}
+	
+	private MultipleChoiceAssessmentItemBuilder initMultipleChoiceAssessmentItemBuilder(MultipleChoiceAssessmentItemBuilder mcItemBuilder) {
+		mcItemBuilder.clearSimpleChoices();
+		mcItemBuilder.clearMapping();
+		mcItemBuilder.setShuffle(options.isShuffle());
+		mcItemBuilder.setScoreEvaluationMode(ScoreEvaluation.perAnswer);
+		return mcItemBuilder;
+	}
+	
+	private MatchAssessmentItemBuilder initMatchAssessmentItemBuilder(MatchAssessmentItemBuilder matchBuilder) {
+		//reset
+		matchBuilder.setQuestion("");
+		matchBuilder.clearAssociations();
+		matchBuilder.clearMapping();
+		matchBuilder.getTargetChoices().clear();
+		matchBuilder.getSourceChoices().clear();
+		//set default options
+		matchBuilder.setShuffle(options.isShuffle());
+		matchBuilder.setMultipleChoice(true);
+		matchBuilder.addMatchInteractionClass(QTI21Constants.CSS_MATCH_SOURCE_LEFT);
+		matchBuilder.setScoreEvaluationMode(ScoreEvaluation.perAnswer);
+		return matchBuilder;
+	}
+	
+	private MatchAssessmentItemBuilder initMatchAssessmentItemBuilderForTrueFalse(MatchAssessmentItemBuilder matchBuilder) {
+		//reset
+		matchBuilder.setQuestion("");
+		matchBuilder.clearAssociations();
+		matchBuilder.clearMapping();
+		matchBuilder.getSourceChoices().clear();
+		//set default options
+		matchBuilder.setShuffle(false);
+		matchBuilder.setMultipleChoice(false);
+		matchBuilder.setScoreEvaluationMode(ScoreEvaluation.perAnswer);
+		return matchBuilder;
+	}
+	
+	private void buildCurrentItem() {
 		if(currentItem != null) {
 			try {
-				String question = currentItem.getItemBuilder().getQuestion();
-				if(!StringHelper.isHtml(question)) {
-					question = "<p>" + question + "</p>";
-				}
+				String question = buildQuestion(); 
 				currentItem.getItemBuilder().setQuestion(question);
 				currentItem.getItemBuilder().build();
+				items.add(currentItem);
 			} catch (Exception e) {
 				log.error("", e);
 				currentItem.setHasError(true);
 			}
 		}
+		currentItem = null;
+		questionFragements = null;
 	}
+	
+	private String buildQuestion() {
+		StringBuilder questionBuilder = new StringBuilder(2048);
+		if(questionFragements != null) {
+			boolean needClosing = false;
+
+			for(String questionFragment:questionFragements) {
+				if(isHtmlBlock(questionFragment)) {
+					if(needClosing) {
+						questionBuilder.append("</p>");
+						needClosing = false;
+					}
+					questionBuilder.append(questionFragment);
+				} else {
+					if(!needClosing) {
+						questionBuilder.append("<p>");
+						needClosing = true;
+					}
+					
+					String[] subLines = questionFragment.split("\r?\n");
+					if(subLines.length > 1) {
+						StringBuilder sb = new StringBuilder(questionFragment.length() + 32);
+						for(int i=0; i<subLines.length; i++) {
+							if(i>0) {
+								sb.append("<br>");
+							}
+							sb.append(subLines[i]);
+						}
+						questionFragment = sb.toString();
+					}
+					questionBuilder.append(questionFragment);
+				}
+			}
+			
+			if(needClosing) {
+				questionBuilder.append("</p>");
+			}
+		}
+
+		String question = questionBuilder.toString();
+		if(!StringHelper.isHtml(question)) {
+			question = "<p>" + question + "</p>";
+		}
+		return question;
+	}
+	
+	private boolean isHtmlBlock(String block) {
+		if(block == null) return false;
+		
+		for(String marker:BLOCK_MARKERS) {
+			if(block.startsWith(marker)) {
+				return true;
+			}
+		}
+		return false;
+	}
+	
 	
 	private void processCoverage(String[] parts) {
 		if(currentItem == null || parts.length < 2) return;
@@ -393,13 +607,24 @@ public class CSVToAssessmentItemConverter {
 		}
 	}
 	
+	private void processTopic(String[] parts) {
+		if(currentItem == null || parts.length < 2) return;
+		
+		String topic = parts[1];
+		if(StringHelper.containsNonWhitespace(topic)) {
+			currentItem.setTopic(topic);
+		}
+	}
+	
 	private void processQuestion(String[] parts) {
 		if(currentItem == null) return;
 		
 		String content = parts[1];
 		if(StringHelper.containsNonWhitespace(content)) {
-			AssessmentItemBuilder itemBuilder = currentItem.getItemBuilder();
-			itemBuilder.setQuestion("<p>" + content + "</p>");
+			if(questionFragements == null) {
+				questionFragements = new ArrayList<>();
+			}
+			questionFragements.add(content);
 		}
 	}
 	
@@ -408,15 +633,32 @@ public class CSVToAssessmentItemConverter {
 		
 		double points = parseFloat(parts[1], 1.0f);
 		AssessmentItemBuilder itemBuilder = currentItem.getItemBuilder();
-		if (itemBuilder instanceof SimpleChoiceAssessmentItemBuilder) {
+		if (itemBuilder instanceof SimpleChoiceAssessmentItemBuilder
+				|| itemBuilder instanceof FIBAssessmentItemBuilder
+				|| itemBuilder instanceof KPrimAssessmentItemBuilder
+				|| itemBuilder instanceof MatchAssessmentItemBuilder) {
 			itemBuilder.setMinScore(0.0d);
 			itemBuilder.setMaxScore(points);
-		} else if(itemBuilder instanceof FIBAssessmentItemBuilder) {
-			itemBuilder.setMinScore(0.0d);
-			itemBuilder.setMaxScore(points);
-		} else if(itemBuilder instanceof KPrimAssessmentItemBuilder) {
-			itemBuilder.setMinScore(0.0d);
-			itemBuilder.setMaxScore(points);
+		}
+	}
+	
+	private void processMaxAnswers(String[] parts) {
+		if(currentItem == null) return;
+		
+		int maxChoices = parseInteger(parts[1], 0);
+		AssessmentItemBuilder itemBuilder = currentItem.getItemBuilder();
+		if (itemBuilder instanceof MultipleChoiceAssessmentItemBuilder) {
+			((MultipleChoiceAssessmentItemBuilder) itemBuilder).setMaxChoices(maxChoices);
+		}
+	}
+	
+	private void processMinAnswers(String[] parts) {
+		if(currentItem == null) return;
+		
+		int minChoices = parseInteger(parts[1], 0);
+		AssessmentItemBuilder itemBuilder = currentItem.getItemBuilder();
+		if (itemBuilder instanceof MultipleChoiceAssessmentItemBuilder) {
+			((MultipleChoiceAssessmentItemBuilder) itemBuilder).setMinChoices(minChoices);
 		}
 	}
 	
@@ -433,6 +675,8 @@ public class CSVToAssessmentItemConverter {
 				processChoice_fib(parts, (FIBAssessmentItemBuilder)itemBuilder);
 			} else if(itemBuilder instanceof KPrimAssessmentItemBuilder) {
 				processChoice_kprim(parts, (KPrimAssessmentItemBuilder)itemBuilder);
+			} else if(itemBuilder instanceof MatchAssessmentItemBuilder) {
+				processChoice_match(parts, (MatchAssessmentItemBuilder)itemBuilder);
 			}
 		} catch (NumberFormatException e) {
 			log.warn("Cannot parse point for: " + parts[0] + " / " + parts[1], e);
@@ -440,20 +684,52 @@ public class CSVToAssessmentItemConverter {
 	}
 
 	private void processChoice_smc(String[] parts, SimpleChoiceAssessmentItemBuilder choiceBuilder) {
-		double point = parseFloat(parts[0], 1.0f);
-		String content = parts[1];
-
-		ChoiceInteraction interaction = choiceBuilder.getChoiceInteraction();
-		SimpleChoice newChoice = AssessmentItemFactory
-				.createSimpleChoice(interaction, content, choiceBuilder.getQuestionType().getPrefix());
-		choiceBuilder.addSimpleChoice(newChoice);
-		choiceBuilder.setMapping(newChoice.getIdentifier(), point);
-
-		if(point > 0.0) {
-			if (choiceBuilder instanceof MultipleChoiceAssessmentItemBuilder) {
-				((MultipleChoiceAssessmentItemBuilder)choiceBuilder).addCorrectAnswer(newChoice.getIdentifier());
-			} else {
-				((SingleChoiceAssessmentItemBuilder)choiceBuilder).setCorrectAnswer(newChoice.getIdentifier());
+		if(StringHelper.containsNonWhitespace(parts[0])) {
+			double point = parseFloat(parts[0], 1.0f);
+			String content = parts[1];
+	
+			ChoiceInteraction interaction = choiceBuilder.getChoiceInteraction();
+			SimpleChoice newChoice = AssessmentItemFactory
+					.createSimpleChoice(interaction, content, choiceBuilder.getQuestionType().getPrefix());
+			choiceBuilder.addSimpleChoice(newChoice);
+			choiceBuilder.setMapping(newChoice.getIdentifier(), point);
+	
+			if(point > 0.0) {
+				if (choiceBuilder instanceof MultipleChoiceAssessmentItemBuilder) {
+					((MultipleChoiceAssessmentItemBuilder)choiceBuilder).addCorrectAnswer(newChoice.getIdentifier());
+				} else {
+					((SingleChoiceAssessmentItemBuilder)choiceBuilder).setCorrectAnswer(newChoice.getIdentifier());
+				}
+			}
+		}
+	}
+	
+	private void processChoice_match(String[] parts, MatchAssessmentItemBuilder matchBuilder) {
+		List<SimpleAssociableChoice> targetChoices = matchBuilder.getTargetChoices();
+		if(targetChoices == null || targetChoices.isEmpty()) {
+			for(int i=1;i<parts.length; i++) {
+				String answer = parts[i];
+				SimpleAssociableChoice choice = AssessmentItemFactory
+						.createSimpleAssociableChoice(answer, matchBuilder.getTargetMatchSet());
+				targetChoices.add(choice);
+			}
+		} else {
+			String answer = parts[0];
+			if(StringHelper.containsNonWhitespace(answer)) {
+				SimpleAssociableChoice sourceChoice = AssessmentItemFactory
+						.createSimpleAssociableChoice(answer, matchBuilder.getSourceMatchSet());
+				matchBuilder.getSourceChoices().add(sourceChoice);
+				
+				//correct answer and points
+				for(int i=1; i<parts.length && i<(targetChoices.size() + 1); i++) {
+					double point = parseFloat(parts[i], 0.0f);
+					SimpleAssociableChoice targetChoice = targetChoices.get(i - 1);
+					DirectedPairValue directedPair = new DirectedPairValue(sourceChoice.getIdentifier(), targetChoice.getIdentifier());
+					matchBuilder.addScore(directedPair, Double.valueOf(point));
+					if(point > 0.0) {
+						matchBuilder.addAssociation(sourceChoice.getIdentifier(), targetChoice.getIdentifier());
+					}
+				}
 			}
 		}
 	}
@@ -462,12 +738,11 @@ public class CSVToAssessmentItemConverter {
 		String firstPart = parts[0].toLowerCase();
 		if("text".equals(firstPart) || "texte".equals(firstPart)) {
 			String text = parts[1];
-			if(StringHelper.containsNonWhitespace(fibBuilder.getQuestion())) {
-				fibBuilder.setQuestion(fibBuilder.getQuestion() + " " + text);
-			} else {
-				fibBuilder.setQuestion(text);
-			}	
-		} else {
+			if(questionFragements == null) {
+				questionFragements = new ArrayList<>();
+			}
+			questionFragements.add(text);	
+		} else if(StringHelper.containsNonWhitespace(parts[0])) {
 			double score = parseFloat(parts[0], 1.0f);
 			String correctBlank = parts[1];
 			String responseId = fibBuilder.generateResponseIdentifier();
@@ -478,13 +753,15 @@ public class CSVToAssessmentItemConverter {
 				String[] sizeArr = sizes.split(",");
 				if(sizeArr.length >= 2) {
 					int size = Integer.parseInt(sizeArr[0]);
-					//int maxLength = Integer.parseInt(sizeArr[1]);
 					textEntry.setExpectedLength(size);
 				}	
 			}
 			
-			String entry = " <textEntryInteraction responseIdentifier=\"" + responseId + "\"/>";
-			fibBuilder.setQuestion(fibBuilder.getQuestion() + " " + entry);
+			String entry = "<textEntryInteraction responseIdentifier=\"" + responseId + "\"/>";
+			if(questionFragements == null) {
+				questionFragements = new ArrayList<>();
+			}
+			questionFragements.add(entry);	
 		}
 	}
 	
@@ -526,11 +803,23 @@ public class CSVToAssessmentItemConverter {
 		float floatValue = defaultValue;
 		
 		if(value != null) {
-			if(value.indexOf(",") >= 0) {
+			if(value.indexOf(',') >= 0) {
 				value = value.replace(",", ".");
 			}
 			floatValue = Float.parseFloat(value);
 		}
 		return floatValue;
+	}
+	
+	private int parseInteger(String value, int defaultValue) {
+		int integerValue = defaultValue;
+		if(value != null && StringHelper.isLong(value)) {
+			try {
+				integerValue = Integer.parseInt(value);
+			} catch (NumberFormatException e) {
+				log.error("Cannot parse: " + value, e);
+			}
+		}
+		return integerValue;
 	}
 }

@@ -23,7 +23,7 @@ import java.util.List;
 
 import javax.naming.directory.Attributes;
 
-import org.olat.core.id.Identity;
+import org.olat.basesecurity.IdentityRef;
 
 /**
  * 
@@ -39,11 +39,12 @@ public class LDAPUser {
 	private boolean userManager;
 	private boolean groupManager;
 	private boolean qpoolManager;
+	private boolean curriculumManager;
 	private boolean learningResourceManager;
 	private List<String> groupIds;
 	private List<String> coachedGroupIds;
 	private Attributes attributes;
-	private Identity cachedIdentity;
+	private IdentityRef cachedIdentity;
 	
 	public String getDn() {
 		return dn;
@@ -101,6 +102,14 @@ public class LDAPUser {
 		this.qpoolManager = qpoolManager;
 	}
 
+	public boolean isCurriculumManager() {
+		return curriculumManager;
+	}
+
+	public void setCurriculumManager(boolean curriculumManager) {
+		this.curriculumManager = curriculumManager;
+	}
+
 	public boolean isLearningResourceManager() {
 		return learningResourceManager;
 	}
@@ -125,11 +134,11 @@ public class LDAPUser {
 		this.coachedGroupIds = coachedGroupIds;
 	}
 
-	public Identity getCachedIdentity() {
+	public IdentityRef getCachedIdentity() {
 		return cachedIdentity;
 	}
 
-	public void setCachedIdentity(Identity cachedIdentity) {
+	public void setCachedIdentity(IdentityRef cachedIdentity) {
 		this.cachedIdentity = cachedIdentity;
 	}
 	

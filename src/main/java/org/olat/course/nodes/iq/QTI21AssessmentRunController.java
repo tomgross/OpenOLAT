@@ -42,15 +42,19 @@ import org.olat.core.gui.control.generic.iframe.IFrameDisplayController;
 import org.olat.core.gui.media.MediaResource;
 import org.olat.core.gui.media.NotFoundMediaResource;
 import org.olat.core.gui.translator.Translator;
+import org.olat.core.id.Identity;
 import org.olat.core.id.OLATResourceable;
+import org.olat.core.id.UserConstants;
 import org.olat.core.logging.activity.ThreadLocalUserActivityLogger;
 import org.olat.core.util.Formatter;
 import org.olat.core.util.StringHelper;
 import org.olat.core.util.UserSession;
 import org.olat.core.util.Util;
+import org.olat.core.util.coordinate.CoordinatorManager;
 import org.olat.core.util.event.EventBus;
 import org.olat.core.util.event.GenericEventListener;
 import org.olat.core.util.mail.MailBundle;
+import org.olat.core.util.prefs.Preferences;
 import org.olat.core.util.resource.OresHelper;
 import org.olat.core.util.vfs.VFSContainer;
 import org.olat.course.CourseModule;
@@ -66,6 +70,7 @@ import org.olat.course.nodes.IQSELFCourseNode;
 import org.olat.course.nodes.IQTESTCourseNode;
 import org.olat.course.nodes.QTICourseNode;
 import org.olat.course.nodes.SelfAssessableCourseNode;
+import org.olat.course.nodes.ms.DocumentsMapper;
 import org.olat.course.run.environment.CourseEnvironment;
 import org.olat.course.run.scoring.ScoreEvaluation;
 import org.olat.course.run.userview.UserCourseEnvironment;
@@ -87,11 +92,17 @@ import org.olat.ims.qti21.ui.ResourcesMapper;
 import org.olat.instantMessaging.InstantMessagingService;
 import org.olat.modules.ModuleConfiguration;
 import org.olat.modules.assessment.AssessmentEntry;
+import org.olat.modules.assessment.Role;
 import org.olat.modules.assessment.model.AssessmentEntryStatus;
+import org.olat.modules.assessment.model.AssessmentRunStatus;
+import org.olat.modules.assessment.ui.event.CompletionEvent;
 import org.olat.repository.RepositoryEntry;
 import org.olat.user.UserManager;
 import org.olat.util.logging.activity.LoggingResourceable;
 import org.springframework.beans.factory.annotation.Autowired;
+
+import uk.ac.ed.ph.jqtiplus.node.test.AssessmentTest;
+import uk.ac.ed.ph.jqtiplus.resolution.ResolvedAssessmentTest;
 
 /**
  * 
@@ -106,6 +117,7 @@ public class QTI21AssessmentRunController extends BasicController implements Gen
 	
 	private Link startButton, showResultsButton, hideResultsButton, signatureDownloadLink;
 	private final VelocityContainer mainVC;
+	private final VelocityContainer disclaimerVC;
 	
 	private boolean assessmentStopped = true;
 	
@@ -120,16 +132,18 @@ public class QTI21AssessmentRunController extends BasicController implements Gen
 	private final QTI21OverrideOptions overrideOptions;
 	// The test is really assessment not a self test or a survey
 	private final boolean assessmentType = true;
+	private AtomicBoolean incrementAttempts = new AtomicBoolean(true);
 	
 	private AssessmentResultController resultCtrl;
 	private AssessmentTestDisplayController displayCtrl;
-	private LayoutMain3ColsController displayContainerController;
-	private AtomicBoolean incrementAttempts = new AtomicBoolean(true);
+	private QTI21AssessmentMainLayoutController displayContainerController;
 	
 	@Autowired
 	private QTI21Service qtiService;
 	@Autowired
 	private CourseModule courseModule;
+	@Autowired
+	private CoordinatorManager coordinatorManager;
 	@Autowired
 	private AssessmentNotificationsHandler assessmentNotificationsHandler;
 	
@@ -146,6 +160,11 @@ public class QTI21AssessmentRunController extends BasicController implements Gen
 		testEntry = courseNode.getReferencedRepositoryEntry();
 		singleUserEventCenter = userSession.getSingleUserEventCenter();
 		mainVC = createVelocityContainer("assessment_run");
+		mainVC.setDomReplaceable(false); // DOM ID set in velocity
+		
+		disclaimerVC = createVelocityContainer("assessment_disclaimer");
+		disclaimerVC.setDomReplacementWrapperRequired(false);
+		mainVC.put("disclaimer", disclaimerVC);
 						
 		addLoggingResourceable(LoggingResourceable.wrap(courseNode));
 		
@@ -174,9 +193,9 @@ public class QTI21AssessmentRunController extends BasicController implements Gen
 		// fetch disclaimer file
 		String sDisclaimer = config.getStringValue(IQEditController.CONFIG_KEY_DISCLAIMER);
 		if (sDisclaimer != null) {
-			VFSContainer baseContainer = userCourseEnv.getCourseEnvironment().getCourseFolderContainer();
 			int lastSlash = sDisclaimer.lastIndexOf('/');
 			if (lastSlash != -1) {
+				VFSContainer baseContainer = userCourseEnv.getCourseEnvironment().getCourseFolderContainer();
 				baseContainer = (VFSContainer)baseContainer.resolve(sDisclaimer.substring(0, lastSlash));
 				sDisclaimer = sDisclaimer.substring(lastSlash);
 				// first check if disclaimer exists on filesystem
@@ -186,9 +205,10 @@ public class QTI21AssessmentRunController extends BasicController implements Gen
 					//screenreader do not like iframes, display inline
 					IFrameDisplayController iFrameCtr = new IFrameDisplayController(ureq, getWindowControl(), baseContainer);
 					listenTo(iFrameCtr);//dispose automatically
-					mainVC.put("disc", iFrameCtr.getInitialComponent());
+					disclaimerVC.put("disc", iFrameCtr.getInitialComponent());
 					iFrameCtr.setCurrentURI(sDisclaimer);
-					mainVC.contextPut("hasDisc", Boolean.TRUE);
+					disclaimerVC.contextPut("hasDisc", Boolean.TRUE);
+					disclaimerVC.contextPut("indisclaimer", isPanelOpen(ureq, "disclaimer", true));
 				}
 			}
 		}
@@ -202,16 +222,23 @@ public class QTI21AssessmentRunController extends BasicController implements Gen
 	private void initAssessment(UserRequest ureq) {
 	    // config : show score info
 		boolean enableScoreInfo= config.getBooleanSafe(IQEditController.CONFIG_KEY_ENABLESCOREINFO);
-		mainVC.contextPut("enableScoreInfo", new Boolean(enableScoreInfo));
+		mainVC.contextPut("enableScoreInfo", Boolean.valueOf(enableScoreInfo));
 	   
 	    // configuration data
 		int maxAttempts = deliveryOptions.getMaxAttempts();
 		if(maxAttempts > 0) {
-			mainVC.contextPut("attemptsConfig", new Integer(maxAttempts));
+			mainVC.contextPut("attemptsConfig", Integer.valueOf(maxAttempts));
 		} else {
 			mainVC.contextPut("attemptsConfig", Boolean.FALSE);
 		}
-		
+		// configure date period
+		mainVC.contextPut("blockDate", Boolean.valueOf(blockedBasedOnDate()));
+		// time limit
+		Long timeLimit = getAssessmentTestMaxTimeLimit();
+		if(timeLimit != null) {
+			mainVC.contextPut("timeLimit", Formatter.formatHourAndSeconds(timeLimit.longValue() * 1000l));
+		}
+
 		if (courseNode instanceof AssessableCourseNode) {
 			AssessableCourseNode assessableCourseNode = (AssessableCourseNode) courseNode;
 			if (assessableCourseNode.hasScoreConfigured() || userCourseEnv.isCoach()){
@@ -236,9 +263,9 @@ public class QTI21AssessmentRunController extends BasicController implements Gen
 				mainVC.contextPut("passed", scoreEval.getPassed());
 				mainVC.contextPut("attempts", attempts); //at least one attempt
 				mainVC.contextPut("showChangeLog", Boolean.TRUE && enableScoreInfo);
-				exposeResults(true);
+				exposeResults(ureq, true);
 			} else {
-				exposeResults(false);
+				exposeResults(ureq, false);
 			}
 		} else if(courseNode instanceof IQTESTCourseNode) {
 			IQTESTCourseNode testCourseNode = (IQTESTCourseNode)courseNode;
@@ -267,9 +294,20 @@ public class QTI21AssessmentRunController extends BasicController implements Gen
 				mainVC.contextPut("hasPassedValue", (passed == null ? Boolean.FALSE : Boolean.TRUE));
 				mainVC.contextPut("passed", passed);
 				if(resultsVisible) {
-					StringBuilder comment = Formatter.stripTabsAndReturns(testCourseNode.getUserUserComment(userCourseEnv));
-					if (comment != null && comment.length() > 0) {
-						mainVC.contextPut("comment", StringHelper.xssScan(comment));					
+					if(testCourseNode.hasCommentConfigured()) {
+						StringBuilder comment = Formatter.stripTabsAndReturns(testCourseNode.getUserUserComment(userCourseEnv));
+						if (comment != null && comment.length() > 0) {
+							mainVC.contextPut("comment", StringHelper.xssScan(comment));
+							mainVC.contextPut("incomment", isPanelOpen(ureq, "comment", true));
+						}
+					}
+					
+					if(testCourseNode.hasIndividualAsssessmentDocuments()) {
+						List<File> docs = testCourseNode.getIndividualAssessmentDocuments(userCourseEnv);
+						String mapperUri = registerCacheableMapper(ureq, null, new DocumentsMapper(docs));
+						mainVC.contextPut("docsMapperUri", mapperUri);
+						mainVC.contextPut("docs", docs);
+						mainVC.contextPut("inassessmentDocuments", isPanelOpen(ureq, "assessmentDocuments", true));
 					}
 				}
 				Integer attempts = assessmentEntry.getAttempts();
@@ -294,18 +332,45 @@ public class QTI21AssessmentRunController extends BasicController implements Gen
 					}
 				}
 
-				exposeResults(resultsVisible);
+				exposeResults(ureq, resultsVisible);
 			}
 		}
-		
 	}
 	
-	private void checkChats (UserRequest ureq) {
+	private boolean blockedBasedOnDate() {
+		mainVC.contextRemove("startTestDate");
+		mainVC.contextRemove("endTestDate");
+		
+		boolean dependOnDate = config.getBooleanSafe(IQEditController.CONFIG_KEY_DATE_DEPENDENT_TEST, false);
+		if(dependOnDate) {
+			Date startTestDate = config.getDateValue(IQEditController.CONFIG_KEY_RESULTS_START_TEST_DATE);
+			if(startTestDate != null) {
+				Formatter formatter = Formatter.getInstance(getLocale());
+				mainVC.contextPut("startTestDate", formatter.formatDateAndTime(startTestDate));
+				
+				Date endTestDate = config.getDateValue(IQEditController.CONFIG_KEY_RESULTS_END_TEST_DATE);
+				if(endTestDate != null) {
+					mainVC.contextPut("endTestDate", formatter.formatDateAndTime(endTestDate));
+				}
+				Date now = new Date();
+				if(startTestDate != null && startTestDate.after(now)) {
+					return true;
+				}
+	
+				if(endTestDate != null && endTestDate.before(now)) {
+					return true;
+				}
+			}
+		}
+		return false;
+	}
+	
+	private void checkChats(UserRequest ureq) {
 		List<?> allChats = null;
 		if (ureq != null) {
 			allChats = ureq.getUserSession().getChats();
 		}
-		if (allChats == null || allChats.size() == 0) {
+		if (allChats == null || allChats.isEmpty()) {
 			startButton.setEnabled (true);
 			mainVC.contextPut("hasChatWindowOpen", false);
 		} else {
@@ -323,12 +388,12 @@ public class QTI21AssessmentRunController extends BasicController implements Gen
 	 * 
 	 * @param ureq
 	 */
-	private void exposeResults(boolean resultsVisible) {
+	private void exposeResults(UserRequest ureq, boolean resultsVisible) {
 		//migration: check if old tests have no summary configured
 		boolean showResultsOnHomePage = config.getBooleanSafe(IQEditController.CONFIG_KEY_RESULT_ON_HOME_PAGE);
 		QTI21AssessmentResultsOptions showSummary = deliveryOptions.getAssessmentResultsOptions();
 		if(resultsVisible && !showSummary.none()) {
-			mainVC.contextPut("showResultsOnHomePage", new Boolean(showResultsOnHomePage));			
+			mainVC.contextPut("showResultsOnHomePage", Boolean.valueOf(showResultsOnHomePage));			
 			boolean dateRelatedVisibility = isResultVisible(config);		
 			if(showResultsOnHomePage && dateRelatedVisibility) {
 				mainVC.contextPut("showResultsVisible",Boolean.TRUE);
@@ -341,27 +406,43 @@ public class QTI21AssessmentRunController extends BasicController implements Gen
 				hideResultsButton.setCustomDisplayText(translate("showResults.title"));
 				hideResultsButton.setElementCssClass("o_qti_hide_assessment_results");
 				hideResultsButton.setIconLeftCSS("o_icon o_icon-fw o_icon_close_togglebox");
-			} else if(showResultsOnHomePage) {
-				Date startDate = config.getDateValue(IQEditController.CONFIG_KEY_RESULTS_START_DATE);
-				Date endDate = config.getDateValue(IQEditController.CONFIG_KEY_RESULTS_END_DATE);
-				String visibilityStartDate = Formatter.getInstance(getLocale()).formatDate(startDate);
-				String visibilityEndDate = "-";
-				if(endDate != null) {
-					visibilityEndDate = Formatter.getInstance(getLocale()).formatDate(endDate);
+				if(isPanelOpen(ureq, "results", true)) {
+					doShowResults(ureq);
 				}
-				String visibilityPeriod = getTranslator().translate("showResults.visibility", new String[] { visibilityStartDate, visibilityEndDate});
-				mainVC.contextPut("visibilityPeriod", visibilityPeriod);
+			} else if(showResultsOnHomePage) {
+				exposeVisiblityPeriod();
 				mainVC.contextPut("showResultsVisible", Boolean.FALSE);
 			} else {
+				exposeVisiblityPeriod();
 				mainVC.contextPut("showResultsVisible", Boolean.FALSE);
 			}
 		} else {
+			exposeVisiblityPeriod();
 			mainVC.contextPut("showResultsVisible", Boolean.FALSE);
+			mainVC.contextPut("showResultsOnHomePage", Boolean.valueOf(showResultsOnHomePage && !showSummary.none()));	
 		}
 		
 		if(!anonym && resultsVisible) {
 			UserNodeAuditManager am = userCourseEnv.getCourseEnvironment().getAuditManager();
 			mainVC.contextPut("log", am.getUserNodeLog(courseNode, getIdentity()));	
+		}
+	}
+	
+	private void exposeVisiblityPeriod() {
+		boolean showResultsActive = config.getBooleanSafe(IQEditController.CONFIG_KEY_DATE_DEPENDENT_RESULTS);
+		Date startDate = config.getDateValue(IQEditController.CONFIG_KEY_RESULTS_START_DATE);
+		Date endDate = config.getDateValue(IQEditController.CONFIG_KEY_RESULTS_END_DATE);
+		if(showResultsActive && startDate != null) {
+			Formatter formatter = Formatter.getInstance(getLocale());
+			String visibilityStartDate = formatter.formatDate(startDate);
+			String visibilityEndDate = "-";
+			if(endDate != null) {
+				visibilityEndDate = formatter.formatDate(endDate);
+			}
+			String visibilityPeriod = translate("showResults.visibility", new String[] { visibilityStartDate, visibilityEndDate });
+			mainVC.contextPut("visibilityPeriod", visibilityPeriod);
+		} else {
+			mainVC.contextPut("visibilityPeriod", translate("showResults.visibility.future"));
 		}
 	}
 	
@@ -414,9 +495,13 @@ public class QTI21AssessmentRunController extends BasicController implements Gen
 		}else if(source == showResultsButton) {			
 			doShowResults(ureq);
 		} else if (source == hideResultsButton) {
-			doHideResults();
+			doHideResults(ureq);
 		} else if (source == signatureDownloadLink) {
 			doDownloadSignature(ureq);
+		} else if("show".equals(event.getCommand())) {
+			saveOpenPanel(ureq, ureq.getParameter("panel"), true);
+		} else if("hide".equals(event.getCommand())) {
+			saveOpenPanel(ureq, ureq.getParameter("panel"), false);
 		}
 	}
 	
@@ -424,7 +509,7 @@ public class QTI21AssessmentRunController extends BasicController implements Gen
 	protected void event(UserRequest ureq, Controller source, Event event) {
 		if (source == displayCtrl) {
 			if(event == Event.CANCELLED_EVENT) {
-				doExitAssessment(ureq, event, false);
+				doCancelAssessment(ureq);
 				initAssessment(ureq);
 				showInfo("assessment.test.cancelled");
 			} else if("suspend".equals(event.getCommand())) {
@@ -437,10 +522,12 @@ public class QTI21AssessmentRunController extends BasicController implements Gen
 					if(!displayCtrl.isResultsVisible()) {
 						doExitAssessment(ureq, event, true);
 						initAssessment(ureq);
+						fireEvent(ureq, Event.CHANGED_EVENT);
 					}
 				} else if(QTI21Event.CLOSE_RESULTS.equals(qe.getCommand())) {
 					doExitAssessment(ureq, event, true);
 					initAssessment(ureq);
+					fireEvent(ureq, Event.CHANGED_EVENT);
 				}
 			}
 		}
@@ -476,15 +563,35 @@ public class QTI21AssessmentRunController extends BasicController implements Gen
 					new ResourcesMapper(assessmentObjectUri, submissionDir));
 
 			resultCtrl = new AssessmentResultController(ureq, getWindowControl(), getIdentity(), true, session,
-					fUnzippedDirRoot, mapperUri, null, getDeliveryOptions().getAssessmentResultsOptions(), false, false);
+					fUnzippedDirRoot, mapperUri, null, getDeliveryOptions().getAssessmentResultsOptions(), false, false, true);
 			listenTo(resultCtrl);
 			mainVC.put("resultReport", resultCtrl.getInitialComponent());
 			mainVC.contextPut("showResults", Boolean.TRUE);
 		}
+		saveOpenPanel(ureq, "results", Boolean.TRUE);
 	}
 
-	private void doHideResults() {
+	private void doHideResults(UserRequest ureq) {
 		mainVC.contextPut("showResults", Boolean.FALSE);
+		saveOpenPanel(ureq, "results", Boolean.FALSE);
+	}
+	
+	private boolean isPanelOpen(UserRequest ureq, String panelId, boolean def) {
+		Preferences guiPrefs = ureq.getUserSession().getGuiPreferences();
+		Boolean showConfig  = (Boolean) guiPrefs.get(QTI21AssessmentRunController.class, getOpenPanelId(panelId));
+		return showConfig == null ? def : showConfig.booleanValue();
+	}
+	
+	private void saveOpenPanel(UserRequest ureq, String panelId, boolean newValue) {
+		Preferences guiPrefs = ureq.getUserSession().getGuiPreferences();
+		if (guiPrefs != null) {
+			guiPrefs.putAndSave(QTI21AssessmentRunController.class, getOpenPanelId(panelId), Boolean.valueOf(newValue));
+		}
+		mainVC.getContext().put("in-" + panelId, Boolean.valueOf(newValue));
+	}
+	
+	private String getOpenPanelId(String panelId) {
+		return panelId + "::" + userCourseEnv.getCourseEnvironment().getCourseResourceableId() + "::" + courseNode.getIdent();
 	}
 	
 	private void doDownloadSignature(UserRequest ureq) {
@@ -499,7 +606,7 @@ public class QTI21AssessmentRunController extends BasicController implements Gen
 			}
 		}
 		if(resource == null) {
-			resource = new NotFoundMediaResource("");
+			resource = new NotFoundMediaResource();
 		}
 		ureq.getDispatchResult().setResultingMediaResource(resource);
 	}
@@ -515,13 +622,21 @@ public class QTI21AssessmentRunController extends BasicController implements Gen
 		displayCtrl = new AssessmentTestDisplayController(ureq, bwControl, this, testEntry, courseRe, courseNode.getIdent(),
 				deliveryOptions, overrideOptions, true, false, false);
 		listenTo(displayCtrl);
-		if(displayCtrl.isTerminated()) {
-			//do nothing
+		if(displayCtrl.getAssessmentTest() == null) {
+			logError("Test cannot be read: " + testEntry + " in course: " + courseRe + " element: " + courseNode.getIdent() , null);
+			showError("error.resource.corrupted");
+		} else if(displayCtrl.isEnded()) {
+			if(!displayCtrl.isResultsVisible()) {
+				doExitAssessment(ureq, null, true);
+				initAssessment(ureq);
+			}
 		} else {
 			// in case displayController was unable to initialize, a message was set by displayController
 			// this is the case if no more attempts or security check was unsuccessfull
-			displayContainerController = new LayoutMain3ColsController(ureq, getWindowControl(), displayCtrl);
+
+			displayContainerController = new QTI21AssessmentMainLayoutController(ureq, getWindowControl(), displayCtrl);
 			listenTo(displayContainerController); // autodispose
+
 
 			Panel empty = new Panel("empty");//empty panel set as "menu" and "tool"
 			Controller courseCloser = new DisposedCourseRestartController(ureq, getWindowControl(), courseRe);
@@ -542,6 +657,25 @@ public class QTI21AssessmentRunController extends BasicController implements Gen
 		}
 	}
 	
+	/**
+	 * @return The maximum time limit in seconds.
+	 */
+	private Long getAssessmentTestMaxTimeLimit() {
+		if(overrideOptions != null && overrideOptions.getAssessmentTestMaxTimeLimit() != null) {
+			Long timeLimits = overrideOptions.getAssessmentTestMaxTimeLimit();
+			return timeLimits.longValue() > 0 ? timeLimits.longValue() : null;
+		}
+		
+		FileResourceManager frm = FileResourceManager.getInstance();
+		File fUnzippedDirRoot = frm.unzipFileResource(testEntry.getOlatResource());
+		ResolvedAssessmentTest resolvedAssessmentTest = qtiService.loadAndResolveAssessmentTest(fUnzippedDirRoot, false, false);
+		AssessmentTest assessmentTest = resolvedAssessmentTest.getRootNodeLookup().extractIfSuccessful();
+		if(assessmentTest != null && assessmentTest.getTimeLimits() != null && assessmentTest.getTimeLimits().getMaximum() != null) {
+			return assessmentTest.getTimeLimits().getMaximum().longValue();
+		}
+		return null;
+	}
+	
 	private QTI21DeliveryOptions getDeliveryOptions() {
 		QTI21DeliveryOptions testOptions = qtiService.getDeliveryOptions(testEntry);
 		QTI21DeliveryOptions finalOptions = testOptions.clone();
@@ -555,34 +689,74 @@ public class QTI21AssessmentRunController extends BasicController implements Gen
 			finalOptions.setEnableCancel(config.getBooleanSafe(IQEditController.CONFIG_KEY_ENABLECANCEL, testOptions.isEnableCancel()));
 			finalOptions.setEnableSuspend(config.getBooleanSafe(IQEditController.CONFIG_KEY_ENABLESUSPEND, testOptions.isEnableSuspend()));
 			finalOptions.setDisplayQuestionProgress(config.getBooleanSafe(IQEditController.CONFIG_KEY_QUESTIONPROGRESS, testOptions.isDisplayQuestionProgress()));
+			finalOptions.setDisplayMaxScoreItem(config.getBooleanSafe(IQEditController.CONFIG_KEY_QUESTION_MAX_SCORE, testOptions.isDisplayMaxScoreItem()));
 			finalOptions.setDisplayScoreProgress(config.getBooleanSafe(IQEditController.CONFIG_KEY_SCOREPROGRESS, testOptions.isDisplayScoreProgress()));
+			finalOptions.setHideFeedbacks(config.getBooleanSafe(IQEditController.CONFIG_KEY_HIDE_FEEDBACKS, testOptions.isHideFeedbacks()));
 			finalOptions.setAssessmentResultsOptions(QTI21AssessmentResultsOptions.parseString(config.getStringValue(IQEditController.CONFIG_KEY_SUMMARY, AssessmentInstance.QMD_ENTRY_SUMMARY_COMPACT)));
 			finalOptions.setShowMenu(config.getBooleanSafe(IQEditController.CONFIG_KEY_ENABLEMENU, testOptions.isShowMenu()));
 			finalOptions.setAllowAnonym(config.getBooleanSafe(IQEditController.CONFIG_ALLOW_ANONYM, testOptions.isAllowAnonym()));
 			finalOptions.setDigitalSignature(config.getBooleanSafe(IQEditController.CONFIG_DIGITAL_SIGNATURE, testOptions.isDigitalSignature()));
 			finalOptions.setDigitalSignatureMail(config.getBooleanSafe(IQEditController.CONFIG_DIGITAL_SIGNATURE_SEND_MAIL, testOptions.isDigitalSignatureMail()));
 		}
+		
+		
+		if(!AssessmentInstance.QMD_ENTRY_SUMMARY_COMPACT.equals(config.getStringValue(IQEditController.CONFIG_KEY_SUMMARY))) {
+			//if this setting is set, override the summary
+			finalOptions.setAssessmentResultsOptions(QTI21AssessmentResultsOptions.parseString(config.getStringValue(IQEditController.CONFIG_KEY_SUMMARY, AssessmentInstance.QMD_ENTRY_SUMMARY_COMPACT)));
+		}
+		Boolean assessmentResultOnFinish = config.getBooleanEntry(IQEditController.CONFIG_KEY_RESULT_ON_FINISH);
+		if(assessmentResultOnFinish != null) {
+			finalOptions.setShowAssessmentResultsOnFinish(assessmentResultOnFinish.booleanValue());
+		} else if(finalOptions.getAssessmentResultsOptions() != null
+				&& !finalOptions.getAssessmentResultsOptions().none()) {
+			finalOptions.setShowAssessmentResultsOnFinish(true);
+		}
 		return finalOptions;
 	}
 	
 	private QTI21OverrideOptions getOverrideOptions() {
-		QTI21OverrideOptions finalOptions = QTI21OverrideOptions.nothingOverriden();
 		boolean configRef = config.getBooleanSafe(IQEditController.CONFIG_KEY_CONFIG_REF, false);
+		Long maxTimeLimit = null;
 		if(!configRef) {
-			Long maxTimeLimit = null;
 			int timeLimit = config.getIntegerSafe(IQEditController.CONFIG_KEY_TIME_LIMIT, -1);
 			if(timeLimit > 0) {
 				maxTimeLimit = new Long(timeLimit);
 			}
-			finalOptions = new QTI21OverrideOptions(maxTimeLimit);
 		}
-		return finalOptions;
+		
+		Date startTestDate = null;
+		Date endTestDate = null;
+		boolean dependOnDate = config.getBooleanSafe(IQEditController.CONFIG_KEY_DATE_DEPENDENT_TEST, false);
+		if(dependOnDate) {
+			startTestDate = config.getDateValue(IQEditController.CONFIG_KEY_RESULTS_START_TEST_DATE);
+			if(startTestDate != null) {
+				endTestDate = config.getDateValue(IQEditController.CONFIG_KEY_RESULTS_END_TEST_DATE);
+			}
+		}
+		
+		return new QTI21OverrideOptions(maxTimeLimit, startTestDate, endTestDate);
+	}
+	
+	private void doCancelAssessment(UserRequest ureq) {
+		if(displayContainerController != null) {
+			displayContainerController.deactivate(ureq);
+		} else {
+			getWindowControl().pop();
+		}	
+		
+		removeHistory(ureq);
+		if(courseNode instanceof IQTESTCourseNode) {
+			((IQTESTCourseNode)courseNode).updateCurrentCompletion(userCourseEnv, getIdentity(), null, null, Role.user);
+		}
+		
+		OLATResourceable ores = OresHelper.createOLATResourceableInstance("test", -1l);
+		addToHistory(ureq, ores, null);
 	}
 
 	/**
 	 * Remove the runtime from the GUI stack only.
 	 * @param ureq
-	 * @param event
+	 * @param event The event which triggered the method (optional)
 	 * @param testEnded true if the test was ended and not suspended or cancelled (use to control increment of attempts)
 	 */
 	private void doExitAssessment(UserRequest ureq, Event event, boolean testEnded) {
@@ -606,7 +780,9 @@ public class QTI21AssessmentRunController extends BasicController implements Gen
 			incrementAttempts.set(true);
 		}
 		
-		fireEvent(ureq, event);
+		if(event != null) {
+			fireEvent(ureq, event);
+		}
 	}
 	
 	@Override
@@ -618,7 +794,8 @@ public class QTI21AssessmentRunController extends BasicController implements Gen
 			CourseEnvironment courseEnv, CourseNode courseNode, RepositoryEntry testEntry, Date timestamp, Locale locale)  {
 		MailBundle bundle = new MailBundle();
 		bundle.setToId(candidateSession.getIdentity());
-		String fullname = CoreSpringFactory.getImpl(UserManager.class).getUserDisplayName(candidateSession.getIdentity());
+		Identity assessedIdentity = candidateSession.getIdentity();
+		String fullname = CoreSpringFactory.getImpl(UserManager.class).getUserDisplayName(assessedIdentity);
 		Date assessedDate = candidateSession.getFinishTime() == null ? timestamp : candidateSession.getFinishTime();
 
 		String[] args = new String[] {
@@ -629,7 +806,12 @@ public class QTI21AssessmentRunController extends BasicController implements Gen
 				testEntry.getDisplayname(),						// {4}
 				fullname,										// {5}
 				Formatter.getInstance(locale)
-					.formatDateAndTime(assessedDate) 			// {6}
+					.formatDateAndTime(assessedDate), 			// {6}
+				assessedIdentity.getName(),											// {7}
+				assessedIdentity.getUser()
+					.getProperty(UserConstants.INSTITUTIONALUSERIDENTIFIER, locale),	// {8}
+				assessedIdentity.getUser()
+					.getProperty(UserConstants.INSTITUTIONALNAME, locale),			// {9}
 		};
 
 		Translator translator = Util.createPackageTranslator(QTI21AssessmentRunController.class, locale);
@@ -641,13 +823,17 @@ public class QTI21AssessmentRunController extends BasicController implements Gen
 	}
 
 	@Override
-	public void updateOutcomes(Float score, Boolean pass) {
-		//ScoreEvaluation sceval = new ScoreEvaluation(score, pass, Boolean.FALSE);
-		//courseNode.updateUserScoreEvaluation(sceval, userCourseEnv, getIdentity(), false);
+	public void updateOutcomes(Float score, Boolean pass, Double completion) {
+		if(courseNode instanceof IQTESTCourseNode) {
+			((IQTESTCourseNode)courseNode).updateCurrentCompletion(userCourseEnv, getIdentity(), completion, AssessmentRunStatus.running, Role.user);
+			coordinatorManager.getCoordinator().getEventBus()
+				.fireEventToListenersOf(new CompletionEvent(CompletionEvent.PROGRESS, courseNode.getIdent(), completion, AssessmentRunStatus.running, getIdentity().getKey()),
+						userCourseEnv.getCourseEnvironment().getCourseGroupManager().getCourseResource());
+		}
 	}
 
 	@Override
-	public void submit(Float score, Boolean pass, Long assessmentId) {
+	public void submit(Float score, Boolean pass, Double completion, Long assessmentId) {
 		if(anonym) {
 			assessmentNotificationsHandler.markPublisherNews(getIdentity(), userCourseEnv.getCourseEnvironment().getCourseResourceableId());
 			return;
@@ -663,19 +849,23 @@ public class QTI21AssessmentRunController extends BasicController implements Gen
 				assessmentStatus = AssessmentEntryStatus.done;
 				visibility = Boolean.TRUE;
 			}
-			ScoreEvaluation sceval = new ScoreEvaluation(score, pass, assessmentStatus, visibility, Boolean.TRUE, assessmentId);
+			ScoreEvaluation sceval = new ScoreEvaluation(score, pass, assessmentStatus, visibility, Boolean.TRUE,
+					completion, AssessmentRunStatus.done, assessmentId);
 			
 			boolean increment = incrementAttempts.getAndSet(false);
-			((IQTESTCourseNode)courseNode).updateUserScoreEvaluation(sceval, userCourseEnv, getIdentity(), increment);
+			((IQTESTCourseNode)courseNode).updateUserScoreEvaluation(sceval, userCourseEnv, getIdentity(), increment, Role.user);
 			if(increment) {
 				ThreadLocalUserActivityLogger.log(QTI21LoggingAction.QTI_CLOSE_IN_COURSE, getClass());
 			}
+			coordinatorManager.getCoordinator().getEventBus()
+				.fireEventToListenersOf(new CompletionEvent(CompletionEvent.PROGRESS, courseNode.getIdent(), completion, AssessmentRunStatus.done, getIdentity().getKey()),
+					userCourseEnv.getCourseEnvironment().getCourseGroupManager().getCourseResource());
 
 			assessmentNotificationsHandler.markPublisherNews(getIdentity(), userCourseEnv.getCourseEnvironment().getCourseResourceableId());
 		} else if(courseNode instanceof SelfAssessableCourseNode) {
 			boolean increment = incrementAttempts.getAndSet(false);
 			if(increment) {
-				((SelfAssessableCourseNode)courseNode).incrementUserAttempts(userCourseEnv);
+				((SelfAssessableCourseNode)courseNode).incrementUserAttempts(userCourseEnv, Role.user);
 			}
 		}
 	}

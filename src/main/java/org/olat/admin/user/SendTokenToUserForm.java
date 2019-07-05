@@ -20,7 +20,12 @@
 
 package org.olat.admin.user;
 
-import org.olat.core.CoreSpringFactory;
+import java.util.List;
+import java.util.Locale;
+
+import org.olat.basesecurity.Authentication;
+import org.olat.basesecurity.BaseSecurity;
+import org.olat.basesecurity.BaseSecurityModule;
 import org.olat.core.gui.UserRequest;
 import org.olat.core.gui.components.form.flexible.FormItem;
 import org.olat.core.gui.components.form.flexible.FormItemContainer;
@@ -30,7 +35,19 @@ import org.olat.core.gui.control.Controller;
 import org.olat.core.gui.control.Event;
 import org.olat.core.gui.control.WindowControl;
 import org.olat.core.id.Identity;
+import org.olat.core.id.Preferences;
+import org.olat.core.id.UserConstants;
+import org.olat.core.util.Encoder;
+import org.olat.core.util.Util;
+import org.olat.core.util.i18n.I18nManager;
+import org.olat.core.util.i18n.I18nModule;
+import org.olat.core.util.mail.MailBundle;
+import org.olat.core.util.mail.MailManager;
 import org.olat.core.util.mail.MailerResult;
+import org.olat.login.LoginModule;
+import org.olat.registration.RegistrationManager;
+import org.olat.registration.TemporaryKey;
+import org.springframework.beans.factory.annotation.Autowired;
 
 /**
  * 
@@ -47,6 +64,21 @@ public class SendTokenToUserForm extends FormBasicController {
 	private TextElement mailText;
 	private UserChangePasswordMailUtil util;
 	
+	private String dummyKey;
+	
+	@Autowired
+	private I18nModule i18nModule;
+	@Autowired
+	private I18nManager i18nManager;
+	@Autowired
+	private MailManager mailManager;
+	@Autowired
+	private BaseSecurity securityManager;
+	@Autowired
+	private RegistrationManager registrationManager;
+	@Autowired
+	private LoginModule loginModule;
+
 	public SendTokenToUserForm(UserRequest ureq, WindowControl wControl, Identity treatedIdentity) {
 		super(ureq, wControl);
 		user = treatedIdentity;
@@ -60,7 +92,7 @@ public class SendTokenToUserForm extends FormBasicController {
 		setFormDescription("form.token.new.description");
 		
 		String initialText = generateMailText();
-		mailText = uifactory.addTextAreaElement("mailtext", "form.token.new.text", 4000, 12, 255, false, initialText, formLayout);
+		mailText = uifactory.addTextAreaElement("mailtext", "form.token.new.text", 4000, 12, 255, false, false, initialText, formLayout);
 		
 		uifactory.addFormSubmitButton("submit", "form.token.new.title", formLayout);
 	}
@@ -86,31 +118,47 @@ public class SendTokenToUserForm extends FormBasicController {
 		fireEvent(ureq, Event.DONE_EVENT);
 	}
 	
+	@Override
 	public FormItem getInitialFormItem() {
 		return flc;
 	}
 
-	private String generateMailText() {
-		try {
-			// OLATNG-5: extracted reusable code into UserChangePasswordMailUtil.generateMailText() so it can be used elsewhere
-			return util.generateMailText(user);
-		} catch (UserHasNoEmailException e) {
-			return "This function is not available for users without an email-adress!";
+			String serverpath = Settings.getServerContextPathURI();
+			Translator userTrans = Util.createPackageTranslator(RegistrationManager.class, locale) ;
+			String body = userTrans.translate("pwchange.intro", new String[] { user.getName() })
+					+ userTrans.translate("pwchange.body", new String[] {
+							serverpath, dummyKey, i18nModule.getLocaleKey(locale)
+					});
+			return body;
 		}
 	}
 	
 	private void sendToken(UserRequest ureq, String text) {
-		try {
-			// OLATNG-5: extracted reusable code into UserChangePasswordMailUtil.sendTokenByMail() so it can be used elsewhere
-			MailerResult result = util.sendTokenByMail(ureq, user, text);
-			if (result.getReturnCode() == 0) {
-				showInfo("email.sent");
-			} else {
-				showError("error.send.changepasswd.link", new String[]{ String.valueOf(result.getReturnCode()) });
-			}
-		} catch(UserChangePasswordException e) {
-			showWarning("changeuserpwd.failed");
-		} catch(UserHasNoEmailException e) {
+		// mailer configuration
+		// We allow creation of password token when user has no password so far or when he as an OpenOLAT Password. 
+		// For other cases such as Shibboleth, LDAP, oAuth etc. we don't allow creation of token as this is most 
+		// likely not a desired action.
+		List<Authentication> authentications = securityManager.getAuthentications(user);
+		boolean isOOpwdAllowed = authentications.isEmpty();
+		for (Authentication authentication : authentications) {
+			if (authentication.getProvider().equals(BaseSecurityModule.getDefaultAuthProviderIdentifier())) {
+				isOOpwdAllowed = true;
+			}			
+		}		
+		if (!isOOpwdAllowed) { 
+			showWarning("sendtoken.wrong.auth");
+			return;
+		}
+		
+		Preferences prefs = user.getUser().getPreferences();
+		Locale locale = i18nManager.getLocaleOrDefault(prefs.getLanguage());
+		String emailAdress = user.getUser().getProperty(UserConstants.EMAIL, locale);
+
+		String ip = ureq.getHttpReq().getRemoteAddr();
+		TemporaryKey tk = registrationManager.createAndDeleteOldTemporaryKey(user.getKey(), emailAdress, ip,
+				RegistrationManager.PW_CHANGE, loginModule.getValidUntilHoursGui());
+		
+		if(text.indexOf(dummyKey) < 0) {
 			showWarning("changeuserpwd.failed");
 		}
 	}

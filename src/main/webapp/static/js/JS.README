@@ -11,16 +11,16 @@ The js.plugins.min.js and js.plugins.min.css are build with:
 It contains the following minified javascripts:
   functions.js
   jshashtable-2.1_src.js
-  jquery.oolog.js
   jquery.translator.js
   jquery.periodic.js
   jquery.tinymce.min.js
   
-it minified the 4 olat plugins for tinymce 4
+it minified the 5 olat plugins for tinymce 4
   olatmatheditor
   olatmovieviewer
   olatsmileys
   quotespliter
+  olatedusharing
   
 and minified css:
   bootstrap-tagsinput.css

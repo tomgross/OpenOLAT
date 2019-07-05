@@ -37,6 +37,7 @@ import org.olat.core.gui.control.generic.wizard.StepsMainRunController;
 import org.olat.core.gui.media.MediaResource;
 import org.olat.core.id.Identity;
 import org.olat.core.id.OLATResourceable;
+import org.olat.core.id.Organisation;
 import org.olat.core.id.Roles;
 import org.olat.core.util.coordinate.LockResult;
 import org.olat.core.util.vfs.VFSContainer;
@@ -47,13 +48,12 @@ import org.olat.repository.model.RepositoryEntrySecurity;
 import org.olat.repository.ui.author.CreateEntryController;
 import org.olat.repository.ui.author.CreateRepositoryEntryController;
 
-
 /**
- * Initial Date:  Apr 5, 2004
+ * Initial Date: Apr 5, 2004
  *
  * @author Mike Stock
  * 
- * Comment:  
+ *         Comment:
  * 
  */
 /**
@@ -66,23 +66,35 @@ public interface RepositoryHandler {
 	 * @return Return the typeNames of OLATResourceable this Handler can handle.
 	 */
 	public String getSupportedType();
-	
+
 	/**
 	 * This resource support creation within OpenOLAT.
+	 * 
+	 * @param identity Identity who wants to create the the resource
+	 * @param roles    Roles of the identity who wants to create the the resource
 	 * @return
 	 */
-	public boolean isCreate();
-	
+	public boolean supportCreate(Identity identity, Roles roles);
+
 	public String getCreateLabelI18nKey();
-	
-	public RepositoryEntry createResource(Identity initialAuthor, String displayname, String description, Object createObject, Locale locale);
-	
+
+	public RepositoryEntry createResource(Identity initialAuthor, String displayname, String description,
+			Object createObject, Organisation organisation, Locale locale);
+
 	/**
 	 * Typically for course wizard
+	 * 
 	 * @return
 	 */
 	public boolean isPostCreateWizardAvailable();
-	
+
+	/**
+	 * This resource support import of files.
+	 * 
+	 * @return
+	 */
+	public boolean supportImport();
+
 	/**
 	 * 
 	 * @param file
@@ -90,21 +102,34 @@ public interface RepositoryHandler {
 	 * @return
 	 */
 	public ResourceEvaluation acceptImport(File file, String filename);
-	
+
+	/**
+	 * This resource support import with an URL.
+	 * 
+	 * @return
+	 */
+	public boolean supportImportUrl();
+
+	public ResourceEvaluation acceptImport(String url);
+
 	/**
 	 * 
 	 * @param initialAuthor
-	 * @param initialAuthorAlt 
+	 * @param initialAuthorAlt
 	 * @param displayname
 	 * @param description
-	 * @param withReferences if true import references
+	 * @param withReferences   if true import references
 	 * @param locale
 	 * @param file
 	 * @param filename
 	 * @return
 	 */
 	public RepositoryEntry importResource(Identity initialAuthor, String initialAuthorAlt, String displayname,
-			String description, boolean withReferences, Locale locale, File file, String filename);	
+			String description, boolean withReferences, Organisation organisation, Locale locale, File file,
+			String filename);
+
+	public RepositoryEntry importResource(Identity initialAuthor, String initialAuthorAlt, String displayname,
+			String description, Organisation organisation, Locale locale, String url);
 
 	/**
 	 * 
@@ -113,27 +138,33 @@ public interface RepositoryHandler {
 	 * @return The target repository entry
 	 */
 	public RepositoryEntry copy(Identity author, RepositoryEntry source, RepositoryEntry target);
-	
+
 	/**
 	 * @return true if this handler supports donwloading Resourceables of its type.
 	 */
 	public boolean supportsDownload();
 
 	/**
-	 * @return true if this handler supports an editor for Resourceables of its type.
+	 * @param resource the reource to edit
+	 * @param identity Identity who wants to edit the the resource
+	 * @param roles    Roles of the identity who wants to edit the the resource
+	 * @return true if this handler supports an editor for Resourceables of its
+	 *         type.
 	 */
-	public EditionSupport supportsEdit(OLATResourceable resource);
-	
+	public EditionSupport supportsEdit(OLATResourceable resource, Identity identity, Roles roles);
+
 	/**
-	 * If the resource handler can deliver an assessment details controller,
-	 * it returns true.
+	 * If the resource handler can deliver an assessment details controller, it
+	 * returns true.
+	 * 
 	 * @return
 	 */
 	public boolean supportsAssessmentDetails();
-	
+
 	/**
-	 * Return the container where image and files can be saved for the description field.
-	 * the folder MUST be under the root folder has its name "media".
+	 * Return the container where image and files can be saved for the description
+	 * field. the folder MUST be under the root folder has its name "media".
+	 * 
 	 * @param repoEntry
 	 * @return
 	 */
@@ -141,38 +172,48 @@ public interface RepositoryHandler {
 
 	/**
 	 * Called if a user launches a Resourceable that this handler can handle.
-	 * @param reSecurity The permissions wrapper
+	 * 
+	 * @param reSecurity            The permissions wrapper
 	 * @param ureq
 	 * @param wControl
 	 * @param res
-	 * @param initialViewIdentifier if null the default view will be started, otherwise a controllerfactory type dependant view will be activated (subscription subtype)
+	 * @param initialViewIdentifier if null the default view will be started,
+	 *                              otherwise a controllerfactory type dependant
+	 *                              view will be activated (subscription subtype)
 	 * @return Controller able to launch resourceable.
 	 */
-	public MainLayoutController createLaunchController(RepositoryEntry re, RepositoryEntrySecurity reSecurity, UserRequest ureq, WindowControl wControl);
-	
+	public MainLayoutController createLaunchController(RepositoryEntry re, RepositoryEntrySecurity reSecurity,
+			UserRequest ureq, WindowControl wControl);
+
 	/**
-	 * Called if a user wants to edit a Resourceable that this handler can provide an editor for. 
-	 * (it is given here that this method 
-	 * can only be called when the current user is either olat admin or in the owning group of this resource
+	 * Called if a user wants to edit a Resourceable that this handler can provide
+	 * an editor for. (it is given here that this method can only be called when the
+	 * current user is either olat admin or in the owning group of this resource
+	 * 
 	 * @param ureq
 	 * @param wControl
 	 * @param toolbar
 	 * @param res
 	 * @return Controler able to edit resourceable.
 	 */
-	public Controller createEditorController(RepositoryEntry re, UserRequest ureq, WindowControl wControl, TooledStackedPanel toolbar);
-	
+	public Controller createEditorController(RepositoryEntry re, UserRequest ureq, WindowControl wControl,
+			TooledStackedPanel toolbar);
+
 	/**
 	 * Called if a user wants to create a Resourceable via wizard.
+	 * 
 	 * @param res
 	 * @param ureq
 	 * @param wControl
 	 * @return Controller that guides trough the creation workflow via wizard.
 	 */
-	public StepsMainRunController createWizardController(OLATResourceable res, UserRequest ureq, WindowControl wControl);
-	
+	public StepsMainRunController createWizardController(OLATResourceable res, UserRequest ureq,
+			WindowControl wControl);
+
 	/**
-	 * Called if a user wants to open the create repository entry dialog for a Resourceable
+	 * Called if a user wants to open the create repository entry dialog for a
+	 * Resourceable
+	 * 
 	 * @param ureq
 	 * @param wControl
 	 * @return Controller able to create resourceable.
@@ -180,7 +221,7 @@ public interface RepositoryHandler {
 	default CreateEntryController createCreateRepositoryEntryController(UserRequest ureq, WindowControl wControl) {
 		return new CreateRepositoryEntryController(ureq, wControl, this);
 	}
-	
+
 	/**
 	 * Return the details controller for the assessed identity.
 	 * 
@@ -191,19 +232,23 @@ public interface RepositoryHandler {
 	 * @param assessedIdentity
 	 * @return
 	 */
-	public Controller createAssessmentDetailsController(RepositoryEntry re, UserRequest ureq, WindowControl wControl, TooledStackedPanel toolbar, Identity assessedIdentity);
-	
+	public Controller createAssessmentDetailsController(RepositoryEntry re, UserRequest ureq, WindowControl wControl,
+			TooledStackedPanel toolbar, Identity assessedIdentity);
+
 	/**
 	 * Called if a user downloads a Resourceable that this handler can handle.
-	 * @param res
+	 * 
+	 * @param res The OLAT resource
 	 * @return MediaResource delivering resourceable.
 	 */
-	public MediaResource getAsMediaResource(OLATResourceable res, boolean backwardsCompatible);
-	
+	public MediaResource getAsMediaResource(OLATResourceable res);
+
 	/**
-	 * Called if the repository entry referencing the given Resourceable will be deleted
-	 * from the repository. Do any necessary cleanup work specific to this handler's type.
-	 * The handler is responsible for deleting the resourceable aswell.
+	 * Called if the repository entry referencing the given Resourceable will be
+	 * deleted from the repository. Do any necessary cleanup work specific to this
+	 * handler's type. The handler is responsible for deleting the resourceable as
+	 * well.
+	 * 
 	 * @param res
 	 * @param ureq
 	 * @param wControl
@@ -212,9 +257,10 @@ public interface RepositoryHandler {
 	public boolean cleanupOnDelete(RepositoryEntry entry, OLATResourceable res);
 
 	/**
-	 * Called if the repository entry referencing the given Resourceable will be deleted
-	 * from the repository. Return status wether to proceed with the delete action. If
-	 * this method returns false, the entry will not be deleted.
+	 * Called if the repository entry referencing the given Resourceable will be
+	 * deleted from the repository. Return status whether to proceed with the delete
+	 * action. If this method returns false, the entry will not be deleted.
+	 * 
 	 * @param res
 	 * @param identity
 	 * @param roles
@@ -222,28 +268,39 @@ public interface RepositoryHandler {
 	 * @param errors
 	 * @return true if ressource is ready to delete, false if not.
 	 */
-	public boolean readyToDelete(RepositoryEntry entry, Identity identity, Roles roles, Locale locale, ErrorList errors);
-	
+	public boolean readyToDelete(RepositoryEntry entry, Identity identity, Roles roles, Locale locale,
+			ErrorList errors);
+
 	/**
 	 * Acquires lock for the input ores and identity.
+	 * 
 	 * @param ores
 	 * @param identity
 	 * @return the LockResult or null if no locking supported.
 	 */
 	public LockResult acquireLock(OLATResourceable ores, Identity identity);
-	
+
 	/**
 	 * Releases the lock.
 	 * 
 	 * @param lockResult the LockResult received when locking
 	 */
 	public void releaseLock(LockResult lockResult);
-	
+
 	/**
 	 * 
 	 * @param ores
 	 * @return
 	 */
-	public boolean isLocked(OLATResourceable ores); 
-	
+	public boolean isLocked(OLATResourceable ores);
+
+	/**
+	 * Called when the repository entry of that Resourceable changed.
+	 * 
+	 * @param entry
+	 */
+	default public void onDescriptionChanged(RepositoryEntry entry) {
+		// nothing to do
+	}
+
 }

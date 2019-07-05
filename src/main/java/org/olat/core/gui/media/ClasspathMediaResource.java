@@ -39,9 +39,9 @@ import java.util.zip.ZipEntry;
 
 import javax.servlet.http.HttpServletResponse;
 
-import org.apache.commons.io.IOUtils;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.helpers.Settings;
-import org.olat.core.logging.LogDelegator;
+import org.olat.core.logging.Tracing;
 import org.olat.core.util.StringHelper;
 import org.olat.core.util.WebappHelper;
 
@@ -53,14 +53,17 @@ import org.olat.core.util.WebappHelper;
  * 
  * @author Felix Jost
  */
-public class ClasspathMediaResource extends LogDelegator implements MediaResource {
+public class ClasspathMediaResource implements MediaResource {
+	
+	private static final Logger log = Tracing.createLoggerFor(ClasspathMediaResource.class);
+	
 	private final String location;
 	private Long lastModified;
 	private Long size;
 	private URL url;
 	// local cache to minimize access to jar content (expensive)
-	private static final Map<String,Long> cachedJarResourceLastModified = new ConcurrentHashMap<String, Long>();
-	private static final Map<String,Long> cachedJarResourceSize = new ConcurrentHashMap<String, Long>();
+	private static final Map<String,Long> cachedJarResourceLastModified = new ConcurrentHashMap<>();
+	private static final Map<String,Long> cachedJarResourceSize = new ConcurrentHashMap<>();
 
 	/**
 	 * Constructor that uses class loader of this (ClasspathMediaResource) class
@@ -107,14 +110,12 @@ public class ClasspathMediaResource extends LogDelegator implements MediaResourc
 						String jarPath = "/" + fileName.substring(5, pathDelim);
 						// Rel path must not start with "!/", remove it
 						String relPath	= fileName.substring(pathDelim + 2);
-						JarFile jar = null;
-						try {
+						File jarFile = new File(jarPath);
+						try(JarFile jar = new JarFile(jarFile)) {
 							// Get last modified and file size form jar entry
-							File jarFile = new File(jarPath);
-							jar = new JarFile(jarFile);
 							ZipEntry entry = jar.getEntry(relPath);
 							if (entry == null) {
-								logWarn("jar resource at location '"+location+"' and package " + packageName + " was not found, could not resolve entry relPath::" + relPath, null);
+								log.warn("jar resource at location '"+location+"' and package " + packageName + " was not found, could not resolve entry relPath::" + relPath);
 							} else {
 								size = new Long(entry.getSize());
 								// Last modified of jar - getTime on jar entry is not stable
@@ -124,9 +125,7 @@ public class ClasspathMediaResource extends LogDelegator implements MediaResourc
 								cachedJarResourceLastModified.put(fileName, lastModified);
 							}
 						} catch (IOException e) {
-							logWarn("jar resource at location '"+location+"' and package " + packageName + " was not found!", e);
-						} finally {
-							IOUtils.closeQuietly(jar);
+							log.warn("jar resource at location '"+location+"' and package " + packageName + " was not found!", e);
 						}
 					}					
 				} else {
@@ -146,16 +145,21 @@ public class ClasspathMediaResource extends LogDelegator implements MediaResourc
 					url = null;
 				}
 			}			
-			if (isLogDebugEnabled()) {
-				logDebug("resource found at URL::" + this.url
+			if (log.isDebugEnabled()) {
+				log.debug("resource found at URL::" + this.url
 						+ " for package::" + packageName + " and location::"
 						+ location + ", filesize::" + size + " lastModified::"
-						+ lastModified, null);
+						+ lastModified);
 			}
 		} else {
 			// resource was not found
-			logWarn("resource at location '"+location+"' and package " + packageName + " was not found!", null);
+			log.warn("resource at location '"+location+"' and package " + packageName + " was not found!");
 		}
+	}
+	
+	@Override
+	public long getCacheControlDuration() {
+		return ServletUtil.CACHE_ONE_DAY;
 	}
 	
 	@Override
@@ -163,29 +167,19 @@ public class ClasspathMediaResource extends LogDelegator implements MediaResourc
 		return true;
 	}
 
-	/**
-	 * @see org.olat.core.gui.media.MediaResource#getContentType()
-	 */
 	@Override
 	public String getContentType() {
 		String mimeType = WebappHelper.getMimeType(location);
 		if (mimeType == null) mimeType = "application/octet-stream";
 		return mimeType;
-
 	}
 
-	/**
-	 * @see org.olat.core.gui.media.MediaResource#getSize()
-	 */
 	@Override
 	public Long getSize() {
 		if (size != null && size > 0) return size;
 		else return null;
 	}
 
-	/**
-	 * @see org.olat.core.gui.media.MediaResource#getInputStream()
-	 */
 	@Override
 	public InputStream getInputStream() {
 		InputStream is = null;
@@ -194,35 +188,26 @@ public class ClasspathMediaResource extends LogDelegator implements MediaResourc
 			is = url.openStream();
 		} catch (UnknownHostException host) {
 			//catch host exception here which can occur when brasato.src is wrongly configured
-			logWarn("cannot get inputstream for url:"+url.toExternalForm()+"Unknown host which starts with windows path like \"C\" points to a wrong configured brasato.src in the olat.properties file", null);
+			log.warn("cannot get inputstream for url:"+url.toExternalForm()+"Unknown host which starts with windows path like \"C\" points to a wrong configured brasato.src in the olat.properties file");
 		} catch (IOException e) {
-			logWarn("cannot get inputstream for url:"+url.toExternalForm(), null);
+			log.warn("cannot get inputstream for url:"+url.toExternalForm());
 		}
 		return is;
 	}
 
-	/**
-	 * @see org.olat.core.gui.media.MediaResource#getLastModified()
-	 */
 	@Override
 	public Long getLastModified() {
 		return lastModified;
 	}
 
-	/**
-	 * @see org.olat.core.gui.media.MediaResource#release()
-	 */
 	@Override
 	public void release() {
-	// void
+		// void
 	}
 
-	/**
-	 * @see org.olat.core.gui.media.MediaResource#prepare(javax.servlet.http.HttpServletResponse)
-	 */
 	@Override
 	public void prepare(HttpServletResponse hres) {
-	//  
+		//  
 	}
 
 	@Override
@@ -235,7 +220,6 @@ public class ClasspathMediaResource extends LogDelegator implements MediaResourc
 	 *         not be found, delivery will fail
 	 */
 	public boolean resourceExists() {
-		if (url == null) return false;
-		else return true;
+		return url != null;
 	}
 }

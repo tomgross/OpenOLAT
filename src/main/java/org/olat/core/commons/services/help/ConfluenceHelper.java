@@ -29,12 +29,11 @@ import org.apache.http.HttpStatus;
 import org.apache.http.client.methods.HttpGet;
 import org.apache.http.impl.client.CloseableHttpClient;
 import org.apache.http.util.EntityUtils;
-import org.apache.poi.util.IOUtils;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.gui.UserRequest;
 import org.olat.core.gui.components.Component;
 import org.olat.core.gui.components.link.ExternalLink;
 import org.olat.core.helpers.Settings;
-import org.olat.core.logging.OLog;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.StringHelper;
 import org.olat.core.util.httpclient.HttpClientFactory;
@@ -51,11 +50,11 @@ import org.olat.core.util.httpclient.HttpClientFactory;
  *
  */
 public class ConfluenceHelper {
-	private static final OLog logger = Tracing.createLoggerFor(ConfluenceHelper.class);
+	private static final Logger logger = Tracing.createLoggerFor(ConfluenceHelper.class);
 
-	private static final Map<String, String> spaces = new ConcurrentHashMap<String, String>();
-	private static final Map<String, String> translatedPages = new ConcurrentHashMap<String, String>();
-	private static final Map<String, Date> translatTrials = new ConcurrentHashMap<String, Date>();
+	private static final Map<String, String> spaces = new ConcurrentHashMap<>();
+	private static final Map<String, String> translatedPages = new ConcurrentHashMap<>();
+	private static final Map<String, Date> translatTrials = new ConcurrentHashMap<>();
 
 	private static final String confluenceBaseUrl = "https://help.olat.uzh.ch";
 	private static final String confluenceDisplayUrl = confluenceBaseUrl + "/display";
@@ -195,9 +194,9 @@ public class ConfluenceHelper {
 			if (lastTrial == null || lastTrial.getTime() < (now.getTime() - (1800 * 1000))) {
 				translatTrials.put(aliasUrl, now);				
 				new Thread() {
+					@Override
 					public void run() {
-						CloseableHttpClient httpClient = HttpClientFactory.getHttpClientInstance(false);
-						try {
+						try(CloseableHttpClient httpClient = HttpClientFactory.getHttpClientInstance(false)) {
 							// Phase 1: lookup alias redirect
 							HttpGet httpMethod = new HttpGet(aliasUrl);
 							httpMethod.setHeader("User-Agent", Settings.getFullVersionInfo());
@@ -219,8 +218,8 @@ public class ConfluenceHelper {
 								}
 								// Remove the path to extract the page name
 								String path = body.substring(locationPos + 18, endPos);
-								String translatedPage = path.substring(path.lastIndexOf("/") + 1);
-								translatedPage = translatedPage.replaceAll("\\+", " ");
+								String translatedPath = path.substring(path.lastIndexOf("/") + 1);
+								translatedPath = translatedPath.replaceAll("\\+", " ");
 								
 								// Phase 2:Lookup real page name in confluence
 								// if this just a stupid confluence page ID
@@ -232,8 +231,8 @@ public class ConfluenceHelper {
 								// Anchors do not work on such pages. For iso
 								// latin pages this should be fine for most
 								// cases.
-								if (translatedPage.indexOf("viewpage.action?pageId") != -1) {
-									String redirectUrl = confluencePagesUrl + translatedPage;
+								if (translatedPath.indexOf("viewpage.action?pageId") != -1) {
+									String redirectUrl = confluencePagesUrl + translatedPath;
 									httpMethod = new HttpGet(redirectUrl);
 									httpMethod.setHeader("User-Agent", Settings.getFullVersionInfo());
 									response = httpClient.execute(httpMethod);
@@ -254,8 +253,8 @@ public class ConfluenceHelper {
 										}
 										// Remove the path to extract the page name
 										path = body.substring(titlePos + 25, endPos);
-										translatedPage = path.substring(path.lastIndexOf("/") + 1);
-										translatedPage = translatedPage.replaceAll("\\+", " ");
+										translatedPath = path.substring(path.lastIndexOf("/") + 1);
+										translatedPath = translatedPath.replaceAll("\\+", " ");
 										// Check if this just a stupid page ID instead
 										// of the page name. This totally breaks the
 										// anchor stuff, we need the real page name. For
@@ -264,12 +263,10 @@ public class ConfluenceHelper {
 								}
 								
 								// We're done. Put to cache for next retrieval
-								translatedPages.putIfAbsent(aliasUrl, translatedPage);
+								translatedPages.putIfAbsent(aliasUrl, translatedPath);
 							}
 						} catch (Exception e) {
 							logger.warn("Error while getting help page from EN alias", e);
-						} finally {
-							IOUtils.closeQuietly(httpClient);
 						}
 					}
 				}.start();

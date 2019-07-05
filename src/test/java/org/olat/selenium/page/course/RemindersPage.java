@@ -21,7 +21,6 @@ package org.olat.selenium.page.course;
 
 import java.util.List;
 
-import org.jboss.arquillian.drone.api.annotation.Drone;
 import org.junit.Assert;
 import org.olat.selenium.page.NavigationPage;
 import org.olat.selenium.page.graphene.OOGraphene;
@@ -38,13 +37,8 @@ import org.openqa.selenium.support.ui.Select;
  *
  */
 public class RemindersPage {
-	
-	@Drone
-	private WebDriver browser;
-	
-	public RemindersPage() {
-		//
-	}
+
+	private final WebDriver browser;
 	
 	public RemindersPage(WebDriver browser) {
 		this.browser = browser;
@@ -91,6 +85,7 @@ public class RemindersPage {
 	 */
 	public RemindersPage sendReminders() {
 		By sendBy = By.cssSelector("div.o_callout_content ul.o_dropdown a.o_sel_course_reminder_send");
+		OOGraphene.waitElement(sendBy, browser);
 		browser.findElement(sendBy).click();
 		OOGraphene.waitBusy(browser);
 		return this;
@@ -167,6 +162,12 @@ public class RemindersPage {
 	public RemindersPage setDescription(String text) {
 		By descBy = By.cssSelector(".o_sel_course_reminder_desc input[type='text']");
 		browser.findElement(descBy).sendKeys(text);
+		return this;
+	}
+
+	public RemindersPage setSubject(String text) {
+		By subjectBy = By.cssSelector(".o_sel_course_reminder_subject input[type='text']");
+		browser.findElement(subjectBy).sendKeys(text);
 		return this;
 	}
 	

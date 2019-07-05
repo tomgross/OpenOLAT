@@ -24,6 +24,7 @@ import java.util.Date;
 import java.util.List;
 import java.util.Locale;
 
+import org.apache.logging.log4j.Logger;
 import org.olat.core.commons.services.notifications.NotificationsHandler;
 import org.olat.core.commons.services.notifications.NotificationsManager;
 import org.olat.core.commons.services.notifications.Publisher;
@@ -33,7 +34,6 @@ import org.olat.core.commons.services.notifications.manager.NotificationsUpgrade
 import org.olat.core.commons.services.notifications.model.SubscriptionListItem;
 import org.olat.core.commons.services.notifications.model.TitleItem;
 import org.olat.core.gui.translator.Translator;
-import org.olat.core.logging.OLog;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.Util;
 import org.olat.core.util.nodes.INode;
@@ -56,7 +56,7 @@ import de.bps.course.nodes.DENCourseNode;
  * @author bja
  */
 public class DENCourseNodeNotificationHandler implements NotificationsHandler {
-	private static final OLog log = Tracing.createLoggerFor(DENCourseNodeNotificationHandler.class);
+	private static final Logger log = Tracing.createLoggerFor(DENCourseNodeNotificationHandler.class);
 
 	public SubscriptionInfo createSubscriptionInfo(Subscriber subscriber, Locale locale, Date compareDate) {
 		SubscriptionInfo si = null;
@@ -105,14 +105,13 @@ public class DENCourseNodeNotificationHandler implements NotificationsHandler {
 	
 	private boolean courseStatus(ICourse course) {
 		return course != null
-				&& !course.getCourseEnvironment().getCourseGroupManager().getCourseEntry().getRepositoryEntryStatus().isUnpublished()
-				&& !course.getCourseEnvironment().getCourseGroupManager().getCourseEntry().getRepositoryEntryStatus().isClosed();
+				&& !course.getCourseEnvironment().getCourseGroupManager().isNotificationsAllowed();
 	}
 	
 	private void checkPublisher(Publisher p) {
 		try {
 			if(!NotificationsUpgradeHelper.checkCourse(p)) {
-				log.info("deactivating publisher with key; " + p.getKey(), null);
+				log.info("deactivating publisher with key; " + p.getKey());
 				NotificationsManager.getInstance().deactivate(p);
 			}
 		} catch (Exception e) {

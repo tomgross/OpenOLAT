@@ -30,6 +30,7 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.util.List;
+import java.util.zip.ZipOutputStream;
 
 import org.olat.core.gui.UserRequest;
 import org.olat.core.gui.components.Component;
@@ -57,11 +58,11 @@ import org.olat.course.nodes.AssessableCourseNode;
  */
 public class ScoreAccountingArchiveController extends BasicController {
 
-	private OLATResourceable ores;
+	private final OLATResourceable ores;
 	private StackedPanel myPanel;
 	private VelocityContainer myContent;
-	private VelocityContainer vcFeedback;
-	private Link startButton, downloadButton;
+	private Link startButton;
+	private Link downloadButton;
 	
 
 	/**
@@ -76,14 +77,11 @@ public class ScoreAccountingArchiveController extends BasicController {
 
 		myPanel = putInitialPanel(myPanel);
 		myContent = createVelocityContainer("start");
-		startButton = LinkFactory.createButtonSmall("cmd.start", myContent, this);
+		startButton = LinkFactory.createButton("cmd.start", myContent, this);
 		myPanel.setContent(myContent);
 	}
 
-	/**
-	 * @see org.olat.core.gui.control.DefaultController#event(org.olat.core.gui.UserRequest,
-	 *      org.olat.core.gui.components.Component, org.olat.core.gui.control.Event)
-	 */
+	@Override
 	public void event(UserRequest ureq, Component source, Event event) {
 		if (source == startButton) {
 			doStartExport();
@@ -102,28 +100,26 @@ public class ScoreAccountingArchiveController extends BasicController {
 		List<AssessableCourseNode> nodes = ScoreAccountingHelper.loadAssessableNodes(course.getCourseEnvironment());
 		
 		String courseTitle = course.getCourseTitle();
-		String fileName = ExportUtil.createFileNameWithTimeStamp(courseTitle, "xlsx");
+		String fileName = ExportUtil.createFileNameWithTimeStamp(courseTitle, "zip");
 		// location for data export
 		File exportDirectory = CourseFactory.getOrCreateDataExportDirectory(getIdentity(), courseTitle);
 		File downloadFile = new File(exportDirectory, fileName);
-		try(OutputStream out=new FileOutputStream(downloadFile)) {
-			ScoreAccountingHelper.createCourseResultsOverviewXMLTable(users, nodes, course, getLocale(), out);
+		try(OutputStream fOut = new FileOutputStream(downloadFile);
+				ZipOutputStream zout = new ZipOutputStream(fOut)) {
+			ScoreAccountingHelper.createCourseResultsOverview(users, nodes, course, getLocale(), zout);
 		} catch(IOException e) {
 			logError("", e);
 		}
 
-		vcFeedback = createVelocityContainer("feedback");
+		VelocityContainer vcFeedback = createVelocityContainer("feedback");
 		vcFeedback.contextPut("body", translate("course.res.feedback", new String[] { downloadFile.getName() }));
 		downloadButton = LinkFactory.createButtonSmall("cmd.download", vcFeedback, this);
 		downloadButton.setUserObject(downloadFile);
 		myPanel.setContent(vcFeedback);
 	}
 
-	/**
-	 * @see org.olat.core.gui.control.DefaultController#doDispose(boolean)
-	 */
+	@Override
 	protected void doDispose() {
 		// nothing to dispose
 	}
-
 }

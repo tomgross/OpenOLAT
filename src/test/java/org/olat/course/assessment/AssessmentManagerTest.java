@@ -37,16 +37,16 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
-import java.util.UUID;
 
+import org.apache.logging.log4j.Logger;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 import org.olat.core.commons.persistence.DBFactory;
 import org.olat.core.id.Identity;
 import org.olat.core.id.IdentityEnvironment;
-import org.olat.core.logging.OLog;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.resource.OresHelper;
 import org.olat.course.CourseFactory;
@@ -59,10 +59,12 @@ import org.olat.course.nodes.CourseNode;
 import org.olat.course.run.scoring.ScoreEvaluation;
 import org.olat.course.run.userview.UserCourseEnvironment;
 import org.olat.course.run.userview.UserCourseEnvironmentImpl;
+import org.olat.modules.assessment.Role;
 import org.olat.repository.RepositoryEntry;
 import org.olat.repository.RepositoryManager;
 import org.olat.test.JunitTestHelper;
 import org.olat.test.OlatTestCase;
+import org.olat.user.manager.ManifestBuilder;
 import org.springframework.beans.factory.annotation.Autowired;
 
 /**
@@ -76,7 +78,7 @@ import org.springframework.beans.factory.annotation.Autowired;
  */
 public class AssessmentManagerTest extends OlatTestCase  {
 	
-	private static OLog log = Tracing.createLoggerFor(AssessmentManagerTest.class);
+	private static final Logger log = Tracing.createLoggerFor(AssessmentManagerTest.class);
 	
 	private AssessmentManager assessmentManager;	
 	private ICourse course;
@@ -95,14 +97,14 @@ public class AssessmentManagerTest extends OlatTestCase  {
 		try {
 			log.info("setUp start ------------------------");
 			
-			Identity author = JunitTestHelper.createAndPersistIdentityAsUser("junit_auth-" + UUID.randomUUID().toString());
-			tutor = JunitTestHelper.createAndPersistIdentityAsUser("junit_tutor-" + UUID.randomUUID().toString());
-			student = JunitTestHelper.createAndPersistIdentityAsUser("junit_student-" + UUID.randomUUID().toString());
+			Identity author = JunitTestHelper.createAndPersistIdentityAsRndUser("junit_auth");
+			tutor = JunitTestHelper.createAndPersistIdentityAsRndUser("junit_tutor");
+			student = JunitTestHelper.createAndPersistIdentityAsRndUser("junit_student");
 			
 			//import "Demo course" into the bcroot_junittest
 			RepositoryEntry repositoryEntry = JunitTestHelper.deployDemoCourse(author);
 			Long resourceableId = repositoryEntry.getOlatResource().getResourceableId();
-			System.out.println("Demo course imported - resourceableId: " + resourceableId);
+			log.info("Demo course imported - resourceableId: " + resourceableId);
 		
 			course = CourseFactory.loadCourse(resourceableId);
 			DBFactory.getInstance().closeSession();
@@ -127,7 +129,7 @@ public class AssessmentManagerTest extends OlatTestCase  {
 	 */
 	@Test
 	public void testSaveScoreEvaluation() {
-		System.out.println("Start testSaveScoreEvaluation");
+		log.info("Start testSaveScoreEvaluation");
 		
 		assertNotNull(course);
 		//find an assessableCourseNode
@@ -138,7 +140,7 @@ public class AssessmentManagerTest extends OlatTestCase  {
 			CourseNode currentNode = nodesIterator.next();			
 			if(currentNode instanceof AssessableCourseNode) {
 				if (currentNode.getType().equalsIgnoreCase("iqtest")) {
-					System.out.println("Yes, we found a test node! - currentNode.getType(): " + currentNode.getType());
+					log.info("Yes, we found a test node! - currentNode.getType(): " + currentNode.getType());
 					assessableCourseNode = (AssessableCourseNode)currentNode;
 					testNodeFound = true;
 					break;
@@ -161,23 +163,18 @@ public class AssessmentManagerTest extends OlatTestCase  {
 		ienv.setIdentity(student);
 		UserCourseEnvironment userCourseEnv = new UserCourseEnvironmentImpl(ienv, course.getCourseEnvironment());
 		boolean incrementAttempts = true;
-		//assessableCourseNode.updateUserScoreEvaluation(scoreEvaluation, userCourseEnv, tutor, incrementAttempts); //alternative
-		assessmentManager.saveScoreEvaluation(assessableCourseNode, tutor, student, scoreEvaluation, userCourseEnv, incrementAttempts);
+		assessmentManager.saveScoreEvaluation(assessableCourseNode, tutor, student, scoreEvaluation, userCourseEnv, incrementAttempts, Role.coach);
 		DBFactory.getInstance().closeSession();
 		//the attempts mut have been incremented
-		//assertEquals(attempts, assessableCourseNode.getUserAttempts(userCourseEnv)); //alternative
 		assertEquals(attempts, assessmentManager.getNodeAttempts(assessableCourseNode, student));
 						
 		assessmentManager.saveNodeCoachComment(assessableCourseNode, student, coachComment);
-		//assessableCourseNode.updateUserCoachComment(coachComment, userCourseEnv); //alternative
 		
 		assessmentManager.saveNodeComment(assessableCourseNode, tutor, student, userComment);
-		//assessableCourseNode.updateUserUserComment(userComment, userCourseEnv, tutor); //alternative
     
 		attempts++;
-		assessmentManager.saveNodeAttempts(assessableCourseNode, tutor, student, attempts);
-		assertEquals(attempts, assessmentManager.getNodeAttempts(assessableCourseNode, student));    	
-		//assessableCourseNode.updateUserAttempts(attempts, userCourseEnv, tutor); //alternative
+		assessmentManager.saveNodeAttempts(assessableCourseNode, tutor, student, attempts, Role.coach);
+		assertEquals(attempts, assessmentManager.getNodeAttempts(assessableCourseNode, student));    
 		        
 		assertEquals(score, assessmentManager.getNodeScore(assessableCourseNode, student));
 		assertEquals(passed, assessmentManager.getNodePassed(assessableCourseNode, student));
@@ -186,7 +183,7 @@ public class AssessmentManagerTest extends OlatTestCase  {
 		assertEquals(coachComment, assessmentManager.getNodeCoachComment(assessableCourseNode, student));
 		assertEquals(userComment, assessmentManager.getNodeComment(assessableCourseNode, student));
 							
-		System.out.println("Finish testing AssessmentManager read/write methods");
+		log.info("Finish testing AssessmentManager read/write methods");
 
 		checkEfficiencyStatementManager();
 		assertNotNull("no course at the end of test",course);
@@ -205,7 +202,7 @@ public class AssessmentManagerTest extends OlatTestCase  {
 	 *
 	 */
 	private void checkEfficiencyStatementManager() {
-		System.out.println("Start testUpdateEfficiencyStatement");
+		log.info("Start testUpdateEfficiencyStatement");
 					
 		List <Identity> identitiyList = new ArrayList<Identity> ();
 		identitiyList.add(student);
@@ -226,8 +223,9 @@ public class AssessmentManagerTest extends OlatTestCase  {
 			if(archiveDir.exists()) {
 				archiveDir.delete();
 				if(archiveDir.mkdir()) {
-				  efficiencyStatementManager.archiveUserData(student, archiveDir);
-				  System.out.println("Archived EfficiencyStatement path: " + archiveDir.getAbsolutePath());
+					ManifestBuilder manifest = ManifestBuilder.createBuilder();
+					efficiencyStatementManager.export(student, manifest, archiveDir, Locale.GERMAN);
+					log.info("Archived EfficiencyStatement path: " + archiveDir.getAbsolutePath());
 				}
 			}
 		} catch (IOException e) {
@@ -275,12 +273,12 @@ public class AssessmentManagerTest extends OlatTestCase  {
 			Map<String,Object> assessmentMap = listIterator.next();
 			if(assessmentMap.get(AssessmentHelper.KEY_IDENTIFYER).equals(assessableCourseNode.getIdent())) {
 				String scoreString = (String) assessmentMap.get(AssessmentHelper.KEY_SCORE);				
-				System.out.println("scoreString: " + scoreString);
+				log.info("scoreString: " + scoreString);
 				assertEquals(score, new Float(scoreString));				
 			}
 		}
 		Double scoreDouble = efficiencyStatementManager.getScore(assessableCourseNode.getIdent(), efficiencyStatement);
-		System.out.println("scoreDouble: " + scoreDouble);
+		log.info("scoreDouble: " + scoreDouble);
 		assertEquals(new Double(score),efficiencyStatementManager.getScore(assessableCourseNode.getIdent(), efficiencyStatement));
 		assertEquals(passed,efficiencyStatementManager.getPassed(assessableCourseNode.getIdent(), efficiencyStatement));
 		return efficiencyStatement;

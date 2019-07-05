@@ -165,7 +165,7 @@ public class ResumeSessionController extends BasicController {
 	}
 	
 	public boolean userInteractionNeeded() {
-		return interceptors.size() > 0;
+		return !interceptors.isEmpty();
 	}
 	
 	@Override
@@ -231,10 +231,10 @@ public class ResumeSessionController extends BasicController {
 	private Long getLastRunTimeForController(String ctrlName) {
 		for (Property prop : preferencesList) {
 			if (prop.getName().equals(ctrlName)) {
-				return new Long(prop.getLastModified().getTime() / 1000);
+				return Long.valueOf(prop.getLastModified().getTime() / 1000);
 			}
 		}
-		return new Long(0);
+		return Long.valueOf(0l);
 	}
 
 	private boolean getRunStateForController(String ctrlName) {
@@ -272,7 +272,6 @@ public class ResumeSessionController extends BasicController {
 			}
 			
 			if(wizardCtrl != null) {
-				//actualCtrNr = ctrNr;
 				wizardCtrl.setCurStep(nextCtrlIndex + 1);
 			}
 
@@ -331,7 +330,7 @@ public class ResumeSessionController extends BasicController {
 				String url = toUrl(getLandingBC(ureq));
 				option = new Redirect(url);
 			} else if ("auto".equals(resumePrefs)) {
-				HistoryPoint historyEntry = HistoryManager.getInstance().readHistoryPoint(ureq.getIdentity());
+				HistoryPoint historyEntry = historyManager.readHistoryPoint(ureq.getIdentity());
 				if(historyEntry != null && StringHelper.containsNonWhitespace(historyEntry.getBusinessPath())) {
 					List<ContextEntry> cloneCes = BusinessControlFactory.getInstance().cloneContextEntries(historyEntry.getEntries());
 					String bc = BusinessControlFactory.getInstance().getAsRestPart(cloneCes, true);
@@ -454,7 +453,7 @@ public class ResumeSessionController extends BasicController {
 		 */
 		public String getFormattedRedirectUrl() {
 			String bc = redirectUrl;
-			if(bc.indexOf("]") < 0) {
+			if(bc.indexOf(']') < 0) {
 				bc = BusinessControlFactory.getInstance().formatFromURI(bc);
 			}
 			return bc;

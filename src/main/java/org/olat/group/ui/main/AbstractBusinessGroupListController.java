@@ -162,6 +162,8 @@ public abstract class AbstractBusinessGroupListController extends FormBasicContr
 	@Autowired
 	protected ACService acService;
 	@Autowired
+	protected QuotaManager quotaManager;
+	@Autowired
 	protected BGAreaManager areaManager;
 	@Autowired
 	protected BGRightManager rightManager;
@@ -184,7 +186,7 @@ public abstract class AbstractBusinessGroupListController extends FormBasicContr
 		setTranslator(Util.createPackageTranslator(AbstractBusinessGroupListController.class, ureq.getLocale(), getTranslator()));
 
 		Roles roles = ureq.getUserSession().getRoles();
-		admin = roles.isOLATAdmin() || roles.isGroupManager();
+		admin = roles.isAdministrator() || roles.isGroupManager();
 		this.readOnly = readOnly;
 		this.showAdminTools = showAdminTools && admin;
 		this.userObject = userObject;
@@ -273,7 +275,7 @@ public abstract class AbstractBusinessGroupListController extends FormBasicContr
 	
 	protected boolean canCreateBusinessGroup(UserRequest ureq) {
 		Roles roles = ureq.getUserSession().getRoles();
-		if(roles.isOLATAdmin() || roles.isGroupManager()
+		if(roles.isAdministrator() || roles.isGroupManager()
 				|| (roles.isAuthor() && groupModule.isAuthorAllowedCreate())
 				|| (!roles.isGuestOnly() && !roles.isInvitee() && groupModule.isUserAllowedCreate())) {
 			return true;
@@ -380,8 +382,6 @@ public abstract class AbstractBusinessGroupListController extends FormBasicContr
 						doLaunch(ureq, businessGroup);
 					} else if(TABLE_ACTION_DELETE.equals(cmd)) {
 						confirmDelete(ureq, Collections.singletonList(item));
-					} else if(TABLE_ACTION_LAUNCH.equals(cmd)) {
-						doLaunch(ureq, businessGroup);
 					} else if(TABLE_ACTION_EDIT.equals(cmd)) {
 						doEdit(ureq, businessGroup);
 					} else if(TABLE_ACTION_LEAVE.equals(cmd)) {
@@ -405,7 +405,6 @@ public abstract class AbstractBusinessGroupListController extends FormBasicContr
 	 */
 	private boolean toogleMark(BusinessGroupRow item) {
 		OLATResourceable bgResource = OresHelper.createOLATResourceableInstance("BusinessGroup", item.getKey());
-		//		item.getBusinessGroup().getResource();
 		if(markManager.isMarked(bgResource, getIdentity(), null)) {
 			markManager.removeMark(bgResource, getIdentity(), null);
 			item.setMarked(false);
@@ -438,8 +437,12 @@ public abstract class AbstractBusinessGroupListController extends FormBasicContr
 		} else if (source == groupCreateController) {
 			BusinessGroup group = null;
 			if(event == Event.DONE_EVENT) {
-				group = groupCreateController.getCreatedGroup();
-				if(group != null) {
+				Set<BusinessGroup> groups = groupCreateController.getCreatedGroups();
+				if(groups.size() == 1) {
+					group = groups.iterator().next();
+				}
+	
+				if(groups.size() > 0) {
 					tableEl.deselectAll();
 					reloadModel();
 				}
@@ -589,7 +592,7 @@ public abstract class AbstractBusinessGroupListController extends FormBasicContr
 		msg.setBodyText(translate("request.leaving.body", args));
 		msg.addEmailTo(contacts);
 		
-		contactCtrl = new ContactFormController(ureq, getWindowControl(), true, false, true, msg);
+		contactCtrl = new ContactFormController(ureq, getWindowControl(), true, false, true, msg, null);
 		listenTo(contactCtrl);
 		cmc = new CloseableModalController(getWindowControl(), "close", contactCtrl.getInitialComponent(),
 				true, translate("dialog.modal.bg.asktoleave.title"));
@@ -631,7 +634,7 @@ public abstract class AbstractBusinessGroupListController extends FormBasicContr
 	 */
 	protected void doCreate(UserRequest ureq, WindowControl wControl, RepositoryEntry re) {				
 		removeAsListenerAndDispose(groupCreateController);
-		groupCreateController = new NewBGController(ureq, wControl, re, false, null);
+		groupCreateController = new NewBGController(ureq, wControl, re, true, null);
 		listenTo(groupCreateController);
 		
 		cmc = new CloseableModalController(getWindowControl(), translate("close"), groupCreateController.getInitialComponent(), true, translate("create.form.title"));
@@ -750,8 +753,8 @@ public abstract class AbstractBusinessGroupListController extends FormBasicContr
 			return;
 		} 
 		
-		boolean isAuthor = ureq.getUserSession().getRoles().isAuthor()
-				|| ureq.getUserSession().getRoles().isInstitutionalResourceManager();
+		Roles roles = ureq.getUserSession().getRoles();
+		boolean isAuthor = roles.isAdministrator() || roles.isAuthor() || roles.isLearnResourceManager();
 
 		Step start = new BGConfigToolsStep(ureq, isAuthor);
 		StepRunnerCallback finish = new StepRunnerCallback() {
@@ -766,19 +769,17 @@ public abstract class AbstractBusinessGroupListController extends FormBasicContr
 						for(String enabledTool:configuration.getToolsToEnable()) {
 							tools.setToolEnabled(enabledTool, true);
 							if(CollaborationTools.TOOL_FOLDER.equals(enabledTool)) {
-								tools.saveFolderAccess(new Long(configuration.getFolderAccess()));
+								tools.saveFolderAccess(Long.valueOf(configuration.getFolderAccess()));
 								
 								Quota quota = configuration.getQuota();
 								if(quota != null) {
 									String path = tools.getFolderRelPath();
-									Quota fQuota = QuotaManager.getInstance()
-										.createQuota(path, quota.getQuotaKB(), quota.getUlLimitKB());
-									QuotaManager.getInstance()
-										.setCustomQuotaKB(fQuota);
+									Quota fQuota = quotaManager.createQuota(path, quota.getQuotaKB(), quota.getUlLimitKB());
+									quotaManager.setCustomQuotaKB(fQuota);
 								}
 								
 							} else if (CollaborationTools.TOOL_CALENDAR.equals(enabledTool)) {
-								tools.saveCalendarAccess(new Long(configuration.getCalendarAccess()));
+								tools.saveCalendarAccess(Long.valueOf(configuration.getCalendarAccess()));
 							}
 						}
 						for(String disabledTool:configuration.getToolsToDisable()) {
@@ -897,7 +898,7 @@ public abstract class AbstractBusinessGroupListController extends FormBasicContr
 	private void finishUserManagement(MembershipModification mod, List<BusinessGroup> groups, MailTemplate template, boolean sendMail) {
 		MailPackage mailing = new MailPackage(template, getWindowControl().getBusinessControl().getAsString(), sendMail);
 		businessGroupService.updateMembership(getIdentity(), mod, groups, mailing);
-		MailHelper.printErrorsAndWarnings(mailing.getResult(), getWindowControl(), getLocale());
+		MailHelper.printErrorsAndWarnings(mailing.getResult(), getWindowControl(), false, getLocale());
 	}
 	
 	protected void doSearch(UserRequest ureq, SearchEvent event) {
@@ -1035,20 +1036,19 @@ public abstract class AbstractBusinessGroupListController extends FormBasicContr
 	}
 	
 	protected final List<BusinessGroup> toBusinessGroups(UserRequest ureq, List<? extends BusinessGroupRef> items, boolean editableOnly) {
-		List<Long> groupKeys = new ArrayList<Long>();
+		List<Long> groupKeys = new ArrayList<>();
 		for(BusinessGroupRef item:items) {
 			groupKeys.add(item.getKey());
 		}
 		if(editableOnly) {
 			filterEditableGroupKeys(ureq, groupKeys);
 		}
-
-		List<BusinessGroup> groups = businessGroupService.loadBusinessGroups(groupKeys);
-		return groups;
+		return businessGroupService.loadBusinessGroups(groupKeys);
 	}
 	
 	protected boolean filterEditableGroupKeys(UserRequest ureq, List<Long> groupKeys) {
-		if(ureq.getUserSession().getRoles().isOLATAdmin() || ureq.getUserSession().getRoles().isGroupManager()) {
+		Roles roles = ureq.getUserSession().getRoles();
+		if(roles.isAdministrator() || roles.isGroupManager()) {
 			return false;
 		}
 		
@@ -1075,10 +1075,10 @@ public abstract class AbstractBusinessGroupListController extends FormBasicContr
 	 * @param doSendMail specifies if notification mails should be sent to users of delted group
 	 */
 	private void doDelete(UserRequest ureq, boolean doSendMail, List<BusinessGroup> groups) {
+		Roles roles = ureq.getUserSession().getRoles();
 		for(BusinessGroup group:groups) {
 			//check security
-			boolean ow = ureq.getUserSession().getRoles().isOLATAdmin()
-					|| ureq.getUserSession().getRoles().isGroupManager()
+			boolean ow = roles.isAdministrator() || roles.isGroupManager()
 					|| businessGroupService.hasRoles(getIdentity(), group, GroupRoles.coach.name());
 
 			if (ow) {

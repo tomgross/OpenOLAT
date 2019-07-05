@@ -49,12 +49,11 @@ import org.apache.http.client.methods.HttpDelete;
 import org.apache.http.client.methods.HttpGet;
 import org.apache.http.client.methods.HttpPut;
 import org.apache.http.util.EntityUtils;
-import org.codehaus.jackson.map.ObjectMapper;
-import org.codehaus.jackson.type.TypeReference;
+import org.apache.logging.log4j.Logger;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
-import org.olat.basesecurity.BaseSecurityManager;
+import org.olat.basesecurity.BaseSecurity;
 import org.olat.commons.calendar.CalendarManager;
 import org.olat.commons.calendar.model.KalendarEvent;
 import org.olat.commons.calendar.restapi.EventVO;
@@ -62,15 +61,18 @@ import org.olat.commons.calendar.ui.components.KalendarRenderWrapper;
 import org.olat.core.CoreSpringFactory;
 import org.olat.core.commons.persistence.DB;
 import org.olat.core.id.Identity;
-import org.olat.core.logging.OLog;
 import org.olat.core.logging.Tracing;
 import org.olat.course.CourseFactory;
 import org.olat.course.ICourse;
-import org.olat.restapi.repository.course.CoursesWebService;
+import org.olat.repository.RepositoryEntry;
+import org.olat.repository.RepositoryEntryStatusEnum;
 import org.olat.restapi.support.vo.CourseConfigVO;
 import org.olat.test.JunitTestHelper;
-import org.olat.test.OlatJerseyTestCase;
+import org.olat.test.OlatRestTestCase;
 import org.springframework.beans.factory.annotation.Autowired;
+
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 /**
  * 
@@ -78,15 +80,17 @@ import org.springframework.beans.factory.annotation.Autowired;
  * @author srosse, stephane.rosse@frentix.com, http://www.frentix.com
  *
  */
-public class CourseCalendarTest extends OlatJerseyTestCase {
+public class CourseCalendarTest extends OlatRestTestCase {
 	
-	private static final OLog log = Tracing.createLoggerFor(CourseCalendarTest.class);
+	private static final Logger log = Tracing.createLoggerFor(CourseCalendarTest.class);
 	
 	private Identity auth1;
 	private ICourse course1;
 
 	@Autowired
 	private DB dbInstance;
+	@Autowired
+	private BaseSecurity securityManager;
 	@Autowired
 	private CalendarManager calendarManager;
 	
@@ -95,13 +99,14 @@ public class CourseCalendarTest extends OlatJerseyTestCase {
 	 */
 	@Before
 	public void setUp() throws Exception {
-		super.setUp();
 		try {
 			// create course and persist as OLATResourceImpl
 			auth1 = JunitTestHelper.createAndPersistIdentityAsUser("rest-course-cal-one");
 			CourseConfigVO config = new CourseConfigVO();
 			config.setCalendar(Boolean.TRUE);
-			course1 = CoursesWebService.createEmptyCourse(auth1, "course calendar", "course with calendar for REST API testing", config);
+			RepositoryEntry courseEntry = JunitTestHelper.deployBasicCourse(auth1,
+					RepositoryEntryStatusEnum.preparation, false, false);
+			course1 = CourseFactory.loadCourse(courseEntry);
 			dbInstance.commit();
 			
 			ICourse course = CourseFactory.loadCourse(course1.getResourceableId());
@@ -184,12 +189,15 @@ public class CourseCalendarTest extends OlatJerseyTestCase {
 	@Test
 	public void putCalendarEvents() throws IOException, URISyntaxException {
 		RestConnection conn = new RestConnection();
-		Identity admin = BaseSecurityManager.getInstance().findIdentityByName("administrator");
+		Identity admin = securityManager.findIdentityByName("administrator");
 
 		Assert.assertTrue(conn.login("administrator", "openolat"));
 		CourseConfigVO config = new CourseConfigVO();
 		config.setCalendar(Boolean.TRUE);
-		ICourse course = CoursesWebService.createEmptyCourse(admin, "Course with calendar", "Course with calendar", config);
+		
+		RepositoryEntry courseEntry = JunitTestHelper.deployBasicCourse(admin,
+				RepositoryEntryStatusEnum.preparation, false, false);
+		ICourse course = CourseFactory.loadCourse(courseEntry);
 		dbInstance.commitAndCloseSession();
 		
 		//create an event

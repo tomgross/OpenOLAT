@@ -28,14 +28,15 @@ package org.olat.search.service.indexer.group;
 
 import java.io.IOException;
 
-import org.olat.basesecurity.Constants;
-import org.olat.basesecurity.BaseSecurityManager;
 import org.olat.collaboration.CollaborationTools;
+import org.olat.core.CoreSpringFactory;
 import org.olat.core.id.Identity;
 import org.olat.core.id.Roles;
 import org.olat.core.id.context.BusinessControl;
 import org.olat.core.id.context.ContextEntry;
 import org.olat.core.logging.AssertException;
+import org.apache.logging.log4j.Logger;
+import org.olat.core.logging.Tracing;
 import org.olat.group.BusinessGroup;
 import org.olat.group.ui.run.BusinessGroupMainRunController;
 import org.olat.modules.fo.Forum;
@@ -55,6 +56,8 @@ import org.olat.search.service.indexer.OlatFullIndexer;
  */
 public class GroupForumIndexer extends ForumIndexer{
 
+	private static final Logger log = Tracing.createLoggerFor(GroupForumIndexer.class);
+
 	//Must correspond with LocalString_xx.properties
 	// Do not use '_' because we want to seach for certain documenttype and lucene haev problems with '_' 
 	public static final String TYPE = "type.group.forum.message";
@@ -73,7 +76,7 @@ public class GroupForumIndexer extends ForumIndexer{
 		BusinessGroup businessGroup = (BusinessGroup)businessObj;
 		
 		NarrowedPropertyManager npm = NarrowedPropertyManager.getInstance(businessGroup);
-		ForumManager fom = ForumManager.getInstance();
+		ForumManager fom = CoreSpringFactory.getImpl(ForumManager.class);
 
 		Property forumKeyProperty = npm.findProperty(null, null, CollaborationTools.PROP_CAT_BG_COLLABTOOLS, CollaborationTools.KEY_FORUM);
 		// Check if forum-property exist
@@ -86,8 +89,8 @@ public class GroupForumIndexer extends ForumIndexer{
 			forumSearchResourceContext.setParentContextType(GroupDocument.TYPE);
 			forumSearchResourceContext.setParentContextName(businessGroup.getName());
 			if (forum == null) { // fxdiff: FXOLAT-104 warn about missing forums
-				logError("found a forum-key " + forumKey + " for businessgroup " + businessGroup.getName() + " [" + businessGroup.getKey() + "] to index a forum that could not be " +
-						"found by key! skip indexing, check if forum should still be enabled. context: " + forumSearchResourceContext.getResourceUrl(), null);
+				log.error("found a forum-key " + forumKey + " for businessgroup " + businessGroup.getName() + " [" + businessGroup.getKey() + "] to index a forum that could not be " +
+						"found by key! skip indexing, check if forum should still be enabled. context: " + forumSearchResourceContext.getResourceUrl());
 				return;
 			}
 		  doIndexAllMessages(forumSearchResourceContext, forum, indexWriter );
@@ -102,7 +105,7 @@ public class GroupForumIndexer extends ForumIndexer{
 	public boolean checkAccess(ContextEntry contextEntry, BusinessControl businessControl, Identity identity, Roles roles) {
 		ContextEntry ce = businessControl.popLauncherContextEntry();
 		Long resourceableId = ce.getOLATResourceable().getResourceableId();
-		Message message = ForumManager.getInstance().loadMessage(resourceableId);
+		Message message = CoreSpringFactory.getImpl(ForumManager.class).loadMessage(resourceableId);
 		if(message == null)  return false;
 
 		Message threadtop = message.getThreadtop();
@@ -112,8 +115,8 @@ public class GroupForumIndexer extends ForumIndexer{
 		boolean isMessageHidden = Status.getStatus(threadtop.getStatusCode()).isHidden(); 
 		//assumes that if is owner then is moderator so it is allowed to see the hidden forum threads
 		//here it is checked if the identity is owner of the forum tool but it has no way to find out whether is owner of the group that owns the forum tool
-		boolean isOwner = BaseSecurityManager.getInstance().isIdentityPermittedOnResourceable(identity, Constants.PERMISSION_ACCESS,  contextEntry.getOLATResourceable());
-		if(isMessageHidden && !isOwner) {
+		//TODO policy owner
+		if(isMessageHidden) {
 			return false;
 		}		
 		return super.checkAccess(contextEntry, businessControl, identity, roles);

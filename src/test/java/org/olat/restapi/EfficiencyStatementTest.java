@@ -25,6 +25,7 @@ import java.io.IOException;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.Date;
+import java.util.List;
 
 import javax.ws.rs.core.MediaType;
 import javax.ws.rs.core.UriBuilder;
@@ -35,18 +36,18 @@ import org.apache.http.client.methods.HttpPut;
 import org.apache.http.util.EntityUtils;
 import org.junit.Assert;
 import org.junit.Test;
-import org.olat.basesecurity.BaseSecurityManager;
+import org.olat.basesecurity.BaseSecurity;
 import org.olat.core.commons.persistence.DB;
 import org.olat.core.id.Identity;
+import org.olat.course.CourseFactory;
 import org.olat.course.ICourse;
 import org.olat.course.assessment.UserEfficiencyStatement;
 import org.olat.course.assessment.manager.EfficiencyStatementManager;
 import org.olat.course.assessment.model.EfficiencyStatementVO;
 import org.olat.repository.RepositoryEntry;
 import org.olat.resource.OLATResource;
-import org.olat.restapi.repository.course.CoursesWebService;
 import org.olat.test.JunitTestHelper;
-import org.olat.test.OlatJerseyTestCase;
+import org.olat.test.OlatRestTestCase;
 import org.springframework.beans.factory.annotation.Autowired;
 
 /**
@@ -55,19 +56,22 @@ import org.springframework.beans.factory.annotation.Autowired;
  * @author srosse, stephane.rosse@frentix.com, http://www.frentix.com
  *
  */
-public class EfficiencyStatementTest extends OlatJerseyTestCase {
+public class EfficiencyStatementTest extends OlatRestTestCase {
 
 	@Autowired
 	private DB dbInstance;
+	@Autowired
+	private BaseSecurity securityManager;
 	@Autowired
 	private EfficiencyStatementManager efficiencyStatementManager;
 	
 	@Test
 	public void getEfficiencyStatement() throws IOException, URISyntaxException {
 		// create a standalone efficiency statement
-		Identity admin = BaseSecurityManager.getInstance().findIdentityByName("administrator");
+		Identity admin = securityManager.findIdentityByName("administrator");
 		Identity assessedIdentity = JunitTestHelper.createAndPersistIdentityAsRndUser("eff-1");
-		ICourse course = CoursesWebService.createEmptyCourse(admin, "courses1", "courses1 long name", null, null, null, RepositoryEntry.ACC_OWNERS, false, null, null, null, null, null, null);
+		RepositoryEntry courseEntry = JunitTestHelper.deployBasicCourse(admin);
+		ICourse course = CourseFactory.loadCourse(courseEntry);
 		dbInstance.commitAndCloseSession();
 		
 		OLATResource resource = course.getCourseEnvironment().getCourseGroupManager().getCourseResource();
@@ -120,7 +124,7 @@ public class EfficiencyStatementTest extends OlatJerseyTestCase {
 		EntityUtils.consume(response.getEntity());
 
 		UserEfficiencyStatement efficiencyStatement = efficiencyStatementManager
-				.getUserEfficiencyStatementFullByResourceKey(entry.getOlatResource().getKey(), assessedIdentity);
+				.getUserEfficiencyStatementFull(entry, assessedIdentity);
 
 		Assert.assertNotNull(efficiencyStatement);
 		Assert.assertNotNull(efficiencyStatement.getCourseRepoKey());
@@ -158,9 +162,12 @@ public class EfficiencyStatementTest extends OlatJerseyTestCase {
 		EntityUtils.consume(response.getEntity());
 
 		//check the efficiency statement
-		UserEfficiencyStatement efficiencyStatement = efficiencyStatementManager
-				.getUserEfficiencyStatementFullByResourceKey(resourceKey, assessedIdentity);
-		Assert.assertNotNull(efficiencyStatement);
+		List<UserEfficiencyStatement> efficiencyStatements = efficiencyStatementManager
+				.getUserEfficiencyStatementLight(assessedIdentity);
+		Assert.assertNotNull(efficiencyStatements);
+		Assert.assertEquals(1, efficiencyStatements.size());
+		
+		UserEfficiencyStatement efficiencyStatement = efficiencyStatements.get(0);
 		Assert.assertEquals(8.5f, efficiencyStatement.getScore(), 0.001);
 		Assert.assertEquals(Boolean.TRUE, efficiencyStatement.getPassed());
 		Assert.assertEquals("Standalone", efficiencyStatement.getShortTitle());
@@ -202,9 +209,12 @@ public class EfficiencyStatementTest extends OlatJerseyTestCase {
 		EntityUtils.consume(response.getEntity());
 
 		//check the efficiency statement
-		UserEfficiencyStatement efficiencyStatement = efficiencyStatementManager
-				.getUserEfficiencyStatementFullByResourceKey(resourceKey, assessedIdentity);
-		Assert.assertNotNull(efficiencyStatement);
+		List<UserEfficiencyStatement> efficiencyStatements = efficiencyStatementManager
+				.getUserEfficiencyStatementLight(assessedIdentity);
+		Assert.assertNotNull(efficiencyStatements);
+		Assert.assertEquals(1, efficiencyStatements.size());
+		
+		UserEfficiencyStatement efficiencyStatement = efficiencyStatements.get(0);
 		Assert.assertEquals(8.5f, efficiencyStatement.getScore(), 0.001);
 		Assert.assertEquals(Boolean.TRUE, efficiencyStatement.getPassed());
 		Assert.assertEquals("Standalone", efficiencyStatement.getShortTitle());

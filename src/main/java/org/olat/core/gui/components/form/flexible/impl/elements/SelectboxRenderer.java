@@ -25,7 +25,6 @@
 */
 package org.olat.core.gui.components.form.flexible.impl.elements;
 
-import org.apache.commons.lang.StringEscapeUtils;
 import org.olat.core.gui.components.Component;
 import org.olat.core.gui.components.DefaultComponentRenderer;
 import org.olat.core.gui.components.form.flexible.impl.FormEvent;
@@ -35,10 +34,9 @@ import org.olat.core.gui.render.Renderer;
 import org.olat.core.gui.render.StringOutput;
 import org.olat.core.gui.render.URLBuilder;
 import org.olat.core.gui.translator.Translator;
+import org.olat.core.util.StringHelper;
 
 /**
- * Description:<br>
- * TODO: patrickb Class Description for SingleSelectionSelectboxRenderer
  * 
  * <P>
  * Initial Date:  02.01.2007 <br>
@@ -89,8 +87,8 @@ class SelectboxRenderer extends DefaultComponentRenderer {
 		int cnt = options.length;
 		boolean escapeHtml = ssec.isEscapeHtml();
 		for (int i = 0; i < cnt; i++) {
-			boolean selected = ssec.isSelected(i);
-			sb.append("<option value=\"").append(StringEscapeUtils.escapeHtml(options[i])).append("\" ");
+			boolean selected = ssec.isSelected(options[i]);
+			sb.append("<option value=\"").append(StringHelper.escapeHtml(options[i])).append("\" ");
 			if (selected) sb.append("selected=\"selected\" ");
 			if(ssec.getAction() != FormEvent.ONCHANGE){
 				//all other events go to the option
@@ -103,7 +101,7 @@ class SelectboxRenderer extends DefaultComponentRenderer {
 			}
 			sb.append(">");
 			if(escapeHtml) {
-				sb.append(StringEscapeUtils.escapeHtml(values[i]));
+				sb.appendHtmlEscaped(values[i]);
 			} else {
 				sb.append(values[i]);
 			}

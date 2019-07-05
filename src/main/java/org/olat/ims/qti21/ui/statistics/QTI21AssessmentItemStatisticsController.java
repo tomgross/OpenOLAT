@@ -36,6 +36,7 @@ import org.olat.core.gui.control.controller.BasicController;
 import org.olat.core.util.StringHelper;
 import org.olat.ims.qti.statistics.QTIType;
 import org.olat.ims.qti.statistics.model.StatisticsItem;
+import org.olat.ims.qti21.QTI21Constants;
 import org.olat.ims.qti21.QTI21StatisticsManager;
 import org.olat.ims.qti21.model.QTI21QuestionType;
 import org.olat.ims.qti21.model.QTI21StatisticSearchParams;
@@ -60,6 +61,7 @@ import uk.ac.ed.ph.jqtiplus.node.item.interaction.Interaction;
 import uk.ac.ed.ph.jqtiplus.node.item.interaction.MatchInteraction;
 import uk.ac.ed.ph.jqtiplus.node.item.interaction.TextEntryInteraction;
 import uk.ac.ed.ph.jqtiplus.node.test.AssessmentItemRef;
+import uk.ac.ed.ph.jqtiplus.resolution.ResolvedAssessmentItem;
 
 /**
  * 
@@ -72,32 +74,36 @@ public class QTI21AssessmentItemStatisticsController extends BasicController {
 	private final VelocityContainer mainVC;
 	
 	private UserFilterController filterCtrl;
-	
+
+	private final String mapperUri;
 	private final AssessmentItem item;
 	private final AssessmentItemRef itemRef;
 	private final QTI21StatisticSearchParams searchParams;
 	private final QTI21StatisticResourceResult resourceResult;
 	
+	private final QTI21ItemBodyController itemBodyCtrl;
+	
 	@Autowired
 	private QTI21StatisticsManager qtiStatisticsManager;
 	
 	public QTI21AssessmentItemStatisticsController(UserRequest ureq, WindowControl wControl,
-			AssessmentItemRef itemRef, AssessmentItem item, String sectionTitle, QTI21StatisticResourceResult resourceResult,
+			AssessmentItemRef itemRef, ResolvedAssessmentItem resolvedAssessmentItem,
+			String sectionTitle, QTI21StatisticResourceResult resourceResult,
 			boolean withFilter, boolean printMode) {
 		super(ureq, wControl);
 		
-		this.item = item;
+		item = resolvedAssessmentItem.getItemLookup().getRootNodeHolder().getRootNode();
 		this.itemRef = itemRef;
 		this.resourceResult = resourceResult;
 		searchParams = resourceResult.getSearchParams();
-		
+
 		mainVC = createVelocityContainer("statistics_item");
 		mainVC.put("d3loader", new StatisticsComponent("d3loader"));
 		mainVC.contextPut("title", item.getTitle());
 		if(StringHelper.containsNonWhitespace(sectionTitle)) {
 			mainVC.contextPut("sectionTitle", sectionTitle);
 		}
-		mainVC.contextPut("printMode", new Boolean(printMode));
+		mainVC.contextPut("printMode", Boolean.valueOf(printMode));
 		
 		QTI21QuestionType type = QTI21QuestionType.getTypeRelax(item);
 		if(type != null) {
@@ -113,6 +119,12 @@ public class QTI21AssessmentItemStatisticsController extends BasicController {
 			listenTo(filterCtrl);
 			mainVC.put("filter", filterCtrl.getInitialComponent());
 		}
+		
+		itemBodyCtrl = new QTI21ItemBodyController(ureq, getWindowControl(), itemRef, resolvedAssessmentItem, resourceResult);
+		listenTo(itemBodyCtrl);
+		mainVC.put("question", itemBodyCtrl.getInitialComponent());
+		mainVC.contextPut("questionComponentId", itemBodyCtrl.getInteractionsComponentId());
+		mapperUri = itemBodyCtrl.getMapperUri();
 		
 		putInitialPanel(mainVC);
 		updateData(ureq);
@@ -147,7 +159,7 @@ public class QTI21AssessmentItemStatisticsController extends BasicController {
 			}
 		}
 		
-		if(textEntryInteractions.size() > 0) {
+		if(!textEntryInteractions.isEmpty()) {
 			Controller interactionCtrl = new TextEntryInteractionsStatisticsController(ureq, getWindowControl(), itemRef, item, textEntryInteractions, resourceResult);
 			listenTo(interactionCtrl);
 			String componentId = "interaction" + counter++;
@@ -163,25 +175,24 @@ public class QTI21AssessmentItemStatisticsController extends BasicController {
 		
 		if(interaction instanceof ChoiceInteraction) {
 			interactionCtrl = new SimpleChoiceInteractionStatisticsController(ureq, getWindowControl(),
-					itemRef, item, (ChoiceInteraction)interaction, itemStats, resourceResult);
+					itemRef, item, (ChoiceInteraction)interaction, itemStats, resourceResult, mapperUri);
 		} else if(interaction instanceof MatchInteraction) {
 			String responseIdentifier = interaction.getResponseIdentifier().toString();
-			if(responseIdentifier.startsWith("KPRIM_")) {
+			if(responseIdentifier.startsWith("KPRIM_") 
+					|| QTI21QuestionType.hasClass(interaction, QTI21Constants.CSS_MATCH_KPRIM)) {
 				interactionCtrl = new KPrimStatisticsController(ureq, getWindowControl(),
-						itemRef, item, (MatchInteraction)interaction, resourceResult);
+						itemRef, item, (MatchInteraction)interaction, resourceResult, mapperUri);
 			} else {
 				interactionCtrl = new MatchStatisticsController(ureq, getWindowControl(),
-						itemRef, item, (MatchInteraction)interaction, resourceResult);
+						itemRef, item, (MatchInteraction)interaction, resourceResult, mapperUri);
 			}
 		} else if(interaction instanceof HotspotInteraction) {
 			interactionCtrl = new HotspotInteractionStatisticsController(ureq, getWindowControl(),
 					itemRef, item, (HotspotInteraction)interaction, itemStats, resourceResult);
 		} else if(interaction instanceof HottextInteraction) {
 			interactionCtrl = new HottextInteractionStatisticsController(ureq, getWindowControl(),
-					itemRef, item, (HottextInteraction)interaction, itemStats, resourceResult);
+					itemRef, item, (HottextInteraction)interaction, itemStats, resourceResult, mapperUri);
 		}
-		
-		
 
 		if(interactionCtrl == null) {
 			interactionCtrl = new UnsupportedInteractionController(ureq, getWindowControl(),

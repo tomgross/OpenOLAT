@@ -37,6 +37,8 @@ import org.olat.core.id.Identity;
 import org.olat.core.id.Roles;
 import org.olat.core.id.context.BusinessControl;
 import org.olat.core.id.context.ContextEntry;
+import org.apache.logging.log4j.Logger;
+import org.olat.core.logging.Tracing;
 import org.olat.core.util.resource.OresHelper;
 import org.olat.group.BusinessGroup;
 import org.olat.group.BusinessGroupService;
@@ -54,13 +56,24 @@ import org.olat.search.service.indexer.OlatFullIndexer;
  */
 public class GroupIndexer extends AbstractHierarchicalIndexer {
 	
+	private static final Logger log = Tracing.createLoggerFor(GroupIndexer.class);
+	
+	private BusinessGroupService businessGroupService;
+	
+	/**
+	 * [used by Spring]
+	 * @param businessGroupService
+	 */
+	public void setBusinessGroupService(BusinessGroupService businessGroupService) {
+		this.businessGroupService = businessGroupService;
+	}
+	
 	@Override
-  public void doIndex(SearchResourceContext parentResourceContext, Object parentObject, OlatFullIndexer indexWriter) throws IOException,InterruptedException {
+	public void doIndex(SearchResourceContext parentResourceContext, Object parentObject, OlatFullIndexer indexWriter) throws IOException,InterruptedException {
 		long startTime = System.currentTimeMillis();
-		final BusinessGroupService bgs = CoreSpringFactory.getImpl(BusinessGroupService.class);
-		
-  	List<BusinessGroup> groupList = bgs.loadAllBusinessGroups();
-  	if (isLogDebugEnabled()) logDebug("GroupIndexer groupList.size=" + groupList.size());
+
+		List<BusinessGroup> groupList = businessGroupService.loadAllBusinessGroups();
+		if (log.isDebugEnabled()) log.debug("GroupIndexer groupList.size=" + groupList.size());
   	
 		// committing here to make sure the loadBusinessGroup below does actually
 		// reload from the database and not only use the session cache 
@@ -71,44 +84,46 @@ public class GroupIndexer extends AbstractHierarchicalIndexer {
 		// loop over all groups
 		for(BusinessGroup businessGroup:groupList){
 			try {
-				
 				// reload the businessGroup here before indexing it to make sure it has not been deleted in the meantime
-				BusinessGroup reloadedBusinessGroup = bgs.loadBusinessGroup(businessGroup);
+				BusinessGroup reloadedBusinessGroup = businessGroupService.loadBusinessGroup(businessGroup);
 				if (reloadedBusinessGroup==null) {
-					logInfo("doIndex: businessGroup was deleted while we were indexing. The deleted businessGroup was: "+businessGroup);
+					log.info("doIndex: businessGroup was deleted while we were indexing. The deleted businessGroup was: "+businessGroup);
 					continue;
 				}
 				businessGroup = reloadedBusinessGroup;
 				
-				if (isLogDebugEnabled()) logDebug("Index BusinessGroup=" + businessGroup);
+				if (log.isDebugEnabled()) log.debug("Index BusinessGroup=" + businessGroup);
 				SearchResourceContext searchResourceContext = new SearchResourceContext(parentResourceContext);
 				searchResourceContext.setBusinessControlFor(businessGroup);
-			  Document document = GroupDocument.createDocument(searchResourceContext, businessGroup);
-			  indexWriter.addDocument(document);
+				Document document = GroupDocument.createDocument(searchResourceContext, businessGroup);
+				indexWriter.addDocument(document);
 		    // Do index child 
 			  super.doIndex(searchResourceContext, businessGroup, indexWriter);
 			} catch(Exception ex) {
-				logError("Exception indexing group=" + businessGroup, ex);
+				log.error("Exception indexing group=" + businessGroup, ex);
 				DBFactory.getInstance().rollbackAndCloseSession();
 			} catch (Error err) {
-				logError("Error indexing group=" + businessGroup, err);
+				log.error("Error indexing group=" + businessGroup, err);
 				DBFactory.getInstance().rollbackAndCloseSession();
 			}
 			DBFactory.getInstance().commitAndCloseSession();
 	  }
 		long indexTime = System.currentTimeMillis() - startTime;
-		if (isLogDebugEnabled()) logDebug("GroupIndexer finished in " + indexTime + " ms");
+		if (log.isDebugEnabled()) log.debug("GroupIndexer finished in " + indexTime + " ms");
 	}
 
 	@Override
 	public boolean checkAccess(ContextEntry contextEntry, BusinessControl businessControl, Identity identity, Roles roles) {
-		Long key = contextEntry.getOLATResourceable().getResourceableId();
-		BusinessGroupService bgs = CoreSpringFactory.getImpl(BusinessGroupService.class);
-		BusinessGroup group = bgs.loadBusinessGroup(key);
-		if(group == null) {
+		if(roles.isGuestOnly()) {
 			return false;
 		}
-		boolean inGroup = bgs.isIdentityInBusinessGroup(identity, group);
+		
+		Long key = contextEntry.getOLATResourceable().getResourceableId();
+		BusinessGroup group = businessGroupService.loadBusinessGroup(key);
+		if(group == null || roles.isGuestOnly()) {
+			return false;
+		}
+		boolean inGroup = businessGroupService.isIdentityInBusinessGroup(identity, group);
 		if (inGroup) {
 			return super.checkAccess(contextEntry, businessControl, identity, roles)
 					&& super.checkAccess(businessControl, identity, roles);

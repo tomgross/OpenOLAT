@@ -23,6 +23,7 @@ import java.io.File;
 import java.io.InputStream;
 import java.util.Date;
 import java.util.List;
+import java.util.Locale;
 
 import javax.mail.Address;
 import javax.mail.internet.MimeMessage;
@@ -55,11 +56,11 @@ public interface MailManager {
 	public Subscriber getSubscriber(Identity identity);
 	
 	/**
-	 * Subscribe to mail news
-	 * @param identity
+	 * Subscribe to mail news (asynchronously).
+	 * 
+	 * @param identity The identity which want to subscribe the mails news
 	 */
 	public void subscribe(Identity identity);
-	
 	
 	/**
 	 * @param key
@@ -144,6 +145,8 @@ public interface MailManager {
 	
 	public void setMailTemplate(String template);
 	
+	public void deleteCustomMailTemplate();
+	
 	public String getDefaultMailTemplate();
 
 	
@@ -195,6 +198,12 @@ public interface MailManager {
 			List<File> attachments, MailerResult result);
 	
 	public void sendMessage(MimeMessage msg, MailerResult result);
+	
+	public MailContent decorateMail(MailBundle bundle);
+	
+	public String decorateMailBody(String body, Locale locale);
+	
+	public MailContent evaluateTemplate(MailTemplate template);
 
 	public MailContent createContentFromTemplate(Identity recipient, MailTemplate template, MailerResult result);
 

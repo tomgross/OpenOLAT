@@ -30,7 +30,7 @@ import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.Part;
 
 import org.apache.commons.io.IOUtils;
-import org.olat.core.logging.OLog;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.StringHelper;
 import org.olat.core.util.WebappHelper;
@@ -40,20 +40,21 @@ import org.olat.core.util.WebappHelper;
  */
 public class MultipartReader {
 
-	private static final OLog log = Tracing.createLoggerFor(MultipartReader.class);
+	private static final Logger log = Tracing.createLoggerFor(MultipartReader.class);
 
 	private String filename;
 	private String contentType;
 	private File file;
-	private Map<String, String> fields = new HashMap<String, String>();
+	private Map<String, String> fields = new HashMap<>();
 
 	public MultipartReader(HttpServletRequest request) {
 		servlet31(request);
 	}
+	
 	private final void servlet31(HttpServletRequest request) {
 		try {
 			for(Part part:request.getParts()) {
-				if(part.getContentType() != null) {
+				if(part.getContentType() != null && (StringHelper.containsNonWhitespace(part.getSubmittedFileName()) || !part.getContentType().startsWith("text/plain"))) {
 					contentType = part.getContentType();
 					filename = part.getSubmittedFileName();
 					if(filename != null) {
@@ -65,7 +66,7 @@ public class MultipartReader {
 					part.write(file.getAbsolutePath());
 					file = new File(WebappHelper.getTmpDir(), filename);
 				} else {
-					String value = IOUtils.toString(part.getInputStream());
+					String value = IOUtils.toString(part.getInputStream(), request.getCharacterEncoding());
 					fields.put(part.getName(), value);
 				}
 				
@@ -93,8 +94,7 @@ public class MultipartReader {
 	}
 
 	public String getValue(String key) {
-		String value = fields.get(key);
-		return value;
+		return fields.get(key);
 	}
 	
 	public String getValue(String key, String defaultValue) {

@@ -19,6 +19,8 @@
  */
 package org.olat.course.nodes.gta.ui;
 
+import java.util.List;
+
 import org.olat.core.gui.UserRequest;
 import org.olat.core.gui.components.Component;
 import org.olat.core.gui.components.link.Link;
@@ -31,7 +33,11 @@ import org.olat.core.gui.control.Controller;
 import org.olat.core.gui.control.Event;
 import org.olat.core.gui.control.WindowControl;
 import org.olat.core.gui.control.controller.BasicController;
+import org.olat.core.gui.control.generic.dtabs.Activateable2;
 import org.olat.core.gui.control.generic.messages.MessageUIFactory;
+import org.olat.core.id.context.ContextEntry;
+import org.olat.core.id.context.StateEntry;
+import org.olat.core.util.resource.OresHelper;
 import org.olat.course.nodes.GTACourseNode;
 import org.olat.course.nodes.gta.GTAManager;
 import org.olat.course.nodes.gta.model.Membership;
@@ -46,13 +52,14 @@ import org.springframework.beans.factory.annotation.Autowired;
  * @author srosse, stephane.rosse@frentix.com, http://www.frentix.com
  *
  */
-public class GTARunController extends BasicController {
+public class GTARunController extends BasicController implements Activateable2 {
 	
 	private GTAParticipantController runCtrl;
 	private GTACoachSelectionController coachCtrl;
+	private GTACoachSelectionController markedCtrl;
 	private GTACoachManagementController manageCtrl;
 
-	private Link runLink, coachLink, manageLink;
+	private Link runLink, coachLink, markedLink, manageLink;
 	private VelocityContainer mainVC;
 	private SegmentViewComponent segmentView;
 	
@@ -70,38 +77,50 @@ public class GTARunController extends BasicController {
 		
 		ModuleConfiguration config = gtaNode.getModuleConfiguration();
 		RepositoryEntry entry = userCourseEnv.getCourseEnvironment().getCourseGroupManager().getCourseEntry();
-		
 		Membership membership = gtaManager.getMembership(getIdentity(), entry, gtaNode);
-		if(membership.isCoach() && membership.isParticipant()) {
+		if((membership.isCoach() && membership.isParticipant()) || (userCourseEnv.isAdmin() && membership.isParticipant())) {
 			mainVC = createVelocityContainer("run_segments");
 			
 			segmentView = SegmentViewFactory.createSegmentView("segments", mainVC, this);
 			runLink = LinkFactory.createLink("run.run", mainVC, this);
-			segmentView.addSegment(runLink, true);
-			coachLink = LinkFactory.createLink("run.coach", mainVC, this);
-			segmentView.addSegment(coachLink, false);
+			segmentView.addSegment(runLink, false);
+			markedLink = LinkFactory.createLink("run.coach.marked", mainVC, this);
+			segmentView.addSegment(markedLink, false);
+			coachLink = LinkFactory.createLink("run.coach.all", mainVC, this);
+			segmentView.addSegment(coachLink, true);
 			if(isManagementTabAvalaible(config)) {
 				manageLink = LinkFactory.createLink("run.manage.coach", mainVC, this);
 				segmentView.addSegment(manageLink, false);
 			}
-			doOpenRun(ureq);
+			doOpenSelectionList(ureq);
 			mainVC.put("segments", segmentView);
 			putInitialPanel(mainVC);
 		} else if(isManagementTabAvalaible(config)) {
 			mainVC = createVelocityContainer("run_segments");
 
 			segmentView = SegmentViewFactory.createSegmentView("segments", mainVC, this);
-			coachLink = LinkFactory.createLink("run.coach", mainVC, this);
+			markedLink = LinkFactory.createLink("run.coach.marked", mainVC, this);
+			segmentView.addSegment(markedLink, false);
+			coachLink = LinkFactory.createLink("run.coach.all", mainVC, this);
 			segmentView.addSegment(coachLink, true);
 			manageLink = LinkFactory.createLink("run.manage.coach", mainVC, this);
 			segmentView.addSegment(manageLink, false);
 
-			doOpenCoach(ureq);
+			doOpenSelectionList(ureq);
 			mainVC.put("segments", segmentView);
 			putInitialPanel(mainVC);
 		} else if(membership.isCoach() || userCourseEnv.isAdmin()) {
-			createCoach(ureq);
-			putInitialPanel(coachCtrl.getInitialComponent());
+			mainVC = createVelocityContainer("run_segments");
+
+			segmentView = SegmentViewFactory.createSegmentView("segments", mainVC, this);
+			markedLink = LinkFactory.createLink("run.coach.marked", mainVC, this);
+			segmentView.addSegment(markedLink, false);
+			coachLink = LinkFactory.createLink("run.coach.all", mainVC, this);
+			segmentView.addSegment(coachLink, true);
+
+			doOpenSelectionList(ureq);
+			mainVC.put("segments", segmentView);
+			putInitialPanel(mainVC);
 		} else if(membership.isParticipant()) {
 			createRun(ureq);
 			putInitialPanel(runCtrl.getInitialComponent());
@@ -121,6 +140,55 @@ public class GTARunController extends BasicController {
 	}
 
 	@Override
+	public void activate(UserRequest ureq, List<ContextEntry> entries, StateEntry state) {
+		if(entries == null || entries.isEmpty()) return;
+		
+		String type = entries.get(0).getOLATResourceable().getResourceableTypeName();
+		if("coach".equalsIgnoreCase(type)) {
+			if(coachLink != null || coachCtrl != null) {
+				List<ContextEntry> subEntries = entries.subList(1, entries.size());
+				doOpenCoach(ureq).activate(ureq, subEntries, entries.get(0).getTransientState());
+				if(segmentView != null) {
+					segmentView.select(coachLink);
+				}
+			}
+		} else if("marked".equalsIgnoreCase(type)) {
+			if(markedLink != null) {
+				doOpenMarked(ureq);
+				if(segmentView != null) {
+					segmentView.select(markedLink);
+				}
+			}
+		} else if("management".equalsIgnoreCase(type)) {
+			if(manageLink != null) {
+				List<ContextEntry> subEntries = entries.subList(1, entries.size());
+				doManage(ureq).activate(ureq, subEntries, entries.get(0).getTransientState());
+				if(segmentView != null) {
+					segmentView.select(manageLink);
+				}
+			}
+		} else if("identity".equalsIgnoreCase(type)) {
+			if(getIdentity().getKey().equals(entries.get(0).getOLATResourceable().getResourceableId())) {
+				List<ContextEntry> subEntries = entries.subList(1, entries.size());
+				doOpenRun(ureq).activate(ureq, subEntries, entries.get(0).getTransientState());
+				if(segmentView != null) {
+					segmentView.select(runLink);
+				}
+			}
+		} else {
+			if("CourseNode".equalsIgnoreCase(entries.get(0).getOLATResourceable().getResourceableTypeName())) {
+				state = entries.get(0).getTransientState();
+				entries = entries.subList(1, entries.size());
+			}
+			
+			if(runCtrl != null && segmentView == null) {
+				runCtrl.activate(ureq, entries, state);
+			}
+			
+		}
+	}
+
+	@Override
 	protected void event(UserRequest ureq, Component source, Event event) {
 		if(source == segmentView) {
 			if(event instanceof SegmentViewEvent) {
@@ -131,6 +199,8 @@ public class GTARunController extends BasicController {
 					doOpenRun(ureq);
 				} else if (clickedLink == coachLink) {
 					doOpenCoach(ureq);
+				} else if (clickedLink == markedLink) {
+					doOpenMarked(ureq);
 				} else if(clickedLink == manageLink) {
 					doManage(ureq);
 				}
@@ -143,25 +213,68 @@ public class GTARunController extends BasicController {
 		//
 	}
 	
-	private void doOpenRun(UserRequest ureq) {
+	private void doOpenSelectionList(UserRequest ureq) {
+		RepositoryEntry entry = userCourseEnv.getCourseEnvironment().getCourseGroupManager().getCourseEntry();
+		boolean hasMarks = gtaManager.hasMarks(entry, gtaNode, getIdentity());
+		if (hasMarks) {
+			doOpenMarked(ureq);
+			if(segmentView != null) {
+				segmentView.select(markedLink);
+			}
+		} else {
+			doOpenCoach(ureq);
+			if(segmentView != null) {
+				segmentView.select(coachLink);
+			}
+		}
+	}
+	
+	private Activateable2 doOpenRun(UserRequest ureq) {
 		if(runCtrl == null) {
 			createRun(ureq);
 		}
-		mainVC.put("segmentCmp", runCtrl.getInitialComponent());
+		addToHistory(ureq, runCtrl);
+		if(mainVC != null) {
+			mainVC.put("segmentCmp", runCtrl.getInitialComponent());
+		}
+		return runCtrl;
 	}
-	
-	private void doOpenCoach(UserRequest ureq) {
+
+	private Activateable2 doOpenMarked(UserRequest ureq) {
+		if(markedCtrl == null) {
+			createMarked(ureq);
+		} else {
+			markedCtrl.reload(ureq);
+		}
+		addToHistory(ureq, markedCtrl);
+		if(mainVC != null) {
+			mainVC.put("segmentCmp", markedCtrl.getInitialComponent());
+		}
+		return markedCtrl;
+	}	
+
+	private Activateable2 doOpenCoach(UserRequest ureq) {
 		if(coachCtrl == null) {
 			createCoach(ureq);
+		} else {
+			coachCtrl.reload(ureq);
 		}
-		mainVC.put("segmentCmp", coachCtrl.getInitialComponent());
+		addToHistory(ureq, coachCtrl);
+		if(mainVC != null) {
+			mainVC.put("segmentCmp", coachCtrl.getInitialComponent());
+		}
+		return coachCtrl;
 	}
 	
-	private void doManage(UserRequest ureq) {
+	private GTACoachManagementController doManage(UserRequest ureq) {
 		if(manageCtrl == null) {
 			createManage(ureq);
 		}
-		mainVC.put("segmentCmp", manageCtrl.getInitialComponent());
+		addToHistory(ureq, manageCtrl);
+		if(mainVC != null) {
+			mainVC.put("segmentCmp", manageCtrl.getInitialComponent());
+		}
+		return manageCtrl;
 	}
 	
 	private GTAParticipantController createRun(UserRequest ureq) {
@@ -172,17 +285,29 @@ public class GTARunController extends BasicController {
 		return runCtrl;
 	}
 	
+	private GTACoachSelectionController createMarked(UserRequest ureq) {
+		removeAsListenerAndDispose(markedCtrl);
+		
+		WindowControl swControl = addToHistory(ureq, OresHelper.createOLATResourceableType("marked"), null);
+		markedCtrl = new GTACoachSelectionController(ureq, swControl, userCourseEnv, gtaNode, true);
+		listenTo(markedCtrl);
+		return coachCtrl;
+	}
+	
 	private GTACoachSelectionController createCoach(UserRequest ureq) {
 		removeAsListenerAndDispose(coachCtrl);
 		
-		coachCtrl = new GTACoachSelectionController(ureq, getWindowControl(), userCourseEnv, gtaNode);
+		WindowControl swControl = addToHistory(ureq, OresHelper.createOLATResourceableType("coach"), null);
+		coachCtrl = new GTACoachSelectionController(ureq, swControl, userCourseEnv, gtaNode, false);
 		listenTo(coachCtrl);
 		return coachCtrl;
 	}
 	
 	private GTACoachManagementController createManage(UserRequest ureq) {
 		removeAsListenerAndDispose(manageCtrl);
-		manageCtrl = new GTACoachManagementController(ureq, getWindowControl(), userCourseEnv, gtaNode);
+		
+		WindowControl swControl = addToHistory(ureq, OresHelper.createOLATResourceableType("management"), null);
+		manageCtrl = new GTACoachManagementController(ureq, swControl, userCourseEnv, gtaNode);
 		listenTo(manageCtrl);
 		return manageCtrl;
 	}

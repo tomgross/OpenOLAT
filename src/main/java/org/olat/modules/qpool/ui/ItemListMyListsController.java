@@ -28,9 +28,12 @@ import org.olat.core.gui.components.form.flexible.FormItemContainer;
 import org.olat.core.gui.components.form.flexible.elements.FormLink;
 import org.olat.core.gui.components.form.flexible.elements.SingleSelection;
 import org.olat.core.gui.components.form.flexible.impl.FormEvent;
+import org.olat.core.gui.components.form.flexible.impl.elements.table.DefaultFlexiColumnModel;
+import org.olat.core.gui.components.form.flexible.impl.elements.table.FlexiTableColumnModel;
 import org.olat.core.gui.components.link.Link;
 import org.olat.core.gui.control.WindowControl;
 import org.olat.core.util.StringHelper;
+import org.olat.modules.qpool.QPoolSecurityCallback;
 import org.olat.modules.qpool.QuestionItemCollection;
 import org.olat.modules.qpool.QuestionItemView;
 import org.olat.modules.qpool.ui.datasource.CollectionOfItemsSource;
@@ -50,8 +53,8 @@ public class ItemListMyListsController extends AbstractItemListController {
     
 	private List<QuestionItemCollection> myCollections;
 
-	public ItemListMyListsController(UserRequest ureq, WindowControl wControl, String restrictToFormat) {
-		super(ureq, wControl, new EmptyItemsSource(), restrictToFormat, "select");
+	public ItemListMyListsController(UserRequest ureq, WindowControl wControl, QPoolSecurityCallback secCallback, String restrictToFormat) {
+		super(ureq, wControl, secCallback, new EmptyItemsSource(), restrictToFormat, "qti-select");
 	}
 	
 	@Override
@@ -87,12 +90,17 @@ public class ItemListMyListsController extends AbstractItemListController {
             myListEl.select(myListKeys[0], true);
 
             QuestionItemCollection firstCollection = myCollections.get(0);
-            CollectionOfItemsSource source = new CollectionOfItemsSource(firstCollection, getIdentity(), ureq.getUserSession().getRoles());
+            CollectionOfItemsSource source = new CollectionOfItemsSource(firstCollection, getIdentity(), ureq.getUserSession().getRoles(), getLocale());
             source.setRestrictToFormat(restrictToFormat);
             updateSource(source);
         } else {
 			myListEl.setEnabled(false);
 		}
+	}
+	
+	@Override
+	protected void initActionColumns(FlexiTableColumnModel columnsModel) {
+		columnsModel.addFlexiColumnModel(new DefaultFlexiColumnModel("select", translate("select"), "select-item"));
 	}
 
 	@Override
@@ -124,7 +132,7 @@ public class ItemListMyListsController extends AbstractItemListController {
 		if(myCollection == null) {
 			updateSource(new EmptyItemsSource());
 		} else {
-			CollectionOfItemsSource source = new CollectionOfItemsSource(myCollection, getIdentity(), ureq.getUserSession().getRoles());
+			CollectionOfItemsSource source = new CollectionOfItemsSource(myCollection, getIdentity(), ureq.getUserSession().getRoles(), getLocale());
 			source.setRestrictToFormat(restrictToFormat);
 			updateSource(source);
 		}

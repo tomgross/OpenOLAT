@@ -26,6 +26,7 @@ import java.util.Map;
 import javax.servlet.RequestDispatcher;
 import javax.servlet.ServletConfig;
 import javax.servlet.ServletException;
+import javax.servlet.SessionCookieConfig;
 import javax.servlet.annotation.MultipartConfig;
 import javax.servlet.http.HttpServlet;
 import javax.servlet.http.HttpServletRequest;
@@ -36,7 +37,6 @@ import org.olat.core.CoreSpringFactory;
 import org.olat.core.commons.persistence.DBFactory;
 import org.olat.core.commons.services.taskexecutor.TaskExecutorManager;
 import org.olat.core.commons.services.webdav.WebDAVDispatcher;
-import org.olat.core.configuration.AbstractOLATModule;
 import org.olat.core.configuration.AbstractSpringModule;
 import org.olat.core.configuration.PreWarm;
 import org.olat.core.dispatcher.Dispatcher;
@@ -44,8 +44,9 @@ import org.olat.core.dispatcher.DispatcherModule;
 import org.olat.core.dispatcher.mapper.GlobalMapperRegistry;
 import org.olat.core.dispatcher.mapper.MapperDispatcher;
 import org.olat.core.extensions.ExtManager;
+import org.olat.core.gui.media.ServletUtil;
 import org.olat.core.helpers.Settings;
-import org.olat.core.logging.OLog;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
 import org.olat.core.logging.activity.ThreadLocalUserActivityLoggerInstaller;
 import org.olat.core.util.StringHelper;
@@ -53,15 +54,13 @@ import org.olat.core.util.WebappHelper;
 import org.olat.core.util.WorkThreadInformations;
 import org.olat.core.util.event.FrameworkStartupEventChannel;
 import org.olat.core.util.i18n.I18nManager;
-import org.olat.core.util.threadlog.RequestBasedLogLevelManager;
-import org.olat.core.util.threadlog.UserBasedLogLevelManager;
 
 
 @MultipartConfig(fileSizeThreshold=10240)
 public class OpenOLATServlet extends HttpServlet {
 
 	private static final long serialVersionUID = -2777749229549683775L;
-	private static final OLog log = Tracing.createLoggerFor(OpenOLATServlet.class);
+	private static final Logger log = Tracing.createLoggerFor(OpenOLATServlet.class);
 	
     private static final String METHOD_PROPFIND = "PROPFIND";
     private static final String METHOD_PROPPATCH = "PROPPATCH";
@@ -73,40 +72,23 @@ public class OpenOLATServlet extends HttpServlet {
     
 	private String legacyContext;
 	
-	private DispatcherModule dispatcherModule;
 	private SessionStatsManager sessionStatsManager;
-	private RequestBasedLogLevelManager requestBasedLogLevelManager;
 	
 	private WebDAVDispatcher webDAVDispatcher;
 	private Map<String, Dispatcher> dispatchers;
 	
-	/**
-	 * @see javax.servlet.Servlet#init(javax.servlet.ServletConfig)
-	 */
 	@Override
 	public void init(ServletConfig servletConfig) throws ServletException {
 		super.init(servletConfig);
-		
-		requestBasedLogLevelManager = RequestBasedLogLevelManager.getInstance();
-		if (requestBasedLogLevelManager==null) {
-			log.info("init: RequestBasedLogLevelManager is not configured on this system.");
-		} else {
-			log.info("init: RequestBasedLogLevelManager is configured and will be used.");
-		}
-		if (UserBasedLogLevelManager.getInstance()==null) {
-			log.info("init: UserBasedLogLevelManager is not configured on this system.");
-		} else {
-			log.info("init: UserBasedLogLevelManager is configured and will be used.");
-		}
-		
+
 		//the servlet.init method gets called after the spring stuff and all the stuff in web.xml is done
 		log.info("Framework has started, sending event to listeners of FrameworkStartupEventChannel");
 		FrameworkStartupEventChannel.fireEvent();
 		log.info("FrameworkStartupEvent processed by alle listeners. Webapp has started.");
 		sessionStatsManager = CoreSpringFactory.getImpl(SessionStatsManager.class);
-		dispatcherModule = CoreSpringFactory.getImpl(DispatcherModule.class);
+		DispatcherModule dispatcherModule = CoreSpringFactory.getImpl(DispatcherModule.class);
 		
-		dispatchers = new HashMap<String, Dispatcher>(dispatcherModule.getDispatchers());
+		dispatchers = new HashMap<>(dispatcherModule.getDispatchers());
 		dispatchers.put(DispatcherModule.PATH_MAPPED, new MapperDispatcher());
 		dispatchers.put(DispatcherModule.PATH_GLOBAL_MAPPED,  GlobalMapperRegistry.getInstance());
 		
@@ -125,10 +107,14 @@ public class OpenOLATServlet extends HttpServlet {
 			}
 		}
 		
+		if(Settings.isSecurePortAvailable()) {
+			SessionCookieConfig cookieConfig = servletConfig.getServletContext().getSessionCookieConfig();
+			cookieConfig.setSecure(true);
+			cookieConfig.setHttpOnly(true);
+		}
+
 		//preload extensions
 		ExtManager.getInstance().getExtensions();
-		
-		AbstractOLATModule.printStats();
 		AbstractSpringModule.printStats();
 		preWarm();
 	}
@@ -144,19 +130,15 @@ public class OpenOLATServlet extends HttpServlet {
 	@Override
 	protected void service(HttpServletRequest req, HttpServletResponse resp)
 	throws ServletException, IOException {
-		/*if(!req.getPathInfo().startsWith("/m/")) {
-			log.info(req.getMethod() + " :: " + req.getPathInfo());
-			ServletUtil.printOutRequestParameters(req);
-		}*/
 
-		Tracing.setUreq(req);
+		Tracing.setHttpRequest(req);
 		ThreadLocalUserActivityLoggerInstaller.initUserActivityLogger(req);
-		WorkThreadInformations.set("Serve request: " + req.getRequestURI());
+		WorkThreadInformations.set("Serve request: ".concat(req.getRequestURI()));
 		if(sessionStatsManager != null) {
 			sessionStatsManager.incrementRequest();
 			sessionStatsManager.incrementConcurrentCounter();
 		}
-
+		
 		try{
 			
 			final String method = req.getMethod();
@@ -179,16 +161,13 @@ public class OpenOLATServlet extends HttpServlet {
 	        }
 			
 		} finally {
-			if (requestBasedLogLevelManager != null) {
-				requestBasedLogLevelManager.deactivateRequestBasedLogLevel();
-			}
 			if(sessionStatsManager != null) {
 				sessionStatsManager.decrementConcurrentCounter();
 			}
 			WorkThreadInformations.unset();
 			ThreadLocalUserActivityLoggerInstaller.resetUserActivityLogger();
 			I18nManager.remove18nInfoFromThread();
-			Tracing.setUreq(null);
+			Tracing.clearHttpRequest();
 			//let it at the end
 			DBFactory.getInstance().commitAndCloseSession();
 		}
@@ -216,6 +195,7 @@ public class OpenOLATServlet extends HttpServlet {
 	 * @throws ServletException
 	 * @throws IOException
 	 */
+	@Override
 	public void doGet(HttpServletRequest request, HttpServletResponse response) 
 	throws ServletException, IOException {
 		executeUserRequest(request, response);
@@ -230,6 +210,7 @@ public class OpenOLATServlet extends HttpServlet {
 	 * @throws ServletException
 	 * @throws IOException
 	 */
+	@Override
 	public void doPost(HttpServletRequest request, HttpServletResponse response)
 	throws ServletException, IOException {
 		executeUserRequest(request, response);
@@ -267,10 +248,6 @@ public class OpenOLATServlet extends HttpServlet {
 	 */
 	private void executeUserRequest(HttpServletRequest request, HttpServletResponse response)
 	throws ServletException, IOException {
-		if (requestBasedLogLevelManager != null) {
-			requestBasedLogLevelManager.activateRequestBasedLogLevel(request);
-		}
-
 		final String dispatcherName = DispatcherModule.getFirstPath(request);
 		if(dispatcherName != null && !dispatcherName.startsWith("/webdav")) {
 			String userAgent = request.getHeader("User-Agent");
@@ -304,11 +281,14 @@ public class OpenOLATServlet extends HttpServlet {
 					if(index > 0) {
 						String redirectUri = Settings.getServerContextPathURI() + uri.substring(index, uri.length());
 						response.sendRedirect(redirectUri);
+						ServletUtil.setCacheHeaders(response, ServletUtil.CACHE_ONE_DAY);
 					} else {
 						response.sendError(HttpServletResponse.SC_NOT_FOUND);
+						ServletUtil.setCacheHeaders(response, ServletUtil.CACHE_ONE_DAY);
 					}
 				} else {
 					response.sendError(HttpServletResponse.SC_NOT_FOUND);
+					ServletUtil.setCacheHeaders(response, ServletUtil.CACHE_ONE_DAY);
 				}
 			}
 		}
@@ -318,5 +298,6 @@ public class OpenOLATServlet extends HttpServlet {
 	throws IOException {
 		String dmzUri = WebappHelper.getServletContextPath() + DispatcherModule.getPathDefault();
 		response.sendRedirect(dmzUri);
+		ServletUtil.setCacheHeaders(response, ServletUtil.CACHE_NO_CACHE);
 	}
 }

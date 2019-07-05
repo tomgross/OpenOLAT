@@ -26,8 +26,10 @@ import org.olat.core.gui.UserRequest;
 import org.olat.core.gui.components.Component;
 import org.olat.core.gui.components.link.Link;
 import org.olat.core.gui.components.link.LinkFactory;
+import org.olat.core.gui.components.stack.PopEvent;
 import org.olat.core.gui.components.stack.TooledStackedPanel;
 import org.olat.core.gui.components.velocity.VelocityContainer;
+import org.olat.core.gui.control.Controller;
 import org.olat.core.gui.control.Event;
 import org.olat.core.gui.control.WindowControl;
 import org.olat.core.gui.control.controller.BasicController;
@@ -46,7 +48,13 @@ import org.olat.modules.portfolio.PortfolioRoles;
 import org.olat.modules.portfolio.PortfolioService;
 import org.olat.modules.portfolio.PortfolioV2Module;
 import org.olat.modules.portfolio.model.BinderRefImpl;
+import org.olat.modules.portfolio.ui.event.OpenBinderEvent;
+import org.olat.modules.portfolio.ui.event.OpenMyBindersEvent;
+import org.olat.modules.portfolio.ui.event.OpenMyPagesEvent;
+import org.olat.modules.portfolio.ui.event.OpenPageEvent;
 import org.olat.modules.portfolio.ui.model.BinderRow;
+import org.olat.modules.portfolio.ui.shared.MySharedItemsController;
+import org.olat.modules.portfolio.ui.shared.SharedItemsOverviewController;
 import org.springframework.beans.factory.annotation.Autowired;
 
 /**
@@ -57,17 +65,26 @@ import org.springframework.beans.factory.annotation.Autowired;
  */
 public class PortfolioHomeController extends BasicController implements Activateable2 {
 	
-	private Link myBindersLink, myEntriesLink, mySharedItemsLink, sharedItemsLink, mediaCenterLink;
-	private Link editLastEntryLink, createNewEntryLink, showHelpLink, goToTrashLink;
+	private final Link myBindersLink;
+	private final Link myEntriesLink;
+	private final Link mediaCenterLink;
+	private final Link goToTrashLink;
+	private final Link showHelpLink;
+	private final Link createNewEntryLink;
+	private final Link mySharedItemsLink;
+	private final Link sharedItemsLink;
 	private final VelocityContainer mainVC;
 	private final TooledStackedPanel stackPanel;
-	
+
+	private TrashController deletedItemsCtrl;
 	private MyPageListController myPageListCtrl;
 	private MediaCenterController mediaCenterCtrl;
-	private SharedItemsController sharedWithMeCtrl;
 	private BinderListController myPortfolioListCtrl;
 	private MySharedItemsController mySharedItemsCtrl;
-	private TrashController deletedItemsCtrl;
+	private SharedItemsOverviewController sharedWithMeCtrl;
+	
+	private LastPageListController lastPagesCtrl;
+	private LastBinderListController lastBindersCtrl;
 	
 	@Autowired
 	private PortfolioV2Module portfolioModule;
@@ -78,42 +95,63 @@ public class PortfolioHomeController extends BasicController implements Activate
 		super(ureq, wControl);
 		this.stackPanel = stackPanel;
 		stackPanel.setToolbarAutoEnabled(true);
+		stackPanel.addListener(this);
 
 		mainVC = createVelocityContainer("home");
 		myBindersLink = LinkFactory.createLink("goto.my.binders", mainVC, this);
-		myBindersLink.setIconRightCSS("o_icon o_icon_start");
+		myBindersLink.setIconLeftCSS("o_icon o_icon-fw o_icon_pf_binder");
+		myBindersLink.setTitle("my.portfolio.binders.text");
 		myBindersLink.setElementCssClass("o_sel_pf_my_binders");
 		
 		myEntriesLink = LinkFactory.createLink("goto.my.pages", mainVC, this);
-		myEntriesLink.setIconRightCSS("o_icon o_icon_start");
+		myEntriesLink.setIconLeftCSS("o_icon o_icon-fw o_icon_pf_entry");
+		myEntriesLink.setTitle("my.entries.text");
 		myEntriesLink.setElementCssClass("o_sel_pf_my_entries");
 		
-		mySharedItemsLink = LinkFactory.createLink("goto.my.shared.items", mainVC, this);
-		mySharedItemsLink.setIconRightCSS("o_icon o_icon_start");
-
-		sharedItemsLink = LinkFactory.createLink("goto.shared.with.me", mainVC, this);
-		sharedItemsLink.setIconRightCSS("o_icon o_icon_start");
-		sharedItemsLink.setElementCssClass("o_sel_pf_shared_with_me");
-		
 		mediaCenterLink = LinkFactory.createLink("goto.media.center", mainVC, this);
-		mediaCenterLink.setIconRightCSS("o_icon o_icon_start");
+		mediaCenterLink.setIconLeftCSS("o_icon o_icon-fw o_icon_mediacenter");
+		mediaCenterLink.setTitle("media.center");
 		mediaCenterLink.setElementCssClass("o_sel_pf_media_center");
 		
-		editLastEntryLink = LinkFactory.createLink("edit.last.entry", mainVC, this);
-		editLastEntryLink.setIconRightCSS("o_icon o_icon_start");
-		createNewEntryLink = LinkFactory.createLink("new.entry", mainVC, this);
-		createNewEntryLink.setIconRightCSS("o_icon o_icon_start");
-		showHelpLink = LinkFactory.createLink("show.help.binder", mainVC, this);
-		showHelpLink.setIconRightCSS("o_icon o_icon_start");
 		goToTrashLink = LinkFactory.createLink("go.to.trash", mainVC, this);
-		goToTrashLink.setIconRightCSS("o_icon o_icon_start");
+		goToTrashLink.setIconLeftCSS("o_icon o_icon-fw o_icon_pf_trash");
+		goToTrashLink.setElementCssClass("o_sel_pf_trash");
+		
+		createNewEntryLink = LinkFactory.createLink("new.entry", mainVC, this);
+		createNewEntryLink.setIconLeftCSS("o_icon o_icon-fw o_icon_pf_new_entry");
+		
+		showHelpLink = LinkFactory.createLink("show.help.binder", mainVC, this);
+		showHelpLink.setIconLeftCSS("o_icon o_icon-fw o_icon_help");
+		
+		mySharedItemsLink = LinkFactory.createLink("goto.my.shared.items", mainVC, this);
+		mySharedItemsLink.setIconLeftCSS("o_icon o_icon-fw o_icon_pf_my_shares");
+		mySharedItemsLink.setTitle("my.shared.items.text");
+
+		sharedItemsLink = LinkFactory.createLink("goto.shared.with.me", mainVC, this);
+		sharedItemsLink.setIconLeftCSS("o_icon o_icon-fw o_icon_pf_shared_with_me");
+		sharedItemsLink.setTitle("shared.with.me.text");
+		sharedItemsLink.setElementCssClass("o_sel_pf_shared_with_me");
+		
+		lastBindersCtrl = new LastBinderListController(ureq, getWindowControl(), 2);
+		listenTo(lastBindersCtrl);
+		mainVC.put("lastBinders", lastBindersCtrl.getInitialComponent());
+		mainVC.contextPut("hasLastBinders", lastBindersCtrl.hasBinders());
+		
+		BinderSecurityCallback secCallback = BinderSecurityCallbackFactory.getCallbackForMyPageList();
+		lastPagesCtrl = new LastPageListController(ureq, getWindowControl(), stackPanel, secCallback, 2);
+		listenTo(lastPagesCtrl);
+		mainVC.put("lastPages", lastPagesCtrl.getInitialComponent());
+		mainVC.contextPut("hasLastPages", lastPagesCtrl.hasPages());
+		
 
 		putInitialPanel(mainVC);
 	}
 	
 	@Override
 	protected void doDispose() {
-		//
+		if(stackPanel != null) {
+			stackPanel.removeListener(this);
+		}
 	}
 
 	@Override
@@ -122,29 +160,58 @@ public class PortfolioHomeController extends BasicController implements Activate
 			BinderListController bindersCtrl = doOpenMyBinders(ureq);
 			if(!portfolioModule.isLearnerCanCreateBinders() && bindersCtrl.getNumOfBinders() == 1) {
 				BinderRow row = bindersCtrl.getFirstBinder();
-				OLATResourceable resource = OresHelper.createOLATResourceableInstance(Binder.class, row.getKey());
-				List<ContextEntry> entries = BusinessControlFactory.getInstance().createCEListFromString(resource);
-				bindersCtrl.activate(ureq, entries, null);
+				if(row != null && row.getKey() != null) {
+					OLATResourceable resource = OresHelper.createOLATResourceableInstance(Binder.class, row.getKey());
+					List<ContextEntry> entries = BusinessControlFactory.getInstance().createCEListFromString(resource);
+					bindersCtrl.activate(ureq, entries, null);
+				}
 			}
 		} else if(myEntriesLink == source) {
 			doOpenMyPages(ureq);
 		} else if(mySharedItemsLink == source) {
 			doOpenMySharedItems(ureq);
 		} else if(sharedItemsLink == source) {
-			doOpenSharedWithMe(ureq);
+			doOpenSharedWithMe(ureq).activate(ureq, null, null);
 		} else if(mediaCenterLink == source) {
 			doOpenMediaCenter(ureq);
-		} else if(editLastEntryLink == source) {
-			doOpenLastEntry(ureq);
 		} else if(createNewEntryLink == source) {
 			doNewEntry(ureq);
 		} else if(showHelpLink == source) {
-
+			// do nothing
 		} else if(goToTrashLink == source) {
 			doDeletedPages(ureq);
+		} else if(stackPanel == source) {
+			if(event instanceof PopEvent) {
+				PopEvent pe = (PopEvent)event;
+				if(pe.getController() == myPortfolioListCtrl || pe.getController() == myPageListCtrl) {
+					lastPagesCtrl.loadModel(ureq, null);
+					lastBindersCtrl.loadModel();
+				}
+			}
+			
 		}
 	}
 	
+	@Override
+	protected void event(UserRequest ureq, Controller source, Event event) {
+		if(lastBindersCtrl == source) {
+			if(event instanceof OpenBinderEvent) {
+				OpenBinderEvent openEvent = (OpenBinderEvent)event;
+				doOpenBinder(ureq, openEvent.getBinder());
+			} else if(event instanceof OpenMyBindersEvent) {
+				doOpenMyBinders(ureq);
+			}
+		} else if(lastPagesCtrl == source) {
+			if(event instanceof OpenPageEvent) {
+				OpenPageEvent openEvent = (OpenPageEvent)event;
+				doOpenPage(ureq, openEvent.getPage());
+			} else if(event instanceof OpenMyPagesEvent) {
+				doOpenMyPages(ureq);
+			}
+		}
+		super.event(ureq, source, event);
+	}
+
 	@Override
 	public void activate(UserRequest ureq, List<ContextEntry> entries, StateEntry state) {
 		if(entries == null || entries.isEmpty()) return;
@@ -183,13 +250,13 @@ public class PortfolioHomeController extends BasicController implements Activate
 		return mediaCenterCtrl;
 	}
 	
-	private SharedItemsController doOpenSharedWithMe(UserRequest ureq) {
+	private SharedItemsOverviewController doOpenSharedWithMe(UserRequest ureq) {
 		removeAsListenerAndDispose(sharedWithMeCtrl);
 		stackPanel.popUpToRootController(ureq);
 		
 		OLATResourceable pagesOres = OresHelper.createOLATResourceableInstance("SharedWithMe", 0l);
 		WindowControl swControl = addToHistory(ureq, pagesOres, null);
-		sharedWithMeCtrl = new SharedItemsController(ureq, swControl, stackPanel);
+		sharedWithMeCtrl = new SharedItemsOverviewController(ureq, swControl, stackPanel);
 		listenTo(sharedWithMeCtrl);
 		stackPanel.pushController(translate("shared.with.me"), sharedWithMeCtrl);
 		return sharedWithMeCtrl;
@@ -207,6 +274,22 @@ public class PortfolioHomeController extends BasicController implements Activate
 		return mySharedItemsCtrl;
 	}
 	
+	private void doOpenPage(UserRequest ureq, Page page) {
+		if(page == null) {
+			//show message
+		} else if(page.getSection() == null) {
+			MyPageListController ctrl = doOpenMyPages(ureq);
+			ctrl.doOpenPage(ureq, page, false);
+		} else {
+			Binder binder = page.getSection().getBinder();
+			List<ContextEntry> entries = new ArrayList<>();
+			entries.add(BusinessControlFactory.getInstance().createContextEntry(OresHelper.createOLATResourceableInstance(Binder.class, binder.getKey())));
+			entries.add(BusinessControlFactory.getInstance().createContextEntry(OresHelper.createOLATResourceableInstance(Page.class, page.getKey())));
+			BinderListController ctrl = doOpenMyBinders(ureq);
+			ctrl.activate(ureq, entries, null);
+		}
+	}
+	
 	private MyPageListController doOpenMyPages(UserRequest ureq) {
 		removeAsListenerAndDispose(myPageListCtrl);
 		stackPanel.popUpToRootController(ureq);
@@ -221,21 +304,11 @@ public class PortfolioHomeController extends BasicController implements Activate
 		return myPageListCtrl;
 	}
 	
-	private void doOpenLastEntry(UserRequest ureq) {
-		Page lastModifiedPage = portfolioService.getLastPage(getIdentity(), false);
-		if(lastModifiedPage == null) {
-			//show message
-		} else if(lastModifiedPage.getSection() == null) {
-			MyPageListController ctrl = doOpenMyPages(ureq);
-			ctrl.doOpenPage(ureq, lastModifiedPage, false);
-		} else {
-			Binder binder = lastModifiedPage.getSection().getBinder();
-			List<ContextEntry> entries = new ArrayList<>();
-			entries.add(BusinessControlFactory.getInstance().createContextEntry(OresHelper.createOLATResourceableInstance(Binder.class, binder.getKey())));
-			entries.add(BusinessControlFactory.getInstance().createContextEntry(OresHelper.createOLATResourceableInstance(Page.class, lastModifiedPage.getKey())));
-			BinderListController ctrl = doOpenMyBinders(ureq);
-			ctrl.activate(ureq, entries, null);
-		}
+	private void doOpenBinder(UserRequest ureq, BinderRef binder) {
+		List<ContextEntry> entries = new ArrayList<>();
+		entries.add(BusinessControlFactory.getInstance().createContextEntry(OresHelper.createOLATResourceableInstance(Binder.class, binder.getKey())));
+		BinderListController ctrl = doOpenMyBinders(ureq);
+		ctrl.activate(ureq, entries, null);
 	}
 	
 	private BinderListController doOpenMyBinders(UserRequest ureq) {

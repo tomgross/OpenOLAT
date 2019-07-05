@@ -29,6 +29,7 @@ import org.olat.core.gui.control.Controller;
 import org.olat.core.gui.control.Event;
 import org.olat.core.gui.control.WindowControl;
 import org.olat.core.gui.control.controller.BasicController;
+import org.olat.core.util.Util;
 import org.olat.core.util.vfs.VFSContainer;
 import org.olat.ims.qti21.QTI21Service;
 import org.olat.ims.qti21.ui.editor.AssessmentItemEditorController;
@@ -36,6 +37,8 @@ import org.olat.ims.qti21.ui.editor.events.AssessmentItemEvent;
 import org.olat.modules.qpool.QPoolItemEditorController;
 import org.olat.modules.qpool.QPoolService;
 import org.olat.modules.qpool.QuestionItem;
+import org.olat.modules.qpool.model.QuestionItemImpl;
+import org.olat.modules.qpool.ui.events.QItemEdited;
 import org.springframework.beans.factory.annotation.Autowired;
 
 import uk.ac.ed.ph.jqtiplus.node.item.AssessmentItem;
@@ -60,24 +63,28 @@ public class QTI21EditorController extends BasicController implements QPoolItemE
 	@Autowired
 	private QTI21Service qtiService;
 	
-	public QTI21EditorController(UserRequest ureq, WindowControl wControl, QuestionItem questionItem) {
-		super(ureq, wControl);
+	public QTI21EditorController(UserRequest ureq, WindowControl wControl, QuestionItem questionItem,
+			boolean readonly) {
+		super(ureq, wControl, Util.createPackageTranslator(AssessmentItemEditorController.class, ureq.getLocale()));
 		this.questionItem = questionItem;
-		mainVC = createVelocityContainer("pool_editor");
 		
 		File resourceDirectory = qpoolService.getRootDirectory(questionItem);
 		VFSContainer resourceContainer = qpoolService.getRootContainer(questionItem);
 		resourceFile = qpoolService.getRootFile(questionItem);
-		URI assessmentItemUri = resourceFile.toURI();
-		
-		ResolvedAssessmentItem resolvedAssessmentItem = qtiService
-				.loadAndResolveAssessmentItem(assessmentItemUri, resourceDirectory);
-		
-		editorCtrl = new AssessmentItemEditorController(ureq, wControl,
-				resolvedAssessmentItem, resourceDirectory, resourceContainer, resourceFile, false);
-		listenTo(editorCtrl);
-		mainVC.put("editor", editorCtrl.getInitialComponent());
-		
+		if(resourceFile == null) {
+			mainVC = createVelocityContainer("missing_resource");
+			mainVC.contextPut("uri", questionItem == null ? null : questionItem.getKey());
+		} else {
+			URI assessmentItemUri = resourceFile.toURI();
+			ResolvedAssessmentItem resolvedAssessmentItem = qtiService
+					.loadAndResolveAssessmentItem(assessmentItemUri, resourceDirectory);
+			
+			editorCtrl = new AssessmentItemEditorController(ureq, wControl, resolvedAssessmentItem, resourceDirectory,
+					resourceContainer, resourceFile, false, readonly);
+			listenTo(editorCtrl);
+			mainVC = createVelocityContainer("pool_editor");
+			mainVC.put("editor", editorCtrl.getInitialComponent());
+		}
 		putInitialPanel(mainVC);
 	}
 	
@@ -98,7 +105,18 @@ public class QTI21EditorController extends BasicController implements QPoolItemE
 				AssessmentItemEvent aie = (AssessmentItemEvent)event;
 				AssessmentItem assessmentItem = aie.getAssessmentItem();
 				qtiService.persistAssessmentObject(resourceFile, assessmentItem);
+				updateQuestionItem(ureq, assessmentItem);
 			}
+		}
+	}
+
+	private void updateQuestionItem(UserRequest ureq, AssessmentItem assessmentItem) {
+		if(questionItem instanceof QuestionItemImpl) {
+			String title = assessmentItem.getTitle();
+			QuestionItemImpl itemImpl = (QuestionItemImpl)questionItem;
+			itemImpl.setTitle(title);
+			qpoolService.updateItem(itemImpl);
+			fireEvent(ureq, new QItemEdited(questionItem));
 		}
 	}
 

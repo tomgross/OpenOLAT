@@ -30,11 +30,17 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.Date;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.apache.lucene.analysis.Analyzer;
@@ -51,14 +57,13 @@ import org.apache.lucene.search.BooleanQuery;
 import org.apache.lucene.search.IndexSearcher;
 import org.apache.lucene.search.Query;
 import org.apache.lucene.search.ReferenceManager;
-import org.apache.lucene.store.Directory;
 import org.apache.lucene.store.FSDirectory;
 import org.olat.core.commons.persistence.SortKey;
 import org.olat.core.gui.control.Event;
 import org.olat.core.id.Identity;
 import org.olat.core.id.Roles;
 import org.olat.core.logging.AssertException;
-import org.olat.core.logging.OLog;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.ArrayHelper;
 import org.olat.core.util.StringHelper;
@@ -77,9 +82,11 @@ import org.olat.search.service.indexer.Index;
 import org.olat.search.service.indexer.IndexerEvent;
 import org.olat.search.service.indexer.LifeFullIndexer;
 import org.olat.search.service.indexer.MainIndexer;
+import org.olat.search.service.searcher.ConditionalQueryAnalyzer;
 import org.olat.search.service.searcher.JmsSearchProvider;
 import org.olat.search.service.spell.SearchSpellChecker;
 import org.quartz.JobDetail;
+import org.quartz.JobKey;
 import org.quartz.Scheduler;
 import org.quartz.SchedulerException;
 
@@ -88,7 +95,9 @@ import org.quartz.SchedulerException;
  * @author Christian Guretzki
  */
 public class SearchServiceImpl implements SearchService, GenericEventListener {
-	private static final OLog log = Tracing.createLoggerFor(SearchServiceImpl.class);
+	private static final Logger log = Tracing.createLoggerFor(SearchServiceImpl.class);
+	
+	private final JobKey indexerJobKey = new JobKey("org.olat.search.job.enabled", Scheduler.DEFAULT_GROUP);
 	
 	private Index indexer;	
 	private SearchModule searchModuleConfig;
@@ -96,7 +105,8 @@ public class SearchServiceImpl implements SearchService, GenericEventListener {
 	private Scheduler scheduler;
 	private CoordinatorManager coordinatorManager;
 
-	private Analyzer analyzer;
+	private final Analyzer analyzer;
+	private final ConditionalQueryAnalyzer conditionalQueryAnalyzer;
 	
 	private LifeFullIndexer lifeIndexer;
 	private SearchSpellChecker searchSpellChecker;
@@ -110,7 +120,7 @@ public class SearchServiceImpl implements SearchService, GenericEventListener {
 	private ExecutorService searchExecutor;
 	private OOSearcherManager indexSearcherRefMgr;
 
-	private String fields[] = {
+	private String[] fields = {
 			AbstractOlatDocument.TITLE_FIELD_NAME, AbstractOlatDocument.DESCRIPTION_FIELD_NAME,
 			AbstractOlatDocument.CONTENT_FIELD_NAME, AbstractOlatDocument.AUTHOR_FIELD_NAME,
 			AbstractOlatDocument.LOCATION_FIELD_NAME, AbstractOlatDocument.DOCUMENTTYPE_FIELD_NAME,
@@ -123,8 +133,8 @@ public class SearchServiceImpl implements SearchService, GenericEventListener {
 			QItemDocument.LANGUAGE_FIELD, QItemDocument.EDU_CONTEXT_FIELD,
 			QItemDocument.ITEM_TYPE_FIELD, QItemDocument.ASSESSMENT_TYPE_FIELD,
 			QItemDocument.ITEM_VERSION_FIELD, QItemDocument.ITEM_STATUS_FIELD,
-			QItemDocument.COPYRIGHT_FIELD, QItemDocument.EDITOR_FIELD,
-			QItemDocument.EDITOR_VERSION_FIELD, QItemDocument.FORMAT_FIELD
+			QItemDocument.EDITOR_FIELD, QItemDocument.EDITOR_VERSION_FIELD, 
+			QItemDocument.FORMAT_FIELD, QItemDocument.TOPIC_FIELD
 	};
 
 	
@@ -139,7 +149,8 @@ public class SearchServiceImpl implements SearchService, GenericEventListener {
 		this.searchModuleConfig = searchModule;
 		this.mainIndexer = mainIndexer;
 		this.coordinatorManager = coordinatorManager;
-		analyzer = new StandardAnalyzer(SearchService.OO_LUCENE_VERSION);
+		analyzer = new StandardAnalyzer();
+		conditionalQueryAnalyzer = new ConditionalQueryAnalyzer();
 		searchProvider.setSearchService(this);
 		coordinatorManager.getCoordinator().getEventBus().registerFor(this, null, IndexerEvent.INDEX_ORES);
 	}
@@ -180,13 +191,13 @@ public class SearchServiceImpl implements SearchService, GenericEventListener {
 		if (indexer==null) throw new AssertException ("Try to call startIndexing() but indexer is null");
 		
 		try {
-			JobDetail detail = scheduler.getJobDetail("org.olat.search.job.enabled", Scheduler.DEFAULT_GROUP);
+			JobDetail detail = scheduler.getJobDetail(indexerJobKey);
 			if(detail == null) {
 				if("disabled".equals(indexerCron)) {
 					indexer.startFullIndex();
 				}
 			} else {
-				scheduler.triggerJob(detail.getName(), detail.getGroup());
+				scheduler.triggerJob(indexerJobKey);
 			}
 			log.info("startIndexing...");
 		} catch (SchedulerException e) {
@@ -202,13 +213,13 @@ public class SearchServiceImpl implements SearchService, GenericEventListener {
 		if (indexer==null) throw new AssertException ("Try to call stopIndexing() but indexer is null");
 
 		try {
-			JobDetail detail = scheduler.getJobDetail("org.olat.search.job.enabled", Scheduler.DEFAULT_GROUP);
+			JobDetail detail = scheduler.getJobDetail(indexerJobKey);
 			if(detail == null) {
 				if("disabled".equals(indexerCron)) {
 					indexer.stopFullIndex();
 				}
 			} else {
-				scheduler.interrupt(detail.getName(), detail.getGroup());
+				scheduler.interrupt(indexerJobKey);
 			}
 			log.info("stopIndexing.");
 		} catch (SchedulerException e) {
@@ -233,6 +244,7 @@ public class SearchServiceImpl implements SearchService, GenericEventListener {
 		searchSpellChecker.setSpellDictionaryPath(searchModuleConfig.getSpellCheckDictionaryPath());
 		searchSpellChecker.setSpellCheckEnabled(searchModuleConfig.getSpellCheckEnabled());
 		searchSpellChecker.setSearchExecutor(searchExecutor);
+		searchSpellChecker.setSearchModule(searchModuleConfig);
 		
 		indexer = new Index(searchModuleConfig, this, searchSpellChecker, mainIndexer, lifeIndexer, coordinatorManager);
 
@@ -243,8 +255,7 @@ public class SearchServiceImpl implements SearchService, GenericEventListener {
 
 		if (startingFullIndexingAllowed()) {
 			try {
-				JobDetail detail = scheduler.getJobDetail("org.olat.search.job.enabled", Scheduler.DEFAULT_GROUP);
-				scheduler.triggerJob(detail.getName(), detail.getGroup());
+				scheduler.triggerJob(indexerJobKey);
 			} catch (SchedulerException e) {
 				log.error("", e);
 			}
@@ -294,17 +305,22 @@ public class SearchServiceImpl implements SearchService, GenericEventListener {
  	 * @return              SearchResults object for this query
 	 */
 	@Override
-	public SearchResults doSearch(String queryString, List<String> condQueries, Identity identity, Roles roles,
+	public SearchResults doSearch(String queryString, List<String> condQueries, Identity identity, Roles roles, Locale locale,
 			int firstResult, int maxResults, boolean doHighlighting)
 	throws ServiceNotAvailableException, ParseException {
-	
+		
+		Future<SearchResults> futureResults = null;
 		try {
-			SearchCallable run = new SearchCallable(queryString,  condQueries, identity, roles, firstResult, maxResults, doHighlighting, this);
-			Future<SearchResults> futureResults = searchExecutor.submit(run);
-			SearchResults results = futureResults.get();
+			SearchCallable run = new SearchCallable(queryString,  condQueries, identity, roles, locale, firstResult, maxResults, doHighlighting, this);
+			futureResults = searchExecutor.submit(run);
+			SearchResults results = futureResults.get(searchModuleConfig.getSearchTimeout(), TimeUnit.SECONDS);
 			queryCount++;
+			if(results != null && results.getException() instanceof IllegalStateException) {
+				refresh();
+			}
 			return results;
-		} catch (InterruptedException e) {
+		} catch (InterruptedException | TimeoutException e) {
+			cancelSearch(futureResults);
 			log.error("", e);
 			return null;
 		} catch (ExecutionException e) {
@@ -320,57 +336,102 @@ public class SearchServiceImpl implements SearchService, GenericEventListener {
  	}
 	
 	@Override
-	public List<Long> doSearch(String queryString, List<String> condQueries, Identity identity, Roles roles,
+	public List<Long> doSearch(String queryString, List<String> condQueries, Identity identity, Roles roles, Locale locale,
 			int firstResult, int maxResults, SortKey... orderBy)
 	throws ServiceNotAvailableException, ParseException, QueryException {
+		
+		Future<List<Long>> futureResults = null;
 		try {
-			SearchOrderByCallable run = new SearchOrderByCallable(queryString, condQueries, orderBy, firstResult, maxResults, this);
-			Future<List<Long>> futureResults = searchExecutor.submit(run);
-			List<Long> results = futureResults.get();
+			SearchOrderByCallable run = new SearchOrderByCallable(queryString, condQueries, orderBy, locale, firstResult, maxResults, this);
+			futureResults = searchExecutor.submit(run);
+			List<Long> results = futureResults.get(searchModuleConfig.getSearchTimeout(), TimeUnit.SECONDS);
 			queryCount++;
 			if(results == null) {
-				results = new ArrayList<Long>(1);
+				results = new ArrayList<>(1);
 			}
 			return results;
+		} catch (NullPointerException e) {
+			// something happens during execution of the query and the error will be there logged
+			return new ArrayList<>(1);
+		} catch (TimeoutException e) {
+			cancelSearch(futureResults);
+			log.error("", e);
+			return new ArrayList<>(1);
 		} catch (Exception e) {
 			log.error("", e);
-			return new ArrayList<Long>(1);
+			return new ArrayList<>(1);
 		}
 	}
 	
 	@Override
 	public Document doSearch(String queryString)
 	throws ServiceNotAvailableException, ParseException, QueryException {
+		Future<Document> futureResults = null;
 		try {
 			GetDocumentByCallable run = new GetDocumentByCallable(queryString, this);
-			Future<Document> futureResults = searchExecutor.submit(run);
-			return futureResults.get();
+			futureResults = searchExecutor.submit(run);
+			return futureResults.get(searchModuleConfig.getSearchTimeout(), TimeUnit.SECONDS);
+		} catch (NullPointerException e) {
+			// something happens during execution of the query and the error will be there logged
+			return null;
+		} catch (TimeoutException e) {
+			cancelSearch(futureResults);
+			log.error("", e);
+			return null;
 		} catch (Exception e) {
 			log.error("", e);
 			return null;
 		}
 	}
 	
-	protected BooleanQuery createQuery(String queryString, List<String> condQueries)
+	private void cancelSearch(Future<?> search) {
+		if(search != null) {
+			try {
+				search.cancel(false);
+			} catch (Exception e) {
+				log.error("Error canceling a search", e);
+			}
+		}
+	}
+	
+	protected BooleanQuery.Builder createQuery(String queryString, List<String> condQueries, Locale locale)
 	throws ParseException {
-		BooleanQuery query = new BooleanQuery();
+		BooleanQuery.Builder query = new BooleanQuery.Builder();
 		if(StringHelper.containsNonWhitespace(queryString)) {
 			String[] fieldsArr = getFieldsToSearchIn();
-			QueryParser queryParser = new MultiFieldQueryParser(SearchService.OO_LUCENE_VERSION, fieldsArr, analyzer);
-			queryParser.setLowercaseExpandedTerms(false);//some add. fields are not tokenized and not lowered case
+			Map<String,Float> boosters = getFieldsBoosters();
+			QueryParser queryParser = new MultiFieldQueryParser(fieldsArr, analyzer, boosters);
+			queryParser.setLocale(locale);//some add. fields are not tokenized and not lowered case
 			Query multiFieldQuery = queryParser.parse(queryString.toLowerCase());
 			query.add(multiFieldQuery, Occur.MUST);
 		}
 		
 		if(condQueries != null && !condQueries.isEmpty()) {
 			for(String condQueryString:condQueries) {
-				QueryParser condQueryParser = new QueryParser(SearchService.OO_LUCENE_VERSION, condQueryString, analyzer);
-				condQueryParser.setLowercaseExpandedTerms(false);
+				QueryParser condQueryParser = new QueryParser(condQueryString, conditionalQueryAnalyzer);
+				condQueryParser.setLocale(locale);
 				Query condQuery = condQueryParser.parse(condQueryString);
 				query.add(condQuery, Occur.MUST);
 			}
 		}
 		return query;
+	}
+	
+	private Map<String,Float> getFieldsBoosters() {
+		Map<String,Float> boosters = new HashMap<>();
+		boosters.put(AbstractOlatDocument.TITLE_FIELD_NAME, Float.valueOf(4.0f));
+	
+		boosters.put(AbstractOlatDocument.DESCRIPTION_FIELD_NAME, Float.valueOf(2.0f));
+		boosters.put(AbstractOlatDocument.AUTHOR_FIELD_NAME, Float.valueOf(2.0f));
+		boosters.put(AbstractOlatDocument.LOCATION_FIELD_NAME, Float.valueOf(2.0f));
+		boosters.put(QItemDocument.LICENSE_TYPE_FIELD_NAME, 2.0f);
+		boosters.put(QItemDocument.COVERAGE_FIELD, 2.0f);
+		boosters.put(QItemDocument.KEYWORDS_FIELD, 2.0f);
+		boosters.put(QItemDocument.LICENSE_TYPE_FIELD_NAME, 2.0f);
+
+		boosters.put(AbstractOlatDocument.CONTENT_FIELD_NAME, Float.valueOf(0.5f));
+		
+		return boosters;
 	}
 	
 	private String[] getFieldsToSearchIn() {
@@ -384,7 +445,10 @@ public class SearchServiceImpl implements SearchService, GenericEventListener {
 	@Override
 	public Set<String> spellCheck(String query) {
 		if(searchSpellChecker==null) throw new AssertException ("Try to call spellCheck() in Search.java but searchSpellChecker is null");
-		return searchSpellChecker.check(query);
+		if (StringHelper.containsNonWhitespace(query)) {
+			return searchSpellChecker.check(query);
+		}
+		return new HashSet<>();
 	}
 
 	@Override
@@ -394,7 +458,7 @@ public class SearchServiceImpl implements SearchService, GenericEventListener {
 
 	@Override
 	public SearchServiceStatus getStatus() {
-		return new SearchServiceStatusImpl(indexer,this);
+		return new SearchServiceStatusImpl(indexer, lifeIndexer, this);
 	}
 
 	@Override
@@ -462,8 +526,8 @@ public class SearchServiceImpl implements SearchService, GenericEventListener {
 	
 
 	private IndexSearcher newSearcher() throws IOException {
-		DirectoryReader classicReader = DirectoryReader.open(FSDirectory.open(new File(indexPath)));
-		DirectoryReader permanentReader = DirectoryReader.open(FSDirectory.open(new File(permanentIndexPath)));
+		DirectoryReader classicReader = DirectoryReader.open(FSDirectory.open(new File(indexPath).toPath()));
+		DirectoryReader permanentReader = DirectoryReader.open(FSDirectory.open(new File(permanentIndexPath).toPath()));
 		OOMultiReader mReader = new OOMultiReader(classicReader, permanentReader);
 		return new IndexSearcher(mReader);
 	}
@@ -473,7 +537,7 @@ public class SearchServiceImpl implements SearchService, GenericEventListener {
 		private final DirectoryReader reader;
 		private final DirectoryReader permanentReader;
 		
-		public OOMultiReader(DirectoryReader reader, DirectoryReader permanentReader) {
+		public OOMultiReader(DirectoryReader reader, DirectoryReader permanentReader) throws IOException {
 			super(reader, permanentReader);
 			this.reader = reader;
 			this.permanentReader = permanentReader;
@@ -504,23 +568,26 @@ public class SearchServiceImpl implements SearchService, GenericEventListener {
 
 		@Override
 		protected void decRef(IndexSearcher reference) throws IOException {
-			reference.getIndexReader().decRef();
+			if(reference != null) {
+				reference.getIndexReader().decRef();
+			}
 		}
 
 		@Override
 		protected IndexSearcher refreshIfNeeded(IndexSearcher referenceToRefresh)
 		throws IOException {
-		    final OOMultiReader r = (OOMultiReader)referenceToRefresh.getIndexReader();
-		    final IndexReader newReader = DirectoryReader.openIfChanged(r.getReader());
-		    final IndexReader newPermReader = DirectoryReader.openIfChanged(r.getPermanentReader());
-		    
 		    IndexSearcher searcher;
 		    if(refresh.getAndSet(false)) {
 		    	searcher = getSearcher(factory);
-		    } else if (newReader == null && newPermReader == null) {
-		    	searcher = null;
 		    } else {
-		    	searcher = getSearcher(factory);
+		    	final OOMultiReader r = (OOMultiReader)referenceToRefresh.getIndexReader();
+		    	final IndexReader newReader = DirectoryReader.openIfChanged(r.getReader());
+		    	final IndexReader newPermReader = DirectoryReader.openIfChanged(r.getPermanentReader());  
+		    	if (newReader == null && newPermReader == null) {
+		    		searcher = null;
+		    	} else {
+			    	searcher = getSearcher(factory);
+			    }
 		    }
 		    return searcher;
 		}
@@ -537,8 +604,7 @@ public class SearchServiceImpl implements SearchService, GenericEventListener {
 		
 		public static IndexSearcher getSearcher(SearchServiceImpl searcherFactory)
 		throws IOException {
-			IndexSearcher searcher = searcherFactory.newSearcher();
-			return searcher;
+			return searcherFactory.newSearcher();
 		}
 	}
 
@@ -565,15 +631,19 @@ public class SearchServiceImpl implements SearchService, GenericEventListener {
 	 */
 	protected boolean existIndex()
 	throws IOException {
-		try {
+		
 			File indexFile = new File(searchModuleConfig.getFullIndexPath());
-			Directory directory = FSDirectory.open(indexFile);
-			File permIndexFile = new File(searchModuleConfig.getFullPermanentIndexPath());
-			Directory permDirectory = FSDirectory.open(permIndexFile);
-			return DirectoryReader.indexExists(directory) && DirectoryReader.indexExists(permDirectory);
-		} catch (IOException e) {
-			throw e;
-		}
+			if(indexFile.exists()) {
+				File permIndexFile = new File(searchModuleConfig.getFullPermanentIndexPath());
+				try(FSDirectory directory = FSDirectory.open(indexFile.toPath());
+						FSDirectory permDirectory = FSDirectory.open(permIndexFile.toPath())) {
+					return DirectoryReader.indexExists(directory) && DirectoryReader.indexExists(permDirectory);
+				} catch(IOException e) {
+					log.error("", e);
+				}
+			}
+			return false;
+		
 	}
 
 	/**

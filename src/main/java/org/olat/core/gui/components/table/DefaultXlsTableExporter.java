@@ -28,11 +28,10 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.util.Date;
 
-import org.apache.commons.lang.StringEscapeUtils;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.gui.media.MediaResource;
 import org.olat.core.gui.render.StringOutput;
 import org.olat.core.gui.translator.Translator;
-import org.olat.core.logging.OLog;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.Formatter;
 import org.olat.core.util.StringHelper;
@@ -51,7 +50,7 @@ import org.olat.core.util.openxml.OpenXMLWorksheet.Row;
  * @author patrick
  */
 public class DefaultXlsTableExporter implements TableExporter {
-	private static final OLog log = Tracing.createLoggerFor(DefaultXlsTableExporter.class);
+	private static final Logger log = Tracing.createLoggerFor(DefaultXlsTableExporter.class);
 
 	/**
 	 * @see org.olat.core.gui.components.table.TableExporter#export(org.olat.core.gui.components.table.Table)
@@ -111,7 +110,7 @@ public class DefaultXlsTableExporter implements TableExporter {
 				cellValue = StringHelper.stripLineBreaks(cellValue);
 				cellValue = FilterFactory.getHtmlTagsFilter().filter(cellValue);
 				if(StringHelper.containsNonWhitespace(cellValue)) {
-					cellValue = StringEscapeUtils.unescapeHtml(cellValue);
+					cellValue = StringHelper.unescapeHtml(cellValue);
 					if(cellValue.length() >= 32767) {
 						cellValue = Formatter.truncate(cellValue, 32760);
 					}

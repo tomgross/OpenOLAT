@@ -19,32 +19,20 @@
  */
 package org.olat.course;
 
+import org.olat.basesecurity.GroupRoles;
+import org.olat.basesecurity.OrganisationRoles;
 import org.olat.core.CoreSpringFactory;
-import org.olat.core.commons.modules.bc.vfs.OlatRootFolderImpl;
-import org.olat.core.commons.services.webdav.servlets.RequestUtil;
-import org.olat.core.gui.components.tree.GenericTreeModel;
-import org.olat.core.gui.components.tree.TreeNode;
 import org.olat.core.id.IdentityEnvironment;
-import org.olat.core.logging.OLog;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.StringHelper;
 import org.olat.core.util.vfs.MergeSource;
 import org.olat.core.util.vfs.NamedContainerImpl;
 import org.olat.core.util.vfs.VFSContainer;
-import org.olat.core.util.vfs.VFSItem;
 import org.olat.core.util.vfs.callbacks.ReadOnlyCallback;
-import org.olat.core.util.vfs.filters.VFSItemFilter;
 import org.olat.course.config.CourseConfig;
-import org.olat.course.nodes.BCCourseNode;
-import org.olat.course.nodes.CourseNode;
-import org.olat.course.nodes.PFCourseNode;
-import org.olat.course.nodes.bc.BCCourseNodeEditController;
-import org.olat.course.nodes.pf.manager.PFManager;
-import org.olat.course.run.userview.NodeEvaluation;
-import org.olat.course.run.userview.TreeEvaluation;
-import org.olat.course.run.userview.UserCourseEnvironment;
-import org.olat.course.run.userview.UserCourseEnvironmentImpl;
-import org.olat.course.run.userview.VisibleTreeFilter;
+import org.olat.course.folder.CourseContainerOptions;
+import org.olat.course.folder.MergedCourseElementDataContainer;
 import org.olat.modules.sharedfolder.SharedFolderManager;
 import org.olat.repository.RepositoryEntry;
 import org.olat.repository.RepositoryManager;
@@ -58,23 +46,25 @@ import org.olat.resource.OLATResource;
  */
 public class MergedCourseContainer extends MergeSource {
 	
-	private static final OLog log = Tracing.createLoggerFor(MergedCourseContainer.class);
+	private static final Logger log = Tracing.createLoggerFor(MergedCourseContainer.class);
 	
 	private final Long courseId;
 	private boolean courseReadOnly = false;
 	private boolean overrideReadOnly = false;
 	private final IdentityEnvironment identityEnv;
+	private final CourseContainerOptions options;
 	
 	public MergedCourseContainer(Long courseId, String name) {
-		this(courseId, name, null, false);
+		this(courseId, name, null, CourseContainerOptions.all(), false);
 	}
 	
 	public MergedCourseContainer(Long courseId, String name, IdentityEnvironment identityEnv) {
-		this(courseId, name, identityEnv, false);
+		this(courseId, name, identityEnv, CourseContainerOptions.all(), false);
 	}
 	
-	public MergedCourseContainer(Long courseId, String name, IdentityEnvironment identityEnv, boolean overrideReadOnly) {
+	public MergedCourseContainer(Long courseId, String name, IdentityEnvironment identityEnv, CourseContainerOptions options, boolean overrideReadOnly) {
 		super(null, name);
+		this.options = options;
 		this.courseId = courseId;
 		this.identityEnv = identityEnv;
 		this.overrideReadOnly = overrideReadOnly;
@@ -92,50 +82,41 @@ public class MergedCourseContainer extends MergeSource {
 		super.init();
 		
 		RepositoryEntry courseRe = persistingCourse.getCourseEnvironment().getCourseGroupManager().getCourseEntry();
-		courseReadOnly = !overrideReadOnly && (courseRe.getRepositoryEntryStatus().isClosed() || courseRe.getRepositoryEntryStatus().isUnpublished());
+		courseReadOnly = !overrideReadOnly && courseRe.getEntryStatus().decommissioned();
 		if(courseReadOnly) {
 			setLocalSecurityCallback(new ReadOnlyCallback());
 		}
-
-		if(identityEnv == null || identityEnv.getRoles().isOLATAdmin()) {
-			VFSContainer courseContainer = persistingCourse.getIsolatedCourseFolder();
-			if(courseReadOnly) {
-				courseContainer.setLocalSecurityCallback(new ReadOnlyCallback());
-			}
-			addContainersChildren(courseContainer, true);
-		} else {
-			RepositoryEntry re = persistingCourse.getCourseEnvironment().getCourseGroupManager().getCourseEntry();
-			RepositoryEntrySecurity reSecurity = RepositoryManager.getInstance()
-					.isAllowed(identityEnv.getIdentity(), identityEnv.getRoles(), re);
-			if(reSecurity.isEntryAdmin()) {
+		
+		if(options.withCourseFolder()) {
+			if(identityEnv == null) {
 				VFSContainer courseContainer = persistingCourse.getIsolatedCourseFolder();
 				if(courseReadOnly) {
 					courseContainer.setLocalSecurityCallback(new ReadOnlyCallback());
 				}
 				addContainersChildren(courseContainer, true);
+			} else {
+				RepositoryEntrySecurity reSecurity = RepositoryManager.getInstance()
+						.isAllowed(identityEnv.getIdentity(), identityEnv.getRoles(), courseRe);
+				if(reSecurity.isEntryAdmin()) {
+					VFSContainer courseContainer = persistingCourse.getIsolatedCourseFolder();
+					if(courseReadOnly) {
+						courseContainer.setLocalSecurityCallback(new ReadOnlyCallback());
+					}
+					addContainersChildren(courseContainer, true);
+				}
 			}
 		}
 		
-		initSharedFolder(persistingCourse);
+		if(options.withSharedResource()) {
+			initSharedFolder(persistingCourse);
+		}
 			
 		// add all course building blocks of type BC to a virtual folder
-		MergeSource nodesContainer = new MergeSource(null, "_courseelementdata");
-		if(identityEnv == null) {
-			CourseNode rootNode = persistingCourse.getRunStructure().getRootNode();
-			addFolderBuildingBlocks(persistingCourse, nodesContainer, rootNode);
-		} else {
-			TreeEvaluation treeEval = new TreeEvaluation();
-			GenericTreeModel treeModel = new GenericTreeModel();
-			UserCourseEnvironment userCourseEnv = new UserCourseEnvironmentImpl(identityEnv, persistingCourse.getCourseEnvironment());
-			CourseNode rootCn = userCourseEnv.getCourseEnvironment().getRunStructure().getRootNode();
-			NodeEvaluation rootNodeEval = rootCn.eval(userCourseEnv.getConditionInterpreter(), treeEval, new VisibleTreeFilter());
-			TreeNode treeRoot = rootNodeEval.getTreeNode();
-			treeModel.setRootNode(treeRoot);
-			addFolderBuildingBlocks(persistingCourse, nodesContainer, treeRoot);
-		}
-		
-		if (nodesContainer.getItems().size() > 0) {
-			addContainer(nodesContainer);
+		if(options.withCourseElements()) {
+			MergedCourseElementDataContainer nodesContainer = new MergedCourseElementDataContainer(courseId, identityEnv);
+			if (!nodesContainer.isEmpty()) {
+				addContainer(nodesContainer);
+			}
 		}
 	}
 	
@@ -151,10 +132,14 @@ public class MergedCourseContainer extends MergeSource {
 		String sfSoftkey = courseConfig.getSharedFolderSoftkey();
 		if (StringHelper.containsNonWhitespace(sfSoftkey) && !CourseConfig.VALUE_EMPTY_SHAREDFOLDER_SOFTKEY.equals(sfSoftkey)) {
 			RepositoryEntry re = persistingCourse.getCourseEnvironment().getCourseGroupManager().getCourseEntry();
-			if(identityEnv == null || identityEnv.getRoles().isOLATAdmin() || RepositoryManager.getInstance().isOwnerOfRepositoryEntry(identityEnv.getIdentity(), re)) {
-				OLATResource sharedResource = CoreSpringFactory.getImpl(RepositoryService.class).loadRepositoryEntryResourceBySoftKey(sfSoftkey);
+			RepositoryService repositoryService = CoreSpringFactory.getImpl(RepositoryService.class);
+			
+			if(identityEnv == null || repositoryService.hasRoleExpanded(identityEnv.getIdentity(), re,
+					OrganisationRoles.administrator.name(), OrganisationRoles.learnresourcemanager.name(),
+					GroupRoles.owner.name())) {
+				OLATResource sharedResource = repositoryService.loadRepositoryEntryResourceBySoftKey(sfSoftkey);
 				if (sharedResource != null) {
-					OlatRootFolderImpl sharedFolder = SharedFolderManager.getInstance().getSharedFolder(sharedResource);
+					VFSContainer sharedFolder = SharedFolderManager.getInstance().getSharedFolder(sharedResource);
 					if (sharedFolder != null) {
 						if(courseConfig.isSharedFolderReadOnlyMount() || courseReadOnly) {
 							sharedFolder.setLocalSecurityCallback(new ReadOnlyCallback());
@@ -165,204 +150,6 @@ public class MergedCourseContainer extends MergeSource {
 				}
 			}
 		}
-	}
-	
-	private void addFolderBuildingBlocks(PersistingCourseImpl course, MergeSource nodesContainer, TreeNode courseNode) {
-		if(courseNode == null) return;
-		
-		for (int i = 0; i < courseNode.getChildCount(); i++) {
-			TreeNode child = (TreeNode)courseNode.getChildAt(i);
-			
-			NodeEvaluation nodeEval;
-			if(child.getUserObject() instanceof NodeEvaluation) {
-				nodeEval = (NodeEvaluation)child.getUserObject();
-			} else {
-				continue;
-			}
-			
-			if(nodeEval != null && nodeEval.getCourseNode() != null) {
-				CourseNode courseNodeChild = nodeEval.getCourseNode();
-				String folderName = RequestUtil.normalizeFilename(courseNodeChild.getShortTitle());
-				 
-				if (courseNodeChild instanceof BCCourseNode) {
-					final BCCourseNode bcNode = (BCCourseNode) courseNodeChild;
-					// add folder not to merge source. Use name and node id to have unique name
-					VFSContainer rootFolder = getBCContainer(course, bcNode);
-
-					boolean canDownload = nodeEval.isCapabilityAccessible("download");
-					if(canDownload && rootFolder != null) {
-						if(courseReadOnly) {
-							rootFolder.setLocalSecurityCallback(new ReadOnlyCallback());
-						} else if(nodeEval.isCapabilityAccessible("upload")) {
-							//inherit the security callback from the course as for author
-						} else {
-							rootFolder.setLocalSecurityCallback(new ReadOnlyCallback());
-						}
-						
-						folderName = getFolderName(nodesContainer, bcNode, folderName);
-						
-						// Create a container for this node content and wrap it with a merge source which is attached to tree
-						VFSContainer nodeContentContainer = new NamedContainerImpl(folderName, rootFolder);
-						MergeSource courseNodeContainer = new MergeSource(nodesContainer, folderName);
-						courseNodeContainer.addContainersChildren(nodeContentContainer, true);
-						nodesContainer.addContainer(courseNodeContainer);	
-						// Do recursion for all children
-						addFolderBuildingBlocks(course, courseNodeContainer, child);
-		
-					} else {
-						// For non-folder course nodes, add merge source (no files to show) ...
-						MergeSource courseNodeContainer = new MergeSource(null, folderName);
-						// , then do recursion for all children ...
-						addFolderBuildingBlocks(course, courseNodeContainer, child);
-						// ... but only add this container if it contains any children with at least one BC course node
-						if (courseNodeContainer.getItems().size() > 0) {
-							nodesContainer.addContainer(courseNodeContainer);
-						}
-					}	
-				} else if (courseNodeChild instanceof PFCourseNode) {
-					final PFCourseNode pfNode = (PFCourseNode) courseNodeChild;					
-					// add folder not to merge source. Use name and node id to have unique name
-					PFManager pfManager = CoreSpringFactory.getImpl(PFManager.class);
-					folderName = getFolderName(nodesContainer, pfNode, folderName);
-					MergeSource courseNodeContainer = new MergeSource(nodesContainer, folderName);					
-					UserCourseEnvironment userCourseEnv = new UserCourseEnvironmentImpl(identityEnv, course.getCourseEnvironment());
-					VFSContainer rootFolder = pfManager.provideCoachOrParticipantContainer(pfNode, userCourseEnv,
-							identityEnv.getIdentity(), courseReadOnly);
-					VFSContainer nodeContentContainer = new NamedContainerImpl(folderName, rootFolder);
-					courseNodeContainer.addContainersChildren(nodeContentContainer, true);
-		
-					addFolderBuildingBlocks(course, courseNodeContainer, child);
-
-					nodesContainer.addContainer(courseNodeContainer);
-					
-				} else {
-					// For non-folder course nodes, add merge source (no files to show) ...
-					MergeSource courseNodeContainer = new MergeSource(null, folderName);
-					// , then do recursion for all children ...
-					addFolderBuildingBlocks(course, courseNodeContainer, child);
-					// ... but only add this container if it contains any children with at least one BC course node
-					if (courseNodeContainer.getItems().size() > 0) {
-						nodesContainer.addContainer(courseNodeContainer);
-					}
-				}
-			}
-		}
-	}
-
-	
-	/**
-	 * Internal method to recursively add all course building blocks of type
-	 * BC to a given VFS container. This should only be used for an author view,
-	 * it does not test for security.
-	 * 
-	 * @param course
-	 * @param nodesContainer
-	 * @param courseNode
-	 * @return container for the current course node
-	 */
-	private void addFolderBuildingBlocks(PersistingCourseImpl course, MergeSource nodesContainer, CourseNode courseNode) {
-		for (int i = 0; i < courseNode.getChildCount(); i++) {
-			CourseNode child = (CourseNode) courseNode.getChildAt(i);
-			String folderName = RequestUtil.normalizeFilename(child.getShortTitle());
-			
-			if (child instanceof BCCourseNode) {
-				final BCCourseNode bcNode = (BCCourseNode) child;
-				// add folder not to merge source. Use name and node id to have unique name
-				VFSContainer rootFolder = getBCContainer(course, bcNode);
-				if(courseReadOnly) {
-					rootFolder.setLocalSecurityCallback(new ReadOnlyCallback());	
-				}
-
-				folderName = getFolderName(nodesContainer, bcNode, folderName);
-
- 				if(rootFolder != null) {
- 					// Create a container for this node content and wrap it with a merge source which is attached to tree
- 					VFSContainer nodeContentContainer = new NamedContainerImpl(folderName, rootFolder);
- 					MergeSource courseNodeContainer = new MergeSource(nodesContainer, folderName);
- 					courseNodeContainer.addContainersChildren(nodeContentContainer, true);
- 					nodesContainer.addContainer(courseNodeContainer);	
- 					// Do recursion for all children
- 					addFolderBuildingBlocks(course, courseNodeContainer, child);
- 				}
-			} else if (child instanceof PFCourseNode) {
-				final PFCourseNode pfNode = (PFCourseNode) child;					
-				// add folder not to merge source. Use name and node id to have unique name
-				PFManager pfManager = CoreSpringFactory.getImpl(PFManager.class);
-				folderName = getFolderName(nodesContainer, pfNode, folderName);
-				MergeSource courseNodeContainer = new MergeSource(nodesContainer, folderName);					
-				VFSContainer rootFolder = pfManager.provideAdminContainer(pfNode, course.getCourseEnvironment());
-				VFSContainer nodeContentContainer = new NamedContainerImpl(folderName, rootFolder);
-				courseNodeContainer.addContainersChildren(nodeContentContainer, true);
-				nodesContainer.addContainer(courseNodeContainer);
-				// Do recursion for all children
-				addFolderBuildingBlocks(course, courseNodeContainer, child);
-			} else {
-				// For non-folder course nodes, add merge source (no files to show) ...
-				MergeSource courseNodeContainer = new MergeSource(null, folderName);
-				// , then do recursion for all children ...
-				addFolderBuildingBlocks(course, courseNodeContainer, child);
-				// ... but only add this container if it contains any children with at least one BC course node
-				if (courseNodeContainer.getItems().size() > 0) {
-					nodesContainer.addContainer(courseNodeContainer);
-				}
-			}
-		}
-	}
-	
-	/**
-	 * Add node ident if multiple files have same name
-	 * 
-	 * @param nodesContainer
-	 * @param bcNode
-	 * @param folderName
-	 * @return
-	 */
-	private String getFolderName(MergeSource nodesContainer, CourseNode bcNode, String folderName) {
-		// add node ident if multiple files have same name
-		if (nodesContainer.getItems(new VFSItemFilter() {
-			@Override
-			public boolean accept(VFSItem vfsItem) {
-				return (bcNode.getShortTitle().equals(RequestUtil.normalizeFilename(bcNode.getShortTitle())));
-			}
-		}).size() > 0) {
-			folderName = folderName + " (" + bcNode.getIdent() + ")";
-		}
-		return folderName;
-	}
-	
-	private VFSContainer getBCContainer(ICourse course, BCCourseNode bcNode) {
-		bcNode.updateModuleConfigDefaults(false);
-		// add folder not to merge source. Use name and node id to have unique name
-		VFSContainer rootFolder = null;
-		String subpath = bcNode.getModuleConfiguration().getStringValue(BCCourseNodeEditController.CONFIG_SUBPATH);
-		if(StringHelper.containsNonWhitespace(subpath)){
-			if(bcNode.isSharedFolder()){
-				// grab any shared folder that is configured
-				OlatRootFolderImpl sharedFolder = null;
-				String sfSoftkey = course.getCourseConfig().getSharedFolderSoftkey();
-				if (StringHelper.containsNonWhitespace(sfSoftkey) && !CourseConfig.VALUE_EMPTY_SHAREDFOLDER_SOFTKEY.equals(sfSoftkey)) {
-					RepositoryManager rm = RepositoryManager.getInstance();
-					RepositoryEntry re = rm.lookupRepositoryEntryBySoftkey(sfSoftkey, false);
-					if (re != null) {
-						sharedFolder = SharedFolderManager.getInstance().getSharedFolder(re.getOlatResource());
-						VFSContainer courseBase = sharedFolder;
-						subpath = subpath.replaceFirst("/_sharedfolder", "");
-						rootFolder = (VFSContainer) courseBase.resolve(subpath);
-						if(rootFolder != null && (course.getCourseConfig().isSharedFolderReadOnlyMount() || courseReadOnly)) {
-							rootFolder.setLocalSecurityCallback(new ReadOnlyCallback());
-						}
-					}
-				}
-			}else{
-				VFSContainer courseBase = course.getCourseBaseContainer();
-				rootFolder = (VFSContainer) courseBase.resolve("/coursefolder" + subpath);
-			}
-		}
-		if(bcNode.getModuleConfiguration().getBooleanSafe(BCCourseNodeEditController.CONFIG_AUTO_FOLDER)){
-			String path = BCCourseNode.getFoldernodePathRelToFolderBase(course.getCourseEnvironment(), bcNode);
-			rootFolder = new OlatRootFolderImpl(path, null);
-		}
-		return rootFolder;
 	}
 
 	private Object readResolve() {

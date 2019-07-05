@@ -38,7 +38,7 @@ import org.olat.core.commons.services.thumbnail.CannotGenerateThumbnailException
 import org.olat.core.commons.services.thumbnail.FinalSize;
 import org.olat.core.commons.services.thumbnail.ThumbnailSPI;
 import org.olat.core.commons.services.video.spi.FLVParser;
-import org.olat.core.logging.OLog;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.FileUtils;
 import org.olat.core.util.WorkThreadInformations;
@@ -56,7 +56,7 @@ import org.springframework.stereotype.Service;
 @Service("movieService")
 public class MovieServiceImpl implements MovieService, ThumbnailSPI {
 	
-	private static final OLog log = Tracing.createLoggerFor(MovieServiceImpl.class);
+	private static final Logger log = Tracing.createLoggerFor(MovieServiceImpl.class);
 
 	private static final List<String> extensions = new ArrayList<>();
 	private static final List<String> fourCCs = new ArrayList<>();
@@ -94,9 +94,10 @@ public class MovieServiceImpl implements MovieService, ThumbnailSPI {
 		}
 
 		if(extensions.contains(suffix)) {
-			try(RandomAccessFile accessFile = new RandomAccessFile(file, "r")) {
-				FileChannel ch = accessFile.getChannel();
-				FileChannelWrapper in = new FileChannelWrapper(ch);
+			try(RandomAccessFile accessFile = new RandomAccessFile(file, "r");
+					FileChannel ch = accessFile.getChannel();
+					FileChannelWrapper in = new FileChannelWrapper(ch)) {
+				
 				MP4Demuxer demuxer1 = new MP4Demuxer(in);
 				org.jcodec.common.model.Size size = demuxer1.getMovie().getDisplaySize();
 				// Case 1: standard case, get dimension from movie
@@ -158,9 +159,10 @@ public class MovieServiceImpl implements MovieService, ThumbnailSPI {
 		}
 
 		if(extensions.contains(suffix)) {
-			try(RandomAccessFile accessFile = new RandomAccessFile(file, "r")) {
+			try(RandomAccessFile accessFile = new RandomAccessFile(file, "r");
 				FileChannel ch = accessFile.getChannel();
-				FileChannelWrapper in = new FileChannelWrapper(ch);
+				FileChannelWrapper in = new FileChannelWrapper(ch)) {
+
 				MP4Demuxer demuxer1 = new MP4Demuxer(in);
 				MovieBox movie = demuxer1.getMovie();
 				long duration = movie.getDuration();
@@ -169,9 +171,37 @@ public class MovieServiceImpl implements MovieService, ThumbnailSPI {
 					timescale = 1;
 				}				
 				// Simple calculation. Ignore NTSC and other issues for now
-				return duration / timescale * 1000;
+				return duration / timescale * 1000l;
 			} catch (Exception | AssertionError e) {
 				log.error("Cannot extract duration of: " + media, e);
+			}
+		}
+
+		return -1;
+	}
+	
+	@Override
+	public long getFrameCount(VFSLeaf media, String suffix) {
+		File file = null;
+		if(media instanceof VFSCPNamedItem) {
+			media = ((VFSCPNamedItem)media).getDelegate();
+		}
+		if(media instanceof LocalFileImpl) {
+			file = ((LocalFileImpl)media).getBasefile();
+		}
+		if(file == null) {
+			return -1;
+		}
+
+		if(extensions.contains(suffix)) {
+			try(RandomAccessFile accessFile = new RandomAccessFile(file, "r");
+					FileChannel ch = accessFile.getChannel();
+					FileChannelWrapper in = new FileChannelWrapper(ch)) {
+				
+				MP4Demuxer demuxer1 = new MP4Demuxer(in);
+				return demuxer1.getVideoTrack().getFrameCount();
+			} catch (Exception | AssertionError e) {
+				log.error("Cannot extract num. of frames of: " + media, e);
 			}
 		}
 
@@ -192,9 +222,10 @@ public class MovieServiceImpl implements MovieService, ThumbnailSPI {
 		}
 		String suffix = FileUtils.getFileSuffix(fileName);
 		if(extensions.contains(suffix)) {
-			try(RandomAccessFile accessFile = new RandomAccessFile(file, "r")) {
-				FileChannel ch = accessFile.getChannel();
-				FileChannelWrapper in = new FileChannelWrapper(ch);
+			try(RandomAccessFile accessFile = new RandomAccessFile(file, "r");
+					FileChannel ch = accessFile.getChannel();
+					FileChannelWrapper in = new FileChannelWrapper(ch)) {
+				
 				MP4Demuxer demuxer1 = new MP4Demuxer(in);
 				String fourCC = demuxer1.getVideoTrack().getFourcc();
 				if (fourCCs.contains(fourCC.toLowerCase())) {

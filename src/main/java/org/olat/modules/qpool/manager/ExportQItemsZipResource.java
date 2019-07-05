@@ -29,10 +29,9 @@ import java.util.zip.ZipOutputStream;
 
 import javax.servlet.http.HttpServletResponse;
 
-import org.apache.commons.io.IOUtils;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.CoreSpringFactory;
 import org.olat.core.gui.media.MediaResource;
-import org.olat.core.logging.OLog;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.StringHelper;
 import org.olat.modules.qpool.QPoolService;
@@ -46,7 +45,7 @@ import org.olat.modules.qpool.QuestionItemFull;
  */
 public class ExportQItemsZipResource implements MediaResource {
 	
-	private static final OLog log = Tracing.createLoggerFor(ExportQItemsZipResource.class);
+	private static final Logger log = Tracing.createLoggerFor(ExportQItemsZipResource.class);
 	
 	private String encoding;
 	private final Locale locale;
@@ -58,6 +57,11 @@ public class ExportQItemsZipResource implements MediaResource {
 		this.items = items;
 	}
 	
+	@Override
+	public long getCacheControlDuration() {
+		return 0;
+	}
+
 	@Override
 	public boolean acceptRanges() {
 		return false;
@@ -97,19 +101,15 @@ public class ExportQItemsZipResource implements MediaResource {
 		hres.setHeader("Content-Disposition", "attachment; filename*=UTF-8''" + encodedFileName);			
 		hres.setHeader("Content-Description", encodedFileName);
 		
-		ZipOutputStream zout = null;
-		try {
-			zout = new ZipOutputStream(hres.getOutputStream());
+		try(ZipOutputStream zout = new ZipOutputStream(hres.getOutputStream())) {
 			zout.setLevel(9);
-			Set<String> names = new HashSet<String>();
+			Set<String> names = new HashSet<>();
 			QPoolService qpoolService = CoreSpringFactory.getImpl(QPoolService.class);
 			for(QuestionItemFull item:items) {
 				qpoolService.exportItem(item, zout, locale, names);
 			}
 		} catch (IOException e) {
 			log.error("", e);
-		} finally {
-			IOUtils.closeQuietly(zout);
 		}
 	}
 

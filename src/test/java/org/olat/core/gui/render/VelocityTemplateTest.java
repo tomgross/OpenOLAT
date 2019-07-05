@@ -33,8 +33,9 @@ import org.apache.velocity.runtime.RuntimeConstants;
 import org.junit.Assert;
 import org.junit.Test;
 import org.olat.core.gui.render.velocity.VelocityModule;
-import org.olat.core.logging.OLog;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
+import org.olat.core.util.io.SystemFileFilter;
 
 /**
  * This test parse all velocity templates and check if they
@@ -44,7 +45,7 @@ import org.olat.core.logging.Tracing;
  *
  */
 public class VelocityTemplateTest {
-	private static final OLog log = Tracing.createLoggerFor(VelocityTemplateTest.class);
+	private static final Logger log = Tracing.createLoggerFor(VelocityTemplateTest.class);
 
 	public static final String MAIN_JAVA = "src/main/java";
 	
@@ -55,7 +56,7 @@ public class VelocityTemplateTest {
 	public void testTemplates() {
 		engine = getEngine();
 		File javaSources = new File(MAIN_JAVA);
-		List<Exception> exs = new ArrayList<Exception>();
+		List<Exception> exs = new ArrayList<>();
 		testTemplates("", javaSources, exs);
 		
 		for(Exception ex:exs) {
@@ -68,13 +69,12 @@ public class VelocityTemplateTest {
 	private void testTemplates(String dir, File file, List<Exception> exs) {
 		String name = file.getName();
 		if("_content".equals(name)) {
-			File[] templates = file.listFiles();
+			File[] templates = file.listFiles(SystemFileFilter.DIRECTORY_FILES);
 			for(File template:templates) {
 				String templateName = template.getName();
 				if(templateName.endsWith(".html")) {
-					try {
+					try(StringWriter writer = new StringWriter()) {
 						String path = dir + templateName;
-						StringWriter writer = new StringWriter();
 						Context context = new VelocityContext();
 						Template veloTemplate = engine.getTemplate(path);
 						veloTemplate.merge(context, writer);
@@ -85,7 +85,7 @@ public class VelocityTemplateTest {
 				}
 			}
 		} else if(file.isDirectory()) {
-			File[] files = file.listFiles();
+			File[] files = file.listFiles(SystemFileFilter.DIRECTORY_FILES);
 			for(File child:files) {
 				String subDir = dir + child.getName() + "/";
 				testTemplates(subDir, child, exs);
@@ -95,19 +95,16 @@ public class VelocityTemplateTest {
 	
 	private VelocityEngine getEngine() {
 		Properties p = new Properties();
-		p.setProperty(RuntimeConstants.RUNTIME_LOG_LOGSYSTEM_CLASS, "org.apache.velocity.runtime.log.SimpleLog4JLogSystem");
-		p.setProperty("runtime.log.logsystem.log4j.category", "syslog");
 		p.setProperty(RuntimeConstants.INPUT_ENCODING, VelocityModule.getInputEncoding());
-		p.setProperty(RuntimeConstants.OUTPUT_ENCODING, VelocityModule.getOutputEncoding());
 
-		p.setProperty(RuntimeConstants.RESOURCE_LOADER, "file, classpath");					
-		p.setProperty("file.resource.loader.class", "org.apache.velocity.runtime.resource.loader.FileResourceLoader");
+		p.setProperty(RuntimeConstants.RESOURCE_LOADERS, "file, classpath");					
+		p.setProperty("resource.loader.file.class", "org.apache.velocity.runtime.resource.loader.FileResourceLoader");
 		p.setProperty(RuntimeConstants.FILE_RESOURCE_LOADER_PATH, MAIN_JAVA);
 		p.setProperty(RuntimeConstants.FILE_RESOURCE_LOADER_CACHE, "false");								
-		p.setProperty("file.resource.loader.modificationCheckInterval", "3");
+		p.setProperty("resource.loader.file.modification_check_interval", "3");
 
-		p.setProperty("classpath.resource.loader.class", "org.apache.velocity.runtime.resource.loader.ClasspathResourceLoader");
-		p.setProperty("classpath.resource.loader.cache", "false");
+		p.setProperty("resource.loader.classpath.class", "org.apache.velocity.runtime.resource.loader.ClasspathResourceLoader");
+		p.setProperty("resource.loader.classpath.cache", "false");
 		
 		p.setProperty(RuntimeConstants.RESOURCE_MANAGER_LOGWHENFOUND, "false");
 		p.setProperty(RuntimeConstants.VM_LIBRARY, "velocity/olat_velocimacros.vm");

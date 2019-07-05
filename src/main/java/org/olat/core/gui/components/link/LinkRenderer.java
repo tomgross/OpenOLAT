@@ -26,13 +26,13 @@
 
 package org.olat.core.gui.components.link;
 
+import java.io.IOException;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-import org.apache.commons.lang.StringEscapeUtils;
 import org.olat.core.gui.components.Component;
 import org.olat.core.gui.components.DefaultComponentRenderer;
-import org.olat.core.gui.components.form.flexible.impl.Form;
+import org.olat.core.gui.components.form.flexible.elements.FormLink;
 import org.olat.core.gui.components.form.flexible.impl.FormJSHelper;
 import org.olat.core.gui.components.form.flexible.impl.NameValuePair;
 import org.olat.core.gui.components.velocity.VelocityContainer;
@@ -42,6 +42,8 @@ import org.olat.core.gui.render.Renderer;
 import org.olat.core.gui.render.StringOutput;
 import org.olat.core.gui.render.URLBuilder;
 import org.olat.core.gui.translator.Translator;
+import org.apache.logging.log4j.Logger;
+import org.olat.core.logging.Tracing;
 import org.olat.core.util.StringHelper;
 
 /**
@@ -50,6 +52,7 @@ import org.olat.core.util.StringHelper;
  *
  */
 public class LinkRenderer extends DefaultComponentRenderer {
+	private static final Logger log = Tracing.createLoggerFor(LinkRenderer.class);
 	private static final Pattern singleQuote = Pattern.compile("\'");
 	private static final Pattern doubleQutoe = Pattern.compile("\"");
 
@@ -60,8 +63,6 @@ public class LinkRenderer extends DefaultComponentRenderer {
 		String command = link.getCommand();
 		AJAXFlags flags = renderer.getGlobalSettings().getAjaxFlags();
 		
-		boolean iframePostEnabled = flags.isIframePostEnabled() && link.isAjaxEnabled() && link.getTarget() == null; // a link may force a non ajax-mode and a custom targ
-
 		int presentation = link.getPresentation();
 		/*
 		 * START && beware! order of this if's are relevant
@@ -77,7 +78,7 @@ public class LinkRenderer extends DefaultComponentRenderer {
 		/*
 		 * END && beware! order of this if's are relevant
 		 */
-		StringBuilder cssSb = new StringBuilder("");
+		StringBuilder cssSb = new StringBuilder(64);
 		cssSb.append("class=\"");
 		if (!link.isEnabled()) {
 			cssSb.append(" o_disabled ");
@@ -152,23 +153,60 @@ public class LinkRenderer extends DefaultComponentRenderer {
 				sb.append("accesskey=\"").append(accessKey).append("\" ");
 			}
 			if (flexiformlink) {
-				//no target if flexi form link! because target is set on 
-				//post action of form
-				Form theForm = (Form)link.getInternalAttachedObject();
-				sb.append("href=\"javascript:")
-				  .append(FormJSHelper.getJSFnCallFor(theForm, elementId, 1))
-				  .append(";\" ");
-				if(link.isForceFlexiDirtyFormWarning()) {
-					sb.append("onclick=\"return o2cl_dirtyCheckOnly();\" ");
+				FormLink flexiLink = link.getFlexiForm();
+				if(flexiLink.isNewWindow()) {
+					String dispatchUri = flexiLink.getFormDispatchId();
+					URLBuilder subu = ubu.createCopyFor(flexiLink.getRootForm().getInitialComponent());
+					try(StringOutput href = new StringOutput()) {
+						subu.buildURI(href, AJAXFlags.MODE_NORMAL,
+								new NameValuePair("dispatchuri", dispatchUri),
+								new NameValuePair("dispatchevent", "2"));
+						sb.append("href=\"javascript:;\" onclick=\"o_openTab('").append(href).append("'); return false;\" ");
+					} catch(IOException e) {
+						log.error("", e);
+					}
+				} else if(flexiLink.isPopup()) {
+					LinkPopupSettings popup = link.getPopup();
+					String dispatchUri = flexiLink.getFormDispatchId();
+					URLBuilder subu = ubu.createCopyFor(flexiLink.getRootForm().getInitialComponent());
+					try(StringOutput href = new StringOutput()) {
+						subu.buildURI(href, AJAXFlags.MODE_NORMAL,
+								new NameValuePair("dispatchuri", dispatchUri),
+								new NameValuePair("dispatchevent", "2"));
+						sb.append("href=\"javascript:;\" onclick=\"o_openPopUp('").append(href).append("','")
+						  .append(popup.getTarget()).append("',").append(popup.getWidth())
+						  .append(",").append(popup.getHeight()).append("); return false;\" ");
+					} catch(IOException e) {
+						log.error("", e);
+					}
+				} else {
+					sb.append("href=\"javascript:")
+					  .append(FormJSHelper.getJSFnCallFor(flexiLink.getRootForm(), elementId, 1))
+					  .append(";\" ");
+					if(link.isForceFlexiDirtyFormWarning()) {
+						sb.append("onclick=\"return o2cl_dirtyCheckOnly();\" ");
+					}
 				}
 			} else if(link.isPopup()) {
-				StringOutput href = new StringOutput();
-				LinkPopupSettings popup = link.getPopup();
-				ubu.buildURI(href, new String[] { VelocityContainer.COMMAND_ID }, new String[] { command }, null, AJAXFlags.MODE_NORMAL);
-				sb.append("href=\"javascript:;\" onclick=\"o_openPopUp('").append(href).append("','")
-				  .append(popup.getTarget()).append("',").append(popup.getWidth())
-				  .append(",").append(popup.getHeight()).append("); return false;\" ");
+				try(StringOutput href = new StringOutput()) {
+					LinkPopupSettings popup = link.getPopup();
+					ubu.buildURI(href, new String[] { VelocityContainer.COMMAND_ID }, new String[] { command }, null, AJAXFlags.MODE_NORMAL);
+					sb.append("href=\"javascript:;\" onclick=\"o_openPopUp('").append(href).append("','")
+					  .append(popup.getTarget()).append("',").append(popup.getWidth())
+					  .append(",").append(popup.getHeight()).append("); return false;\" ");
+				} catch(IOException e) {
+					log.error("", e);
+				}
+			} else if(link.isNewWindow()) {
+				try(StringOutput href = new StringOutput()) {
+					ubu.buildURI(href, new String[] { VelocityContainer.COMMAND_ID }, new String[] { command }, null, AJAXFlags.MODE_NORMAL);
+					sb.append("href=\"javascript:;\" onclick=\"o_openTab('").append(href).append("'); return false;\" ");
+				} catch(IOException e) {
+					log.error("", e);
+				}
 			} else {
+				 // a link may force a non ajax-mode and a custom targ
+				boolean iframePostEnabled = flags.isIframePostEnabled() && link.isAjaxEnabled() && link.getTarget() == null;
 				ubu.buildHrefAndOnclick(sb, null, iframePostEnabled, !link.isSuppressDirtyFormWarning(), true,
 						new NameValuePair(VelocityContainer.COMMAND_ID, command));
 			}
@@ -178,9 +216,9 @@ public class LinkRenderer extends DefaultComponentRenderer {
 				if (!link.isHasTooltip()) {
 					sb.append(" title=\"");
 					if (nontranslated){
-						sb.append(StringEscapeUtils.escapeHtml(title)).append("\"");
+						sb.appendHtmlEscaped(title).append("\"");
 					} else {
-						sb.append(StringEscapeUtils.escapeHtml(translator.translate(title))).append("\"");
+						sb.appendHtmlEscaped(translator.translate(title)).append("\"");
 					}
 				}
 				//tooltips based on the extjs library, see webapp/static/js/ext*
@@ -191,7 +229,7 @@ public class LinkRenderer extends DefaultComponentRenderer {
 					} else {
 						text = translator.translate(title);
 					}
-					sb.append(" title=\"").append(StringEscapeUtils.escapeHtml(text)).append("\"");
+					sb.append(" title=\"").appendHtmlEscaped(text).append("\"");
 				}
 			}
 			sb.append(">");
@@ -201,19 +239,17 @@ public class LinkRenderer extends DefaultComponentRenderer {
 				sb.append("<i class='").append(link.getIconLeftCSS()).append("'");
 				sb.append("></i> "); // one space needed
 			} else if (presentation == Link.LINK_BACK) {
-				sb.append("<i class='o_icon o_icon_back'></i> "); // one space needed				
+				sb.append("<i class='o_icon o_icon_back'> </i> "); // one space needed				
 			}
 			
 			sb.append("<span>"); // inner wrapper for layouting
 			if (customDisplayText != null) {
-				//link is nontranslated but has custom text
+				//link is not translated but has custom text
 				sb.append(customDisplayText);
 			}	else if (nontranslated) {
 				if (i18n != null) {
 					// link name is not a i18n key
 					sb.append(i18n);
-				} else {
-					sb.append("");
 				}
 			} else {
 				// use translator
@@ -245,8 +281,7 @@ public class LinkRenderer extends DefaultComponentRenderer {
 			       .append(" });});");
 			}
 			/**
-			 * TODO:gs:b may be usefull as well
-			 * this binds the event to the function call as argument, usefull if event is needed
+			 * this binds the event to the function call as argument, useful if event is needed
 			 * Event.observe("id", "click", functionName.bindAsEventListener(this));
 			 */
 			if(link.getJavascriptHandlerFunction() != null) {
@@ -262,7 +297,7 @@ public class LinkRenderer extends DefaultComponentRenderer {
 		} else {
 			String text;
 			if (customDisplayText != null) {
-				//link is nontranslated but has custom text
+				//link is not translated but has custom text
 				text = customDisplayText;
 			}	else if (nontranslated) {
 				// link name is not a i18n key

@@ -19,7 +19,7 @@
  */
 package org.olat.course.certificate.restapi;
 
-import static org.olat.restapi.security.RestSecurityHelper.isAdmin;
+import static org.olat.restapi.security.RestSecurityHelper.getRoles;
 
 import java.io.File;
 import java.util.Date;
@@ -42,9 +42,10 @@ import javax.ws.rs.core.Response;
 import javax.ws.rs.core.Response.Status;
 
 import org.olat.basesecurity.BaseSecurity;
-import org.olat.core.CoreSpringFactory;
+import org.olat.basesecurity.OrganisationRoles;
 import org.olat.core.id.Identity;
 import org.olat.core.id.OLATResourceable;
+import org.olat.core.id.Roles;
 import org.olat.core.util.StringHelper;
 import org.olat.core.util.resource.OresHelper;
 import org.olat.core.util.vfs.VFSLeaf;
@@ -53,12 +54,15 @@ import org.olat.course.ICourse;
 import org.olat.course.certificate.Certificate;
 import org.olat.course.certificate.CertificateTemplate;
 import org.olat.course.certificate.CertificatesManager;
+import org.olat.course.certificate.model.CertificateConfig;
 import org.olat.course.certificate.model.CertificateInfos;
 import org.olat.repository.RepositoryEntry;
 import org.olat.resource.OLATResource;
 import org.olat.resource.OLATResourceManager;
 import org.olat.restapi.support.MultipartReader;
 import org.olat.restapi.support.ObjectFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Component;
 
 /**
  * 
@@ -66,29 +70,31 @@ import org.olat.restapi.support.ObjectFactory;
  * @author srosse, stephane.rosse@frentix.com, http://www.frentix.com
  *
  */
+@Component
 @Path("repo/courses/{resourceKey}/certificates")
 public class CertificationWebService {
 	
+	@Autowired
+	private BaseSecurity securityManager;
+	@Autowired
+	private CertificatesManager certificatesManager;
+	@Autowired
+	private OLATResourceManager resourceManager;
 	
 	@HEAD
 	@Path("{identityKey}")
 	@Produces({"application/pdf"})
 	public Response getCertificateInfo(@PathParam("identityKey") Long identityKey, @PathParam("resourceKey") Long resourceKey,
 			@Context HttpServletRequest request) {
-		if(!isAdmin(request)) {
-			return Response.serverError().status(Status.UNAUTHORIZED).build();
-		}
-
-		CertificatesManager certificatesManager = CoreSpringFactory.getImpl(CertificatesManager.class);
-		BaseSecurity baseSecurity = CoreSpringFactory.getImpl(BaseSecurity.class);
-
-		Identity identity = baseSecurity.loadIdentityByKey(identityKey);
+		Identity identity = securityManager.loadIdentityByKey(identityKey);
 		if(identity == null) {
 			return Response.serverError().status(Response.Status.NOT_FOUND).build();
 		}
+		if(!isAdminOf(identity, request)) {
+			return Response.serverError().status(Status.UNAUTHORIZED).build();
+		}
 		
 		OLATResourceable courseOres = OresHelper.createOLATResourceableInstance("CourseModule", resourceKey);
-		OLATResourceManager resourceManager = CoreSpringFactory.getImpl(OLATResourceManager.class);
 		OLATResource resource = resourceManager.findResourceable(courseOres);
 		if(resource == null) {
 			resource = resourceManager.findResourceById(resourceKey);
@@ -126,17 +132,14 @@ public class CertificationWebService {
 	@Produces({"application/pdf"})
 	public Response getCertificate(@PathParam("identityKey") Long identityKey, @PathParam("resourceKey") Long resourceKey,
 			@Context HttpServletRequest request) {
-		if(!isAdmin(request)) {
-			return Response.serverError().status(Status.UNAUTHORIZED).build();
-		}
-
-		CertificatesManager certificatesManager = CoreSpringFactory.getImpl(CertificatesManager.class);
-		BaseSecurity baseSecurity = CoreSpringFactory.getImpl(BaseSecurity.class);
-
-		Identity identity = baseSecurity.loadIdentityByKey(identityKey);
+		Identity identity = securityManager.loadIdentityByKey(identityKey);
 		if(identity == null) {
 			return Response.serverError().status(Response.Status.NOT_FOUND).build();
 		}
+		if(!isAdminOf(identity, request)) {
+			return Response.serverError().status(Status.UNAUTHORIZED).build();
+		}
+		
 		Certificate certificate = certificatesManager.getLastCertificate(identity, resourceKey);
 		if(certificate == null) {
 			return Response.serverError().status(Response.Status.NOT_FOUND).build();
@@ -153,20 +156,15 @@ public class CertificationWebService {
 	@Path("{identityKey}")
 	public Response deleteCertificateInfo(@PathParam("identityKey") Long identityKey, @PathParam("resourceKey") Long resourceKey,
 			@Context HttpServletRequest request) {
-		if(!isAdmin(request)) {
-			return Response.serverError().status(Status.UNAUTHORIZED).build();
-		}
-
-		CertificatesManager certificatesManager = CoreSpringFactory.getImpl(CertificatesManager.class);
-		BaseSecurity baseSecurity = CoreSpringFactory.getImpl(BaseSecurity.class);
-
-		Identity identity = baseSecurity.loadIdentityByKey(identityKey);
+		Identity identity = securityManager.loadIdentityByKey(identityKey);
 		if(identity == null) {
 			return Response.serverError().status(Response.Status.NOT_FOUND).build();
 		}
+		if(!isAdminOf(identity, request)) {
+			return Response.serverError().status(Status.UNAUTHORIZED).build();
+		}
 		
 		OLATResourceable courseOres = OresHelper.createOLATResourceableInstance("CourseModule", resourceKey);
-		OLATResourceManager resourceManager = CoreSpringFactory.getImpl(OLATResourceManager.class);
 		OLATResource resource = resourceManager.findResourceable(courseOres);
 		if(resource == null) {
 			resource = resourceManager.findResourceById(resourceKey);
@@ -205,18 +203,14 @@ public class CertificationWebService {
 			@QueryParam("score") Float score, @QueryParam("passed") Boolean passed,
 			@QueryParam("creationDate") String creationDate,
 			@Context HttpServletRequest request) {
-		
-		if(!isAdmin(request)) {
-			return Response.serverError().status(Status.UNAUTHORIZED).build();
-		}
-
-		BaseSecurity baseSecurity = CoreSpringFactory.getImpl(BaseSecurity.class);
-		Identity assessedIdentity = baseSecurity.loadIdentityByKey(identityKey);
+		Identity assessedIdentity = securityManager.loadIdentityByKey(identityKey);
 		if(assessedIdentity == null) {
 			return Response.serverError().status(Response.Status.NOT_FOUND).build();
 		}
+		if(!isAdminOf(assessedIdentity, request)) {
+			return Response.serverError().status(Status.UNAUTHORIZED).build();
+		}
 
-		OLATResourceManager resourceManager = CoreSpringFactory.getImpl(OLATResourceManager.class);
 		OLATResource resource = resourceManager.findResourceById(resourceKey);
 		if(resource == null) {
 			resource = resourceManager.findResourceable(resourceKey, "CourseModule");
@@ -224,29 +218,35 @@ public class CertificationWebService {
 		
 		if(resource == null) {	
 			return Response.serverError().status(Response.Status.NOT_FOUND).build();
-		} else {
-			CertificatesManager certificatesManager = CoreSpringFactory.getImpl(CertificatesManager.class);
-			
-			ICourse course = CourseFactory.loadCourse(resource);
-			RepositoryEntry entry = course.getCourseEnvironment().getCourseGroupManager().getCourseEntry();
+		}
+		
+		ICourse course = CourseFactory.loadCourse(resource);
+		RepositoryEntry entry = course.getCourseEnvironment().getCourseGroupManager().getCourseEntry();
 
-			CertificateTemplate template = null;
-			Long templateId = course.getCourseConfig().getCertificateTemplate();
-			if(templateId != null) {
-				template = certificatesManager.getTemplateById(templateId);
-			}
-			
-			CertificateInfos certificateInfos = new CertificateInfos(assessedIdentity, score, passed);
-			if(StringHelper.containsNonWhitespace(creationDate)) {
-				Date date = ObjectFactory.parseDate(creationDate);
-				certificateInfos.setCreationDate(date);
-			}
-			Certificate certificate = certificatesManager.generateCertificate(certificateInfos, entry, template, false);
-			if(certificate != null) {
-				return Response.ok().build();
-			}
-			return Response.serverError().status(Response.Status.INTERNAL_SERVER_ERROR).build();
-		}	
+		CertificateTemplate template = null;
+		Long templateId = course.getCourseConfig().getCertificateTemplate();
+		if(templateId != null) {
+			template = certificatesManager.getTemplateById(templateId);
+		}
+		
+		CertificateInfos certificateInfos = new CertificateInfos(assessedIdentity, score, passed);
+		if(StringHelper.containsNonWhitespace(creationDate)) {
+			Date date = ObjectFactory.parseDate(creationDate);
+			certificateInfos.setCreationDate(date);
+		}
+		CertificateConfig config = CertificateConfig.builder()
+				.withCustom1(course.getCourseConfig().getCertificateCustom1())
+				.withCustom2(course.getCourseConfig().getCertificateCustom2())
+				.withCustom3(course.getCourseConfig().getCertificateCustom3())
+				.withSendEmailBcc(false)
+				.withSendEmailLinemanager(false)
+				.withSendEmailIdentityRelations(false)
+				.build();
+		Certificate certificate = certificatesManager.generateCertificate(certificateInfos, entry, template, config);
+		if(certificate != null) {
+			return Response.ok().build();
+		}
+		return Response.serverError().status(Response.Status.INTERNAL_SERVER_ERROR).build();
 	}
 
 	/**
@@ -265,11 +265,6 @@ public class CertificationWebService {
 	@Consumes(MediaType.MULTIPART_FORM_DATA)
 	public Response postCertificate(@PathParam("identityKey") Long identityKey, @PathParam("resourceKey") Long resourceKey,
 			@Context HttpServletRequest request) {
-		
-		if(!isAdmin(request)) {
-			return Response.serverError().status(Status.UNAUTHORIZED).build();
-		}
-
 		MultipartReader partsReader = null;
 		try {
 			partsReader = new MultipartReader(request);
@@ -281,26 +276,34 @@ public class CertificationWebService {
 				creationDate = ObjectFactory.parseDate(creationDateStr);
 			}
 
-			CertificatesManager certificatesManager = CoreSpringFactory.getImpl(CertificatesManager.class);
-			BaseSecurity baseSecurity = CoreSpringFactory.getImpl(BaseSecurity.class);
-			Identity assessedIdentity = baseSecurity.loadIdentityByKey(identityKey);
+			Identity assessedIdentity = securityManager.loadIdentityByKey(identityKey);
 			if(assessedIdentity == null) {
 				return Response.serverError().status(Response.Status.NOT_FOUND).build();
 			}
-
-			OLATResourceManager resourceManager = CoreSpringFactory.getImpl(OLATResourceManager.class);
+			if(!isAdminOf(assessedIdentity, request)) {
+				return Response.serverError().status(Status.UNAUTHORIZED).build();
+			}
+			
 			OLATResource resource = resourceManager.findResourceById(resourceKey);
 			if(resource == null) {
 				certificatesManager.uploadStandaloneCertificate(assessedIdentity, creationDate, courseTitle, resourceKey, tmpFile);
 			} else {
 				certificatesManager.uploadCertificate(assessedIdentity, creationDate, resource, tmpFile);
 			}
-
 			return Response.ok().build();
 		} catch (Throwable e) {
 			throw new WebApplicationException(e);
 		}	finally {
 			MultipartReader.closeQuietly(partsReader);
 		}
+	}
+	
+	private boolean isAdminOf(Identity assessedIdentity, HttpServletRequest httpRequest) {
+		Roles managerRoles = getRoles(httpRequest);
+		if(!managerRoles.isUserManager() && !managerRoles.isRolesManager() && !managerRoles.isAdministrator()) {
+			return false;
+		}
+		Roles identityRoles = securityManager.getRoles(assessedIdentity);
+		return managerRoles.isManagerOf(OrganisationRoles.administrator, identityRoles);
 	}
 }

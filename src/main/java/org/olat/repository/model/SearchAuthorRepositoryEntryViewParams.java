@@ -21,6 +21,7 @@ package org.olat.repository.model;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 
 import org.olat.basesecurity.IdentityRef;
 import org.olat.core.id.Roles;
@@ -36,8 +37,10 @@ public class SearchAuthorRepositoryEntryViewParams {
 	private final Roles roles;
 	
 	private Boolean marked;
+	private Boolean closed;
 	private boolean deleted = false;
 	private boolean ownedResourcesOnly;
+	private ResourceUsage resourceUsage = ResourceUsage.all;
 	
 	private String idAndRefs;
 	private String idRefsAndTitle;
@@ -48,7 +51,7 @@ public class SearchAuthorRepositoryEntryViewParams {
 	private OrderBy orderBy;
 	private boolean orderByAsc;
 	private List<String> resourceTypes;
-	private List<Long> repoEntryKeys;
+	private Set<Long> licenseTypeKeys;
 	
 	public SearchAuthorRepositoryEntryViewParams(IdentityRef identity, Roles roles) {
 		this.identity = identity;
@@ -103,14 +106,6 @@ public class SearchAuthorRepositoryEntryViewParams {
 		this.description = description;
 	}
 
-	public List<Long> getRepoEntryKeys() {
-		return repoEntryKeys;
-	}
-
-	public void setRepoEntryKeys(List<Long> repoEntryKeys) {
-		this.repoEntryKeys = repoEntryKeys;
-	}
-
 	public OrderBy getOrderBy() {
 		return orderBy;
 	}
@@ -128,7 +123,7 @@ public class SearchAuthorRepositoryEntryViewParams {
 	}
 
 	public boolean isResourceTypesDefined() {
-		return resourceTypes != null && resourceTypes.size() > 0;
+		return resourceTypes != null && !resourceTypes.isEmpty();
 	}
 
 	public List<String> getResourceTypes() {
@@ -141,7 +136,7 @@ public class SearchAuthorRepositoryEntryViewParams {
 	
 	public void addResourceTypes(String... types) {
 		if(this.resourceTypes == null) {
-			this.resourceTypes = new ArrayList<String>();
+			this.resourceTypes = new ArrayList<>();
 		}
 		if(types != null) {
 			for(String resourceType:types) {
@@ -174,6 +169,34 @@ public class SearchAuthorRepositoryEntryViewParams {
 		this.marked = marked;
 	}
 	
+	public ResourceUsage getResourceUsage() {
+		return resourceUsage;
+	}
+
+	public void setResourceUsage(ResourceUsage resourceUsage) {
+		this.resourceUsage = resourceUsage;
+	}
+
+	public Boolean getClosed() {
+		return closed;
+	}
+
+	public void setClosed(Boolean closed) {
+		this.closed = closed;
+	}
+	
+	public boolean isLicenseTypeDefined() {
+		return licenseTypeKeys != null && !licenseTypeKeys.isEmpty();
+	}
+ 
+	public Set<Long> getLicenseTypeKeys() {
+		return licenseTypeKeys;
+	}
+
+	public void setLicenseTypeKeys(Set<Long> licenseTypeKeys) {
+		this.licenseTypeKeys = licenseTypeKeys;
+	}
+
 	public enum OrderBy {
 		key,
 		favorit,
@@ -181,6 +204,7 @@ public class SearchAuthorRepositoryEntryViewParams {
 		displayname,
 		authors,
 		author,
+		license,
 		location,
 		access,
 		ac,
@@ -192,7 +216,16 @@ public class SearchAuthorRepositoryEntryViewParams {
 		lifecycleSoftkey,
 		lifecycleStart,
 		lifecycleEnd,
+		references,
 		deletionDate,
-		deletedBy
+		deletedBy,
+		lectureEnabled,
+		guests
+	}
+	
+	public enum ResourceUsage {
+		all,
+		used,
+		notUsed
 	}
 }

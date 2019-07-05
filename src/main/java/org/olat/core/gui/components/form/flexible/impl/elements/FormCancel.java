@@ -141,11 +141,19 @@ public class FormCancel extends FormItemImpl implements Disposable, Cancel {
 		cancelLink.setCustomEnabledLinkCSS(customEnabledLinkCSS);
 	}
 
+	@Override
+	public void setElementCssClass(String elementCssClass) {
+		if(cancelLink != null) {
+			cancelLink.setElementCssClass(elementCssClass);
+		}
+		super.setElementCssClass(elementCssClass);
+	}
+
 	/**
 	 * @see org.olat.core.gui.components.form.flexible.elements.Cancel#setI18nKey(java.lang.String)
 	 */
 	public void setI18nKey(String i18n) {
-		cancelLink.setTitle(i18n);
+		cancelLink.setCustomDisplayText(translator.translate(i18n));
 	}
 
 	/**

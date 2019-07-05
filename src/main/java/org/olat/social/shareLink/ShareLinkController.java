@@ -23,7 +23,6 @@ package org.olat.social.shareLink;
 
 import java.util.List;
 
-import org.olat.core.CoreSpringFactory;
 import org.olat.core.gui.UserRequest;
 import org.olat.core.gui.WindowManager;
 import org.olat.core.gui.components.Component;
@@ -37,8 +36,10 @@ import org.olat.core.id.context.BusinessControlFactory;
 import org.olat.core.id.context.ContextEntry;
 import org.olat.core.id.context.HistoryPoint;
 import org.olat.core.util.StringHelper;
+import org.olat.core.util.UserSession;
 import org.olat.core.util.prefs.Preferences;
 import org.olat.social.SocialModule;
+import org.springframework.beans.factory.annotation.Autowired;
 
 /**
  * <h3>Description:</h3>
@@ -58,9 +59,11 @@ import org.olat.social.SocialModule;
  * 
  * @author Florian Gnaegi, frentix GmbH, http://www.frentix.com
  */
-
 public class ShareLinkController extends BasicController {
 	private final VelocityContainer shareLinkVC;
+	
+	@Autowired
+	private SocialModule socialModule;
 	
 	/**
 	 * Standard constructor for the share link controller
@@ -74,17 +77,18 @@ public class ShareLinkController extends BasicController {
 		// Add the OpenOLAT base URL from the config
 		shareLinkVC.contextPut("baseURL", Settings.getServerContextPathURI());
 		// Load configured share link buttons from the SocialModule configuration
-		SocialModule socialModule = (SocialModule) CoreSpringFactory.getBean("socialModule");
 		shareLinkVC.contextPut("shareLinks", socialModule.getEnabledShareLinkButtons());
 		// Tell if user is logged in
-		shareLinkVC.contextPut("isUser", ureq.getUserSession().isAuthenticated() && !ureq.getUserSession().getRoles().isGuestOnly());
+		UserSession usess = ureq.getUserSession();
+		shareLinkVC.contextPut("isUser", usess.isAuthenticated() && !usess.getRoles().isGuestOnly());
 		putInitialPanel(shareLinkVC);
 	}
 
 	@Override
 	protected void event(UserRequest ureq, Component source, Event event) {
-		if (source == shareLinkVC && event.getCommand().equals("setLandingPage") && ureq.getUserSession().isAuthenticated()) {
-			HistoryPoint p = ureq.getUserSession().getLastHistoryPoint();
+		UserSession usess = ureq.getUserSession();
+		if (source == shareLinkVC && "setLandingPage".equals(event.getCommand()) && usess != null && usess.isAuthenticated()) {
+			HistoryPoint p = usess.getLastHistoryPoint();
 			if(p != null && StringHelper.containsNonWhitespace(p.getBusinessPath())) {
 				List<ContextEntry> ces = p.getEntries();
 				String landingPage = BusinessControlFactory.getInstance().getAsURIString(ces, true);
@@ -94,7 +98,7 @@ public class ShareLinkController extends BasicController {
 					landingPage = landingPage.substring(start + 4);
 				}
 				// update user prefs
-				Preferences prefs = ureq.getUserSession().getGuiPreferences();
+				Preferences prefs = usess.getGuiPreferences();
 				prefs.put(WindowManager.class, "landing-page", landingPage);				
 				prefs.save();
 				getWindowControl().getWindowBackOffice().sendCommandTo(new JSCommand("showInfoBox(\"" + translate("info.header") + "\",\"" + translate("landingpage.set.message") + "\");"));

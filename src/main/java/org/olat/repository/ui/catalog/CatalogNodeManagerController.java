@@ -28,7 +28,6 @@ import org.olat.NewControllerFactory;
 import org.olat.admin.securitygroup.gui.GroupController;
 import org.olat.admin.securitygroup.gui.IdentitiesAddEvent;
 import org.olat.admin.securitygroup.gui.IdentitiesRemoveEvent;
-import org.olat.basesecurity.BaseSecurity;
 import org.olat.basesecurity.SecurityGroup;
 import org.olat.core.dispatcher.mapper.MapperService;
 import org.olat.core.dispatcher.mapper.manager.MapperKey;
@@ -62,6 +61,7 @@ import org.olat.core.gui.control.generic.modal.DialogBoxUIFactory;
 import org.olat.core.helpers.Settings;
 import org.olat.core.id.Identity;
 import org.olat.core.id.OLATResourceable;
+import org.olat.core.id.Roles;
 import org.olat.core.id.context.BusinessControlFactory;
 import org.olat.core.id.context.ContextEntry;
 import org.olat.core.id.context.StateEntry;
@@ -80,6 +80,7 @@ import org.olat.repository.CatalogEntry;
 import org.olat.repository.CatalogEntry.Style;
 import org.olat.repository.RepositoryEntry;
 import org.olat.repository.RepositoryEntryRef;
+import org.olat.repository.RepositoryEntryStatusEnum;
 import org.olat.repository.RepositoryManager;
 import org.olat.repository.RepositoryModule;
 import org.olat.repository.RepositoryService;
@@ -142,7 +143,7 @@ public class CatalogNodeManagerController extends FormBasicController implements
 
 	private final boolean isGuest;
 	private final boolean isAuthor;
-	private final boolean isOLATAdmin;
+	private final boolean isAdministrator;
 	private final boolean isLocalTreeAdmin;
 	
 	private CatalogEntry catalogEntry;
@@ -162,8 +163,6 @@ public class CatalogNodeManagerController extends FormBasicController implements
 	@Autowired
 	private CatalogManager catalogManager;
 	@Autowired
-	private BaseSecurity securityManager;
-	@Autowired
 	private RepositoryManager repositoryManager;
 	
 	public CatalogNodeManagerController(UserRequest ureq, WindowControl wControl, WindowControl rootwControl,
@@ -176,15 +175,15 @@ public class CatalogNodeManagerController extends FormBasicController implements
 		this.rootwControl = rootwControl;
 		mapperThumbnailKey = mapperService.register(null, "catalogentryImage", new CatalogEntryImageMapper());
 		
-		isAuthor = ureq.getUserSession().getRoles().isAuthor();
-		isGuest = ureq.getUserSession().getRoles().isGuestOnly();
-		isOLATAdmin = ureq.getUserSession().getRoles().isOLATAdmin();
+		Roles roles = ureq.getUserSession().getRoles();
+		isAuthor = roles.isAuthor();
+		isGuest = roles.isGuestOnly();
+		isAdministrator = roles.isAdministrator() || roles.isLearnResourceManager();
 		
-		if(isOLATAdmin) {
+		if(isAdministrator) {
 			isLocalTreeAdmin = false;
 		} else {
-			isLocalTreeAdmin = localTreeAdmin || securityManager
-					.isIdentityInSecurityGroup(ureq.getIdentity(), catalogEntry.getOwnerGroup());
+			isLocalTreeAdmin = localTreeAdmin || catalogManager.isOwner(catalogEntry, getIdentity());
 		}
 
 		initForm(ureq);
@@ -252,7 +251,7 @@ public class CatalogNodeManagerController extends FormBasicController implements
 		columnsModel.addFlexiColumnModel(new DefaultFlexiColumnModel(true, Cols.lifecycleEnd.i18nKey(), Cols.lifecycleEnd.ordinal(),
 				true, OrderBy.lifecycleEnd.name(), FlexiColumnModel.ALIGNMENT_LEFT, new DateFlexiCellRenderer(getLocale())));
 		columnsModel.addFlexiColumnModel(new DefaultFlexiColumnModel(true, Cols.access.i18nKey(), Cols.access.ordinal(),
-				true, OrderBy.access.name(), FlexiColumnModel.ALIGNMENT_LEFT, new AccessRenderer()));
+				true, OrderBy.access.name(), FlexiColumnModel.ALIGNMENT_LEFT, new AccessRenderer(getLocale())));
 		columnsModel.addFlexiColumnModel(new DefaultFlexiColumnModel(true, Cols.ac.i18nKey(), Cols.ac.ordinal(),
 				true, OrderBy.ac.name(), FlexiColumnModel.ALIGNMENT_LEFT, new ACRenderer()));
 		columnsModel.addFlexiColumnModel(new DefaultFlexiColumnModel(false, Cols.creationDate.i18nKey(), Cols.creationDate.ordinal(),
@@ -296,11 +295,9 @@ public class CatalogNodeManagerController extends FormBasicController implements
 		List<CatalogEntryRow> closedItems = new ArrayList<>();
 		for(RepositoryEntry entry:repoEntries) {
 			CatalogEntryRow row = new CatalogEntryRow(entry);
-			List<PriceMethod> types = new ArrayList<PriceMethod>();
-			if (entry.isMembersOnly()) {
-				// members only always show lock icon
-				types.add(new PriceMethod("", "o_ac_membersonly_icon", translate("cif.access.membersonly.short")));
-			} else {
+			List<PriceMethod> types = new ArrayList<>(3);
+			
+			if(entry.isBookable()) {
 				// collect access control method icons
 				OLATResource resource = entry.getOlatResource();
 				for(OLATResourceAccess resourceAccess:resourcesWithOffer) {
@@ -314,13 +311,16 @@ public class CatalogNodeManagerController extends FormBasicController implements
 						}
 					}
 				}
-			}
+			} else if (!entry.isAllUsers() && !entry.isGuests()) {
+				// members only always show lock icon
+				types.add(new PriceMethod("", "o_ac_membersonly_icon", translate("cif.access.membersonly.short")));
+			} 
 			
 			if(!types.isEmpty()) {
 				row.setAccessTypes(types);
 			}
 			
-			if(entry.getRepositoryEntryStatus().isClosed()) {
+			if(entry.getEntryStatus() == RepositoryEntryStatusEnum.closed) {
 				closedItems.add(row);
 			} else {
 				items.add(row);
@@ -366,9 +366,9 @@ public class CatalogNodeManagerController extends FormBasicController implements
 	}
 	
 	protected void initToolbar() {
-		boolean canAddLinks = isOLATAdmin || isAuthor; // author is allowed to add!
-		boolean canAdministrateCategory = isOLATAdmin || isLocalTreeAdmin;
-		boolean canAddSubCategories = isOLATAdmin || isLocalTreeAdmin;
+		boolean canAddLinks = isAdministrator || isAuthor; // author is allowed to add!
+		boolean canAdministrateCategory = isAdministrator || isLocalTreeAdmin;
+		boolean canAddSubCategories = isAdministrator || isLocalTreeAdmin;
 	
 		if (canAdministrateCategory || canAddLinks) {
 			if (canAdministrateCategory) {
@@ -399,7 +399,7 @@ public class CatalogNodeManagerController extends FormBasicController implements
 			}
 		}
 
-		if(isOLATAdmin || isLocalTreeAdmin || isAuthor) {
+		if(isAdministrator || isLocalTreeAdmin || isAuthor) {
 			if (canAddSubCategories) {
 				addCategoryLink = LinkFactory.createToolLink("addResource", translate("tools.add.catalog.category"), this, "o_icon_catalog_sub");
 				addCategoryLink.setElementCssClass("o_sel_catalog_add_category");
@@ -680,10 +680,10 @@ public class CatalogNodeManagerController extends FormBasicController implements
 		removeAsListenerAndDispose(entrySearchCtrl);
 		removeAsListenerAndDispose(cmc);
 		
-		entrySearchCtrl = new RepositorySearchController(translate("choose"), ureq, getWindowControl(), true, false, new String[0], null);
+		entrySearchCtrl = new RepositorySearchController(translate("choose"), ureq, getWindowControl(), true, false, new String[0], false, null);
 		listenTo(entrySearchCtrl);
 		// OLAT-Admin has search form
-		if (ureq.getUserSession().getRoles().isOLATAdmin()) {
+		if (isAdministrator) {
 			entrySearchCtrl.displaySearchForm();
 		}
 		// an Author gets the list of his repository
@@ -703,7 +703,6 @@ public class CatalogNodeManagerController extends FormBasicController implements
 		newLinkNotPersistedYet.setDescription(selectedEntry.getDescription());
 		newLinkNotPersistedYet.setRepositoryEntry(selectedEntry);
 		newLinkNotPersistedYet.setType(CatalogEntry.TYPE_LEAF);
-		newLinkNotPersistedYet.setOwnerGroup(securityManager.createAndPersistSecurityGroup());
 		catalogManager.addCatalogEntry(catalogEntry, newLinkNotPersistedYet);
 		loadResources(ureq);
 	}
@@ -804,13 +803,6 @@ public class CatalogNodeManagerController extends FormBasicController implements
 		
 		// add ownership management
 		SecurityGroup secGroup = catalogEntry.getOwnerGroup();
-		if (secGroup == null) {
-			catalogEntry = catalogManager.loadCatalogEntry(catalogEntry);
-			secGroup = securityManager.createAndPersistSecurityGroup();
-			catalogEntry.setOwnerGroup(secGroup);
-			catalogEntry = catalogManager.saveCatalogEntry(catalogEntry);
-		}
-
 		groupCtrl = new GroupController(ureq, getWindowControl(), true, false, false, false, false, false, secGroup);
 		listenTo(groupCtrl);
 		
@@ -826,16 +818,15 @@ public class CatalogNodeManagerController extends FormBasicController implements
 			IdentitiesAddEvent identitiesAddedEvent = (IdentitiesAddEvent) event;
 			List<Identity> list = identitiesAddedEvent.getAddIdentities();
 	        for (Identity identity : list) {
-	        	if (!securityManager.isIdentityInSecurityGroup(identity, catalogEntry.getOwnerGroup())) {
-	        		securityManager.addIdentityToSecurityGroup(identity, catalogEntry.getOwnerGroup());
-	        		identitiesAddedEvent.getAddedIdentities().add(identity);
-	        	}
+				if(catalogManager.addOwner(catalogEntry, identity)) {
+					identitiesAddedEvent.getAddedIdentities().add(identity);
+				}
 	        }
 		} else if (event instanceof IdentitiesRemoveEvent) {
 			IdentitiesRemoveEvent identitiesRemoveEvent = (IdentitiesRemoveEvent) event;
 			List<Identity> list = identitiesRemoveEvent.getRemovedIdentities();
 			for (Identity identity : list) {
-				securityManager.removeIdentityFromSecurityGroup(identity, catalogEntry.getOwnerGroup());
+				catalogManager.removeOwner(catalogEntry, identity);
 			}		
 		}
 	}
@@ -845,13 +836,12 @@ public class CatalogNodeManagerController extends FormBasicController implements
 		removeAsListenerAndDispose(contactCtrl);
 
 		ContactList caretaker = new ContactList(translate("contact.to.groupname.caretaker"));
-		List<Identity> owners = new ArrayList<Identity>();
+		List<Identity> owners = new ArrayList<>();
 		
 		CatalogEntry parent = catalogEntry;
 		while(parent != null && owners.isEmpty()) {
-			SecurityGroup parentOwner = parent.getOwnerGroup();
-			if (parentOwner != null) {
-				owners = securityManager.getIdentitiesOfSecurityGroup(parentOwner);
+			if (parent.getOwnerGroup() != null) {
+				owners = catalogManager.getOwners(parent);
 			}
 			parent = parent.getParent();			
 		}
@@ -863,7 +853,7 @@ public class CatalogNodeManagerController extends FormBasicController implements
 		//create e-mail Message
 		ContactMessage cmsg = new ContactMessage(ureq.getIdentity());
 		cmsg.addEmailTo(caretaker);
-		contactCtrl = new ContactFormController(ureq, getWindowControl(), true, false, false, cmsg);
+		contactCtrl = new ContactFormController(ureq, getWindowControl(), true, false, false, cmsg, null);
 		listenTo(contactCtrl);
 		
 		// open form in dialog

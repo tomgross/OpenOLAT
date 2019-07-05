@@ -1,4 +1,5 @@
 /**
+
  * <a href="http://www.openolat.org">
  * OpenOLAT - Online Learning and Training</a><br>
  * <p>
@@ -43,6 +44,9 @@ import org.olat.core.id.context.BusinessControlFactory;
 import org.olat.core.util.Formatter;
 import org.olat.core.util.StringHelper;
 import org.olat.core.util.Util;
+import org.olat.modules.ceditor.PageElement;
+import org.olat.modules.ceditor.PageElementAddController;
+import org.olat.modules.ceditor.ui.AddElementInfos;
 import org.olat.modules.portfolio.Category;
 import org.olat.modules.portfolio.CitationSourceType;
 import org.olat.modules.portfolio.Media;
@@ -52,9 +56,6 @@ import org.olat.modules.portfolio.manager.MetadataXStream;
 import org.olat.modules.portfolio.model.CitationXml;
 import org.olat.modules.portfolio.model.MediaPart;
 import org.olat.modules.portfolio.ui.PortfolioHomeController;
-import org.olat.modules.portfolio.ui.editor.AddElementInfos;
-import org.olat.modules.portfolio.ui.editor.PageElement;
-import org.olat.modules.portfolio.ui.editor.PageElementAddController;
 import org.springframework.beans.factory.annotation.Autowired;
 
 /**
@@ -111,6 +112,10 @@ public class CollectCitationMediaController extends FormBasicController implemen
 		setTranslator(Util.createPackageTranslator(PortfolioHomeController.class, getLocale(), getTranslator()));
 		businessPath = media.getBusinessPath();
 		mediaReference = media;
+		
+		if(StringHelper.containsNonWhitespace(mediaReference.getMetadataXml())) {
+			citation = (CitationXml)MetadataXStream.get().fromXML(mediaReference.getMetadataXml());
+		}
 		
 		List<Category> categoryList = portfolioService.getCategories(media);
 		for(Category category:categoryList) {
@@ -281,9 +286,15 @@ public class CollectCitationMediaController extends FormBasicController implemen
 	
 	@Override
 	protected boolean validateFormLogic(UserRequest ureq) {
-		boolean allOk = true;
+		boolean allOk = super.validateFormLogic(ureq);
+		
+		titleEl.clearError();
+		if (titleEl.isEmpty()) {
+			titleEl.setErrorKey("form.legende.mandatory", null);
+			allOk &= false;
+		}
 
-		return allOk & super.validateFormLogic(ureq);
+		return allOk;
 	}
 
 	@Override

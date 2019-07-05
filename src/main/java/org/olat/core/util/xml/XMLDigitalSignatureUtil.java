@@ -74,7 +74,7 @@ import javax.xml.transform.TransformerFactoryConfigurationError;
 import javax.xml.transform.dom.DOMSource;
 import javax.xml.transform.stream.StreamResult;
 
-import org.olat.core.logging.OLog;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.StringHelper;
 import org.w3c.dom.Document;
@@ -92,7 +92,7 @@ import org.xml.sax.SAXException;
  */
 public class XMLDigitalSignatureUtil {
 	
-	private static final OLog log = Tracing.createLoggerFor(XMLDigitalSignatureUtil.class);
+	private static final Logger log = Tracing.createLoggerFor(XMLDigitalSignatureUtil.class);
 	
 	/**
 	 * Validate a XML file with a XML Digital Signature saved in an extenral file.
@@ -336,7 +336,7 @@ public class XMLDigitalSignatureUtil {
         KeyInfoFactory kif = sigFactory.getKeyInfoFactory();
         X509Data xd = kif.newX509Data(Collections.singletonList(x509Cert));
         
-        List<Object> keyInfoList = new ArrayList<>();
+        List<XMLStructure> keyInfoList = new ArrayList<>();
         if(StringHelper.containsNonWhitespace(keyName)) {
             keyInfoList.add(kif.newKeyName(keyName));
         }
@@ -461,18 +461,18 @@ public class XMLDigitalSignatureUtil {
 	
     private static class X509KeySelector extends KeySelector {
         
+    	@Override
     	public KeySelectorResult select(KeyInfo keyInfo, KeySelector.Purpose purpose, AlgorithmMethod method, XMLCryptoContext context)
         throws KeySelectorException {
-            @SuppressWarnings("unchecked")
-			Iterator<Object> ki = keyInfo.getContent().iterator();
+  
+    			Iterator<?> ki = keyInfo.getContent().iterator();
             while (ki.hasNext()) {
                 XMLStructure info = (XMLStructure) ki.next();
                 if (!(info instanceof X509Data)) {
                     continue;
                 }
                 X509Data x509Data = (X509Data) info;
-                @SuppressWarnings("unchecked")
-				Iterator<Object> xi = x509Data.getContent().iterator();
+				Iterator<?> xi = x509Data.getContent().iterator();
                 while (xi.hasNext()) {
                     Object o = xi.next();
                     if (!(o instanceof X509Certificate)) {

@@ -19,10 +19,9 @@
  */
 package de.bps.olat.user;
 
-import java.util.Collections;
 import java.util.HashMap;
-import java.util.List;
 
+import org.olat.basesecurity.BaseSecurity;
 import org.olat.core.gui.UserRequest;
 import org.olat.core.gui.control.WindowControl;
 import org.olat.core.gui.translator.Translator;
@@ -30,10 +29,12 @@ import org.olat.core.id.Identity;
 import org.olat.core.id.User;
 import org.olat.core.util.StringHelper;
 import org.olat.core.util.Util;
+import org.olat.core.util.xml.XStreamHelper;
 import org.olat.home.HomeMainController;
 import org.olat.login.SupportsAfterLoginInterceptor;
 import org.olat.user.ProfileAndHomePageEditController;
 import org.olat.user.UserManager;
+import org.springframework.beans.factory.annotation.Autowired;
 
 import com.thoughtworks.xstream.XStream;
 
@@ -49,15 +50,19 @@ import com.thoughtworks.xstream.XStream;
 public class ChangeEMailExecuteController extends ChangeEMailController implements SupportsAfterLoginInterceptor {
 	
 	private static final String PRESENTED_EMAIL_CHANGE_REMINDER = "presentedemailchangereminder";
-	
 
 	protected static final String PACKAGE_HOME = ProfileAndHomePageEditController.class.getPackage().getName();
+	
+	@Autowired
+	private UserManager userManager;
+	@Autowired
+	private BaseSecurity securityManager;
 	
 	public ChangeEMailExecuteController(UserRequest ureq, WindowControl wControl) {
 		super(ureq, wControl);
 		this.userRequest = ureq;
 		pT = Util.createPackageTranslator(ProfileAndHomePageEditController.class, userRequest.getLocale());
-		pT = UserManager.getInstance().getPropertyHandlerTranslator(pT);
+		pT = userManager.getPropertyHandlerTranslator(pT);
 		emKey = userRequest.getHttpReq().getParameter("key");
 		if (emKey == null) {
 			emKey = userRequest.getIdentity().getUser().getProperty("emchangeKey", null);
@@ -102,29 +107,29 @@ public class ChangeEMailExecuteController extends ChangeEMailController implemen
 	 * @return
 	 */
 	public boolean changeEMail(WindowControl wControl) {
-		XStream xml = new XStream();
+		XStream xml = XStreamHelper.createXStreamInstance();
 		@SuppressWarnings("unchecked")
 		HashMap<String, String> mails = (HashMap<String, String>) xml.fromXML(tempKey.getEmailAddress());
 		
-		String currentMail = mails.get("currentEMail");
-		List<Identity> identities = UserManager.getInstance()
-				.findIdentitiesByEmail(Collections.singletonList(currentMail));
-		if (identities != null && identities.size() == 1) {
-			// change mail address
-			Identity ident = identities.get(0);
-			ident.getUser().setProperty("email", mails.get("changedEMail"));
+		Identity identity = securityManager.loadIdentityByKey(tempKey.getIdentityKey());
+		if (identity != null) {
+			String oldEmail = identity.getUser().getEmail();
+			identity.getUser().setProperty("email", mails.get("changedEMail"));
 			// if old mail address closed then set the new mail address
 			// unclosed
-			String value = ident.getUser().getProperty("emailDisabled", null);
+			String value = identity.getUser().getProperty("emailDisabled", null);
 			if (value != null && value.equals("true")) {
-				ident.getUser().setProperty("emailDisabled", "false");
+				identity.getUser().setProperty("emailDisabled", "false");
 			}
-			ident.getUser().setProperty("email", mails.get("changedEMail"));
+			identity.getUser().setProperty("email", mails.get("changedEMail"));
 			// success info message
-			wControl.setInfo(pT.translate("success.change.email", new String[] { mails.get("currentEMail"), mails.get("changedEMail") }));
+			String currentEmailDisplay = userManager.getUserDisplayEmail(mails.get("currentEMail"), userRequest.getLocale());
+			String changedEmailDisplay = userManager.getUserDisplayEmail(mails.get("changedEMail"), userRequest.getLocale());
+			wControl.setInfo(pT.translate("success.change.email", new String[] { currentEmailDisplay, changedEmailDisplay }));
 			// remove keys
-			ident.getUser().setProperty("emchangeKey", null);
+			identity.getUser().setProperty("emchangeKey", null);
 			userRequest.getUserSession().removeEntryFromNonClearedStore(ChangeEMailController.CHANGE_EMAIL_ENTRY);
+			securityManager.deleteInvalidAuthenticationsByEmail(oldEmail);
 		} else {
 			// error message
 			wControl.setWarning(pT.translate("error.change.email.unexpected", new String[] { mails.get("currentEMail"), mails.get("changedEMail") }));

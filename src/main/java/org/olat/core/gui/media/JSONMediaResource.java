@@ -26,7 +26,7 @@ import javax.servlet.http.HttpServletResponse;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
-import org.olat.core.logging.OLog;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
 
 /**
@@ -39,7 +39,7 @@ import org.olat.core.logging.Tracing;
  * @author mkuendig
  */
 public class JSONMediaResource extends DefaultMediaResource {
-	private static final OLog log = Tracing.createLoggerFor(JSONMediaResource.class);
+	private static final Logger log = Tracing.createLoggerFor(JSONMediaResource.class);
 	
 	private String encoding = "";
 	private JSONArray jsonArray;
@@ -58,6 +58,11 @@ public class JSONMediaResource extends DefaultMediaResource {
 	}
 
 	@Override
+	public long getCacheControlDuration() {
+		return ServletUtil.CACHE_NO_CACHE;
+	}
+
+	@Override
 	public void prepare(HttpServletResponse hres) {
 		super.prepare(hres);
 		try {
@@ -72,9 +77,7 @@ public class JSONMediaResource extends DefaultMediaResource {
 			} else if(jsonArray != null) {
 				jsonArray.write(hres.getWriter());
 			}
-		} catch (JSONException e) {
-			log.error("", e);
-		} catch (IOException e) {
+		} catch (JSONException | IOException e) {
 			log.error("", e);
 		}
 	}

@@ -28,14 +28,20 @@ import java.util.Map;
 import org.olat.basesecurity.IdentityRef;
 import org.olat.core.id.Identity;
 import org.olat.core.util.vfs.VFSLeaf;
+import org.olat.course.nodes.PortfolioCourseNode;
+import org.olat.modules.assessment.Role;
 import org.olat.modules.assessment.model.AssessmentEntryStatus;
+import org.olat.modules.forms.EvaluationFormSession;
+import org.olat.modules.forms.EvaluationFormSurvey;
 import org.olat.modules.portfolio.model.AccessRightChange;
 import org.olat.modules.portfolio.model.AccessRights;
 import org.olat.modules.portfolio.model.AssessedBinder;
+import org.olat.modules.portfolio.model.AssessedPage;
 import org.olat.modules.portfolio.model.AssessmentSectionChange;
 import org.olat.modules.portfolio.model.BinderPageUsage;
 import org.olat.modules.portfolio.model.BinderStatistics;
 import org.olat.modules.portfolio.model.CategoryLight;
+import org.olat.modules.portfolio.model.SearchSharePagesParameters;
 import org.olat.modules.portfolio.model.SynchedBinder;
 import org.olat.repository.RepositoryEntry;
 import org.olat.repository.RepositoryEntryRef;
@@ -74,6 +80,26 @@ public interface PortfolioService {
 	 */
 	public boolean deleteBinder(BinderRef binder);
 	
+
+	/**
+	 * This will detach all binders from the course without checking the nodes. Use only
+	 * during deletion of a course.
+	 * 
+	 * @param entry
+	 * @return
+	 */
+	public boolean detachCourseFromBinders(RepositoryEntry entry);
+	
+	/**
+	 * Use if the course node or the course itself is deleted. The portfolios themself are not deleted
+	 * adn stay.
+	 * 
+	 * @param entry
+	 * @param courseNode
+	 * @return
+	 */
+	public boolean detachRepositoryEntryFromBinders(RepositoryEntry entry, PortfolioCourseNode courseNode);
+	
 	
 	/**
 	 * Set some extra options for the template.
@@ -101,7 +127,7 @@ public interface PortfolioService {
 	 * @param section The section is mandatory
 	 * @return
 	 */
-	public Assignment addAssignment(String title, String summary, String content, AssignmentType type, Section section,
+	public Assignment addAssignment(String title, String summary, String content, AssignmentType type, boolean template, Section section, Binder binder,
 			boolean onlyAutoEvaluation, boolean reviewerSeeAutoEvaluation, boolean anonymousExternEvaluation, RepositoryEntry formEntry);
 	
 	public Section moveUpAssignment(Section section, Assignment assignment);
@@ -121,8 +147,23 @@ public interface PortfolioService {
 	 */
 	public Assignment getAssignment(PageBody body);
 
+	/**
+	 * The list of assignments in each sections of the binder.
+	 * 
+	 * @param binder The binder
+	 * @param searchString An optional search string
+	 * @return A list of assignments
+	 */
+	public List<Assignment> getSectionsAssignments(PortfolioElement binder, String searchString);
 	
-	public List<Assignment> getAssignments(PortfolioElement binder, String searchString);
+	/**
+	 * The list of assignments in the templates folder of the binder.
+	 * @param binder The binder which holds the assignments
+	 * @return A list of assignments
+	 */
+	public List<Assignment> getBindersAssignmentsTemplates(BinderRef binder);
+	
+	public boolean hasBinderAssignmentTemplate(BinderRef binder);
 	
 	public List<Assignment> searchOwnedAssignments(IdentityRef assignee);
 	
@@ -132,12 +173,29 @@ public interface PortfolioService {
 	
 	
 	/**
+	 * Start an assignment (template excluded) and create the page.
 	 * 
-	 * @param assignment
-	 * @param author
-	 * @return
+	 * @param assignmentKey The assignment primary key
+	 * @param author The user which will authored the page
+	 * @return The updated assignment
 	 */
-	public Assignment startAssignment(Assignment assignment, Identity author);
+	public Assignment startAssignment(Long assignmentKey, Identity author);
+	
+	/**
+	 * Start an assignment (template one) and create a copy of the assignment
+	 * linked to the section.
+	 * 
+	 * @param assignmentKey The assignment primary key
+	 * @param author The user which will author the page
+	 * @param title The title of the page
+	 * @param summary The summary of the page
+	 * @param imagePath The path of the image
+	 * @param align Alignment of the image
+	 * @param section The section (mandatory)
+	 * @return The page created for the assignment
+	 */
+	public Page startAssignmentFromTemplate(Long assignmentKey, Identity author,
+			String title, String summary, String imagePath, PageImageAlign align, SectionRef section);
 	
 	/**
 	 * Add a new section at the end of the sections list of the specified binder.
@@ -179,7 +237,11 @@ public interface PortfolioService {
 	 */
 	public List<BinderStatistics> searchOwnedBinders(IdentityRef owner);
 	
+	public int countOwnedBinders(IdentityRef owner);
+	
 	public List<BinderStatistics> searchOwnedDeletedBinders(IdentityRef owner);
+	
+	public List<BinderStatistics> searchOwnedLastBinders(IdentityRef owner, int maxResults);
 	
 	/**
 	 * Return the list of binder owned by the specified user
@@ -195,9 +257,20 @@ public interface PortfolioService {
 	 * Search all binders which are shared with the specified member.
 	 * 
 	 * @param member
+	 * @param searchString
 	 * @return
 	 */
 	public List<AssessedBinder> searchSharedBindersWith(Identity coach, String searchString);
+	
+	/**
+	 * Search the pages in all binders which are shared with the specified member.
+	 * 
+	 * @param member
+	 * @param searchString
+	 * @param bookmarkedOnly If true, search only bookmarked pages
+	 * @return
+	 */
+	public List<AssessedPage> searchSharedPagesWith(Identity coach, SearchSharePagesParameters params);
 
 	/**
 	 * 
@@ -312,6 +385,13 @@ public interface PortfolioService {
 	
 	public void changeAccessRights(List<Identity> identities, List<AccessRightChange> changes);
 	
+	/**
+	 * The method remove all access rights of the specified identity
+	 * to the specified binder.
+	 * 
+	 * @param binder The binder to access
+	 * @param identity The identity with access rights
+	 */
 	public void removeAccessRights(Binder binder, Identity identity);
 	
 	public List<Category> getCategories(PortfolioElement element);
@@ -412,7 +492,11 @@ public interface PortfolioService {
 	 */
 	public List<Page> getPages(SectionRef section);
 	
+	public int countOwnedPages(IdentityRef owner);
+	
 	public List<Page> searchOwnedPages(IdentityRef owner, String searchString);
+	
+	public List<Page> searchOwnedLastPages(IdentityRef owner, int maxResults);
 	
 	/**
 	 * List the pages of the specified user in deleted mode.
@@ -448,7 +532,7 @@ public interface PortfolioService {
 	 */
 	public Page getPageByBody(PageBody body);
 	
-	public Page getLastPage(Identity owner, boolean binderMandatory);
+	public List<Page> getLastPages(Identity owner, int maxResults);
 	
 	/**
 	 * Update the metadata of a page.
@@ -457,6 +541,25 @@ public interface PortfolioService {
 	 * @return
 	 */
 	public Page updatePage(Page page, SectionRef newParentSection);
+	
+	/**
+	 * Get or create the personal informations about a page. The default
+	 * status is set based on the status of the page:
+	 * <ul>
+	 * 	<li>Draft set the status to "New"
+	 *  <li>Closed and deleted to "Done" 
+	 *  <li>The default is "In process"
+	 * </ul>
+	 * 
+	 * @param page The page
+	 * @param identity The identity
+	 * @return The informations
+	 */
+	public PageUserInformations getPageUserInfos(Page page, Identity identity, PageUserStatus defStatus);
+	
+	public List<PageUserInformations> getPageUserInfos(BinderRef binder, IdentityRef identity);
+	
+	public PageUserInformations updatePageUserInfos(PageUserInformations infos);
 	
 
 	public File getPosterImage(Page page);
@@ -488,6 +591,8 @@ public interface PortfolioService {
 	public void moveUpPagePart(Page page, PagePart part);
 	
 	public void moveDownPagePart(Page page, PagePart part);
+	
+	public void movePagePart(Page page, PagePart partToMove, PagePart sibling, boolean after);
 	
 	/**
 	 * Remove the page from the section, remove relations to the
@@ -544,9 +649,11 @@ public interface PortfolioService {
 	 * Change the status of the page.
 	 * @param page
 	 * @param status
+	 * @param identity The user which does the change
+	 * @param by The role of the user which does the change
 	 * @return
 	 */
-	public Page changePageStatus(Page page, PageStatus status);
+	public Page changePageStatus(Page page, PageStatus status, Identity identity, Role by);
 	
 	/**
 	 * Close the section
@@ -569,6 +676,10 @@ public interface PortfolioService {
 	
 	public void setAssessmentStatus(Identity assessedIdentity, BinderRef binderRef, AssessmentEntryStatus status, Identity coachingIdentity);
 		
+	public EvaluationFormSurvey loadOrCreateSurvey(PageBody body, RepositoryEntry formEntry);
 	
+	public EvaluationFormSession loadOrCreateSession(EvaluationFormSurvey survey, Identity executor);
+
+	public void deleteSurvey(PageBody body);
 
 }

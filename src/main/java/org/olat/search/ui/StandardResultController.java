@@ -23,8 +23,11 @@ package org.olat.search.ui;
 import java.util.Collections;
 import java.util.List;
 
-import org.olat.basesecurity.BaseSecurityManager;
+import org.olat.basesecurity.BaseSecurity;
 import org.olat.basesecurity.IdentityShort;
+import org.olat.core.commons.services.license.LicenseService;
+import org.olat.core.commons.services.license.LicenseType;
+import org.olat.core.commons.services.license.ui.LicenseUIFactory;
 import org.olat.core.gui.UserRequest;
 import org.olat.core.gui.components.form.flexible.FormItem;
 import org.olat.core.gui.components.form.flexible.FormItemContainer;
@@ -41,6 +44,7 @@ import org.olat.core.util.StringHelper;
 import org.olat.core.util.filter.FilterFactory;
 import org.olat.search.model.ResultDocument;
 import org.olat.user.UserManager;
+import org.springframework.beans.factory.annotation.Autowired;
 
 /**
  * Description:<br>
@@ -54,6 +58,13 @@ public class StandardResultController extends FormBasicController implements Res
 	protected final ResultDocument document;
 	protected FormLink docLink, docHighlightLink;
 	private boolean highlight;
+	
+	@Autowired
+	private UserManager userManager;
+	@Autowired
+	private BaseSecurity securityManager;
+	@Autowired
+	private LicenseService licenseService;
 	
 	public StandardResultController(UserRequest ureq, WindowControl wControl, Form mainForm, ResultDocument document) {
 		super(ureq, wControl, LAYOUT_CUSTOM, "standardResult", mainForm);
@@ -76,12 +87,20 @@ public class StandardResultController extends FormBasicController implements Res
 			
 			String author = document.getAuthor();
 			if(StringHelper.containsNonWhitespace(author)) {
-				List<IdentityShort> identities = BaseSecurityManager.getInstance().findShortIdentitiesByName(Collections.singleton(author));
-				if(identities.size() > 0) {
-					author = UserManager.getInstance().getUserDisplayName(identities.get(0));
+				List<IdentityShort> identities = securityManager.findShortIdentitiesByName(Collections.singleton(author));
+				if(!identities.isEmpty()) {
+					author = userManager.getUserDisplayName(identities.get(0));
 				}
 			}
 			formLayoutCont.contextPut("author", author);
+			
+			if (StringHelper.containsNonWhitespace(document.getLicenseTypeKey())) {
+				LicenseType licenseType = licenseService.loadLicenseTypeByKey(document.getLicenseTypeKey());
+				if (!licenseService.isNoLicense(licenseType)) {
+					formLayoutCont.contextPut("licenseIcon", LicenseUIFactory.getCssOrDefault(licenseType));
+					formLayoutCont.contextPut("license", LicenseUIFactory.translate(licenseType, getLocale()));
+				}
+			}
 		}
 		
 		String icon = document.getCssIcon();

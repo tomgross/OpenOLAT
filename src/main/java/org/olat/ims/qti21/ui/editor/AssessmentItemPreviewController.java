@@ -27,20 +27,26 @@ import java.util.Map;
 
 import org.olat.core.gui.UserRequest;
 import org.olat.core.gui.components.Component;
+import org.olat.core.gui.components.htmlheader.jscss.JSAndCSSComponent;
 import org.olat.core.gui.components.velocity.VelocityContainer;
 import org.olat.core.gui.control.Event;
 import org.olat.core.gui.control.WindowControl;
 import org.olat.core.gui.control.controller.BasicController;
+import org.olat.core.id.Persistable;
 import org.olat.core.util.Util;
 import org.olat.ims.qti21.AssessmentResponse;
 import org.olat.ims.qti21.AssessmentSessionAuditLogger;
 import org.olat.ims.qti21.AssessmentTestSession;
+import org.olat.ims.qti21.QTI21DeliveryOptions;
+import org.olat.ims.qti21.QTI21Service;
 import org.olat.ims.qti21.manager.audit.DefaultAssessmentSessionAuditLogger;
+import org.olat.ims.qti21.model.InMemoryOutcomeListener;
 import org.olat.ims.qti21.model.audit.CandidateEvent;
 import org.olat.ims.qti21.ui.AssessmentItemDisplayController;
 import org.olat.ims.qti21.ui.AssessmentTestDisplayController;
 import org.olat.modules.assessment.AssessmentEntry;
 import org.olat.repository.RepositoryEntry;
+import org.springframework.beans.factory.annotation.Autowired;
 
 import uk.ac.ed.ph.jqtiplus.node.test.AssessmentItemRef;
 import uk.ac.ed.ph.jqtiplus.resolution.ResolvedAssessmentItem;
@@ -62,6 +68,8 @@ public class AssessmentItemPreviewController extends BasicController {
 	private final VelocityContainer mainVC;
 	private final AssessmentSessionAuditLogger candidateAuditLogger = new PreviewAuditLogger();
 	
+	@Autowired
+	private QTI21Service qtiService;
 
 	private AssessmentItemPreviewController(UserRequest ureq, WindowControl wControl) {
 		super(ureq, wControl);
@@ -74,7 +82,14 @@ public class AssessmentItemPreviewController extends BasicController {
 		mainVC = createVelocityContainer("assessment_item_preview");
 		mainVC.contextPut("outcomes", new ArrayList<>());
 		mainVC.contextPut("responses", new ArrayList<>());
-		mainVC.contextPut("showOutcomes", new Boolean(showOutcomes));
+		mainVC.contextPut("showOutcomes", Boolean.valueOf(showOutcomes));
+		
+		String[] jss = new String[] {
+				"js/jquery/qti/jquery.qtiAutosave.js"
+		};
+		JSAndCSSComponent js = new JSAndCSSComponent("js", jss, null);
+		mainVC.put("js", js);
+		
 		putInitialPanel(mainVC);
 	}
 	
@@ -83,7 +98,8 @@ public class AssessmentItemPreviewController extends BasicController {
 		this(ureq, wControl);
 
 		displayCtrl = new AssessmentItemDisplayController(ureq, getWindowControl(),
-				resolvedAssessmentItem, rootDirectory, itemFile, candidateAuditLogger);
+				resolvedAssessmentItem, rootDirectory, itemFile,
+				QTI21DeliveryOptions.defaultSettings(), candidateAuditLogger);
 		listenTo(displayCtrl);
 		mainVC.put("display", displayCtrl.getInitialComponent());
 	}
@@ -94,9 +110,11 @@ public class AssessmentItemPreviewController extends BasicController {
 			File rootDirectory, File itemFile) {
 		this(ureq, wControl);
 
+		String subIdent = itemRef.getIdentifier().toString();
 		displayCtrl = new AssessmentItemDisplayController(ureq, getWindowControl(),
-				testEntry, assessmentEntry, true, resolvedAssessmentItem, itemRef,
-				rootDirectory, itemFile, candidateAuditLogger);
+				testEntry, subIdent, testEntry, assessmentEntry, true, resolvedAssessmentItem, 
+				rootDirectory, itemFile, QTI21DeliveryOptions.defaultSettings(),
+				new InMemoryOutcomeListener(), candidateAuditLogger);
 		listenTo(displayCtrl);
 		mainVC.put("display", displayCtrl.getInitialComponent());
 	}
@@ -104,16 +122,19 @@ public class AssessmentItemPreviewController extends BasicController {
 	@Override
 	protected void doDispose() {
 		mainVC.removeListener(this);
+		if(displayCtrl != null && displayCtrl.getCandidateSession() instanceof Persistable) {
+			qtiService.deleteAssessmentTestSession(displayCtrl.getCandidateSession());
+		}
 	}
 
 	@Override
 	protected void event(UserRequest ureq, Component source, Event event) {
 		if("show".equals(event.getCommand())) {
 			showOutcomes = true; 
-			ureq.getUserSession().putEntryInNonClearedStore(DEBUG_OUTCOMES, new Boolean(showOutcomes));
+			ureq.getUserSession().putEntryInNonClearedStore(DEBUG_OUTCOMES, Boolean.valueOf(showOutcomes));
 		} else if("hide".equals(event.getCommand())) {
 			showOutcomes = false;
-			ureq.getUserSession().putEntryInNonClearedStore(DEBUG_OUTCOMES, new Boolean(showOutcomes));
+			ureq.getUserSession().putEntryInNonClearedStore(DEBUG_OUTCOMES, Boolean.valueOf(showOutcomes));
 		}
 	}
 	
@@ -129,7 +150,7 @@ public class AssessmentItemPreviewController extends BasicController {
 			}
 			Collections.sort(responses);
 			mainVC.contextPut("responses", responses);
-			mainVC.contextPut("showOutcomes", new Boolean(showOutcomes));
+			mainVC.contextPut("showOutcomes", Boolean.valueOf(showOutcomes));
 			mainVC.setDirty(true);
 		}
 
@@ -143,7 +164,7 @@ public class AssessmentItemPreviewController extends BasicController {
 			}
 			Collections.sort(outcomes);
 			mainVC.contextPut("outcomes", outcomes);
-			mainVC.contextPut("showOutcomes", new Boolean(showOutcomes));
+			mainVC.contextPut("showOutcomes", Boolean.valueOf(showOutcomes));
 			mainVC.setDirty(true);
 		}
 	}

@@ -36,6 +36,8 @@ import org.olat.core.commons.controllers.linkchooser.CustomLinkTreeModel;
 import org.olat.core.gui.UserRequest;
 import org.olat.core.gui.components.Component;
 import org.olat.core.gui.components.ComponentEventListener;
+import org.olat.core.gui.components.dropdown.DropdownItem;
+import org.olat.core.gui.components.form.flexible.elements.AutoCompleter;
 import org.olat.core.gui.components.form.flexible.elements.DateChooser;
 import org.olat.core.gui.components.form.flexible.elements.DownloadLink;
 import org.olat.core.gui.components.form.flexible.elements.FileElement;
@@ -59,6 +61,7 @@ import org.olat.core.gui.components.form.flexible.impl.FormEvent;
 import org.olat.core.gui.components.form.flexible.impl.FormItemImpl;
 import org.olat.core.gui.components.form.flexible.impl.components.SimpleExampleText;
 import org.olat.core.gui.components.form.flexible.impl.components.SimpleFormErrorText;
+import org.olat.core.gui.components.form.flexible.impl.elements.AutoCompleterImpl;
 import org.olat.core.gui.components.form.flexible.impl.elements.DownloadLinkImpl;
 import org.olat.core.gui.components.form.flexible.impl.elements.FileElementImpl;
 import org.olat.core.gui.components.form.flexible.impl.elements.FormCancel;
@@ -85,13 +88,14 @@ import org.olat.core.gui.components.form.flexible.impl.elements.table.FlexiTable
 import org.olat.core.gui.components.form.flexible.impl.elements.table.FlexiTableElementImpl;
 import org.olat.core.gui.components.link.Link;
 import org.olat.core.gui.components.progressbar.ProgressBarItem;
+import org.olat.core.gui.components.rating.RatingFormItem;
 import org.olat.core.gui.components.tree.MenuTreeItem;
 import org.olat.core.gui.components.tree.TreeModel;
 import org.olat.core.gui.control.WindowBackOffice;
 import org.olat.core.gui.control.WindowControl;
+import org.olat.core.gui.media.MediaResource;
 import org.olat.core.gui.themes.Theme;
 import org.olat.core.gui.translator.Translator;
-import org.olat.core.gui.util.CSSHelper;
 import org.olat.core.util.StringHelper;
 import org.olat.core.util.UserSession;
 import org.olat.core.util.ValidationStatus;
@@ -290,6 +294,24 @@ public class FormUIFactory {
 		formLayout.add(mse);
 		return mse;
 	}
+	
+	public MultipleSelectionElement addCheckboxesDropdown(String name, FormItemContainer formLayout) {
+		return addCheckboxesDropdown(name, name, formLayout, new String[] {}, new String[] {});
+	}
+	
+	public MultipleSelectionElement addCheckboxesDropdown(String name, String i18nLabel, FormItemContainer formLayout,
+			String[] keys, String[] values) {
+		return addCheckboxesDropdown(name, i18nLabel, formLayout, keys, values, null, null);
+	}
+	
+	public MultipleSelectionElement addCheckboxesDropdown(String name, String i18nLabel, FormItemContainer formLayout,
+			String[] keys, String[] values, String[] cssClasses, String[] iconLeftCSS) {
+		MultipleSelectionElement mse = new MultipleSelectionElementImpl(name, Layout.dropdown);
+		mse.setKeysAndValues(keys, values, cssClasses, iconLeftCSS);
+		setLabelIfNotNull(i18nLabel, mse);
+		formLayout.add(mse);
+		return mse;
+	}
 
 	/**
 	 * Create a multiple selection element as a tree.
@@ -383,7 +405,14 @@ public class FormUIFactory {
 		formLayout.add(ss);
 		return ss;
 	}
+	
+	public SingleSelection addDropdownSingleselect(final String name, FormItemContainer formLayout, final String[] theKeys, final String[] theValues) {
+		return addDropdownSingleselect(name, name, name, formLayout, theKeys, theValues, null);
+	}
 
+	public SingleSelection addDropdownSingleselect(final String name, final String i18nLabel, FormItemContainer formLayout, final String[] theKeys, final String[] theValues) {
+		return addDropdownSingleselect(name, name, i18nLabel, formLayout, theKeys, theValues, null);
+	}
 
 	/**
 	 * Add a drop down menu (also called pulldown menu), with a label's i18n key being the same as the <code>name<code>.
@@ -426,8 +455,8 @@ public class FormUIFactory {
 	 * @param theCssClasses
 	 * @return
 	 */
-	public SingleSelection addDropdownSingleselect(final String id, final String name, final String i18nLabel, FormItemContainer formLayout, final String[] theKeys, final String[] theValues, final String @Nullable [] theCssClasses) {
-		SingleSelection ss = new SelectboxSelectionImpl(id, name);
+	public SingleSelection addDropdownSingleselect(final String id, final String name, final String i18nLabel, FormItemContainer formLayout, final String[] theKeys, final String[] theValues, final String[] theCssClasses) {
+		SingleSelection ss = new SelectboxSelectionImpl(id, name, formLayout.getTranslator().getLocale());
 		ss.setKeysAndValues(theKeys, theValues, theCssClasses);
 		setLabelIfNotNull(i18nLabel, ss);
 		formLayout.add(ss);
@@ -549,16 +578,11 @@ public class FormUIFactory {
 		return fiWrapper;
 	}
 	
+	public TextElement addTextElement(final String i18nLabel, final int maxLen, String initialValue,
+			FormItemContainer formLayout) {
+		return addTextElement(i18nLabel, i18nLabel, maxLen, initialValue, formLayout);
+	}
 	
-	/**
-	 * 
-	 * @param name
-	 * @param maxLen
-	 * @param initialValue
-	 * @param i18nLabel
-	 * @param formLayout
-	 * @return
-	 */
 	public TextElement addTextElement(String name, final String i18nLabel, final int maxLen, String initialValue,
 			FormItemContainer formLayout) {
 		String val = initialValue == null ? "" : initialValue;
@@ -620,10 +644,27 @@ public class FormUIFactory {
 		return te;
 	}
 	
+	public AutoCompleter addTextElementWithAutoCompleter(String name, final String i18nLabel, final int maxLen, String initialValue,
+			FormItemContainer formLayout) {
+		return addTextElementWithAutoCompleter(null, name, i18nLabel, maxLen, initialValue, formLayout);
+	}
+	
+	public AutoCompleter addTextElementWithAutoCompleter(String id, String name, final String i18nLabel, final int maxLen, String initialValue,
+			FormItemContainer formLayout) {
+		String val = initialValue == null ? "" : initialValue;
+		AutoCompleterImpl te = new AutoCompleterImpl(id, name);
+		te.setNotLongerThanCheck(maxLen, "text.element.error.notlongerthan");
+		setLabelIfNotNull(i18nLabel, te);
+		te.setMaxLength(maxLen);
+		te.setValue(val);
+		formLayout.add(te);
+		return te;
+	}
+	
 	/**
 	 * Add a multi line text element, using the provided name as i18n key for the label, no max length check set, and fits content hight at maximium (100lnes).
 	 * 
-	 * @see FormUIFactory#addTextAreaElement(String, String, int, int, int, boolean, String, FormItemContainer)
+	 * @see FormUIFactory#addTextAreaElement(String, String, int, int, int, boolean, boolean, String, FormItemContainer)
 	 * @param name
 	 * @param rows
 	 * @param cols
@@ -632,7 +673,7 @@ public class FormUIFactory {
 	 * @return
 	 */
 	public TextAreaElement addTextAreaElement(String name, final int rows, final int cols, String initialValue,	FormItemContainer formLayout) {
-		return addTextAreaElement(name, name, -1, rows, cols, true, initialValue, formLayout);
+		return addTextAreaElement(name, name, -1, rows, cols, true, false, initialValue, formLayout);
 	}
 	
 	/**
@@ -645,13 +686,14 @@ public class FormUIFactory {
 	 *          available space
 	 * @param isAutoHeightEnabled true: element expands to fit content height,
 	 *          (max 100 lines); false: specified rows used
+	 * @param fixedFontWidth 
 	 * @param initialValue Initial value
 	 * @param formLayout
 	 * @return
 	 */
-	public TextAreaElement addTextAreaElement(String name, final String i18nLabel, final int maxLen, final int rows, final int cols, boolean isAutoHeightEnabled, String initialValue,
-		FormItemContainer formLayout) {
-		TextAreaElement te = new TextAreaElementImpl(name, initialValue, rows, cols, isAutoHeightEnabled) {
+	public TextAreaElement addTextAreaElement(String name, final String i18nLabel, final int maxLen, final int rows, final int cols, boolean isAutoHeightEnabled, boolean fixedFontWidth,
+		String initialValue, FormItemContainer formLayout) {
+		TextAreaElement te = new TextAreaElementImpl(name, initialValue, rows, cols, isAutoHeightEnabled, fixedFontWidth) {
 			{
 				setNotLongerThanCheck(maxLen, "text.element.error.notlongerthan");
 				// the text.element.error.notlongerthan uses a variable {0} that
@@ -698,7 +740,8 @@ public class FormUIFactory {
 		RichTextElement rte = new RichTextElementImpl(name, initialHTMLValue, rows, cols, formLayout.getRootForm(), formLayout.getTranslator().getLocale());
 		setLabelIfNotNull(i18nLabel, rte);
 		// Now configure editor
-		rte.getEditorConfiguration().setConfigProfileFormEditorMinimalistic(wControl.getWindowBackOffice().getWindow().getGuiTheme());			
+		rte.getEditorConfiguration().setConfigProfileFormEditorMinimalistic(wControl.getWindowBackOffice().getWindow().getGuiTheme());		
+		rte.getEditorConfiguration().setPathInStatusBar(false);
 		// Add to form and finish
 		formLayout.add(rte);
 		return rte;
@@ -771,6 +814,19 @@ public class FormUIFactory {
 		return rte;
 	}
 	
+	public RichTextElement addRichTextElementForParagraphEditor(String name, String i18nLabel, String initialHTMLValue, int rows,
+			int cols, FormItemContainer formLayout, WindowControl wControl) {
+		// Create rich text element with bare bone configuration
+		RichTextElement rte = new RichTextElementImpl(name, initialHTMLValue, rows, cols, formLayout.getRootForm(), formLayout.getTranslator().getLocale());
+		setLabelIfNotNull(i18nLabel, rte);
+		// Now configure editor
+		rte.getEditorConfiguration().setConfigProfileFormParagraphEditor(wControl.getWindowBackOffice().getWindow().getGuiTheme());		
+		rte.getEditorConfiguration().setPathInStatusBar(false);
+		// Add to form and finish
+		formLayout.add(rte);
+		return rte;
+	}
+	
 	/**
 	 * 
 	 * This is a version with olat media only. The tiny media is disabled because we need to catch the object
@@ -799,6 +855,7 @@ public class FormUIFactory {
 		rte.getEditorConfiguration().setExtendedValidElements("script[src|type|defer]");
 		rte.getEditorConfiguration().disableTinyMedia();
 		rte.getEditorConfiguration().setFilenameUriValidation(true);
+		rte.getEditorConfiguration().setFigCaption(false);
 		// Add to form and finish
 		formLayout.add(rte);
 		return rte;
@@ -816,6 +873,7 @@ public class FormUIFactory {
 		rte.getEditorConfiguration().setExtendedValidElements("script[src|type|defer]");
 		rte.getEditorConfiguration().disableTinyMedia();
 		rte.getEditorConfiguration().setFilenameUriValidation(true);
+		rte.getEditorConfiguration().setFigCaption(false);
 		// Add to form and finish
 		formLayout.add(rte);
 		return rte;
@@ -1047,8 +1105,6 @@ public class FormUIFactory {
 		DownloadLinkImpl fte = new DownloadLinkImpl(name);
 		fte.setLinkText(linkTitle);
 		fte.setDownloadItem(file);
-		String css = CSSHelper.createFiletypeIconCssClassFor(file.getName());
-		fte.setIconLeftCSS("o_icon o_icon-fw " + css);
 		setLabelIfNotNull(i18nLabel, fte);
 		if(formLayout != null) {
 			formLayout.add(fte);
@@ -1069,8 +1125,6 @@ public class FormUIFactory {
 		DownloadLinkImpl fte = new DownloadLinkImpl(name);
 		fte.setLinkText(linkTitle);
 		fte.setDownloadItem(file);
-		String css = CSSHelper.createFiletypeIconCssClassFor(file.getName());
-		fte.setIconLeftCSS("o_icon o_icon-fw " + css);
 		setLabelIfNotNull(i18nLabel, fte);
 		if(formLayout != null) {
 			((FlexiTableElementImpl)formLayout).addFormItem(fte);
@@ -1082,8 +1136,17 @@ public class FormUIFactory {
 		DownloadLinkImpl fte = new DownloadLinkImpl(name);
 		fte.setLinkText(linkTitle);
 		fte.setDownloadItem(file);
-		String css = CSSHelper.createFiletypeIconCssClassFor(file.getName());
-		fte.setIconLeftCSS("o_icon o_icon-fw " + css);
+		setLabelIfNotNull(i18nLabel, fte);
+		if(formLayout != null) {
+			((FlexiTableElementImpl)formLayout).addFormItem(fte);
+		}
+		return fte;
+	}
+	
+	public DownloadLink addDownloadLink(String name,  String linkTitle, String i18nLabel, MediaResource resource, FlexiTableElement formLayout) {
+		DownloadLinkImpl fte = new DownloadLinkImpl(name);
+		fte.setLinkText(linkTitle);
+		fte.setDownloadMedia(resource);
 		setLabelIfNotNull(i18nLabel, fte);
 		if(formLayout != null) {
 			((FlexiTableElementImpl)formLayout).addFormItem(fte);
@@ -1230,4 +1293,27 @@ public class FormUIFactory {
 		formLayout.add(slider);
 		return slider;
 	}
+	
+	
+	public DropdownItem addDropdownMenu(String name, String i18nLabel, FormItemContainer formLayout, Translator translator) {
+		DropdownItem dropdown = new DropdownItem(name, name, translator);
+		dropdown.setEmbbeded(true);
+		dropdown.setButton(true);
+		setLabelIfNotNull(i18nLabel, dropdown);
+		formLayout.add(dropdown);
+		return dropdown;
+	}
+	
+	public RatingFormItem addRatingItem(String name, String i18nLabel, float initialRating, int maxRating, boolean allowUserInput, FormItemContainer formLayout) {
+		RatingFormItem ratingCmp = new RatingFormItem(name, initialRating, maxRating, allowUserInput);
+		setLabelIfNotNull(i18nLabel, ratingCmp);
+		if(i18nLabel != null) {
+			ratingCmp.showLabel(true);
+		}
+		if(formLayout != null) {
+			formLayout.add(ratingCmp);
+		}
+		return ratingCmp;
+	}
+	
 }

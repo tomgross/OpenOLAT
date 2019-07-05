@@ -31,20 +31,21 @@ import java.util.Locale;
 import org.olat.admin.quota.QuotaConstants;
 import org.olat.core.CoreSpringFactory;
 import org.olat.core.commons.fullWebApp.LayoutMain3ColsController;
-import org.olat.core.commons.modules.bc.vfs.OlatRootFolderImpl;
 import org.olat.core.commons.persistence.DBFactory;
 import org.olat.core.gui.UserRequest;
 import org.olat.core.gui.components.stack.TooledStackedPanel;
 import org.olat.core.gui.control.Controller;
 import org.olat.core.gui.control.WindowControl;
 import org.olat.core.gui.control.generic.iframe.DeliveryOptions;
-import org.olat.core.gui.control.generic.layout.MainLayout3ColumnsController;
 import org.olat.core.gui.control.generic.layout.MainLayoutController;
 import org.olat.core.gui.control.generic.wizard.StepsMainRunController;
 import org.olat.core.gui.media.MediaResource;
+import org.olat.core.gui.media.ZippedDirectoryMediaResource;
 import org.olat.core.gui.translator.Translator;
 import org.olat.core.id.Identity;
 import org.olat.core.id.OLATResourceable;
+import org.olat.core.id.Organisation;
+import org.olat.core.id.Roles;
 import org.olat.core.logging.AssertException;
 import org.olat.core.util.FileUtils;
 import org.olat.core.util.Util;
@@ -52,12 +53,11 @@ import org.olat.core.util.coordinate.LockResult;
 import org.olat.core.util.vfs.LocalFolderImpl;
 import org.olat.core.util.vfs.Quota;
 import org.olat.core.util.vfs.QuotaManager;
+import org.olat.core.util.vfs.VFSContainer;
 import org.olat.core.util.vfs.callbacks.FullAccessWithQuotaCallback;
 import org.olat.core.util.vfs.callbacks.VFSSecurityCallback;
-import org.olat.course.assessment.AssessmentMode;
 import org.olat.course.assessment.manager.UserCourseInformationsManager;
 import org.olat.fileresource.FileResourceManager;
-import org.olat.fileresource.ZippedDirectoryMediaResource;
 import org.olat.fileresource.types.FileResource;
 import org.olat.fileresource.types.ImsCPFileResource;
 import org.olat.fileresource.types.ResourceEvaluation;
@@ -69,10 +69,10 @@ import org.olat.ims.cp.ui.CPRuntimeController;
 import org.olat.modules.cp.CPDisplayController;
 import org.olat.modules.cp.CPOfflineReadableManager;
 import org.olat.repository.RepositoryEntry;
+import org.olat.repository.RepositoryEntryStatusEnum;
 import org.olat.repository.RepositoryManager;
 import org.olat.repository.RepositoryService;
 import org.olat.repository.model.RepositoryEntrySecurity;
-import org.olat.repository.ui.RepositoryEntryRuntimeController.RuntimeControllerCreator;
 import org.olat.resource.OLATResource;
 import org.olat.resource.OLATResourceManager;
 
@@ -88,20 +88,21 @@ import org.olat.resource.OLATResourceManager;
 public class ImsCPHandler extends FileHandler {
 	
 	@Override
-	public boolean isCreate() {
+	public boolean supportCreate(Identity identity, Roles roles) {
 		return true;
 	}
 	
 	@Override
-	public RepositoryEntry createResource(Identity initialAuthor, String displayname, String description, Object createObject, Locale locale) {
+	public RepositoryEntry createResource(Identity initialAuthor, String displayname, String description,
+			Object createObject, Organisation organisation, Locale locale) {
 		OLATResource resource = OLATResourceManager.getInstance().createOLATResourceInstance("FileResource.IMSCP");
-		RepositoryEntry re = CoreSpringFactory.getImpl(RepositoryService.class)
-				.create(initialAuthor, null, "", displayname, description, resource, RepositoryEntry.ACC_OWNERS);
+		RepositoryEntry re = CoreSpringFactory.getImpl(RepositoryService.class).create(initialAuthor, null, "", displayname, description,
+				resource, RepositoryEntryStatusEnum.preparation, organisation);
 		DBFactory.getInstance().commit();
 
 		Translator translator = Util.createPackageTranslator(CPContentController.class, locale);
 		String initialPageTitle = translator.translate("cptreecontroller.newpage.title");
-		CPManager.getInstance().createNewCP(resource, initialPageTitle);
+		CoreSpringFactory.getImpl(CPManager.class).createNewCP(resource, initialPageTitle);
 		return re;
 	}
 	
@@ -116,20 +117,35 @@ public class ImsCPHandler extends FileHandler {
 	}
 	
 	@Override
+	public boolean supportImport() {
+		return true;
+	}
+
+	@Override
 	public ResourceEvaluation acceptImport(File file, String filename) {
 		return ImsCPFileResource.evaluate(file, filename);
+	}
+
+	@Override
+	public boolean supportImportUrl() {
+		return false;
+	}
+
+	@Override
+	public ResourceEvaluation acceptImport(String url) {
+		return ResourceEvaluation.notValid();
 	}
 	
 	@Override
 	public RepositoryEntry importResource(Identity initialAuthor, String initialAuthorAlt, String displayname, String description,
-			boolean withReferences, Locale locale, File file, String filename) {
+			boolean withReferences, Organisation organisation, Locale locale, File file, String filename) {
 
 		ImsCPFileResource cpResource = new ImsCPFileResource();
 		OLATResource resource = OLATResourceManager.getInstance().findOrPersistResourceable(cpResource);
-		RepositoryEntry re = CoreSpringFactory.getImpl(RepositoryService.class)
-				.create(initialAuthor, null, "", displayname, description, resource, RepositoryEntry.ACC_OWNERS);
+		RepositoryEntry re = CoreSpringFactory.getImpl(RepositoryService.class).create(initialAuthor, null, "", displayname, description,
+				resource, RepositoryEntryStatusEnum.preparation, organisation);
 		
-		File fResourceFileroot = FileResourceManager.getInstance().getFileResourceRootImpl(resource).getBasefile();
+		File fResourceFileroot = FileResourceManager.getInstance().getFileResourceRoot(resource);
 		File zipRoot = new File(fResourceFileroot, FileResourceManager.ZIPDIR);
 		FileResource.copyResource(file, filename, zipRoot);
 		CPOfflineReadableManager.getInstance().makeCPOfflineReadable(cpResource, displayname);
@@ -139,15 +155,22 @@ public class ImsCPHandler extends FileHandler {
 	}
 	
 	@Override
+	public RepositoryEntry importResource(Identity initialAuthor, String initialAuthorAlt, String displayname,
+			String description, Organisation organisation, Locale locale, String url) {
+		//
+		return null;
+	}
+	
+	@Override
 	public RepositoryEntry copy(Identity author, RepositoryEntry source, RepositoryEntry target) {
-		final CPManager cpManager = CPManager.getInstance();
+		final CPManager cpManager = CoreSpringFactory.getImpl(CPManager.class);
 		OLATResource sourceResource = source.getOlatResource();
 		OLATResource targetResource = target.getOlatResource();
 		
-		File sourceFileroot = FileResourceManager.getInstance().getFileResourceRootImpl(sourceResource).getBasefile();
+		File sourceFileroot = FileResourceManager.getInstance().getFileResourceRoot(sourceResource);
 		File zipRoot = new File(sourceFileroot, FileResourceManager.ZIPDIR);
 		
-		File targetFileroot = FileResourceManager.getInstance().getFileResourceRootImpl(targetResource).getBasefile();
+		File targetFileroot = FileResourceManager.getInstance().getFileResourceRoot(targetResource);
 		FileUtils.copyFileToDir(zipRoot, targetFileroot, "add file resource");
 		
 		//copy packaging info
@@ -161,7 +184,7 @@ public class ImsCPHandler extends FileHandler {
 	}
 
 	@Override
-	public MediaResource getAsMediaResource(OLATResourceable res, boolean backwardsCompatible) {
+	public MediaResource getAsMediaResource(OLATResourceable res) {
 		File unzippedDir = FileResourceManager.getInstance().unzipFileResource(res);
 		String displayName = CoreSpringFactory.getImpl(RepositoryManager.class)
 				.lookupDisplayNameByOLATResourceableId(res.getResourceableId());
@@ -179,7 +202,7 @@ public class ImsCPHandler extends FileHandler {
 	}
 
 	@Override
-	public EditionSupport supportsEdit(OLATResourceable resource) {
+	public EditionSupport supportsEdit(OLATResourceable resource, Identity identity, Roles roles) {
 		return EditionSupport.yes;
 	}
 	
@@ -198,37 +221,35 @@ public class ImsCPHandler extends FileHandler {
 		OLATResource res = re.getOlatResource();
 		File cpRoot = FileResourceManager.getInstance().unzipFileResource(res);
 		final LocalFolderImpl vfsWrapper = new LocalFolderImpl(cpRoot);
-		CPPackageConfig packageConfig = CPManager.getInstance().getCPPackageConfig(res);
+		CPPackageConfig packageConfig = CoreSpringFactory.getImpl(CPManager.class).getCPPackageConfig(res);
 		final DeliveryOptions deliveryOptions = (packageConfig == null ? null : packageConfig.getDeliveryOptions());
 		return new CPRuntimeController(ureq, wControl, re, reSecurity,
-				new RuntimeControllerCreator() {
-					@Override
-					public Controller create(UserRequest uureq, WindowControl wwControl, TooledStackedPanel toolbarPanel,
-							RepositoryEntry entry, RepositoryEntrySecurity security, AssessmentMode assessmentMode) {
-						boolean activateFirstPage = true;
-						String initialUri = null;
+				(uureq, wwControl, toolbarPanel, entry, security, assessmentMode) -> {
+			boolean activateFirstPage = true;
+			String initialUri = null;
 
-						CoreSpringFactory.getImpl(UserCourseInformationsManager.class)
-							.updateUserCourseInformations(entry.getOlatResource(), uureq.getIdentity());
-						
-						CPDisplayController cpCtr = new CPDisplayController(uureq, wwControl, vfsWrapper, true, true, activateFirstPage, true, deliveryOptions,
-								initialUri, entry.getOlatResource(), "", false);
-						MainLayout3ColumnsController ctr = new LayoutMain3ColsController(uureq, wwControl, cpCtr.getMenuComponent(), cpCtr.getInitialComponent(), vfsWrapper.getName());
-						ctr.addDisposableChildController(cpCtr);
-						return ctr;
-					}
-			});
+			CoreSpringFactory.getImpl(UserCourseInformationsManager.class)
+				.updateUserCourseInformations(entry.getOlatResource(), uureq.getIdentity());
+			
+			CPDisplayController cpCtr = new CPDisplayController(uureq, wwControl, vfsWrapper, true, true, activateFirstPage, true, deliveryOptions,
+					initialUri, entry.getOlatResource(), "", false);
+			LayoutMain3ColsController ctr = new LayoutMain3ColsController(uureq, wwControl, cpCtr.getMenuComponent(), cpCtr.getInitialComponent(), vfsWrapper.getName());
+			ctr.addDisposableChildController(cpCtr);
+			ctr.addActivateableDelegate(cpCtr);
+			return ctr;
+		});
 	}
 
 	@Override
 	public Controller createEditorController(RepositoryEntry re, UserRequest ureq, WindowControl wControl, TooledStackedPanel toolbar) {
 		// only unzips, if not already unzipped
-		OlatRootFolderImpl cpRoot = FileResourceManager.getInstance().unzipContainerResource(re.getOlatResource());
+		VFSContainer cpRoot = FileResourceManager.getInstance().unzipContainerResource(re.getOlatResource());
 
-		Quota quota = QuotaManager.getInstance().getCustomQuota(cpRoot.getRelPath());
+		QuotaManager quotaManager = CoreSpringFactory.getImpl(QuotaManager.class);
+		Quota quota = quotaManager.getCustomQuota(cpRoot.getRelPath());
 		if (quota == null) {
-			Quota defQuota = QuotaManager.getInstance().getDefaultQuota(QuotaConstants.IDENTIFIER_DEFAULT_REPO);
-			quota = QuotaManager.getInstance().createQuota(cpRoot.getRelPath(), defQuota.getQuotaKB(), defQuota.getUlLimitKB());
+			Quota defQuota = quotaManager.getDefaultQuota(QuotaConstants.IDENTIFIER_DEFAULT_REPO);
+			quota = quotaManager.createQuota(cpRoot.getRelPath(), defQuota.getQuotaKB(), defQuota.getUlLimitKB());
 		}
 		VFSSecurityCallback secCallback = new FullAccessWithQuotaCallback(quota);
 		cpRoot.setLocalSecurityCallback(secCallback);

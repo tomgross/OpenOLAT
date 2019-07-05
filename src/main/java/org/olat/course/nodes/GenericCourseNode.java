@@ -40,6 +40,7 @@ import org.olat.core.gui.control.generic.messages.MessageUIFactory;
 import org.olat.core.gui.control.generic.tabbable.TabbableController;
 import org.olat.core.gui.translator.Translator;
 import org.olat.core.id.Identity;
+import org.olat.core.id.Organisation;
 import org.olat.core.util.CodeHelper;
 import org.olat.core.util.StringHelper;
 import org.olat.core.util.Util;
@@ -64,7 +65,7 @@ import org.olat.course.run.userview.TreeFilter;
 import org.olat.course.run.userview.UserCourseEnvironment;
 import org.olat.course.statistic.StatisticResourceOption;
 import org.olat.course.statistic.StatisticResourceResult;
-import org.olat.ims.qti.statistics.QTIType;
+import org.olat.course.statistic.StatisticType;
 import org.olat.modules.ModuleConfiguration;
 
 /**
@@ -81,7 +82,7 @@ public abstract class GenericCourseNode extends GenericNode implements CourseNod
 	private Condition preConditionVisibility;
 	private Condition preConditionAccess;
 	protected transient StatusDescription[] oneClickStatusCache = null;
-	protected List<AdditionalCondition> additionalConditions = new ArrayList<AdditionalCondition>();
+	protected List<AdditionalCondition> additionalConditions = new ArrayList<>();
 
 	/**
 	 * Generic course node constructor
@@ -157,12 +158,12 @@ public abstract class GenericCourseNode extends GenericNode implements CourseNod
 	
 	@Override
 	public StatisticResourceResult createStatisticNodeResult(UserRequest ureq, WindowControl wControl,
-			UserCourseEnvironment userCourseEnv, StatisticResourceOption options, QTIType... types) {
+			UserCourseEnvironment userCourseEnv, StatisticResourceOption options, StatisticType type) {
 		return null;
 	}
 
 	@Override
-	public boolean isStatisticNodeResultAvailable(UserCourseEnvironment userCourseEnv, QTIType... types) {
+	public boolean isStatisticNodeResultAvailable(UserCourseEnvironment userCourseEnv, StatisticType type) {
 		return false;
 	}
 
@@ -408,15 +409,12 @@ public abstract class GenericCourseNode extends GenericNode implements CourseNod
 	 *      org.olat.course.ICourse, java.util.zip.ZipOutputStream, String charset)
 	 */
 	@Override
-	public boolean archiveNodeData(Locale locale, ICourse course, ArchiveOptions options, ZipOutputStream exportStream, String charset) {
+	public boolean archiveNodeData(Locale locale, ICourse course, ArchiveOptions options,
+			ZipOutputStream exportStream, String path, String charset) {
 		// nothing to do in default implementation
 		return true;
 	}
 
-	/**
-	 * @see org.olat.course.nodes.CourseNode#exportNode(java.io.File,
-	 *      org.olat.course.ICourse)
-	 */
 	@Override
 	public void exportNode(File exportDirectory, ICourse course) {
 	// nothing to do in default implementation
@@ -424,12 +422,9 @@ public abstract class GenericCourseNode extends GenericNode implements CourseNod
 
 	/**
 	 * Implemented by specialized node
-	 * @see org.olat.course.nodes.CourseNode#importNode(java.io.File,
-	 *      org.olat.course.ICourse, org.olat.core.gui.UserRequest,
-	 *      org.olat.core.gui.control.WindowControl, boolean)
 	 */
 	@Override
-	public void importNode(File importDirectory, ICourse course, Identity owner, Locale locale, boolean withReferences) {
+	public void importNode(File importDirectory, ICourse course, Identity owner, Organisation organisation, Locale locale, boolean withReferences) {
 		// nothing to do in default implementation
 	}
 
@@ -614,7 +609,7 @@ public abstract class GenericCourseNode extends GenericNode implements CourseNod
 	 */
 	//for StatusDescription.WARNING
 	protected List<StatusDescription> isConfigValidWithTranslator(CourseEditorEnv cev, String translatorStr, List<ConditionExpression> condExprs) {
-		List<StatusDescription> condExprsStatusDescs = new ArrayList<StatusDescription>();
+		List<StatusDescription> condExprsStatusDescs = new ArrayList<>();
 		// check valid configuration without course environment
 		StatusDescription first = isConfigValid();
 		// check valid configuration within the course environment

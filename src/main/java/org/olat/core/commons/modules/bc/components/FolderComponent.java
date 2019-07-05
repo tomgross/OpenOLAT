@@ -30,36 +30,40 @@ import java.text.Collator;
 import java.text.DateFormat;
 import java.util.*;
 
+import org.olat.core.CoreSpringFactory;
 import org.olat.core.commons.controllers.linkchooser.CustomLinkTreeModel;
 import org.olat.core.commons.modules.bc.FolderLoggingAction;
 import org.olat.core.commons.modules.bc.FolderRunController;
 import org.olat.core.commons.modules.bc.commands.FolderCommandFactory;
-import org.olat.core.commons.modules.bc.meta.tagged.LockComparator;
+import org.olat.core.commons.modules.bc.comparators.LockComparator;
+import org.olat.core.commons.services.analytics.AnalyticsModule;
+import org.olat.core.commons.services.analytics.AnalyticsSPI;
+import org.olat.core.commons.services.vfs.VFSMetadata;
+import org.olat.core.commons.services.vfs.VFSRepositoryService;
 import org.olat.core.gui.UserRequest;
 import org.olat.core.gui.components.AbstractComponent;
 import org.olat.core.gui.components.ComponentRenderer;
 import org.olat.core.gui.control.Event;
 import org.olat.core.gui.translator.Translator;
 import org.olat.core.id.IdentityEnvironment;
-import org.olat.core.logging.OLog;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
 import org.olat.core.logging.activity.CoreLoggingResourceable;
 import org.olat.core.logging.activity.ThreadLocalUserActivityLogger;
 import org.olat.core.util.Util;
+import org.olat.core.util.vfs.VFSConstants;
 import org.olat.core.util.vfs.VFSContainer;
 import org.olat.core.util.vfs.VFSItem;
 import org.olat.core.util.vfs.VFSLeaf;
-import org.olat.core.util.vfs.filters.VFSItemExcludePrefixFilter;
 import org.olat.core.util.vfs.filters.VFSItemFilter;
-import org.olat.core.util.vfs.version.Versionable;
-import org.olat.user.UserManager;
+import org.olat.core.util.vfs.filters.VFSSystemItemFilter;
 
 /**
  * Initial Date:  Feb 11, 2004
  * @author Mike Stock
  */
 public class FolderComponent extends AbstractComponent {
-	private static final OLog log = Tracing.createLoggerFor(FolderComponent.class);
+	private static final Logger log = Tracing.createLoggerFor(FolderComponent.class);
  	private static final ComponentRenderer RENDERER = new FolderComponentRenderer();
  	
 	public static final String SORT_NAME = "name";
@@ -67,15 +71,6 @@ public class FolderComponent extends AbstractComponent {
 	public static final String SORT_DATE = "date";
 	public static final String SORT_REV = "revision";
 	public static final String SORT_LOCK = "lock";
-	
-	// see MessagesEditController
-	// see OLAT-4182/OLAT-4219 and OLAT-4259
-	// the filtering of .nfs is sort of temporary until we make sure that we no longer reference
-	// attached files anywhere at the time of deleting it
-	// likely to be resolved after user logs out, caches get cleared - and if not the server
-	// restart overnight definitely removes those .nfs files.
-	// fxdiff: FXOLAT-333 hide all shadow-files per default
-	public static final String[] ATTACHMENT_EXCLUDE_PREFIXES = new String[] {};
 
 	protected boolean sortAsc = true;													// asc or desc?
 	protected String sortCol = "";  													// column to sort
@@ -84,6 +79,7 @@ public class FolderComponent extends AbstractComponent {
 	private IdentityEnvironment identityEnv;
 	private VFSContainer rootContainer;
 	private VFSContainer currentContainer;
+	private VFSMetadata currentMetadata;
 	private String currentContainerPath;
 	private String currentSortOrder;
 	// need to know our children in advance in order to be able to identify them later...
@@ -93,9 +89,12 @@ public class FolderComponent extends AbstractComponent {
 	protected Translator translator;
 	private VFSItemFilter filter;
 	private final DateFormat dateTimeFormat;
-	private VFSItemExcludePrefixFilter exclFilter;
+	private VFSItemFilter exclFilter;
 	private CustomLinkTreeModel customLinkTreeModel;
 	private final VFSContainer externContainerForCopy;
+	
+	private final AnalyticsSPI analyticsSpi;
+	private final VFSRepositoryService vfsRepositoryService;
 
 	/**
 	 * Wraps the folder module as a component.
@@ -130,14 +129,14 @@ public class FolderComponent extends AbstractComponent {
 			VFSContainer rootContainer, VFSItemFilter filter,
 			CustomLinkTreeModel customLinkTreeModel, VFSContainer externContainerForCopy) {
 		super(name);
+		analyticsSpi = CoreSpringFactory.getImpl(AnalyticsModule.class).getAnalyticsProvider();
+		vfsRepositoryService = CoreSpringFactory.getImpl(VFSRepositoryService.class);
+		
 		this.identityEnv = ureq.getUserSession().getIdentityEnvironment();
 		this.filter = filter;
 		this.customLinkTreeModel = customLinkTreeModel;
 		this.externContainerForCopy = externContainerForCopy;
-
-		boolean showHiddenFiles = UserManager.getInstance().getShowHiddenFiles(ureq.getIdentity());
-		exclFilter = getExcludeFilter(showHiddenFiles);
-
+		exclFilter = new VFSSystemItemFilter();
 		Locale locale = ureq.getLocale();
 		collator = Collator.getInstance(locale);
 		translator = Util.createPackageTranslator(FolderRunController.class, locale);
@@ -146,16 +145,15 @@ public class FolderComponent extends AbstractComponent {
 		setCurrentContainerPath("/");
 		
 		dateTimeFormat = DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT, locale);
+		
 	}
 	
-	/**
-	 * @see org.olat.core.gui.components.Component#dispatchRequest(org.olat.core.gui.UserRequest)
-	 */
+	@Override
 	protected void doDispatchRequest(UserRequest ureq) {
 		if (ureq.getParameter(ListRenderer.PARAM_EDTID) != null) {
 			fireEvent(ureq, new Event(FolderCommandFactory.COMMAND_EDIT));
 			return;
-		} else if (ureq.getParameter(ListRenderer.PARAM_CONTENTEDITID) != null) {
+		} else if (ureq.getParameter(ListRenderer.PARAM_CONTENT_EDIT_ID) != null) {
 			fireEvent(ureq, new Event(FolderCommandFactory.COMMAND_EDIT_CONTENT));
 			return;
 		} else if (ureq.getParameter(ListRenderer.PARAM_SERV) != null) {
@@ -210,6 +208,10 @@ public class FolderComponent extends AbstractComponent {
 	public void setCanMail(boolean canMail) {
 		this.canMail = canMail;
 	}
+	
+	public AnalyticsSPI getAnalyticsSPI() {
+		return analyticsSpi;
+	}
 
 	/**
 	 * Sorts the bc folder components table
@@ -220,6 +222,7 @@ public class FolderComponent extends AbstractComponent {
 		currentSortOrder = col;
 		if (col.equals(SORT_NAME)) {																										// sort after file name?
 			comparator = new Comparator<VFSItem>() {
+				@Override
 				public int compare(VFSItem o1, VFSItem o2) {
 					if (sortAsc) {
 						if ((o1 instanceof VFSLeaf && o2 instanceof VFSLeaf) || (!(o1 instanceof VFSLeaf) && !(o2 instanceof VFSLeaf))) {
@@ -248,6 +251,7 @@ public class FolderComponent extends AbstractComponent {
 			};
 		} else if (col.equals(SORT_DATE)) {																							// sort after modification date (if same, then name)
 			comparator = new Comparator<VFSItem>() {
+				@Override
 				public int compare(VFSItem o1, VFSItem o2) {
 					if      (o1.getLastModified() < o2.getLastModified()) return ((sortAsc) ? -1 :  1);			
 					else if (o1.getLastModified() > o2.getLastModified()) return ((sortAsc) ?  1 : -1);
@@ -259,6 +263,7 @@ public class FolderComponent extends AbstractComponent {
 			};
 		} else	if (col.equals(SORT_SIZE)) {																						// sort after file size, folders always on top
 			comparator = new Comparator<VFSItem>() {
+				@Override
 				public int compare(VFSItem o1, VFSItem o2) {
 					VFSLeaf leaf1 = null;
 					if (o1 instanceof VFSLeaf) {
@@ -280,7 +285,10 @@ public class FolderComponent extends AbstractComponent {
 			};
 		} else if (col.equals(SORT_REV)) {																							// sort after revision number, folders always on top
 			comparator = new Comparator<VFSItem>() {
+				@Override
 				public int compare(VFSItem o1, VFSItem o2) {
+					return o1.getName().compareTo(o2.getName());
+					/*
 					Versionable v1 = null;
 					Versionable v2 = null;
 					if (o1 instanceof Versionable) {
@@ -303,6 +311,7 @@ public class FolderComponent extends AbstractComponent {
 						return 1;
 					}
 					return (sortAsc) ? collator.compare(r1, r2) : collator.compare(r2, r1);
+					*/
 				}
 			};
 		}  else if (col.equals(SORT_LOCK)) {																							// sort after modification date (if same, then name)
@@ -311,16 +320,10 @@ public class FolderComponent extends AbstractComponent {
 		if (currentContainerChildren != null) updateChildren();													// if not empty the update list
 	}
 
-	/**
-	 * @return VFSContainer
-	 */
 	public VFSContainer getRootContainer() {
 		return rootContainer;
 	}
 
-	/**
-	 * @return VFSContainer
-	 */
 	public VFSContainer getCurrentContainer() {
 		return currentContainer;
 	}
@@ -365,7 +368,7 @@ public class FolderComponent extends AbstractComponent {
 		if (filter != null) {
 			children = currentContainer.getItems(filter);
 		} else {
-			children = currentContainer.getItems();			
+			children = currentContainer.getItems(new VFSSystemItemFilter());			
 		}
 		// OLAT-5256: filter .nfs files
 		for(Iterator<VFSItem> it = children.iterator(); it.hasNext(); ) {
@@ -382,24 +385,30 @@ public class FolderComponent extends AbstractComponent {
 		currentContainerChildren = children;
 	}
 	
-	/**
-	 * @param relPath
-	 */
 	public boolean setCurrentContainerPath(String relPath) {
 		// get the container
 		setDirty(true);
+		currentMetadata = null;
+		
 		if (relPath == null) relPath = "/";
 		if (!(relPath.charAt(0) == '/')) relPath = "/" + relPath;
 		VFSItem vfsItem = rootContainer.resolve(relPath);
-		if (vfsItem == null || !(vfsItem instanceof VFSContainer)) {
+		if (!(vfsItem instanceof VFSContainer)) {
 			// unknown path, reset to root contaner...
 			currentContainer = rootContainer;
 			relPath = "";
 			return false;
 		}
 		
-		this.currentContainer = (VFSContainer)vfsItem;
-		this.currentContainerPath = relPath;
+		currentContainer = (VFSContainer)vfsItem;
+		if(currentContainer.canMeta() == VFSConstants.YES) {
+			currentMetadata = vfsRepositoryService.getMetadataFor(currentContainer);
+			if(currentMetadata != null && !"migrated".equals(currentMetadata.getMigrated())) {
+				vfsRepositoryService.migrate(currentContainer, currentMetadata);
+			}
+		}
+		
+		currentContainerPath = relPath;
 		updateChildren();
 		return true;
 	}
@@ -429,6 +438,7 @@ public class FolderComponent extends AbstractComponent {
 		return externContainerForCopy;
 	}
 
+	@Override
 	public ComponentRenderer getHTMLRendererSingleton() {
 		return RENDERER;
 	}

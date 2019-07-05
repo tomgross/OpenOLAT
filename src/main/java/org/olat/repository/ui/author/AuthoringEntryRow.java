@@ -22,6 +22,7 @@ package org.olat.repository.ui.author;
 import java.util.Date;
 import java.util.List;
 
+import org.olat.core.commons.services.license.License;
 import org.olat.core.gui.components.form.flexible.elements.FormLink;
 import org.olat.core.id.OLATResourceable;
 import org.olat.core.util.filter.FilterFactory;
@@ -30,7 +31,7 @@ import org.olat.repository.RepositoryEntryAuthorView;
 import org.olat.repository.RepositoryEntryLight;
 import org.olat.repository.RepositoryEntryManagedFlag;
 import org.olat.repository.RepositoryEntryRef;
-import org.olat.repository.RepositoryEntryStatus;
+import org.olat.repository.RepositoryEntryStatusEnum;
 import org.olat.repository.model.RepositoryEntryLifecycle;
 import org.olat.repository.ui.PriceMethod;
 
@@ -51,9 +52,10 @@ public class AuthoringEntryRow implements RepositoryEntryRef, RepositoryEntryLig
 	private final String location;
 	private final String shortenedDescription;
 	
-	private final boolean membersOnly;
-	private final int access;
-	private final int statusCode;
+	private RepositoryEntryStatusEnum status;
+	private final boolean allUsers;
+	private final boolean guests;
+	private final boolean bookable;
 
 	private final Date lastUsage;
 	private final Date creationDate;
@@ -68,6 +70,11 @@ public class AuthoringEntryRow implements RepositoryEntryRef, RepositoryEntryLig
 	private Date lifecycleStart;
 	private Date lifecycleEnd;
 	
+	private final int numOfReferences;
+	
+	private final boolean lectureEnabled;
+	private final boolean rollCallEnabled;
+	
 	private final String deletedByFullName;
 	private final Date deletionDate;
 	
@@ -75,8 +82,11 @@ public class AuthoringEntryRow implements RepositoryEntryRef, RepositoryEntryLig
 
 	private OLATResourceable olatResource;
 	
+	private License license;
+	
 	private FormLink markLink;
 	private FormLink toolsLink;
+	private FormLink referencesLink;
 	
 	public AuthoringEntryRow(RepositoryEntryAuthorView view, String fullnameAuthor) {
 		key = view.getKey();
@@ -103,9 +113,10 @@ public class AuthoringEntryRow implements RepositoryEntryRef, RepositoryEntryLig
 		managed = view.getManagedFlags() != null && view.getManagedFlags().length > 0;
 		managedFlags = view.getManagedFlags();
 		
-		membersOnly = view.isMembersOnly();
-		access = view.getAccess();
-		statusCode = view.getStatusCode();
+		status = view.getEntryStatus();
+		allUsers = view.isAllUsers();
+		guests = view.isGuests();
+		bookable = view.isBookable();
 		
 		olatResource = OresHelper.clone(view.getOlatResource());
 		
@@ -118,6 +129,10 @@ public class AuthoringEntryRow implements RepositoryEntryRef, RepositoryEntryLig
 				lifecycleSoftKey = lifecycle.getSoftKey();
 			}
 		}
+		
+		numOfReferences = view.getNumOfReferences();
+		lectureEnabled = view.isLectureEnabled();
+		rollCallEnabled = view.isRollCallEnabled();
 		
 		deletedByFullName = view.getDeletedByFullName();
 		deletionDate = view.getDeletionDate();
@@ -137,22 +152,23 @@ public class AuthoringEntryRow implements RepositoryEntryRef, RepositoryEntryLig
 	}
 	
 	@Override
-	public int getStatusCode() {
-		return statusCode;
+	public RepositoryEntryStatusEnum getEntryStatus() {
+		return status;
+	}
+
+	@Override
+	public boolean isAllUsers() {
+		return allUsers;
+	}
+
+	@Override
+	public boolean isGuests() {
+		return guests;
 	}
 	
-	public RepositoryEntryStatus getRepositoryEntryStatus() {
-		return new RepositoryEntryStatus(statusCode);
-	}
-
 	@Override
-	public boolean isMembersOnly() {
-		return membersOnly;
-	}
-
-	@Override
-	public int getAccess() {
-		return access;
+	public boolean isBookable() {
+		return bookable;
 	}
 
 	public Date getLastUsage() {
@@ -211,6 +227,18 @@ public class AuthoringEntryRow implements RepositoryEntryRef, RepositoryEntryLig
 
 	public Date getLifecycleEnd() {
 		return lifecycleEnd;
+	}
+	
+	public int getNumOfReferences() {
+		return numOfReferences;
+	}
+
+	public boolean isLectureEnabled() {
+		return lectureEnabled;
+	}
+
+	public boolean isRollCallEnabled() {
+		return rollCallEnabled;
 	}
 
 	public String getDeletedByFullName() {
@@ -274,6 +302,14 @@ public class AuthoringEntryRow implements RepositoryEntryRef, RepositoryEntryLig
 		this.selected = selected;
 	}
 
+	public License getLicense() {
+		return license;
+	}
+
+	public void setLicense(License license) {
+		this.license = license;
+	}
+
 	public FormLink getMarkLink() {
 		return markLink;
 	}
@@ -290,6 +326,14 @@ public class AuthoringEntryRow implements RepositoryEntryRef, RepositoryEntryLig
 		this.toolsLink = toolsLink;
 	}
 	
+	public FormLink getReferencesLink() {
+		return referencesLink;
+	}
+
+	public void setReferencesLink(FormLink referencesLink) {
+		this.referencesLink = referencesLink;
+	}
+
 	@Override
 	public int hashCode() {
 		return key == null ? -79224867 : key.hashCode();

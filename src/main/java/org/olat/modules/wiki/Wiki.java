@@ -29,6 +29,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.Serializable;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.Date;
 import java.util.HashMap;
@@ -42,7 +43,7 @@ import org.jamwiki.utils.Utilities;
 import org.olat.core.CoreSpringFactory;
 import org.olat.core.logging.AssertException;
 import org.olat.core.logging.OLATRuntimeException;
-import org.olat.core.logging.OLog;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.FileUtils;
 import org.olat.core.util.Formatter;
@@ -79,7 +80,7 @@ public class Wiki implements WikiContainer, Serializable {
 	protected static final String NEW_PAGE = "O_new_page";
 	private String IMAGE_NAMESPACE = "Image:";
 	private String MEDIA_NAMESPACE = "Media:";
-	private static final OLog log = Tracing.createLoggerFor(Wiki.class);
+	private static final Logger log = Tracing.createLoggerFor(Wiki.class);
 	
 	protected Wiki(VFSContainer wikiRootContainer) {
 		if(wikiRootContainer == null) throw new AssertException("null values are not allowed for the wiki constructor!");
@@ -100,15 +101,39 @@ public class Wiki implements WikiContainer, Serializable {
 	 * @return the wikiPage or null if not found
 	 */
 	public WikiPage getPage(String pageId) {
-		WikiPage page = null;
-		page = wikiPages.get(pageId);
+		WikiPage page = getPageById(pageId);
 		// try also the pageName, may be someone tried to access with the name
 		// instead of the page id
-		if (page == null) page = wikiPages.get(this.generatePageId(pageId));
-		if (page == null) page = wikiPages.get(this.generatePageId(FilterUtil.normalizeWikiLink(pageId)));
+		if (page == null) {
+			page = getPageById(generatePageId(pageId));
+		}
+		if (page == null) {
+			page = getPageById(generatePageId(FilterUtil.normalizeWikiLink(pageId)));
+		}
 		if (page == null) {
 			page = new WikiPage(WikiPage.WIKI_ERROR);
 			page.setContent("wiki.error.page.not.found");
+		}
+		return page;
+	}
+	
+	/**
+	 * The method check the specified pageId with the
+	 * id in the map and if it doesn't found a page, check
+	 * all pages for an alternative ids.
+	 * 
+	 * @param pageId
+	 * @return
+	 */
+	private final WikiPage getPageById(String pageId) {
+		WikiPage page = wikiPages.get(pageId);
+		if(page == null) {
+			for(WikiPage wikiPage:wikiPages.values()) {
+				if(wikiPage.matchIds(pageId)) {
+					page = wikiPage;
+					break;
+				}
+			}
 		}
 		return page;
 	}
@@ -123,17 +148,27 @@ public class Wiki implements WikiContainer, Serializable {
 	public WikiPage getPage(String pageId, boolean loadContent) {
 		WikiPage page = getPage(pageId);
 		// if not empty content is already loaded
-		if (!page.getContent().equals("")) return page;
+		if (!page.getContent().equals("")) {
+			return page;
+		}
 		if (loadContent) {
-			VFSLeaf leaf = (VFSLeaf) pageContainer.resolve(page.getPageId() + "." + WikiManager.WIKI_FILE_SUFFIX);
-			page.setContent(FileUtils.load(leaf.getInputStream(), "utf-8"));
+			VFSItem item = pageContainer.resolve(page.getPageId() + "." + WikiManager.WIKI_FILE_SUFFIX);
+			if(item instanceof VFSLeaf) {
+				try(InputStream in = ((VFSLeaf)item).getInputStream()) {
+					page.setContent(FileUtils.load(in, "utf-8"));
+				} catch(Exception e) {
+					log.error("Cannot load wiki page: " + item, e);
+				}
+			}
 		}
 		return page;
 	}
 
 	public void addPage(WikiPage page) {
 		String pageId = page.getPageId();
-		if (!wikiPages.containsKey(pageId)) wikiPages.put(pageId, page);
+		if (!wikiPages.containsKey(pageId)) {
+			wikiPages.put(pageId, page);
+		}
 	}
 
 	/**
@@ -141,8 +176,9 @@ public class Wiki implements WikiContainer, Serializable {
 	 * @see WikiPage.generateId(name) as pages are stored by pageId
 	 * @return
 	 */
+	@Override
 	public boolean pageExists(String pageId) {
-		if( log.isDebug() ) {
+		if( log.isDebugEnabled() ) {
 			boolean exists = wikiPages.containsKey(pageId);
 			log.debug("\n\nChecking for existence of page with id in this wiki: "+ pageId +" located in: "+pageContainer);
 			log.debug("Does page exists?: "+ exists);
@@ -151,10 +187,24 @@ public class Wiki implements WikiContainer, Serializable {
 		boolean isImage = pageId.startsWith(IMAGE_NAMESPACE);
 		boolean isMedia = pageId.startsWith(MEDIA_NAMESPACE);
 		if ( isImage || isMedia ) {
-			if (isImage) return mediaFileExists(pageId.substring(IMAGE_NAMESPACE.length(), pageId.length()));
-			if (isMedia) return mediaFileExists(pageId.substring(MEDIA_NAMESPACE.length(), pageId.length()));
+			if (isImage) {
+				return mediaFileExists(pageId.substring(IMAGE_NAMESPACE.length(), pageId.length()));
+			}
+			if (isMedia) {
+				return mediaFileExists(pageId.substring(MEDIA_NAMESPACE.length(), pageId.length()));
+			}
 		}
-		return wikiPages.containsKey(pageId);
+
+		boolean exists = wikiPages.containsKey(pageId);
+		if(!exists) {
+			for(WikiPage wikiPage:wikiPages.values()) {
+				if(wikiPage.matchIds(pageId)) {
+					exists = true;
+					break;
+				}
+			}	
+		}
+		return exists;
 	}
 
 	protected void removePage(WikiPage page) {
@@ -164,14 +214,14 @@ public class Wiki implements WikiContainer, Serializable {
 	}
 
 	protected int getNumberOfPages() {
-		return this.wikiPages.size();
+		return wikiPages.size();
 	}
 
 	protected List<ChangeInfo> getDiff(WikiPage page, int version1, int version2) {
 		WikiPage v1 = loadVersion(page, version1);
 		WikiPage v2 = loadVersion(page, version2);
 		
-		if (log.isDebug()) {
+		if (log.isDebugEnabled()) {
 			log.debug("comparing wiki page versions: " + version1 + " <--> " + version2);
 			log.debug("version 1:\n" + v1.toString());
 			log.debug("version 2:\n" + v2.toString());
@@ -181,7 +231,7 @@ public class Wiki implements WikiContainer, Serializable {
 	}
 
 	protected List<WikiPage> getHistory(WikiPage page) {
-		List<WikiPage> versions = new ArrayList<WikiPage>();
+		List<WikiPage> versions = new ArrayList<>();
 		List<VFSItem> leafs = versionsContainer.getItems(new VFSLeafFilter());
 		if (leafs.size() > 0) {
 			for (Iterator<VFSItem> iter = leafs.iterator(); iter.hasNext();) {
@@ -220,10 +270,8 @@ public class Wiki implements WikiContainer, Serializable {
 	public static WikiPage assignPropertiesToPage(VFSLeaf leaf) {
 		Properties p = new Properties();
 		if (leaf != null) {
-		try {
-			InputStream is =leaf.getInputStream();
+		try(InputStream is =leaf.getInputStream()) {
 			p.load(is);
-			is.close();
 		} catch (IOException e) {
 			throw new OLATRuntimeException("Wiki page couldn't be read! Pagename:"+leaf.getName(), e);
 		}
@@ -232,7 +280,16 @@ public class Wiki implements WikiContainer, Serializable {
 			log.warn("wiki properties page is persent but without content. Name:"+leaf.getName());
 			return null;
 		}
-		WikiPage page = new WikiPage(pageName);
+		
+		String initialPageName = p.getProperty(WikiManager.INITIAL_PAGENAME);
+		WikiPage page = new WikiPage(pageName, initialPageName);
+		String oldPageNames = p.getProperty(WikiManager.OLD_PAGENAME);
+		if(StringHelper.containsNonWhitespace(oldPageNames)) {
+			String[] names =  oldPageNames.split("[,]");
+			if(names.length > 0) {
+				page.setOldPageNames(Arrays.asList(names));
+			}
+		}
 		page.setCreationTime(p.getProperty(WikiManager.C_TIME));
 		page.setVersion(p.getProperty(WikiManager.VERSION));
 		page.setForumKey(p.getProperty(WikiManager.FORUM_KEY));
@@ -253,26 +310,27 @@ public class Wiki implements WikiContainer, Serializable {
 	
 	protected List<VFSItem> getMediaFileList() {
 		List<VFSItem> allFiles = mediaContainer.getItems();
-		List<VFSItem> mediaFilesOnly = new ArrayList<VFSItem>();
+		List<VFSItem> mediaFilesOnly = new ArrayList<>();
 		for (Iterator<VFSItem> iter = allFiles.iterator(); iter.hasNext();) {
 			VFSItem element = iter.next();
-			if(!element.getName().endsWith(WikiMainController.METADATA_SUFFIX)) mediaFilesOnly.add(element);
+			if(!element.getName().endsWith(WikiMainController.METADATA_SUFFIX)) {//TODO 
+				mediaFilesOnly.add(element);
+			}
 		}
 		return mediaFilesOnly;
 	}
 
 	public String getAllPageNamesSorted() {
-		ArrayList<WikiPage> pages = new ArrayList<WikiPage>(wikiPages.values());
+		List<WikiPage> pages = new ArrayList<>(wikiPages.values());
 		Collections.sort(pages, WikiPageSort.PAGENAME_ORDER);
 		StringBuilder sb = new StringBuilder();
-		for (Iterator<WikiPage> iter = pages.iterator(); iter.hasNext();) {
-			WikiPage page = iter.next();
+		for (WikiPage page:pages) {
 			if (!page.getPageName().startsWith("O_")) {
 				sb.append("* ");
-				if(log.isDebug()) sb.append(page.getPageId()).append("  -->  ");
-				sb.append("[[");
-				sb.append(page.getPageName());
-				sb.append("]]\n");
+				if(log.isDebugEnabled()) sb.append(page.getPageId()).append("  -->  ");
+				sb.append("[[")
+				  .append(page.getPageName())
+				  .append("]]\n");
 			}
 		}
 		return sb.toString();
@@ -281,7 +339,7 @@ public class Wiki implements WikiContainer, Serializable {
 	protected String getRecentChanges(Locale locale) {
 		if(locale == null) throw new AssertException("param was null which is not allowed");
 		final int MAX_RESULTS = 5;
-		ArrayList<WikiPage> pages = new ArrayList<WikiPage>(wikiPages.values());
+		List<WikiPage> pages = new ArrayList<>(wikiPages.values());
 		Collections.sort(pages, WikiPageSort.MODTIME_ORDER);
 		StringBuilder sb = new StringBuilder(512);
 		int counter = 0;
@@ -325,8 +383,9 @@ public class Wiki implements WikiContainer, Serializable {
 	/**
 	 * @see org.olat.core.commons.modules.wiki.WikiContainer#generatePageId(java.lang.String)
 	 */
+	@Override
 	public String generatePageId(String pageName) {
-		if(log.isDebug()) log.debug("Generating page id from page name: "+pageName +" to id: "+WikiManager.generatePageId(pageName));
+		if(log.isDebugEnabled()) log.debug("Generating page id from page name: "+pageName +" to id: "+WikiManager.generatePageId(pageName));
 		return WikiManager.generatePageId(pageName);
 	}
 

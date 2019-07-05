@@ -35,12 +35,14 @@ import org.olat.core.gui.control.Controller;
 import org.olat.core.gui.control.Event;
 import org.olat.core.gui.control.WindowControl;
 import org.olat.core.gui.control.generic.closablewrapper.CloseableCalloutWindowController;
+import org.olat.core.gui.control.generic.closablewrapper.CloseableModalController;
+import org.olat.core.gui.control.generic.dtabs.Activateable2;
 import org.olat.core.gui.control.generic.modal.DialogBoxController;
 import org.olat.core.gui.control.generic.modal.DialogBoxUIFactory;
 import org.olat.core.gui.translator.Translator;
 import org.olat.core.id.Identity;
-import org.olat.core.id.UserConstants;
-import org.olat.core.util.Formatter;
+import org.olat.core.id.context.ContextEntry;
+import org.olat.core.id.context.StateEntry;
 import org.olat.core.util.StringHelper;
 import org.olat.core.util.coordinate.CoordinatorManager;
 import org.olat.core.util.io.SystemFilenameFilter;
@@ -59,12 +61,15 @@ import org.olat.course.nodes.gta.Task;
 import org.olat.course.nodes.gta.TaskHelper;
 import org.olat.course.nodes.gta.TaskHelper.FilesLocked;
 import org.olat.course.nodes.gta.TaskProcess;
+import org.olat.course.nodes.gta.model.DueDate;
 import org.olat.course.nodes.gta.model.TaskDefinition;
 import org.olat.course.nodes.gta.ui.events.SubmitEvent;
 import org.olat.course.nodes.gta.ui.events.TaskMultiUserEvent;
 import org.olat.course.nodes.ms.MSCourseNodeRunController;
+import org.olat.course.run.scoring.AssessmentEvaluation;
 import org.olat.course.run.userview.UserCourseEnvironment;
 import org.olat.group.BusinessGroup;
+import org.olat.modules.assessment.Role;
 import org.springframework.beans.factory.annotation.Autowired;
 
 /**
@@ -73,21 +78,31 @@ import org.springframework.beans.factory.annotation.Autowired;
  * @author srosse, stephane.rosse@frentix.com, http://www.frentix.com
  *
  */
-public class GTAParticipantController extends GTAAbstractController {
+public class GTAParticipantController extends GTAAbstractController implements Activateable2 {
 	
-	private Link submitButton, openGroupButton, changeGroupLink;
+	private Link submitButton;
+	private Link openGroupButton;
+	private Link changeGroupLink;
+	private Link resetTaskButton;
+	private Link optionalTaskButton;
 
+	private CloseableModalController cmc;
+	private DirectoryController solutionsCtrl;
+	private DirectoryController correctionsCtrl;
+	private DirectoryController submittedDocCtrl;
 	private MSCourseNodeRunController gradingCtrl;
 	private SubmitDocumentsController submitDocCtrl;
 	private DialogBoxController confirmSubmitDialog;
 	private GTAAssignedTaskController assignedTaskCtrl;
 	private GTAAvailableTaskController availableTaskCtrl;
+	private ConfirmResetTaskController confirmResetTaskCtrl;
 	private CloseableCalloutWindowController chooserCalloutCtrl;
 	private BusinessGroupChooserController businessGroupChooserCtrl;
 	private GTAParticipantRevisionAndCorrectionsController revisionDocumentsCtrl;
-	private DirectoryController submittedDocCtrl, correctionsCtrl, solutionsCtrl;
+	private ConfirmOptionalTaskAssignmentController confirmOptionalAssignmentCtrl;
 
 	private List<BusinessGroup> myGroups;
+	private boolean optionalTaskRefused = false;
 	
 	@Autowired
 	private MailManager mailManager;
@@ -102,8 +117,12 @@ public class GTAParticipantController extends GTAAbstractController {
 	@Override
 	protected void initContainer(UserRequest ureq) {
 		mainVC = createVelocityContainer("run");
-		putInitialPanel(mainVC);
 		
+		resetTaskButton = LinkFactory.createCustomLink("participant.reset.button", "reset", "participant.reset.button", Link.BUTTON, mainVC, this);
+		resetTaskButton.setElementCssClass("o_sel_course_gta_reset");
+		resetTaskButton.setVisible(false);
+		
+		putInitialPanel(mainVC);
 		initFlow() ;
 	}
 
@@ -115,7 +134,7 @@ public class GTAParticipantController extends GTAAbstractController {
 		} else {
 			//this is a group task
 			myGroups = gtaManager.getParticipatingBusinessGroups(getIdentity(), gtaNode);
-			if(myGroups.size() == 0) {
+			if(myGroups.isEmpty()) {
 				//show error
 				mainVC.contextPut("noGroupError", Boolean.TRUE);
 			} else if(myGroups.size() == 1) {
@@ -145,6 +164,11 @@ public class GTAParticipantController extends GTAAbstractController {
 				stepPreferences.setAssignement(Boolean.TRUE);
 			}
 			
+			boolean optional = gtaNode.isOptional();
+			if(optional) {
+				mainVC.contextPut("assignmentOptional", Boolean.TRUE);
+			}
+			
 			//assignment open?
 			DueDate dueDate = getAssignementDueDate(assignedTask);
 			if(dueDate != null && dueDate.getDueDate() != null && dueDate.getDueDate().compareTo(new Date()) < 0) {
@@ -158,26 +182,14 @@ public class GTAParticipantController extends GTAAbstractController {
 				//assignment auto or manual
 				String assignmentType = config.getStringValue(GTACourseNode.GTASK_ASSIGNEMENT_TYPE);
 				if(GTACourseNode.GTASK_ASSIGNEMENT_TYPE_AUTO.equals(assignmentType)) {
-					
-					AssignmentResponse response;
-					if(GTAType.group.name().equals(config.getStringValue(GTACourseNode.GTASK_TYPE))) {
-						response = gtaManager.assignTaskAutomatically(taskList, assessedGroup, courseEnv, gtaNode);
-					} else {
-						response = gtaManager.assignTaskAutomatically(taskList, assessedIdentity, courseEnv, gtaNode);
-					}
-					
-					if(response == null || response.getStatus() == AssignmentResponse.Status.error) {
-						showError("task.assignment.error");
-					} else if(response == null || response.getStatus() == AssignmentResponse.Status.noMoreTasks) {
-						showError("error.nomoretasks");
-					} else if(response == null || response.getStatus() == AssignmentResponse.Status.ok) {
-						if(response != null) {
-							assignedTask = response.getTask();
+					if(optionalTaskRefused) {
+						if(optionalTaskButton == null) {
+							optionalTaskButton = LinkFactory.createCustomLink("run.accept.optional", "accept.optional", "run.accept.optional", Link.BUTTON, mainVC, this);
 						}
-						showInfo(buildAssignmentTaskMessage(assignedTask, ureq.getIdentity()));
-						showAssignedTask(ureq, assignedTask);
-						// send e-mail; called function will check the enabled roles
-						doAssignmentEmail(assignedTask);
+					} else if(optional) {
+						doConfirmOptionalAssignment(ureq, assignedTask);
+					} else {
+						assignedTask = assignTaskAutomatically(ureq, assignedTask);
 					}
 				} else if(GTACourseNode.GTASK_ASSIGNEMENT_TYPE_MANUAL.equals(assignmentType)) {
 					availableTaskCtrl = new GTAAvailableTaskController(ureq, getWindowControl(), availableTasks,
@@ -223,6 +235,35 @@ public class GTAParticipantController extends GTAAbstractController {
 			message = message.replaceAll("\\$" + key, placeholders.get(key));
 		}
 		return message != null ? message : "";
+	}
+	
+	private void doConfirmOptionalAssignment(UserRequest ureq, Task assignedTask) {
+		confirmOptionalAssignmentCtrl = new ConfirmOptionalTaskAssignmentController(ureq, getWindowControl(), assignedTask);
+		listenTo(confirmOptionalAssignmentCtrl);
+		String title = translate("participant.confirm.option.task.title");
+		cmc = new CloseableModalController(getWindowControl(), translate("close"), confirmOptionalAssignmentCtrl.getInitialComponent(), true, title);
+		listenTo(cmc);
+		cmc.activate();
+	}
+	
+	private Task assignTaskAutomatically(UserRequest ureq, Task assignedTask) {
+		AssignmentResponse response;
+		if(GTAType.group.name().equals(config.getStringValue(GTACourseNode.GTASK_TYPE))) {
+			response = gtaManager.assignTaskAutomatically(taskList, assessedGroup, courseEnv, gtaNode);
+		} else {
+			response = gtaManager.assignTaskAutomatically(taskList, assessedIdentity, courseEnv, gtaNode);
+		}
+		
+		if(response == null || response.getStatus() == AssignmentResponse.Status.error) {
+			showError("task.assignment.error");
+		} else if(response.getStatus() == AssignmentResponse.Status.noMoreTasks) {
+			showError("error.nomoretasks");
+		} else if(response.getStatus() == AssignmentResponse.Status.ok) {
+			assignedTask = response.getTask();
+			showInfo("task.successfully.assigned");
+			showAssignedTask(ureq, assignedTask);
+		}
+		return assignedTask;
 	}
 	
 	private void showAssignedTask(UserRequest ureq, Task assignedTask) {
@@ -284,11 +325,11 @@ public class GTAParticipantController extends GTAAbstractController {
 		File documentsDir;
 		VFSContainer documentsContainer;
 		if(GTAType.group.name().equals(config.getStringValue(GTACourseNode.GTASK_TYPE))) {
-			documentsDir = gtaManager.getSubmitDirectory(courseEnv, gtaNode, assessedGroup);
 			documentsContainer = gtaManager.getSubmitContainer(courseEnv, gtaNode, assessedGroup);
+			documentsDir = gtaManager.getSubmitDirectory(courseEnv, gtaNode, assessedGroup);
 		} else {
-			documentsDir = gtaManager.getSubmitDirectory(courseEnv, gtaNode, getIdentity());
 			documentsContainer = gtaManager.getSubmitContainer(courseEnv, gtaNode, getIdentity());
+			documentsDir = gtaManager.getSubmitDirectory(courseEnv, gtaNode, getIdentity());
 		}
 		
 		DueDate dueDate = getSubmissionDueDate(task);
@@ -362,8 +403,12 @@ public class GTAParticipantController extends GTAAbstractController {
 	}
 	
 	private void doSubmitDocuments(UserRequest ureq, Task task) {
-		TaskProcess review = gtaManager.nextStep(TaskProcess.submit, gtaNode);
-		task = gtaManager.updateTask(task, review, gtaNode);
+		int numOfDocs = getNumberOfSubmittedDocuments();
+		if(task == null) {
+			TaskProcess firstStep = gtaManager.firstStep(gtaNode);
+			task = gtaManager.createTask(null, taskList, firstStep, assessedGroup, assessedIdentity, gtaNode);
+		}
+		task = gtaManager.submitTask(task, gtaNode, numOfDocs, Role.user);
 		showInfo("run.documents.successfully.submitted");
 		
 		TaskMultiUserEvent event = new TaskMultiUserEvent(TaskMultiUserEvent.SUMBIT_TASK,
@@ -371,7 +416,8 @@ public class GTAParticipantController extends GTAAbstractController {
 		CoordinatorManager.getInstance().getCoordinator().getEventBus()
 			.fireEventToListenersOf(event, taskListEventResource);
 		
-		gtaManager.log("Submit", "submit documents", task, getIdentity(), assessedIdentity, assessedGroup, courseEnv, gtaNode);
+		gtaManager.log("Submit", "submit documents", task,
+				getIdentity(), assessedIdentity, assessedGroup, courseEnv, gtaNode, Role.user);
 		
 		cleanUpProcess();
 		process(ureq);
@@ -465,6 +511,17 @@ public class GTAParticipantController extends GTAAbstractController {
 		mailManager.sendMessage(bundles);
 	}
 	
+	private void doConfirmResetTask(UserRequest ureq, Task task) {
+		if(confirmResetTaskCtrl != null) return;
+		confirmResetTaskCtrl = new ConfirmResetTaskController(ureq, getWindowControl(), task, gtaNode, courseEnv);
+		listenTo(confirmResetTaskCtrl);
+		
+		String title = translate("participant.confirm.reset.task.title");
+		cmc = new CloseableModalController(getWindowControl(), translate("close"), confirmResetTaskCtrl.getInitialComponent(), true, title);
+		listenTo(cmc);
+		cmc.activate();
+	}
+	
 	@Override
 	protected Task stepReviewAndCorrection(UserRequest ureq, Task assignedTask) {
 		assignedTask = super.stepReviewAndCorrection(ureq, assignedTask);
@@ -503,7 +560,7 @@ public class GTAParticipantController extends GTAAbstractController {
 			documentsContainer = gtaManager.getCorrectionContainer(courseEnv, gtaNode, getIdentity());
 		}
 		
-		if(TaskHelper.hasDocuments(documentsDir)) {
+		if(!waiting && TaskHelper.hasDocuments(documentsDir)) {
 			correctionsCtrl = new DirectoryController(ureq, getWindowControl(), documentsDir, documentsContainer,
 					"run.corrections.description", "bulk.review", "review");
 			listenTo(correctionsCtrl);
@@ -587,7 +644,11 @@ public class GTAParticipantController extends GTAAbstractController {
 			if(assignedTask == null || assignedTask.getTaskStatus() == TaskProcess.assignment || assignedTask.getTaskStatus() == TaskProcess.submit
 					|| assignedTask.getTaskStatus() == TaskProcess.review || assignedTask.getTaskStatus() == TaskProcess.correction
 					|| assignedTask.getTaskStatus() == TaskProcess.revision) {
-				mainVC.contextPut("solutionCssClass", "");
+				if(gtaNode.getModuleConfiguration().getBooleanSafe(GTACourseNode.GTASK_SAMPLE_SOLUTION_VISIBLE_ALL, false)) {
+					setSolutions(ureq, assignedTask);
+				} else {
+					mainVC.contextPut("solutionCssClass", "");
+				}
 			} else if(assignedTask.getTaskStatus() == TaskProcess.solution) {
 				mainVC.contextPut("solutionCssClass", "o_active");
 				setSolutions(ureq, assignedTask);
@@ -610,18 +671,59 @@ public class GTAParticipantController extends GTAAbstractController {
 		DueDate availableDate = getSolutionDueDate(assignedTask);
 		boolean visible = availableDate == null || 
 				(availableDate.getDueDate() != null && availableDate.getDueDate().compareTo(new Date()) <= 0);
-		if(visible) {
-			File documentsDir = gtaManager.getSolutionsDirectory(courseEnv, gtaNode);
-			VFSContainer documentsContainer = gtaManager.getSolutionsContainer(courseEnv, gtaNode);
-			if(TaskHelper.hasDocuments(documentsDir)) {
+
+		File documentsDir = gtaManager.getSolutionsDirectory(courseEnv, gtaNode);
+		if(visible && TaskHelper.hasDocuments(documentsDir)) {
+			if(showSolutions(availableDate)) {
+				VFSContainer documentsContainer = gtaManager.getSolutionsContainer(courseEnv, gtaNode);
 				solutionsCtrl = new DirectoryController(ureq, getWindowControl(), documentsDir, documentsContainer, "run.solutions.description", "bulk.solutions", "solutions");
 				listenTo(solutionsCtrl);
 				mainVC.put("solutions", solutionsCtrl.getInitialComponent());
+			} else {
+				VelocityContainer waitVC = createVelocityContainer("no_solutions_foryou");
+				mainVC.put("solutions", waitVC);
 			}
 		} else {
 			VelocityContainer waitVC = createVelocityContainer("wait_for_solutions");
 			mainVC.put("solutions", waitVC);
 		}
+	}
+	
+	/**
+	 * If the due date is not defined, the solutions are show the users with an uploaded
+	 * solution or if the configuration is set to visible to all. If the due date is set
+	 * but is not a relative date, the solution is shown to the users which uploaded a
+	 * solution or if the configuration is set to visible to all.
+	 * 
+	 * @param availableDate The due date of the solutions (can be null)
+	 * @return If the solutions are visible to the user
+	 */
+	private boolean showSolutions(DueDate availableDate) {
+		boolean show = false;
+		boolean optional = gtaNode.isOptional();
+		if(config.getBooleanSafe(GTACourseNode.GTASK_SUBMIT)) {
+			File submitDirectory;
+			if(GTAType.group.name().equals(config.getStringValue(GTACourseNode.GTASK_TYPE))) {
+				submitDirectory = gtaManager.getSubmitDirectory(courseEnv, gtaNode, assessedGroup);
+			} else {
+				submitDirectory = gtaManager.getSubmitDirectory(courseEnv, gtaNode, assessedIdentity);
+			}
+			
+			if(availableDate == null && !optional) {
+				show = true;
+			} else if(availableDate == null && optional
+					&& (gtaNode.getModuleConfiguration().getBooleanSafe(GTACourseNode.GTASK_SAMPLE_SOLUTION_VISIBLE_ALL, false) || TaskHelper.hasDocuments(submitDirectory))) {
+				show = true;
+			} else if(availableDate != null && (optional || !availableDate.isRelative())
+					&& (gtaNode.getModuleConfiguration().getBooleanSafe(GTACourseNode.GTASK_SAMPLE_SOLUTION_VISIBLE_ALL, false) || TaskHelper.hasDocuments(submitDirectory))) {
+				show = true;
+			}
+		} else if(optional) {
+			show = gtaNode.getModuleConfiguration().getBooleanSafe(GTACourseNode.GTASK_SAMPLE_SOLUTION_VISIBLE_ALL, false);
+		} else {
+			show = true;
+		}
+		return show;
 	}
 
 	@Override
@@ -671,17 +773,48 @@ public class GTAParticipantController extends GTAAbstractController {
 	}
 	
 	@Override
-	protected void nodeLog() {
-		if(businessGroupTask) {
-			String userLog = courseEnv.getAuditManager().getUserNodeLog(gtaNode, getIdentity());
-			if(StringHelper.containsNonWhitespace(userLog)) {
-				mainVC.contextPut("userLog", userLog);
+	protected void resetTask(UserRequest ureq, Task task) {
+		resetTaskButton.setUserObject(task);
+
+		DueDate assignmentDueDate = getAssignementDueDate(task);
+		boolean allowed = task != null
+				&& (StringHelper.containsNonWhitespace(task.getTaskName()) || (! StringHelper.containsNonWhitespace(task.getTaskName()) && task.getTaskStatus() == TaskProcess.submit))
+				&& (task.getTaskStatus() == TaskProcess.assignment || task.getTaskStatus() == TaskProcess.submit)
+				&& task.getAllowResetDate() != null 
+				&& (assignmentDueDate == null || assignmentDueDate.getDueDate() == null || assignmentDueDate.getDueDate().after(new Date()))
+				&& GTACourseNode.GTASK_ASSIGNEMENT_TYPE_MANUAL.equals(gtaNode.getModuleConfiguration().getStringValue(GTACourseNode.GTASK_ASSIGNEMENT_TYPE));
+		resetTaskButton.setVisible(allowed);
+	}
+
+	@Override
+	protected void nodeLog(Task assignedTask) {
+		if(isResultVisible(assignedTask)) {
+			if(businessGroupTask) {
+				String userLog = courseEnv.getAuditManager().getUserNodeLog(gtaNode, getIdentity());
+				if(StringHelper.containsNonWhitespace(userLog)) {
+					mainVC.contextPut("userLog", userLog);
+				} else {
+					mainVC.contextRemove("userLog");
+				}
 			} else {
-				mainVC.contextRemove("userLog");
+				super.nodeLog(assignedTask);
 			}
 		} else {
-			super.nodeLog();
+			mainVC.contextRemove("userLog");
 		}
+	}
+	
+	private boolean isResultVisible(Task assignedTask) {
+		boolean isVisible = false;
+		if(config.getBooleanSafe(GTACourseNode.GTASK_GRADING)) {
+			if (assignedTask != null && (assignedTask.getTaskStatus() == TaskProcess.grading || assignedTask.getTaskStatus() == TaskProcess.graded)) {
+				AssessmentEvaluation eval = gtaNode.getUserScoreEvaluation(getAssessedUserCourseEnvironment());
+				isVisible = eval.getUserVisible() == null || eval.getUserVisible().booleanValue();
+			}
+		} else {
+			isVisible = true;
+		}
+		return isVisible;
 	}
 
 	private void setGroupWarning() {
@@ -701,6 +834,38 @@ public class GTAParticipantController extends GTAAbstractController {
 	@Override
 	protected void doDispose() {
 		//
+	}
+
+	@Override
+	public void activate(UserRequest ureq, List<ContextEntry> entries, StateEntry state) {
+		if(entries == null || entries.isEmpty()) {
+			if(submitDocCtrl != null) {
+				submitDocCtrl.activate(ureq, entries, state);
+			}
+		} else {
+			String type = entries.get(0).getOLATResourceable().getResourceableTypeName();
+			if("Correction".equalsIgnoreCase(type)) {
+				int revisionLoop = entries.get(0).getOLATResourceable().getResourceableId().intValue();
+				if(revisionLoop == 0) {
+					if(correctionsCtrl != null) {
+						List<ContextEntry> subEntries = entries.subList(1, entries.size());
+						correctionsCtrl.activate(ureq, subEntries, null);
+					}
+				} else if(revisionDocumentsCtrl != null) {
+					revisionDocumentsCtrl.activate(ureq, entries, null);
+				}
+			} else if("Solution".equalsIgnoreCase(type)) {
+				if(solutionsCtrl != null) {
+					List<ContextEntry> subEntries = entries.subList(1, entries.size());
+					solutionsCtrl.activate(ureq, subEntries, null);
+				}
+			} else if("Assessment".equalsIgnoreCase(type)) {
+				if(gradingCtrl != null) {
+					List<ContextEntry> subEntries = entries.subList(1, entries.size());
+					gradingCtrl.activate(ureq, subEntries, null);
+				}
+			}
+		}
 	}
 
 	@Override
@@ -725,6 +890,10 @@ public class GTAParticipantController extends GTAAbstractController {
 		} else if(submitButton == source) {
 			Task assignedTask = submitDocCtrl.getAssignedTask();
 			doConfirmSubmit(ureq, assignedTask);
+		} else if(resetTaskButton == source) {
+			doConfirmResetTask(ureq, (Task)resetTaskButton.getUserObject());
+		} else if(optionalTaskButton == source) {
+			doConfirmOptionalAssignment(ureq, null);
 		}
 		super.event(ureq, source, event);
 	}
@@ -766,11 +935,19 @@ public class GTAParticipantController extends GTAAbstractController {
 				doSubmitDocuments(ureq, task);
 			}
 			cleanUpPopups();
+		} else if(confirmResetTaskCtrl == source) {
+			if(event == Event.DONE_EVENT) {
+				cleanUpProcess();
+				process(ureq);
+			}
+			cmc.deactivate();
+			cleanUpPopups();
 		} else if(submitDocCtrl == source) {
 			boolean hasUploadDocuments = submitDocCtrl.hasUploadDocuments();
 			if(event instanceof SubmitEvent) {
 				Task assignedTask = submitDocCtrl.getAssignedTask();
-				gtaManager.log("Submit", (SubmitEvent)event, assignedTask, getIdentity(), assessedIdentity, assessedGroup, courseEnv, gtaNode);
+				gtaManager.log("Submit", (SubmitEvent)event, assignedTask,
+						getIdentity(), assessedIdentity, assessedGroup, courseEnv, gtaNode, Role.user);
 			} else if(event == Event.DONE_EVENT) {
 				cleanUpProcess();
 				process(ureq);
@@ -779,6 +956,20 @@ public class GTAParticipantController extends GTAAbstractController {
 			if(submitButton != null) {
 				submitButton.setCustomEnabledLinkCSS(hasUploadDocuments ? "btn btn-primary" : "btn btn-default");
 			}
+		} else if(confirmOptionalAssignmentCtrl == source) {
+			if(event == Event.DONE_EVENT) {
+				assignTaskAutomatically(ureq, confirmOptionalAssignmentCtrl.getTask());
+				cleanUpProcess();
+				process(ureq);
+			} else {
+				optionalTaskRefused = true;
+				cleanUpProcess();
+				process(ureq);
+			}
+			cmc.deactivate();
+			cleanUpPopups();
+		} else if(cmc == source) {
+			cleanUpPopups();
 		}
 		super.event(ureq, source, event);
 	}
@@ -821,12 +1012,18 @@ public class GTAParticipantController extends GTAAbstractController {
 	}
 
 	private void cleanUpPopups() {
+		removeAsListenerAndDispose(confirmOptionalAssignmentCtrl);
 		removeAsListenerAndDispose(businessGroupChooserCtrl);
+		removeAsListenerAndDispose(confirmResetTaskCtrl);
 		removeAsListenerAndDispose(confirmSubmitDialog);
 		removeAsListenerAndDispose(chooserCalloutCtrl);
+		removeAsListenerAndDispose(cmc);
+		confirmOptionalAssignmentCtrl = null;
 		businessGroupChooserCtrl = null;
+		confirmResetTaskCtrl = null;
 		confirmSubmitDialog = null;
 		chooserCalloutCtrl = null;
+		cmc = null;
 	}
 
 	private void doOpenBusinessGroup(UserRequest ureq) {
@@ -846,4 +1043,9 @@ public class GTAParticipantController extends GTAAbstractController {
 		listenTo(chooserCalloutCtrl);
 		chooserCalloutCtrl.activate();
 	}
+
+	@Override
+	protected Role getDoer() {
+		return Role.user;
+	}	
 }

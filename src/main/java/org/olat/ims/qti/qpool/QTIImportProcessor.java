@@ -21,6 +21,7 @@ package org.olat.ims.qti.qpool;
 
 import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
+import java.io.Closeable;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
@@ -42,19 +43,21 @@ import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 
 import org.apache.commons.io.IOUtils;
-import org.cyberneko.html.parsers.SAXParser;
+import org.apache.logging.log4j.Logger;
 import org.dom4j.Attribute;
 import org.dom4j.Document;
 import org.dom4j.DocumentFactory;
 import org.dom4j.Element;
+import org.dom4j.Node;
 import org.dom4j.io.OutputFormat;
 import org.dom4j.io.SAXReader;
 import org.dom4j.io.XMLWriter;
+import org.olat.core.CoreSpringFactory;
 import org.olat.core.commons.persistence.DB;
 import org.olat.core.id.Identity;
-import org.olat.core.logging.OLog;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.FileUtils;
+import org.olat.core.util.PathUtils;
 import org.olat.core.util.PathUtils.CopyVisitor;
 import org.olat.core.util.PathUtils.YesMatcher;
 import org.olat.core.util.StringHelper;
@@ -69,21 +72,23 @@ import org.olat.ims.qti.editor.beecom.objects.Question;
 import org.olat.ims.qti.editor.beecom.parser.ItemParser;
 import org.olat.ims.qti.questionimport.ItemAndMetadata;
 import org.olat.ims.resources.IMSEntityResolver;
+import org.olat.modules.qpool.QPoolService;
 import org.olat.modules.qpool.QuestionItem;
 import org.olat.modules.qpool.QuestionType;
-import org.olat.modules.qpool.TaxonomyLevel;
 import org.olat.modules.qpool.manager.QEducationalContextDAO;
 import org.olat.modules.qpool.manager.QItemTypeDAO;
-import org.olat.modules.qpool.manager.QLicenseDAO;
 import org.olat.modules.qpool.manager.QPoolFileStorage;
 import org.olat.modules.qpool.manager.QuestionItemDAO;
-import org.olat.modules.qpool.manager.TaxonomyLevelDAO;
 import org.olat.modules.qpool.model.QEducationalContext;
 import org.olat.modules.qpool.model.QItemType;
-import org.olat.modules.qpool.model.QLicense;
 import org.olat.modules.qpool.model.QuestionItemImpl;
+import org.olat.modules.taxonomy.TaxonomyLevel;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.xml.sax.InputSource;
 import org.xml.sax.SAXException;
+
+import nu.validator.htmlparser.common.XmlViolationPolicy;
+import nu.validator.htmlparser.sax.HtmlParser;
 
 /**
  * This class is NOT thread-safe
@@ -94,7 +99,7 @@ import org.xml.sax.SAXException;
  */
 class QTIImportProcessor {
 	
-	private static final OLog log = Tracing.createLoggerFor(QTIImportProcessor.class);
+	private static final Logger log = Tracing.createLoggerFor(QTIImportProcessor.class);
 	
 	
 	private final Identity owner;
@@ -102,41 +107,34 @@ class QTIImportProcessor {
 	private final String importedFilename;
 	private final File importedFile;
 
-	private final DB dbInstance;
-	private final QLicenseDAO qLicenseDao;
-	private final QItemTypeDAO qItemTypeDao;
-	private final QPoolFileStorage qpoolFileStorage;
-	private final QuestionItemDAO questionItemDao;
-	private final TaxonomyLevelDAO taxonomyLevelDao;
-	private final QEducationalContextDAO qEduContextDao;
+	@Autowired
+	private DB dbInstance;
+	@Autowired
+	private QItemTypeDAO qItemTypeDao;
+	@Autowired
+	private QPoolFileStorage qpoolFileStorage;
+	@Autowired
+	private QuestionItemDAO questionItemDao;
+	@Autowired
+	private QPoolService qpoolService;
+	@Autowired
+	private QEducationalContextDAO qEduContextDao;
 	
-	public QTIImportProcessor(Identity owner, Locale defaultLocale, QuestionItemDAO questionItemDao,
-			QItemTypeDAO qItemTypeDao, QEducationalContextDAO qEduContextDao,
-			TaxonomyLevelDAO taxonomyLevelDao, QLicenseDAO qLicenseDao, QPoolFileStorage qpoolFileStorage,
-			DB dbInstance) {
-		this(owner, defaultLocale, null, null, questionItemDao, qItemTypeDao, qEduContextDao,
-				taxonomyLevelDao, qLicenseDao, qpoolFileStorage, dbInstance);
+	public QTIImportProcessor(Identity owner, Locale defaultLocale) {
+		this(owner, defaultLocale, null, null);
 	}
 
-	public QTIImportProcessor(Identity owner, Locale defaultLocale, String importedFilename, File importedFile,
-			QuestionItemDAO questionItemDao, QItemTypeDAO qItemTypeDao, QEducationalContextDAO qEduContextDao,
-			TaxonomyLevelDAO taxonomyLevelDao, QLicenseDAO qLicenseDao, QPoolFileStorage qpoolFileStorage,
-			DB dbInstance) {
+	public QTIImportProcessor(Identity owner, Locale defaultLocale, String importedFilename, File importedFile) {
 		this.owner = owner;
-		this.dbInstance = dbInstance;
 		this.defaultLocale = defaultLocale;
 		this.importedFilename = importedFilename;
 		this.importedFile = importedFile;
-		this.qLicenseDao = qLicenseDao;
-		this.qItemTypeDao = qItemTypeDao;
-		this.questionItemDao = questionItemDao;
-		this.qEduContextDao = qEduContextDao;
-		this.qpoolFileStorage = qpoolFileStorage;
-		this.taxonomyLevelDao = taxonomyLevelDao;
+
+		CoreSpringFactory.autowireObject(this);
 	}
 	
 	public List<QuestionItem> process() {
-		List<QuestionItem> qItems = new ArrayList<QuestionItem>();
+		List<QuestionItem> qItems = new ArrayList<>();
 		try {
 			List<DocInfos> docInfoList = getDocInfos();
 			if(docInfoList != null) {
@@ -144,6 +142,10 @@ class QTIImportProcessor {
 					List<QuestionItem> processdItems = process(docInfos);
 					qItems.addAll(processdItems);
 					dbInstance.commit();
+				}
+
+				for(DocInfos docInfos:docInfoList) {
+					IOUtils.closeQuietly(docInfos);
 				}
 			}
 		} catch (IOException e) {
@@ -170,7 +172,7 @@ class QTIImportProcessor {
 
 	protected List<ItemInfos> getItemList(DocInfos doc) {
 		Document document = doc.getDocument();
-		List<ItemInfos> itemElements = new ArrayList<ItemInfos>();
+		List<ItemInfos> itemElements = new ArrayList<>();
 		Element item = (Element)document.selectSingleNode("/questestinterop/item");
 		Element assessment = (Element)document.selectSingleNode("/questestinterop/assessment");
 		if(item != null) {
@@ -180,10 +182,9 @@ class QTIImportProcessor {
 			itemInfos.setComment(qtiComment);
 			itemElements.add(itemInfos);
 		} else if(assessment != null) {
-			@SuppressWarnings("unchecked")
-			List<Element> items = assessment.selectNodes("//item");
-			for(Element it:items) {
-				itemElements.add(new ItemInfos(it, false));
+			List<Node> items = assessment.selectNodes("//item");
+			for(Node it:items) {
+				itemElements.add(new ItemInfos((Element)it, false));
 			}
 		}
 		return itemElements;
@@ -248,6 +249,9 @@ class QTIImportProcessor {
 			processItemMetadata(poolItem, metadata);
 		}
 		questionItemDao.persist(owner, poolItem);
+		if(metadata != null) {
+			createLicense(poolItem, metadata);
+		}
 		return poolItem;
 	}
 	
@@ -288,14 +292,14 @@ class QTIImportProcessor {
 		
 		String taxonomyPath = metadata.getTaxonomyPath();
 		if(StringHelper.containsNonWhitespace(taxonomyPath)) {
-			QTIMetadataConverter converter = new QTIMetadataConverter(qItemTypeDao, qLicenseDao, taxonomyLevelDao, qEduContextDao);
+			QTIMetadataConverter converter = new QTIMetadataConverter(qItemTypeDao, qEduContextDao, qpoolService);
 			TaxonomyLevel taxonomyLevel = converter.toTaxonomy(taxonomyPath);
 			poolItem.setTaxonomyLevel(taxonomyLevel);
 		}
 		
 		String level = metadata.getLevel();
 		if(StringHelper.containsNonWhitespace(level)) {
-			QTIMetadataConverter converter = new QTIMetadataConverter(qItemTypeDao, qLicenseDao, taxonomyLevelDao, qEduContextDao);
+			QTIMetadataConverter converter = new QTIMetadataConverter(qItemTypeDao, qEduContextDao, qpoolService);
 			QEducationalContext educationalContext = converter.toEducationalContext(level);
 			poolItem.setEducationalContext(educationalContext);
 		}
@@ -323,19 +327,17 @@ class QTIImportProcessor {
 		poolItem.setDifficulty(metadata.getDifficulty());
 		poolItem.setDifferentiation(metadata.getDifferentiation());
 		poolItem.setStdevDifficulty(metadata.getStdevDifficulty());
-		
+	}
+
+	private void createLicense(QuestionItemImpl poolItem, ItemAndMetadata metadata) {
 		String license = metadata.getLicense();
-		if(StringHelper.containsNonWhitespace(license)) {
-			QTIMetadataConverter converter = new QTIMetadataConverter(qItemTypeDao, qLicenseDao, taxonomyLevelDao, qEduContextDao);
-			QLicense qLicense = converter.toLicense(license);
-			poolItem.setLicense(qLicense);
-		}
+		QTIMetadataConverter converter = new QTIMetadataConverter(qItemTypeDao, qEduContextDao, qpoolService);
+		converter.createLicense(poolItem, license);
 	}
 	
 	private void processItemMetadata(QuestionItemImpl poolItem, Element itemEl) {
-		@SuppressWarnings("unchecked")
-		List<Element> qtiMetadataFieldList = itemEl.selectNodes("./itemmetadata/qtimetadata/qtimetadatafield");
-		for(Element qtiMetadataField:qtiMetadataFieldList) {
+		List<Node> qtiMetadataFieldList = itemEl.selectNodes("./itemmetadata/qtimetadata/qtimetadatafield");
+		for(Node qtiMetadataField:qtiMetadataFieldList) {
 			Element labelEl = (Element)qtiMetadataField.selectSingleNode("./fieldlabel");
 			Element entryEl = (Element)qtiMetadataField.selectSingleNode("./fieldentry");
 			if(labelEl != null && entryEl != null) {
@@ -488,10 +490,11 @@ class QTIImportProcessor {
 	
 	@SuppressWarnings("unchecked")
 	protected List<String> getMaterials(Element el) {
-		List<String> materialPath = new ArrayList<String>();
+		List<String> materialPath = new ArrayList<>();
 		//mattext
-		List<Element> mattextList = el.selectNodes(".//mattext");
-		for(Element mat:mattextList) {
+		List<Node> mattextList = el.selectNodes(".//mattext");
+		for(Node matNode:mattextList) {
+			Element mat = (Element)matNode;
 			Attribute texttypeAttr = mat.attribute("texttype");
 			if(texttypeAttr != null) {
 				String texttype = texttypeAttr.getValue();
@@ -502,12 +505,13 @@ class QTIImportProcessor {
 			}
 		}
 		//matimage uri
-		List<Element> matList = new ArrayList<Element>();
+		List<Node> matList = new ArrayList<>();
 		matList.addAll(el.selectNodes(".//matimage"));
 		matList.addAll(el.selectNodes(".//mataudio"));
 		matList.addAll(el.selectNodes(".//matvideo"));
 		
-		for(Element mat:matList) {
+		for(Node matNode:matList) {
+			Element mat = (Element)matNode;
 			Attribute uriAttr = mat.attribute("uri");
 			String uri = uriAttr.getValue();
 			materialPath.add(uri);
@@ -522,7 +526,7 @@ class QTIImportProcessor {
 	 */
 	protected void findMaterialInMatText(String content, List<String> materialPath) {
 		try {
-			SAXParser parser = new SAXParser();
+			HtmlParser parser = new HtmlParser(XmlViolationPolicy.ALTER_INFOSET);
 			QTI12HtmlHandler contentHandler = new QTI12HtmlHandler(materialPath);
 			parser.setContentHandler(contentHandler);
 			parser.parse(new InputSource(new StringReader(content)));
@@ -585,7 +589,7 @@ class QTIImportProcessor {
 				SAXReader reader = new SAXReader();
 		        Document document = reader.read(metadataIn);
 		        Element rootElement = document.getRootElement();
-		        QTIMetadataConverter enricher = new QTIMetadataConverter(rootElement, qItemTypeDao, qLicenseDao, taxonomyLevelDao, qEduContextDao);
+		        QTIMetadataConverter enricher = new QTIMetadataConverter(rootElement, qItemTypeDao, qEduContextDao, qpoolService);
 		        enricher.toQuestion(item);
 			}
 	        return true;
@@ -796,7 +800,7 @@ class QTIImportProcessor {
 		}
 	}
 	
-	public static class DocInfos {
+	public static class DocInfos implements Closeable {
 		private Document doc;
 		private String filename;
 		private Path root;
@@ -841,6 +845,11 @@ class QTIImportProcessor {
 
 		public void setQtiComment(String qtiComment) {
 			this.qtiComment = qtiComment;
+		}
+
+		@Override
+		public void close() throws IOException {
+			PathUtils.closeSubsequentFS(root);
 		}
 	}
 }

@@ -31,6 +31,7 @@ import org.olat.ims.qti.repository.handlers.QTISurveyHandler;
 import org.olat.ims.qti.repository.handlers.QTITestHandler;
 import org.olat.repository.handlers.RepositoryHandlerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 /**
@@ -38,8 +39,15 @@ import org.springframework.stereotype.Service;
  *
  * @author Mike Stock
  */
-@Service("")
-public class QTIModule extends AbstractSpringModule {	
+@Service
+public class QTIModule extends AbstractSpringModule {
+
+	@Value("${qti12.create.resources.enabled:false}")
+	private boolean createResourcesEnabled;
+	@Value("${qti12.survey.create.resources.enabled:false}")
+	private boolean createSurveyResourcesEnabled;
+	@Value("${qti12.edit.resources.enabled:false}")
+	private boolean createEditResourcesEnabled;
 
 	@Autowired
 	public QTIModule(CoordinatorManager coordinatorManager) {
@@ -50,11 +58,23 @@ public class QTIModule extends AbstractSpringModule {
 	public void init() {
 		RepositoryHandlerFactory.registerHandler(new QTISurveyHandler(), 11);
 		RepositoryHandlerFactory.registerHandler(new QTITestHandler(), 10);
+		initFromChangedProperties();
 	}
-
 
 	@Override
 	protected void initFromChangedProperties() {
 		//
+	}
+
+	public boolean isCreateResourcesEnabled() {
+		return createResourcesEnabled;
+	}
+	
+	public boolean isCreateSurveyResourcesEnabled() {
+		return createSurveyResourcesEnabled;
+	}
+	
+	public boolean isEditResourcesEnabled() {
+		return createEditResourcesEnabled;
 	}
 }

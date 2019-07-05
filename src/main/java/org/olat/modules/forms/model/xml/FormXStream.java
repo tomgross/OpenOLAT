@@ -20,8 +20,11 @@
 package org.olat.modules.forms.model.xml;
 
 import org.olat.core.util.xml.XStreamHelper;
+import org.olat.modules.ceditor.model.ImageSettings;
+import org.olat.modules.forms.model.xml.SessionInformations.InformationType;
 
 import com.thoughtworks.xstream.XStream;
+import com.thoughtworks.xstream.security.ExplicitTypePermission;
 
 /**
  * 
@@ -34,11 +37,31 @@ public class FormXStream {
 	private static final XStream xstream = XStreamHelper.createXStreamInstance();
 
 	static {
+		XStream.setupDefaultSecurity(xstream);
+		Class<?>[] types = new Class[] { Choice.class,
+				Choices.class, Container.class, Disclaimer.class, FileStoredData.class, FileUpload.class, Form.class,
+				HTMLParagraph.class, HTMLRaw.class, Image.class, ImageSettings.class, InformationType.class,
+				MultipleChoice.class, Rubric.class, ScaleType.class, SessionInformations.class, SingleChoice.class,
+				Slider.class, Spacer.class, StepLabel.class, Table.class, TextInput.class, Title.class };
+		xstream.addPermission(new ExplicitTypePermission(types));
 		xstream.alias("form", Form.class);
 		xstream.alias("spacer", Spacer.class);
 		xstream.alias("title", Title.class);
 		xstream.alias("rubric", Rubric.class);
 		xstream.alias("slider", Slider.class);
+		xstream.alias("fileupload", FileUpload.class);
+		xstream.alias("choice", Choice.class);
+		xstream.alias("choices", Choices.class);
+		xstream.alias("singlechoice", SingleChoice.class);
+		xstream.alias("multiplechoice", MultipleChoice.class);
+		xstream.alias("sessioninformations", SessionInformations.class);
+		xstream.alias("informationType", InformationType.class);
+		xstream.alias("disclaimer", Disclaimer.class);
+		xstream.alias("table", Table.class);
+		xstream.alias("image", Image.class);
+		xstream.alias("imageSettgins", ImageSettings.class);
+		xstream.alias("fileStoredData", FileStoredData.class);
+		xstream.ignoreUnknownElements();
 	}
 	
 	public static XStream getXStream() {

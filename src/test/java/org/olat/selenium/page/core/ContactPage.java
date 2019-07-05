@@ -21,11 +21,12 @@ package org.olat.selenium.page.core;
 
 import java.util.List;
 
-import org.jboss.arquillian.drone.api.annotation.Drone;
 import org.junit.Assert;
+import org.olat.selenium.page.graphene.OOGraphene;
 import org.openqa.selenium.By;
 import org.openqa.selenium.WebDriver;
 import org.openqa.selenium.WebElement;
+import org.openqa.selenium.firefox.FirefoxDriver;
 
 /**
  * 
@@ -37,12 +38,7 @@ import org.openqa.selenium.WebElement;
  */
 public class ContactPage {
 	
-	@Drone
-	private WebDriver browser;
-	
-	public ContactPage() {
-		//
-	}
+	private final WebDriver browser;
 	
 	public ContactPage(WebDriver browser) {
 		this.browser = browser;
@@ -54,5 +50,31 @@ public class ContactPage {
 		Assert.assertFalse(calendarToolbarsEl.isEmpty());
 		return this;
 	}
-
+	
+	public ContactPage setContent(String subject, String body) {
+		By subjectBy = By.cssSelector("div.o_sel_contact_subject  input[type='text']");
+		OOGraphene.waitElement(subjectBy, browser);
+		browser.findElement(subjectBy).sendKeys(subject);
+		
+		String containerCssSelector = "div.o_sel_contact_body";
+		OOGraphene.tinymce(body, containerCssSelector, browser);
+		return this;
+	}
+	
+	public ContactPage send() {
+		By sendBy = By.cssSelector("fieldset.o_sel_contact_form button.btn-primary");
+		if(browser instanceof FirefoxDriver) {
+			OOGraphene.scrollTo(sendBy, browser);
+		}
+		OOGraphene.moveAndClick(sendBy, browser);
+		OOGraphene.moveTop(browser);
+		OOGraphene.waitAndCloseBlueMessageWindow(browser);
+		return this;
+	}
+	
+	public ContactPage assertSend() {
+		By sendBy = By.cssSelector("fieldset.o_sel_contact_form div.o_sel_contact_body div.o_disabled");
+		OOGraphene.waitElement(sendBy, browser);
+		return this;
+	}
 }

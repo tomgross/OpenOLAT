@@ -19,6 +19,10 @@
  */
 package org.olat.user;
 
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.OutputStream;
 import java.io.Serializable;
 import java.nio.charset.Charset;
 import java.util.ArrayList;
@@ -35,26 +39,39 @@ import javax.persistence.EntityManager;
 import javax.persistence.TypedQuery;
 
 import org.olat.basesecurity.BaseSecurity;
+import org.olat.basesecurity.GroupRoles;
 import org.olat.basesecurity.IdentityImpl;
 import org.olat.basesecurity.IdentityNames;
 import org.olat.basesecurity.IdentityRef;
 import org.olat.basesecurity.IdentityShort;
+import org.olat.basesecurity.OrganisationRoles;
 import org.olat.core.commons.persistence.DB;
-import org.olat.core.commons.persistence.DBFactory;
-import org.olat.core.commons.persistence.DBQuery;
+import org.olat.core.gui.translator.Translator;
 import org.olat.core.helpers.Settings;
 import org.olat.core.id.Identity;
 import org.olat.core.id.Preferences;
 import org.olat.core.id.User;
 import org.olat.core.id.UserConstants;
 import org.olat.core.logging.AssertException;
+import org.apache.logging.log4j.Logger;
+import org.olat.core.logging.Tracing;
+import org.olat.core.util.StringHelper;
+import org.olat.core.util.Util;
 import org.olat.core.util.WebappHelper;
 import org.olat.core.util.cache.CacheWrapper;
 import org.olat.core.util.coordinate.CoordinatorManager;
 import org.olat.core.util.i18n.I18nModule;
 import org.olat.core.util.mail.MailHelper;
+import org.olat.core.util.openxml.OpenXMLWorkbook;
+import org.olat.core.util.openxml.OpenXMLWorksheet;
+import org.olat.core.util.openxml.OpenXMLWorksheet.Row;
+import org.olat.login.LoginModule;
+import org.olat.login.auth.AuthenticationProvider;
 import org.olat.properties.Property;
 import org.olat.properties.PropertyManager;
+import org.olat.registration.RegistrationManager;
+import org.olat.user.manager.ManifestBuilder;
+import org.olat.user.propertyhandlers.UserPropertyHandler;
 import org.springframework.beans.factory.annotation.Autowired;
 
 /**
@@ -66,7 +83,10 @@ import org.springframework.beans.factory.annotation.Autowired;
  * 
  * @author Florian Gnaegi, frentix GmbH, http://www.frentix.com
  */
-public class UserManagerImpl extends UserManager {
+public class UserManagerImpl extends UserManager implements UserDataDeletable, UserDataExportable {
+	
+	private static final Logger log = Tracing.createLoggerFor(UserManagerImpl.class);
+	
   // used to save user data in the properties table 
   private static final String CHARSET = "charset";
   private static final String HIDDEN_FILES = "hiddenfiles";
@@ -76,7 +96,15 @@ public class UserManagerImpl extends UserManager {
   @Autowired
   private DB dbInstance;
   @Autowired
+  private UserDAO userDAO;
+  @Autowired
+  private UserModule userModule;
+  @Autowired
   private BaseSecurity securityManager;
+  @Autowired
+  private RegistrationManager registrationManager;
+  @Autowired
+  private LoginModule loginModule;
   @Autowired
   private CoordinatorManager coordinatorManager;
 
@@ -87,7 +115,7 @@ public class UserManagerImpl extends UserManager {
 	 * Use UserManager.getInstance(), this is a spring factory method to load the
 	 * correct user manager
 	 */
-	private UserManagerImpl() {
+	UserManagerImpl() {
 		INSTANCE = this;
 	}
 	
@@ -100,9 +128,7 @@ public class UserManagerImpl extends UserManager {
 		
 	}
 
-	/**
-	 * @see org.olat.user.UserManager#createUser(java.lang.String, java.lang.String, java.lang.String)
-	 */
+	@Override
 	public User createUser(String firstName, String lastName, String eMail) {
 		UserImpl newUser = new UserImpl();
 		newUser.setFirstName(firstName);
@@ -127,28 +153,6 @@ public class UserManagerImpl extends UserManager {
 	}
 	
 	@Override
-	public boolean isEmailInUse(String email) {
-		DB db = DBFactory.getInstance();
-		String[] emailProperties = {UserConstants.EMAIL, UserConstants.INSTITUTIONALEMAIL};
-		for(String emailProperty:emailProperties) {
-			StringBuilder sb = new StringBuilder();
-			sb.append("select count(user) from org.olat.core.id.User user where ")
-			  .append("user.")
-			  .append(emailProperty)
-			  .append("=:email_value");
-			
-			String query = sb.toString();
-			DBQuery dbq = db.createQuery(query);
-			dbq.setString("email_value", email);
-			Number countEmail = (Number)dbq.uniqueResult();
-			if(countEmail.intValue() > 0) {
-				return true;
-			}
-		}
-		return false;
-	}
-	
-	@Override
 	public List<Long> findUserKeyWithProperty(String propName, String propValue) {
 		StringBuilder sb = new StringBuilder();
 		sb.append("select user.key from ").append(UserImpl.class.getName()).append(" user ")
@@ -161,84 +165,29 @@ public class UserManagerImpl extends UserManager {
 	}
 	
 	@Override
-	public Identity findIdentityKeyWithProperty(String propName, String propValue) {
+	public List<Identity> findIdentitiesWithProperty(String propName, String propValue) {
 		StringBuilder sb = new StringBuilder("select identity from ").append(IdentityImpl.class.getName()).append(" identity ")
 			.append(" inner join fetch identity.user user ")
 			.append(" where user.").append(propName).append("=:propValue");
 
-		List<Identity> userKeys = dbInstance.getCurrentEntityManager()
+		return dbInstance.getCurrentEntityManager()
 				.createQuery(sb.toString(), Identity.class)
 				.setParameter("propValue", propValue).getResultList();
-		if(userKeys.isEmpty()) {
-			return null;
-		}
-		return userKeys.get(0);
 	}
 
-	/**
-	 * @see org.olat.user.UserManager#findIdentityByEmail(java.lang.String)
-	 */
-	public Identity findIdentityByEmail(String email) {
-		if (!MailHelper.isValidEmailAddress(email)) {
-			throw new AssertException("Identity cannot be searched by email, if email is not valid. Used address: " + email);
-		}
-
-		StringBuilder sb = new StringBuilder("select identity from ").append(IdentityImpl.class.getName()).append(" identity ")
-			.append(" inner join fetch identity.user user ")
-			.append(" where ");
-		
-		boolean mysql = "mysql".equals(dbInstance.getDbVendor());
-		//search email
-		StringBuilder emailSb = new StringBuilder(sb);
-		if(mysql) {
-			emailSb.append(" user.").append(UserConstants.EMAIL).append("=:email");
-		} else {
-			emailSb.append(" lower(user.").append(UserConstants.EMAIL).append(") = lower(:email)");
-		}
-
-		List<Identity> identities = dbInstance.getCurrentEntityManager()
-				.createQuery(emailSb.toString(), Identity.class)
-				.setParameter("email", email).getResultList();
-		if (identities.size() > 1) {
-			throw new AssertException("more than one identity found with email::" + email);
-		}
-
-		//search institutional email
-		StringBuilder institutionalSb = new StringBuilder(sb);
-		if(mysql) {
-			institutionalSb.append(" user.").append(UserConstants.INSTITUTIONALEMAIL).append("=:email");
-		} else {
-			institutionalSb.append(" lower(user.").append(UserConstants.INSTITUTIONALEMAIL).append(") = lower(:email)");
-		}
-		List<Identity> instIdentities = dbInstance.getCurrentEntityManager()
-				.createQuery(institutionalSb.toString(), Identity.class)
-				.setParameter("email", email).getResultList();
-		if (instIdentities.size() > 1) {
-			throw new AssertException("more than one identity found with institutional-email::" + email);
-		}
-
-		// check if email found in both fields && identity is not the same
-		if ( (identities.size() > 0) && (instIdentities.size() > 0) && 
-				 ( identities.get(0) != instIdentities.get(0) ) ) {
-			throw new AssertException("found two identites with same email::" + email + " identity1=" + identities.get(0) + " identity2=" + instIdentities.get(0));
-		}
-		if (identities.size() == 1) {
-			return identities.get(0);
-		}
-		if (instIdentities.size() == 1) {
-			return instIdentities.get(0);
-		}
-		return null;
+	@Override
+	public Identity findUniqueIdentityByEmail(String email) {
+		return userDAO.findUniqueIdentityByEmail(email);
 	}
 	
 	@Override
 	public List<Identity> findIdentitiesByEmail(List<String> emailList) {
-		List<String> emails = new ArrayList<String>(emailList);
+		List<String> emails = new ArrayList<>(emailList);
 		for (int i=0; i<emails.size(); i++) {
 			String email = emails.get(i).toLowerCase();
 			if (!MailHelper.isValidEmailAddress(email)) {
 				emails.remove(i);
-				logWarn("Invalid email address: " + email, null);
+				log.warn("Invalid email address: " + email);
 			}
 			else {
 				emails.set(i, email);
@@ -285,95 +234,72 @@ public class UserManagerImpl extends UserManager {
 		return identities;
 	}
 
-	/**
-	 * @see org.olat.user.UserManager#findUserByEmail(java.lang.String)
-	 */
-	public User findUserByEmail(String email) {
-		if (isLogDebugEnabled()){
-			logDebug("Trying to find user with email '" + email + "'");
-		}
-		
-		Identity ident = findIdentityByEmail(email);
-		// if no user found return null
-		if (ident == null) {
-			if (isLogDebugEnabled()){
-				logDebug("Could not find user '" + email + "'");
-			}
-			return null;
-		} 
-		return ident.getUser();
-	}
-	
-	public boolean userExist(String email) {
-		StringBuilder sb = new StringBuilder("select distinct count(user) from ").append(UserImpl.class.getName()).append(" user where ");
-		boolean mysql = "mysql".equals(dbInstance.getDbVendor());
-		//search email
-		StringBuilder emailSb = new StringBuilder(sb);
-		if(mysql) {
-			emailSb.append(" user.").append(UserConstants.EMAIL).append("=:email");
-		} else {
-			emailSb.append(" lower(user.").append(UserConstants.EMAIL).append(") = lower(:email)");
-		}
-		
-		Number count = dbInstance.getCurrentEntityManager()
-				.createQuery(emailSb.toString(), Number.class)
-				.setParameter("email", email)
-				.getSingleResult();
-		if(count.intValue() > 0) {
-			return true;
-		}
-		
-		//search institutional email
-		StringBuilder institutionalSb = new StringBuilder(sb);
-		if(mysql) {
-			institutionalSb.append(" user.").append(UserConstants.INSTITUTIONALEMAIL).append(" =:email");
-		} else {
-			institutionalSb.append(" lower(user.").append(UserConstants.INSTITUTIONALEMAIL).append(") = lower(:email)");
-		}
-		count = dbInstance.getCurrentEntityManager()
-				.createQuery(institutionalSb.toString(), Number.class)
-				.setParameter("email", email)
-				.getSingleResult();
-		return count.intValue() > 0;
+	@Override
+	public List<Identity> findVisibleIdentitiesWithoutEmail() {
+		return userDAO.findVisibleIdentitiesWithoutEmail();
 	}
 
-	/**
-	 * @see org.olat.user.UserManager#loadUserByKey(java.lang.Long)
-	 */
+	@Override
+	public List<Identity> findVisibleIdentitiesWithEmailDuplicates() {
+		return userDAO.findVisibleIdentitiesWithEmailDuplicates();
+	}
+
+	@Override
+	public boolean isEmailAllowed(String email, User user) {
+		if (isEmailOfUser(email, user)) return true;
+		if (isEmailAllowed(email)) return true;
+		return false;
+	}
+
+	private boolean isEmailOfUser(String email, User user) {
+		if (!StringHelper.containsNonWhitespace(email) || user == null) return false;
+		
+		boolean isOwnEmail = email.equalsIgnoreCase(user.getEmail()) ;
+		boolean isOwnInstitutionalEmail = email.equalsIgnoreCase(user.getInstitutionalEmail());
+		return isOwnEmail || isOwnInstitutionalEmail;
+	}
+	
+	@Override
+	public boolean isEmailAllowed(String email) {
+		if (email == null && !userModule.isEmailMandatory()) return true;
+		if (email != null && !userModule.isEmailUnique()) return true;
+		if (email != null && isEmailNotInUse(email)) return true;
+		return false;
+	}
+	
+	private boolean isEmailNotInUse(String email) {
+		boolean emailIsNotInUse = !userDAO.isEmailInUse(email);
+		boolean emailIsNotReserved = !registrationManager.isEmailReserved(email);
+		return emailIsNotInUse && emailIsNotReserved;
+	}
+	
+	@Override
 	public User loadUserByKey(Long key) {
-		return DBFactory.getInstance().loadObject(UserImpl.class, key);
+		return dbInstance.getCurrentEntityManager().find(UserImpl.class, key);
 		// User not loaded yet (lazy initialization). Need to access
 		// a field first to really load user from database.
 	}
 
-	/**
-	 * @see org.olat.user.UserManager#updateUser(org.olat.core.id.User)
-	 */
 	@Override
 	public User updateUser(User usr) {
 		if (usr == null) throw new AssertException("User object is null!");
 		return dbInstance.getCurrentEntityManager().merge(usr);
 	}
 
-	/**
-	 * @see org.olat.user.UserManager#updateUserFromIdentity(org.olat.core.id.Identity)
-	 */
 	@Override
 	public boolean updateUserFromIdentity(Identity identity) {
 		try {
 			String fullName = getUserDisplayName(identity);
 			updateUsernameCache(identity.getKey(), identity.getName(), fullName);
 		} catch (Exception e) {
-			logWarn("Error update usernames cache", e);
+			log.warn("Error update usernames cache", e);
 		}
 		User user = updateUser(identity.getUser());
 		((IdentityImpl)identity).setUser(user);
 		return true;
 	}
 
-	/**
-	 * @see org.olat.user.UserManager#setUserCharset(org.olat.core.id.Identity, java.lang.String)
-	 */
+	@Override
 	public void setUserCharset(Identity identity, String charset){
 	    PropertyManager pm = PropertyManager.getInstance();
 	    Property p = pm.findProperty(identity, null, null, null, CHARSET);
@@ -387,12 +313,9 @@ public class UserManagerImpl extends UserManager {
 	    }
 	}
 
-	/**
-	 * @see org.olat.user.UserManager#getUserCharset(org.olat.core.id.Identity)
-	 */
+	@Override
 	public String getUserCharset(Identity identity){
 	   String charset;
-	   charset = WebappHelper.getDefaultCharset();
 	   PropertyManager pm = PropertyManager.getInstance();
 	   Property p = pm.findProperty(identity, null, null, null, CHARSET);
 	   if(p != null){
@@ -501,12 +424,12 @@ public class UserManagerImpl extends UserManager {
 
 	@Override
 	public Map<String, String> getUserDisplayNamesByUserName(Collection<String> usernames) {
-		if(usernames == null | usernames.isEmpty()) {
+		if(usernames == null || usernames.isEmpty()) {
 			return Collections.emptyMap();
 		}
 		
-		Map<String, String> fullNames = new HashMap<String,String>();
-		List<String> newUsernames = new ArrayList<String>();
+		Map<String, String> fullNames = new HashMap<>();
+		List<String> newUsernames = new ArrayList<>();
 		for(String username:usernames) {
 			String fullName = userToFullnameCache.get(username);
 			if(fullName != null) {
@@ -572,13 +495,12 @@ public class UserManagerImpl extends UserManager {
 
 	@Override
 	public Map<Long, String> getUserDisplayNamesByKey(Collection<Long> identityKeys) {
-		
-		if(identityKeys == null | identityKeys.isEmpty()) {
+		if(identityKeys == null || identityKeys.isEmpty()) {
 			return Collections.emptyMap();
 		}
 		
-		Map<Long, String> fullNames = new HashMap<Long,String>();
-		List<Long> newIdentityKeys = new ArrayList<Long>();
+		Map<Long, String> fullNames = new HashMap<>();
+		List<Long> newIdentityKeys = new ArrayList<>();
 		for(Long identityKey:identityKeys) {
 			String fullName = userToFullnameCache.get(identityKey);
 			if(fullName != null) {
@@ -619,5 +541,166 @@ public class UserManagerImpl extends UserManager {
 	public void setUserDisplayNameCreator(UserDisplayNameCreator userDisplayNameCreator) {
 		this.userDisplayNameCreator = userDisplayNameCreator;
 	}
+	
+	@Override
+	public String getUserDisplayEmail(Identity identity, Locale locale) {
+		User user = identity.getUser();
+		return getUserDisplayEmail(user, locale);
+	}
+	
+	@Override
+	public String getUserDisplayEmail(User user, Locale locale) {
+		String email = user.getProperty(UserConstants.EMAIL, locale);
+		return getUserDisplayEmail(email, locale);
+	}
+	
+	@Override
+	public String getUserDisplayEmail(String email, Locale locale) {
+		Translator translator = Util.createPackageTranslator(UserManager.class, locale);
+		return getUserDisplayEmail(email, translator);
+	}
 
+	public String getUserDisplayEmail(String email, Translator translator) {
+		String transaltedEmail;
+		if (StringHelper.containsNonWhitespace(email)) {
+			transaltedEmail = email;
+		} else {
+			transaltedEmail = translator.translate("email.not.available");
+		}
+		return transaltedEmail;
+	}
+
+	@Override
+	public String getEnsuredEmail(User user) {
+		String ensuredEmail;
+		if (user == null) {
+			ensuredEmail = "-1@" + getDomain();
+		} else if (StringHelper.containsNonWhitespace(user.getEmail())) {
+			ensuredEmail = user.getEmail();
+		} else {
+			ensuredEmail = user.getKey() + "@" + getDomain();
+		}
+		return ensuredEmail;
+	}
+
+	private String getDomain() {
+		AuthenticationProvider authenticationProvider = loginModule.getAuthenticationProvider("OLAT");
+		String issuer = authenticationProvider.getIssuerIdentifier(null);
+		return issuer.startsWith("https://")? issuer.substring(8): issuer;
+	}
+
+	@Override
+	public int deleteUserDataPriority() {
+		// delete with high priority
+		return 100;
+	}
+	
+	@Override
+	public void deleteUserData(Identity identity, String newDeletedUserName) {
+		identity = securityManager.loadIdentityByKey(identity.getKey());
+		
+		String roles = ((IdentityImpl)identity).getDeletedRoles();
+		boolean isAdministrativeUser = roles != null && (roles.contains("admins") || roles.contains("authors")
+				|| roles.contains("groupmanagers") || roles.contains("poolsmanager") || roles.contains("usermanagers")
+				|| roles.contains("owners") || roles.contains(GroupRoles.owner.name())
+				|| roles.contains(OrganisationRoles.administrator.name()) || roles.contains(OrganisationRoles.author.name())
+				|| roles.contains(OrganisationRoles.curriculummanager.name()) || roles.contains(OrganisationRoles.groupmanager.name())
+				|| roles.contains(OrganisationRoles.learnresourcemanager.name()) || roles.contains(OrganisationRoles.poolmanager.name())
+				|| roles.contains(OrganisationRoles.sysadmin.name()) || roles.contains(OrganisationRoles.usermanager.name()));
+
+		User persistedUser = identity.getUser();
+		List<UserPropertyHandler> userPropertyHandlers = getAllUserPropertyHandlers();
+		for (UserPropertyHandler userPropertyHandler : userPropertyHandlers) {
+			String actualProperty = userPropertyHandler.getName();
+			if (UserConstants.USERNAME.equals(actualProperty)) {
+				// Skip, user name will be anonymised by BaseSecurityManager
+			} else if(isAdministrativeUser && (UserConstants.FIRSTNAME.equals(actualProperty) || UserConstants.LASTNAME.equals(actualProperty))) {
+				// Skip first name and last name of user with administrative functions
+			} else {
+				persistedUser.setProperty(actualProperty, null);
+				log.debug("Deleted user-property::" + actualProperty + " for identity::+" + identity.getKey());
+			}
+		}
+		updateUserFromIdentity(identity);
+		log.info("deleteUserProperties user::" + persistedUser.getKey() + " from identity::" + identity.getKey());
+		dbInstance.commit();
+	}
+
+	@Override
+	public String getExporterID() {
+		return "profile";
+	}
+
+	@Override
+	public void export(Identity identity, ManifestBuilder manifest, File archiveDirectory, Locale locale) {
+		File profileArchive = new File(archiveDirectory, "UserProfile.xlsx");
+		try(OutputStream out = new FileOutputStream(profileArchive);
+			OpenXMLWorkbook workbook = new OpenXMLWorkbook(out, 1)) {
+			OpenXMLWorksheet sheet = workbook.nextWorksheet();
+			
+			Row row = sheet.newRow();
+			row.addCell(0, "Created");
+			row.addCell(1, identity.getCreationDate(), workbook.getStyles().getDateTimeStyle());
+			row.addCell(0, "User name");
+			row.addCell(1, identity.getName());
+			
+			User user = identity.getUser();
+			Translator translator = getPropertyHandlerTranslator(Util.createPackageTranslator(UserManager.class, locale));
+			List<UserPropertyHandler> userPropertyHandlers = getAllUserPropertyHandlers();
+			for (UserPropertyHandler userPropertyHandler : userPropertyHandlers) {
+				String actualProperty = userPropertyHandler.getName();
+				if(UserConstants.USERNAME.equals(actualProperty) || "creationDateDisplayProperty".equals(actualProperty)
+						|| "lastloginDateDisplayProperty".equals(actualProperty)) {
+					continue;//
+				}
+				String key = translator.translate("form.name." + actualProperty);
+				String value = user.getProperty(actualProperty, locale);
+				exportKeyValue(key, value, sheet);
+			}
+			
+			sheet.newRow();
+			row = sheet.newRow();
+			row.addCell(0, "Last login");
+			row.addCell(1, identity.getLastLogin(), workbook.getStyles().getDateTimeStyle());
+			exportKeyValue("External ID", identity.getExternalId(), sheet);
+
+			// preferences
+			sheet.newRow();
+			sheet.newRow().addCell(0, "Settings");
+			Preferences preferences = user.getPreferences();
+			exportKeyValue("Font size", preferences.getFontsize(), sheet);
+			exportKeyValue("Language", preferences.getLanguage(), sheet);
+			exportKeyValue("Notification", preferences.getNotificationInterval(), sheet);
+			exportKeyValue("Real mail", preferences.getReceiveRealMail(), sheet);
+		} catch (IOException e) {
+			log.error("Unable to export xlsx", e);
+		}
+		manifest.appendFile(profileArchive.getName());
+	}
+	
+	private void exportKeyValue(String key, String value, OpenXMLWorksheet sheet) {
+		if(StringHelper.containsNonWhitespace(value)) {
+			Row row = sheet.newRow();
+			row.addCell(0, key);
+			row.addCell(1, value);
+		}
+	}
+
+	@Override
+	public void clearAllUserProperties(Identity identity) {
+		User persistedUser = identity.getUser();
+		List<UserPropertyHandler> userPropertyHandlers = getAllUserPropertyHandlers();
+		for (UserPropertyHandler userPropertyHandler : userPropertyHandlers) {
+			String actualProperty = userPropertyHandler.getName();
+			if (UserConstants.USERNAME.equals(actualProperty)) {
+				// Skip, user name will be anonymised by BaseSecurityManager
+			} else {
+				persistedUser.setProperty(actualProperty, null);
+				log.debug("Deleted user-property::" + actualProperty + " for identity::+" + identity.getKey());
+			}
+		}
+		updateUserFromIdentity(identity);
+		log.info("clearUserProperties user::" + persistedUser.getKey() + " from identity::" + identity.getKey());
+		dbInstance.commit();
+	}
 }

@@ -19,15 +19,17 @@
  */
 package org.olat.selenium.page.core;
 
+import java.io.File;
 import java.util.List;
 
-import org.jboss.arquillian.drone.api.annotation.Drone;
 import org.junit.Assert;
 import org.olat.core.gui.render.URLBuilder;
 import org.olat.selenium.page.graphene.OOGraphene;
 import org.openqa.selenium.By;
 import org.openqa.selenium.WebDriver;
 import org.openqa.selenium.WebElement;
+import org.openqa.selenium.interactions.Actions;
+import org.openqa.selenium.support.ui.Select;
 
 /**
  * 
@@ -41,12 +43,7 @@ public class FolderPage {
 	
 	public static final By folderBy = By.cssSelector("div.o_briefcase_folder");
 	
-	@Drone
-	private WebDriver browser;
-	
-	public FolderPage() {
-		//
-	}
+	private final WebDriver browser;
 	
 	public FolderPage(WebDriver browser) {
 		this.browser = browser;
@@ -89,27 +86,78 @@ public class FolderPage {
 		By newFileBy = By.className("b_bc_newfile");
 		browser.findElement(newFileBy).click();
 		OOGraphene.waitBusy(browser);
+		OOGraphene.waitModalDialog(browser);
 		
-		By filenameBy = By.cssSelector(".o_sel_folder_new_file_name input[type='text']");
-		OOGraphene.waitElement(filenameBy, browser);
+		// create a new HTML document
+		By typeBy = By.cssSelector(".o_sel_folder_new_doc_type select");
+		OOGraphene.waitElement(typeBy, browser);
+		Select selectType = new Select(browser.findElement(typeBy));
+		List<WebElement> typeEls = selectType.getOptions();
+		for(WebElement typeEl:typeEls) {
+			if(typeEl.getText().toLowerCase().contains("html")) {
+				selectType.selectByValue(typeEl.getAttribute("value"));
+				break;
+			}
+		}
+		
+		By filenameBy = By.cssSelector(".o_sel_folder_new_doc_name input[type='text']");
 		browser.findElement(filenameBy).sendKeys(name);
-		
+
 		By createBy = By.cssSelector(".o_sel_folder_new_file button.btn-primary");
 		browser.findElement(createBy).click();
 		OOGraphene.waitBusy(browser);
+		OOGraphene.waitModalDialogDisappears(browser);
 		
+		// wait the HTML document
 		OOGraphene.tinymce(content, browser);
-		
+		// save the HTML document
 		By saveAndCloseButton = By.cssSelector("#o_button_saveclose a.btn");
-		browser.findElement(saveAndCloseButton).click();
+		OOGraphene.clickAndWait(saveAndCloseButton, browser);
+		OOGraphene.waitBusy(browser);
+		return this;
+	}
+	
+	public FolderPage uploadFile(File file) {
+		By newFileBy = By.className("o_bc_upload");
+		OOGraphene.waitElement(newFileBy, browser);
+		browser.findElement(newFileBy).click();
+		OOGraphene.waitModalDialog(browser);
+		
+		By inputBy = By.cssSelector("div.modal-dialog div.o_fileinput input[type='file']");
+		OOGraphene.uploadFile(inputBy, file, browser);
+		OOGraphene.waitBusy(browser);
+		
+		By saveButtonBy = By.cssSelector("div.o_sel_upload_buttons button.btn-primary");
+		browser.findElement(saveButtonBy).click();
+		OOGraphene.waitBusy(browser);
+		OOGraphene.waitModalDialogDisappears(browser);
+		return this;
+	}
+	
+	public FolderPage selectRootDirectory() {
+		By rootBy = By.xpath("//div[@class='o_briefcase_folder']//ol[@class='breadcrumb']/li[1]/a");
+		OOGraphene.waitElement(rootBy, browser);
+		
+		// tooltip of the image sometimes appears and block the click
+		By tooltipBy = By.cssSelector("div.tooltip-inner");
+		WebElement rootEl = browser.findElement(rootBy);
+		List<WebElement> tooltipEls = browser.findElements(tooltipBy);
+		if(tooltipEls.size() > 0) {
+			new Actions(browser)
+				.moveToElement(rootEl)
+				.build()
+				.perform();
+			OOGraphene.waitElementDisappears(tooltipBy, 5, browser);
+		}
+		
+		browser.findElement(rootBy).click();
 		OOGraphene.waitBusy(browser);
 		return this;
 	}
 	
 	public FolderPage assertOnFile(String filename) {
 		By fileBy = By.xpath("//table[contains(@class,'o_bc_table')]//a[contains(text(),'" + filename + "')]");
-		List<WebElement> fileEls = browser.findElements(fileBy);
-		Assert.assertFalse(fileEls.isEmpty());
+		OOGraphene.waitElement(fileBy, browser);
 		return this;
 	}
 }

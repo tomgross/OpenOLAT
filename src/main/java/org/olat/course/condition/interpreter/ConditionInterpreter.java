@@ -25,14 +25,12 @@
 
 package org.olat.course.condition.interpreter;
 
-import java.lang.reflect.Field;
 import java.text.ParseException;
-import java.util.Collection;
 
+import org.apache.logging.log4j.Logger;
 import org.olat.core.gui.translator.Translator;
 import org.olat.core.logging.AssertException;
 import org.olat.core.logging.OLATRuntimeException;
-import org.olat.core.logging.OLog;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.Util;
 import org.olat.course.condition.Condition;
@@ -62,12 +60,12 @@ import de.bps.course.condition.interpreter.score.GetOnyxTestOutcomeNumFunction;
  * Comment:
  */
 public class ConditionInterpreter {
-	private OLog log = Tracing.createLoggerFor(this.getClass());
+	private static final Logger log = Tracing.createLoggerFor(ConditionInterpreter.class);
 
 	/** static Integer(1) object */
-	public static final Integer INT_TRUE = new Integer(1);
+	public static final Integer INT_TRUE = Integer.valueOf(1);
 	/** static Integer(0) object */
-	public static final Integer INT_FALSE = new Integer(0);
+	public static final Integer INT_FALSE = Integer.valueOf(0);
 	protected Environment env;
 	protected Translator translator;
 	protected UserCourseEnvironment uce;
@@ -141,6 +139,7 @@ public class ConditionInterpreter {
 		env.addFunction(IsCourseCoachFunction.name, new IsCourseCoachFunction(userCourseEnv));
 		env.addFunction(IsCourseParticipantFunction.name, new IsCourseParticipantFunction(userCourseEnv));
 		env.addFunction(IsCourseAdministratorFunction.name, new IsCourseAdministratorFunction(userCourseEnv));
+		env.addFunction(IsInOrganisationFunction.name, new IsInOrganisationFunction(userCourseEnv));
 		
 		env.addFunction(IsAssessmentModeFunction.name, new IsAssessmentModeFunction(userCourseEnv));
 		env.addFunction(GetCourseBeginDateFunction.name, new GetCourseBeginDateFunction(userCourseEnv));
@@ -216,23 +215,6 @@ public class ConditionInterpreter {
 	}
 
 	/**
-	 * Check an expression on syntactical errors.
-	 *
-	 * @param expression
-	 * @return Null if syntactically correct, error message otherwise.
-	 * @deprecated TODO: remove as it is no longer referenced, except test?
-	 */
-	public ConditionErrorMessage syntaxTestCalculation(String expression) {
-		try {
-			Expression exp = new Expression(expression, env);
-			exp.evaluate();
-		} catch (Exception e) {
-			return handleExpressionExceptions(e);
-		}
-		return null;
-	}
-
-	/**
 	 * evaluation of expression may throw exceptions, the handling of these is
 	 * done here.
 	 *
@@ -291,7 +273,7 @@ public class ConditionInterpreter {
 	 * Evaluates a condition.
 	 *
 	 * @param c
-	 * @return True if evaluation successfull.
+	 * @return True if evaluation successful.
 	 */
 	public boolean evaluateCondition(Condition c) {
 		return evaluateCondition(c.getConditionExpression());
@@ -301,16 +283,17 @@ public class ConditionInterpreter {
 	 * Evaluates a condition.
 	 *
 	 * @param condition
-	 * @return True if evaluation successfull.
+	 * @return True if evaluation successful.
 	 */
 	public boolean evaluateCondition(String condition) {
 		boolean ok = false;
 		try {
-			// TODO: lookup in Map: key = c -> cached Expression
-			// if not null then: ok = evaluateCondition(Expression cachedExpression)
 			ok = doEvaluateCondition(condition);
 		} catch (ParseException e) {
-			log.error("ParseException in evaluateCondition:" + condition, e);
+			log.error("ParseException in evaluateCondition: " + condition, e);
+			ok = false;
+		} catch (Exception e) {
+			log.error("Exception in evaluateCondition: " + condition, e);
 			ok = false;
 		}
 		return ok;
@@ -320,7 +303,7 @@ public class ConditionInterpreter {
 	 * Evaluates a calculation.
 	 *
 	 * @param calculation
-	 * @return True if evaluation successfull.
+	 * @return True if evaluation successful.
 	 */
 	public float evaluateCalculation(String calculation) {
 		float res = -100000000000000000000000000000000f;
@@ -328,7 +311,10 @@ public class ConditionInterpreter {
 			res = doEvaluateCalculation(calculation);
 		} catch (ParseException e) {
 			log.info("ParseException in evaluateCalculation:" + e);
-			throw new AssertException("parse or execute error in calculation:" + calculation + " exception=" + e.getMessage());
+			throw new AssertException("Parse error in calculation:" + calculation, e);
+		} catch (Exception e) {
+			log.info("Exception in evaluateCalculation:" + e);
+			throw new AssertException("Execute error in calculation: " + calculation, e);
 		}
 		return res;
 	}
@@ -347,18 +333,6 @@ public class ConditionInterpreter {
 			throw new ParseException("Parse exception for calculation: " + calculation + ". " + xe.getMessage(), xe.getPosition());
 		}
 	}
-	
-	public Collection<Object> getParsedTokens(String condition) 
-	throws Exception {
-		Expression exp = new Expression(condition, env);
-		exp.evaluate();
-		
-		Field tokenListField = Expression.class.getDeclaredField("oTokenList");
-		tokenListField.setAccessible(true);
-		@SuppressWarnings("unchecked")
-		Collection<Object> tokenList = (Collection<Object>)tokenListField.get(exp);
-		return tokenList;
-	}
 
 	/**
 	 * Evaluate a condition using the jmep expression parser
@@ -371,9 +345,9 @@ public class ConditionInterpreter {
 			Expression exp = new Expression(condition, env);
 			Object result = exp.evaluate();
 			if (result instanceof Double) {
-				return (((Double) result).doubleValue() == 1.0) ? true : false;
+				return (((Double) result).doubleValue() == 1.0);
 			} else if (result instanceof Integer) {
-				return (((Integer) result).intValue() == 1) ? true : false;
+				return (((Integer) result).intValue() == 1);
 			} else return false;
 		} catch (XExpression xe) {
 			throw new ParseException("Parse exception for condition: " + condition + ". " + xe.getMessage(), xe.getPosition());

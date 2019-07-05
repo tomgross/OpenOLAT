@@ -19,26 +19,23 @@
  */
 package org.olat.modules.coach.manager;
 
-import java.io.File;
 import java.net.URISyntaxException;
 import java.net.URL;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 
 import org.junit.Assert;
-import org.junit.Ignore;
 import org.junit.Test;
-import org.olat.basesecurity.BaseSecurity;
 import org.olat.basesecurity.GroupRoles;
 import org.olat.basesecurity.IdentityRef;
 import org.olat.core.commons.persistence.DB;
 import org.olat.core.id.Identity;
 import org.olat.core.id.User;
 import org.olat.core.id.UserConstants;
-import org.olat.core.util.CodeHelper;
 import org.olat.course.CourseFactory;
 import org.olat.course.ICourse;
 import org.olat.course.assessment.manager.EfficiencyStatementManager;
@@ -55,6 +52,7 @@ import org.olat.modules.coach.model.StudentStatEntry;
 import org.olat.modules.coach.ui.UserListController;
 import org.olat.repository.RepositoryEntry;
 import org.olat.repository.RepositoryEntryRef;
+import org.olat.repository.RepositoryEntryStatusEnum;
 import org.olat.repository.RepositoryService;
 import org.olat.test.JunitTestHelper;
 import org.olat.test.OlatTestCase;
@@ -77,8 +75,6 @@ public class CoachingDAOTest extends OlatTestCase {
 	@Autowired
 	private UserManager userManager;
 	@Autowired
-	private BaseSecurity securityManager;
-	@Autowired
 	private RepositoryService repositoryService;
 	@Autowired
 	private BusinessGroupService businessGroupService;
@@ -100,10 +96,9 @@ public class CoachingDAOTest extends OlatTestCase {
 	throws URISyntaxException {
 		List<UserPropertyHandler> userPropertyHandlers = userManager.getUserPropertyHandlersFor(UserListController.usageIdentifyer, false);
 		
-		URL courseWithForumsUrl = CoachingLargeTest.class.getResource("CoachingCourse.zip");
-		File courseWithForums = new File(courseWithForumsUrl.toURI());
-		String softKey = UUID.randomUUID().toString();
-		RepositoryEntry re = CourseFactory.deployCourseFromZIP(courseWithForums, softKey, 4);
+		URL courseUrl = CoachingLargeTest.class.getResource("CoachingCourse.zip");
+		RepositoryEntry re = JunitTestHelper.deployCourse(null, "Coaching course", courseUrl);
+
 		Assert.assertNotNull(re);
 
 		dbInstance.commitAndCloseSession();
@@ -155,7 +150,7 @@ public class CoachingDAOTest extends OlatTestCase {
 
 		
 		//user native
-		List<StudentStatEntry> nativeUserStats = coachingDAO.getStudentsStatisticsNative(coach, userPropertyHandlers);
+		List<StudentStatEntry> nativeUserStats = coachingDAO.getStudentsStatisticsNative(coach, userPropertyHandlers, Locale.ENGLISH);
 		Assert.assertNotNull(nativeUserStats);
 		Assert.assertEquals(2, nativeUserStats.size());
 		//participant1
@@ -206,11 +201,11 @@ public class CoachingDAOTest extends OlatTestCase {
 	@Test
 	public void getStatistics_notAttempted()
 	throws URISyntaxException {
-		URL coachingCourseUrl = CoachingLargeTest.class.getResource("CoachingCourse.zip");
-		File coachingCourseFile = new File(coachingCourseUrl.toURI());
-		RepositoryEntry re1 = CourseFactory.deployCourseFromZIP(coachingCourseFile, UUID.randomUUID().toString(), 4);
-		RepositoryEntry re2 = CourseFactory.deployCourseFromZIP(coachingCourseFile, UUID.randomUUID().toString(), 4);
-		RepositoryEntry re3 = CourseFactory.deployCourseFromZIP(coachingCourseFile, UUID.randomUUID().toString(), 4);
+		
+		URL courseUrl = CoachingLargeTest.class.getResource("CoachingCourse.zip");
+		RepositoryEntry re1 = JunitTestHelper.deployCourse(null, "Coaching course 1", courseUrl);
+		RepositoryEntry re2 = JunitTestHelper.deployCourse(null, "Coaching course 2", courseUrl);
+		RepositoryEntry re3 = JunitTestHelper.deployCourse(null, "Coaching course 3", courseUrl);
 		dbInstance.commitAndCloseSession();
 		
 		
@@ -285,7 +280,7 @@ public class CoachingDAOTest extends OlatTestCase {
 		List<UserPropertyHandler> userPropertyHandlers = userManager.getUserPropertyHandlersFor(UserListController.usageIdentifyer, false);
 		
 		//user native
-		List<StudentStatEntry> nativeUserStats = coachingDAO.getStudentsStatisticsNative(coach, userPropertyHandlers);
+		List<StudentStatEntry> nativeUserStats = coachingDAO.getStudentsStatisticsNative(coach, userPropertyHandlers, Locale.ENGLISH);
 		Assert.assertNotNull(nativeUserStats);
 		Assert.assertEquals(2, nativeUserStats.size());
 		//participant1
@@ -326,11 +321,10 @@ public class CoachingDAOTest extends OlatTestCase {
 	@Test
 	public void getStatistics_owner()
 	throws URISyntaxException {
-		URL coachingCourseUrl = CoachingLargeTest.class.getResource("CoachingCourse.zip");
-		File coachingCourseFile = new File(coachingCourseUrl.toURI());
-		RepositoryEntry re1 = CourseFactory.deployCourseFromZIP(coachingCourseFile, UUID.randomUUID().toString(), 4);
-		RepositoryEntry re2 = CourseFactory.deployCourseFromZIP(coachingCourseFile, UUID.randomUUID().toString(), 4);
-		RepositoryEntry re3 = CourseFactory.deployCourseFromZIP(coachingCourseFile, UUID.randomUUID().toString(), 4);
+		URL courseUrl = CoachingLargeTest.class.getResource("CoachingCourse.zip");
+		RepositoryEntry re1 = JunitTestHelper.deployCourse(null, "Coaching course 1", courseUrl); 
+		RepositoryEntry re2 = JunitTestHelper.deployCourse(null, "Coaching course 2", courseUrl); 
+		RepositoryEntry re3 = JunitTestHelper.deployCourse(null, "Coaching course 3", courseUrl);
 		dbInstance.commitAndCloseSession();
 		
 		//members of courses
@@ -427,7 +421,7 @@ public class CoachingDAOTest extends OlatTestCase {
 		
 		List<UserPropertyHandler> userPropertyHandlers = userManager.getUserPropertyHandlersFor(UserListController.usageIdentifyer, false);
 		//user native
-		List<StudentStatEntry> nativeUserStats = coachingDAO.getStudentsStatisticsNative(coach, userPropertyHandlers);
+		List<StudentStatEntry> nativeUserStats = coachingDAO.getStudentsStatisticsNative(coach, userPropertyHandlers, Locale.ENGLISH);
 		Assert.assertNotNull(nativeUserStats);
 	
 		Assert.assertEquals(4, nativeUserStats.size());
@@ -473,11 +467,13 @@ public class CoachingDAOTest extends OlatTestCase {
 	@Test
 	public void getStatistics_permissionOnCourses()
 	throws URISyntaxException {
-		URL coachingCourseUrl = CoachingLargeTest.class.getResource("CoachingCourse.zip");
-		File coachingCourseFile = new File(coachingCourseUrl.toURI());
-		RepositoryEntry re1 = CourseFactory.deployCourseFromZIP(coachingCourseFile, UUID.randomUUID().toString(), 1);
-		RepositoryEntry re2 = CourseFactory.deployCourseFromZIP(coachingCourseFile, UUID.randomUUID().toString(), 2);
-		RepositoryEntry re3 = CourseFactory.deployCourseFromZIP(coachingCourseFile, UUID.randomUUID().toString(), 3);
+		URL courseUrl = CoachingLargeTest.class.getResource("CoachingCourse.zip");
+		RepositoryEntry re1 = JunitTestHelper.deployCourse(null, "Coaching course 1",
+				RepositoryEntryStatusEnum.preparation, false, false, courseUrl);
+		RepositoryEntry re2 = JunitTestHelper.deployCourse(null, "Coaching course 2",
+				RepositoryEntryStatusEnum.review, false, false, courseUrl);
+		RepositoryEntry re3 = JunitTestHelper.deployCourse(null, "Coaching course 3",
+				RepositoryEntryStatusEnum.published, true, false, courseUrl);
 		dbInstance.commitAndCloseSession();
 		
 		//members of courses
@@ -605,7 +601,7 @@ public class CoachingDAOTest extends OlatTestCase {
 	
 		List<UserPropertyHandler> userPropertyHandlers = userManager.getUserPropertyHandlersFor(UserListController.usageIdentifyer, false);
 		//user native
-		List<StudentStatEntry> courseCoachUserStats = coachingDAO.getStudentsStatisticsNative(courseCoach, userPropertyHandlers);
+		List<StudentStatEntry> courseCoachUserStats = coachingDAO.getStudentsStatisticsNative(courseCoach, userPropertyHandlers, Locale.ENGLISH);
 		Assert.assertNotNull(courseCoachUserStats);
 		Assert.assertEquals(2, courseCoachUserStats.size());
 		//participant3 is only in re 1
@@ -626,7 +622,7 @@ public class CoachingDAOTest extends OlatTestCase {
 		Assert.assertEquals(1, entryParticipant31.getCountRepo());
 		
 		//group coach
-		List<StudentStatEntry> groupCoachUserStats = coachingDAO.getStudentsStatisticsNative(groupCoach, userPropertyHandlers);
+		List<StudentStatEntry> groupCoachUserStats = coachingDAO.getStudentsStatisticsNative(groupCoach, userPropertyHandlers, Locale.ENGLISH);
 		Assert.assertNotNull(groupCoachUserStats);
 		Assert.assertEquals(2, groupCoachUserStats.size());
 
@@ -657,10 +653,9 @@ public class CoachingDAOTest extends OlatTestCase {
 	@Test
 	public void getStatistics_emptyStatements_emptyCourseInfos()
 	throws URISyntaxException {
-		URL coachingCourseUrl = CoachingLargeTest.class.getResource("CoachingCourse.zip");
-		File coachingCourseFile = new File(coachingCourseUrl.toURI());
-		RepositoryEntry re1 = CourseFactory.deployCourseFromZIP(coachingCourseFile, UUID.randomUUID().toString(), 4);
-		RepositoryEntry re2 = CourseFactory.deployCourseFromZIP(coachingCourseFile, UUID.randomUUID().toString(), 4);
+		URL courseUrl = CoachingLargeTest.class.getResource("CoachingCourse.zip");
+		RepositoryEntry re1 = JunitTestHelper.deployCourse(null, "Coaching course 1", courseUrl);
+		RepositoryEntry re2 = JunitTestHelper.deployCourse(null, "Coaching course 2", courseUrl);
 		dbInstance.commitAndCloseSession();
 		
 		//members of courses
@@ -711,7 +706,7 @@ public class CoachingDAOTest extends OlatTestCase {
 
 		List<UserPropertyHandler> userPropertyHandlers = userManager.getUserPropertyHandlersFor(UserListController.usageIdentifyer, false);
 		//user native
-		List<StudentStatEntry> nativeUserStats = coachingDAO.getStudentsStatisticsNative(coach, userPropertyHandlers);
+		List<StudentStatEntry> nativeUserStats = coachingDAO.getStudentsStatisticsNative(coach, userPropertyHandlers, Locale.ENGLISH);
 		Assert.assertNotNull(nativeUserStats);
 		Assert.assertEquals(4, nativeUserStats.size());
 		//participants have all the same statistics
@@ -736,10 +731,9 @@ public class CoachingDAOTest extends OlatTestCase {
 	@Test
 	public void getStatistics_empty()
 	throws URISyntaxException {
-		URL coachingCourseUrl = CoachingLargeTest.class.getResource("CoachingCourse.zip");
-		File coachingCourseFile = new File(coachingCourseUrl.toURI());
-		RepositoryEntry re1 = CourseFactory.deployCourseFromZIP(coachingCourseFile, UUID.randomUUID().toString(), 4);
-		RepositoryEntry re2 = CourseFactory.deployCourseFromZIP(coachingCourseFile, UUID.randomUUID().toString(), 4);
+		URL courseUrl = CoachingLargeTest.class.getResource("CoachingCourse.zip");
+		RepositoryEntry re1 = JunitTestHelper.deployCourse(null, "Coaching course 1", courseUrl);
+		RepositoryEntry re2 = JunitTestHelper.deployCourse(null, "Coaching course 2", courseUrl);
 		dbInstance.commitAndCloseSession();
 		
 		//members of courses
@@ -763,7 +757,7 @@ public class CoachingDAOTest extends OlatTestCase {
 		
 		List<UserPropertyHandler> userPropertyHandlers = userManager.getUserPropertyHandlersFor(UserListController.usageIdentifyer, false);
 		//user native
-		List<StudentStatEntry> nativeUserStats = coachingDAO.getStudentsStatisticsNative(coach, userPropertyHandlers);
+		List<StudentStatEntry> nativeUserStats = coachingDAO.getStudentsStatisticsNative(coach, userPropertyHandlers, Locale.ENGLISH);
 		Assert.assertNotNull(nativeUserStats);
 		Assert.assertEquals(0, nativeUserStats.size());
 	}
@@ -771,11 +765,10 @@ public class CoachingDAOTest extends OlatTestCase {
 	@Test
 	public void getUsers()
 	throws URISyntaxException {
-		URL coachingCourseUrl = CoachingLargeTest.class.getResource("CoachingCourse.zip");
-		File coachingCourseFile = new File(coachingCourseUrl.toURI());
-		RepositoryEntry re1 = CourseFactory.deployCourseFromZIP(coachingCourseFile, UUID.randomUUID().toString(), 4);
-		RepositoryEntry re2 = CourseFactory.deployCourseFromZIP(coachingCourseFile, UUID.randomUUID().toString(), 4);
-		RepositoryEntry re3 = CourseFactory.deployCourseFromZIP(coachingCourseFile, UUID.randomUUID().toString(), 4);
+		URL courseUrl = CoachingLargeTest.class.getResource("CoachingCourse.zip");
+		RepositoryEntry re1 = JunitTestHelper.deployCourse(null, "Coaching course 1", courseUrl);
+		RepositoryEntry re2 = JunitTestHelper.deployCourse(null, "Coaching course 2", courseUrl);
+		RepositoryEntry re3 = JunitTestHelper.deployCourse(null, "Coaching course 3", courseUrl);
 		dbInstance.commitAndCloseSession();
 		
 		//members of courses
@@ -817,7 +810,7 @@ public class CoachingDAOTest extends OlatTestCase {
 		Map<String,String> props = new HashMap<>();
 		props.put(UserConstants.FIRSTNAME, "re");
 		params.setUserProperties(props);
-		List<StudentStatEntry> stats = coachingDAO.getUsersStatisticsNative(params, userPropertyHandlers);
+		List<StudentStatEntry> stats = coachingDAO.getUsersStatisticsNative(params, userPropertyHandlers, Locale.ENGLISH);
 		Assert.assertNotNull(stats);
 		Assert.assertFalse(stats.isEmpty());
 		
@@ -834,7 +827,7 @@ public class CoachingDAOTest extends OlatTestCase {
 		//search by user name
 		SearchCoachedIdentityParams loginParams = new SearchCoachedIdentityParams();
 		loginParams.setLogin(participant.getName());
-		List<StudentStatEntry> loginStats = coachingDAO.getUsersStatisticsNative(loginParams, userPropertyHandlers);
+		List<StudentStatEntry> loginStats = coachingDAO.getUsersStatisticsNative(loginParams, userPropertyHandlers, Locale.ENGLISH);
 		Assert.assertNotNull(loginStats);
 		Assert.assertEquals(1, loginStats.size());
 		
@@ -850,9 +843,8 @@ public class CoachingDAOTest extends OlatTestCase {
 	
 	@Test
 	public void getStudents_coach_course() throws URISyntaxException {
-		URL coachingCourseUrl = CoachingLargeTest.class.getResource("CoachingCourse.zip");
-		File coachingCourseFile = new File(coachingCourseUrl.toURI());
-		RepositoryEntry re = CourseFactory.deployCourseFromZIP(coachingCourseFile, UUID.randomUUID().toString(), 4);
+		URL courseUrl = CoachingLargeTest.class.getResource("CoachingCourse.zip");
+		RepositoryEntry re = JunitTestHelper.deployCourse(null, "Coaching course", courseUrl);
 		dbInstance.commitAndCloseSession();
 		
 		//members of courses
@@ -882,9 +874,8 @@ public class CoachingDAOTest extends OlatTestCase {
 	
 	@Test
 	public void getStudents_owner_course() throws URISyntaxException {
-		URL coachingCourseUrl = CoachingLargeTest.class.getResource("CoachingCourse.zip");
-		File coachingCourseFile = new File(coachingCourseUrl.toURI());
-		RepositoryEntry re = CourseFactory.deployCourseFromZIP(coachingCourseFile, UUID.randomUUID().toString(), 4);
+		URL courseUrl = CoachingLargeTest.class.getResource("CoachingCourse.zip");
+		RepositoryEntry re = JunitTestHelper.deployCourse(null, "Coaching course", courseUrl);
 		dbInstance.commitAndCloseSession();
 		
 		//members of courses
@@ -926,9 +917,8 @@ public class CoachingDAOTest extends OlatTestCase {
 
 	@Test
 	public void isCoach_owner() throws URISyntaxException {
-		URL coachingCourseUrl = CoachingLargeTest.class.getResource("CoachingCourse.zip");
-		File coachingCourseFile = new File(coachingCourseUrl.toURI());
-		RepositoryEntry re = CourseFactory.deployCourseFromZIP(coachingCourseFile, UUID.randomUUID().toString(), 4);
+		URL courseUrl = CoachingLargeTest.class.getResource("CoachingCourse.zip");
+		RepositoryEntry re = JunitTestHelper.deployCourse(null, "Coaching course", courseUrl);
 		dbInstance.commitAndCloseSession();
 	
 		//members of courses
@@ -942,9 +932,8 @@ public class CoachingDAOTest extends OlatTestCase {
 	
 	@Test
 	public void isCoach_coach() throws URISyntaxException {
-		URL coachingCourseUrl = CoachingLargeTest.class.getResource("CoachingCourse.zip");
-		File coachingCourseFile = new File(coachingCourseUrl.toURI());
-		RepositoryEntry re = CourseFactory.deployCourseFromZIP(coachingCourseFile, UUID.randomUUID().toString(), 4);
+		URL courseUrl = CoachingLargeTest.class.getResource("CoachingCourse.zip");
+		RepositoryEntry re = JunitTestHelper.deployCourse(null, "Coaching course", courseUrl);
 		dbInstance.commitAndCloseSession();
 	
 		//coach of course
@@ -967,14 +956,16 @@ public class CoachingDAOTest extends OlatTestCase {
 	
 	@Test
 	public void isCoach_notPermitted() throws URISyntaxException {
-		URL coachingCourseUrl = CoachingLargeTest.class.getResource("CoachingCourse.zip");
-		File coachingCourseFile = new File(coachingCourseUrl.toURI());
-		RepositoryEntry re = CourseFactory.deployCourseFromZIP(coachingCourseFile, UUID.randomUUID().toString(), 1);
+		URL courseUrl = CoachingLargeTest.class.getResource("CoachingCourse.zip");
+		RepositoryEntry re = JunitTestHelper.deployCourse(null, "Coaching course",
+				RepositoryEntryStatusEnum.published, false, false, courseUrl);
 		dbInstance.commitAndCloseSession();
 	
 		//owner of course
 		Identity courseOwner = JunitTestHelper.createAndPersistIdentityAsRndUser("Coach-1");
+		Identity courseParticipant = JunitTestHelper.createAndPersistIdentityAsRndUser("Participant-1");
 		repositoryService.addRole(courseOwner, re, GroupRoles.owner.name());
+		repositoryService.addRole(courseParticipant, re, GroupRoles.participant.name());
 		dbInstance.commitAndCloseSession();
 
 		//coach in a group of the course
@@ -987,7 +978,9 @@ public class CoachingDAOTest extends OlatTestCase {
 		boolean canCourseCoach = coachingDAO.isCoach(courseOwner);
 		Assert.assertTrue(canCourseCoach);
 		boolean canGroupCoach = coachingDAO.isCoach(groupCoach);
-		Assert.assertFalse(canGroupCoach);
+		Assert.assertTrue(canGroupCoach);
+		boolean canCourseParticipant= coachingDAO.isCoach(courseParticipant);
+		Assert.assertFalse(canCourseParticipant);
 	}
 	
 	private StudentStatEntry getStudentStatEntry(IdentityRef identity, List<StudentStatEntry> entries) {
@@ -1018,29 +1011,5 @@ public class CoachingDAOTest extends OlatTestCase {
 			}
 		}
 		return entry;
-	}
-	
-	/**
-	 * To test performance against an external database ( of a customer ).
-	 */
-	@Test
-	@Ignore
-	public void testExtern() {
-		Identity coach = securityManager.loadIdentityByKey(46268418l);
-		List<UserPropertyHandler> userPropertyHandlers = userManager.getUserPropertyHandlersFor(UserListController.usageIdentifyer, false);
-		
-		if(coach != null) {
-			long start = System.nanoTime();
-			coachingDAO.getCoursesStatisticsNative(coach);
-			CodeHelper.printNanoTime(start, "Courses");
-			
-			start = System.nanoTime();
-			coachingDAO.getGroupsStatisticsNative(coach);
-			CodeHelper.printNanoTime(start, "Groups");
-			
-			start = System.nanoTime();
-			coachingDAO.getStudentsStatisticsNative(coach, userPropertyHandlers);
-			CodeHelper.printNanoTime(start, "Students");
-		}
 	}
 }

@@ -39,6 +39,8 @@ import org.json.JSONException;
 import org.json.JSONObject;
 import org.olat.core.CoreSpringFactory;
 import org.olat.core.commons.persistence.DBFactory;
+import org.olat.core.commons.services.analytics.AnalyticsModule;
+import org.olat.core.commons.services.analytics.AnalyticsSPI;
 import org.olat.core.dispatcher.DispatcherModule;
 import org.olat.core.dispatcher.mapper.MapperService;
 import org.olat.core.dispatcher.mapper.manager.MapperKey;
@@ -77,6 +79,7 @@ import org.olat.core.gui.render.ValidationResult;
 import org.olat.core.gui.render.intercept.InterceptHandler;
 import org.olat.core.gui.render.intercept.InterceptHandlerInstance;
 import org.olat.core.gui.themes.Theme;
+import org.olat.core.gui.translator.Translator;
 import org.olat.core.helpers.GUISettings;
 import org.olat.core.helpers.Settings;
 import org.olat.core.id.context.BusinessControl;
@@ -85,8 +88,9 @@ import org.olat.core.id.context.ContextEntry;
 import org.olat.core.id.context.HistoryPoint;
 import org.olat.core.logging.AssertException;
 import org.olat.core.logging.OLATRuntimeException;
-import org.olat.core.logging.OLog;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
+import org.olat.core.util.Formatter;
 import org.olat.core.util.StringHelper;
 import org.olat.core.util.component.ComponentTraverser;
 import org.olat.core.util.component.ComponentVisitor;
@@ -98,7 +102,7 @@ import org.olat.core.util.component.ComponentVisitor;
  */
 public class Window extends AbstractComponent implements CustomCSSDelegate {
 	
-	private static final OLog log = Tracing.createLoggerFor(Window.class);
+	private static final Logger log = Tracing.createLoggerFor(Window.class);
 	private static final DispatchResult NO_DISPATCHRESULT = new DispatchResult(false, false, false);
 	
 	private static final String LOG_SEPARATOR = "^$^";
@@ -168,6 +172,8 @@ public class Window extends AbstractComponent implements CustomCSSDelegate {
 	private DTabs dTabs;
 	//custom css
 	private CustomCSS customCSS;
+	// the window title
+	private String title;
 	
 	// wbackoffice reference
 	private final WindowBackOfficeImpl wbackofficeImpl;
@@ -175,6 +181,8 @@ public class Window extends AbstractComponent implements CustomCSSDelegate {
 	private final Object render_mutex = new Object();
 	// delegate for css and js includes
 	private final JSAndCSSAdderImpl jsAndCssAdder;
+	// the analytics service
+	private final AnalyticsSPI analyticsSPI;
 	
 	/**
 	 * @param name
@@ -185,8 +193,16 @@ public class Window extends AbstractComponent implements CustomCSSDelegate {
 		this.wbackofficeImpl = wbackoffice;
 		jsAndCssAdder = wbackoffice.createJSAndCSSAdder();
 		// set default theme
-		Theme myTheme = new Theme(CoreSpringFactory.getImpl(GUISettings.class).getGuiThemeIdentifyer());
+		Theme myTheme = CoreSpringFactory.getImpl(GUISettings.class).getGuiTheme();
 		setGuiTheme(myTheme);
+		// add analytics service provider if configured
+		AnalyticsModule analyticsModule = CoreSpringFactory.getImpl(AnalyticsModule.class);
+		if (analyticsModule.isAnalyticsEnabled()) {
+			analyticsSPI = analyticsModule.getAnalyticsProvider();
+		} else {
+			analyticsSPI = null;
+		}
+
 	}
 	
 	public Component getJsCssRawHtmlHeader() {
@@ -207,6 +223,30 @@ public class Window extends AbstractComponent implements CustomCSSDelegate {
 	public Theme getGuiTheme() {
 		return guiTheme;
 	}
+
+	/**
+	 * @return The current window title
+	 */
+	public String getTitle() {
+		return title;
+	}
+
+	/** 
+	 * @param title The new title of this window (for browser history)
+	 */
+	public void setTitle(Translator translator, String newTitle) {
+		this.title = translator.translate("page.appname") + " - " + newTitle;
+		StringBuilder sb = new StringBuilder();
+		sb.append("document.title = \"");
+		sb.append(Formatter.escapeDoubleQuotes(this.title));
+		sb.append("\";");
+		JSCommand jsc = new JSCommand(sb.toString());
+		if (getWindowBackOffice() != null) {
+			getWindowBackOffice().sendCommandTo(jsc);			
+		}
+	}
+
+
 	
 	public WindowBackOffice getWindowBackOffice() {
 		return wbackofficeImpl;
@@ -291,7 +331,7 @@ public class Window extends AbstractComponent implements CustomCSSDelegate {
 		boolean incTimestamp = false;//!GUIInterna.isLoadPerformanceMode();
 		
 		MediaResource mr = null;
-		final boolean isDebugLog = log.isDebug();
+		final boolean isDebugLog = log.isDebugEnabled();
 		StringBuilder debugMsg = null;
 		long debug_start = 0;
 		if (isDebugLog) {
@@ -367,7 +407,6 @@ public class Window extends AbstractComponent implements CustomCSSDelegate {
 
 						MediaResource mmr = null;
 						//REVIEW:PB: this will be the code allowing back forward navigation
-						//-----> if (didDispatch || inlineAfterBackForward) {
 						if (forceReload) {
 							//force RELOAD with a redirect to itself
 							String reRenderUri = buildURIFor(this, timestampID, null);
@@ -381,7 +420,6 @@ public class Window extends AbstractComponent implements CustomCSSDelegate {
 									// a) have the normal mode set (not the ajax mode)
 									// b) have the target="_blank" attribute
 									// reason: in non-ajax-mode, a link has to know beforehand whether it opens in a new window or not.
-									// FIXME:fj:c think about bodyOnLoad -> win.open(new window url)
 									throw new AssertException("a link in ajax mode should never result in a new window");
 								}
 								mmr = ureq.getDispatchResult().getResultingMediaResource();
@@ -393,7 +431,6 @@ public class Window extends AbstractComponent implements CustomCSSDelegate {
 							}
 
 							//REVIEW:PB: this will be the code allowing back forward navigation
-							//-----> if (inline) {
 							if (inline || !validForDispatching) {
 								if(!validForDispatching){
 									// not valid: fire oldtimestamp event and later rerender
@@ -680,16 +717,19 @@ public class Window extends AbstractComponent implements CustomCSSDelegate {
 
 					// todo maybe better delegate window registry to the windowbackoffice?
 					URLBuilder ubu = new URLBuilder(uriPrefix, resWindow.getInstanceId(), String.valueOf(resWindow.timestamp));
-					StringOutput sout = new StringOutput(30);
-					ubu.buildURI(sout, null, null);
-					mr = new RedirectMediaResource(sout.toString());
-					ServletUtil.serveResource(request, response, mr);
-					if (isDebugLog) {
-						long diff = System.currentTimeMillis() - debug_start;
-						debugMsg.append("rdirnw:").append(diff).append(LOG_SEPARATOR);
-						log.debug(debugMsg.toString());
-						long durationDispatchRequest = System.currentTimeMillis() - debug_start;
-						log.debug("Perf-Test: Window return from 2 durationDispatchRequest=" + durationDispatchRequest);
+					try(StringOutput sout = new StringOutput(30)) {
+						ubu.buildURI(sout, null, null);
+						mr = new RedirectMediaResource(sout.toString());
+						ServletUtil.serveResource(request, response, mr);
+						if (isDebugLog) {
+							long diff = System.currentTimeMillis() - debug_start;
+							debugMsg.append("rdirnw:").append(diff).append(LOG_SEPARATOR);
+							log.debug(debugMsg.toString());
+							long durationDispatchRequest = System.currentTimeMillis() - debug_start;
+							log.debug("Perf-Test: Window return from 2 durationDispatchRequest=" + durationDispatchRequest);
+						}
+					} catch(IOException e) {
+						log.error("", e);
 					}
 					return;
 				}
@@ -859,7 +899,17 @@ public class Window extends AbstractComponent implements CustomCSSDelegate {
 			StringBuilder sb = new StringBuilder();
 			List<ContextEntry> ces = p.getEntries();
 			String url = BusinessControlFactory.getInstance().getAsURIString(ces, true);
-			sb.append("try { o_info.businessPath='").append(url).append("'; } catch(e) { }");
+			sb.append("try { o_info.businessPath='").append(url).append("';");
+			// Add analytics code
+			if (analyticsSPI != null) {
+				String serverUri = Settings.getServerContextPathURI();
+				if(url != null && url.startsWith(serverUri)) {
+					analyticsSPI.analyticsCountPageJavaScript(sb, getTitle(), url.substring(serverUri.length()));
+				}
+			}			
+			sb.append(" } catch(e) { }");
+
+
 			return new JSCommand(sb.toString());
 		}
 		return null;
@@ -870,9 +920,13 @@ public class Window extends AbstractComponent implements CustomCSSDelegate {
 		URLBuilder ubu = new URLBuilder(getUriPrefix(), getInstanceId(), getTimestamp());
 		Renderer fr = Renderer.getInstance(cmp.getParent(), cmp.getTranslator(), ubu, renderResult, wbackofficeImpl.getGlobalSettings());
 		
-		StringOutput sb = StringOutputPool.allocStringBuilder(2048);
-		fr.render(cmp, sb, null);
-		return StringOutputPool.freePop(sb);
+		try(StringOutput sb = StringOutputPool.allocStringBuilder(2048)) {
+			fr.render(cmp, sb, null);
+			return StringOutputPool.freePop(sb);
+		} catch(IOException e) {
+			log.error("", e);
+			return null;
+		}
 	}
 
 	/**
@@ -887,7 +941,7 @@ public class Window extends AbstractComponent implements CustomCSSDelegate {
 		// more accurately, the synchronized is needed when other classes than window call this method.
 		synchronized(this) {
 			Command com = null;
-			boolean isDebugLog = log.isDebug();
+			boolean isDebugLog = log.isDebugEnabled();
 			StringBuilder debugMsg = null;
 			long start = 0;
 			if (isDebugLog) {
@@ -895,8 +949,9 @@ public class Window extends AbstractComponent implements CustomCSSDelegate {
 				start = System.currentTimeMillis();
 			}
 			
-			final List<Component> dirties = new ArrayList<Component>();
+			final List<Component> dirties = new ArrayList<>();
 			ComponentVisitor dirtyV = new ComponentVisitor() {
+				@Override
 				public boolean visit(Component comp, UserRequest ureq) {
 					boolean visitChildren = false;
 					if(comp == null) {
@@ -1078,9 +1133,13 @@ public class Window extends AbstractComponent implements CustomCSSDelegate {
 	 */
 	public String buildURIFor(Window win, String timestampId, String moduleUri) {
 		URLBuilder ubu = new URLBuilder(uriPrefix, win.getInstanceId(), timestampId);
-		StringOutput so = new StringOutput();
-		ubu.buildURI(so, null, null, moduleUri, 0);
-		return so.toString();
+		try(StringOutput so = new StringOutput()) {
+			ubu.buildURI(so, null, null, moduleUri, 0);
+			return so.toString();
+		} catch(IOException e) {
+			log.error("", e);
+			return null;
+		}
 	}	
 
 	private String buildURIForRedirect(String moduleUri) {
@@ -1107,7 +1166,7 @@ public class Window extends AbstractComponent implements CustomCSSDelegate {
 			return NO_DISPATCHRESULT;
 		}
 
-		List<Component> foundPath = new ArrayList<Component>(10);
+		List<Component> foundPath = new ArrayList<>(10);
 		// OLAT-1973
 		Component target = ComponentHelper.findDescendantOrSelfByID(getContentPane(), s_compID, foundPath);
 		if (target == null) {
@@ -1167,7 +1226,7 @@ public class Window extends AbstractComponent implements CustomCSSDelegate {
 		}
 		
 		ChiefController chief = wbackofficeImpl.getChiefController();
-		boolean reload = chief == null ? false : chief.wishReload(ureq, true);
+		boolean reload = chief == null ? null : chief.wishReload(ureq, true);
 		return new DispatchResult(toDispatch, incTimestamp, reload);
 	}
 	
@@ -1278,12 +1337,12 @@ public class Window extends AbstractComponent implements CustomCSSDelegate {
 class DispatchResult {
 	private final boolean dispatch;
 	private final boolean incTimestamp;
-	private final boolean forceReload;
+	private final boolean reload;
 	
-	public DispatchResult(boolean dispatch, boolean incTimestamp, boolean forceReload) {
+	public DispatchResult(boolean dispatch, boolean incTimestamp, boolean reload) {
 		this.dispatch = dispatch;
 		this.incTimestamp = incTimestamp;
-		this.forceReload = forceReload;
+		this.reload = reload;
 	}
 
 	public boolean isDispatch() {
@@ -1291,7 +1350,7 @@ class DispatchResult {
 	}
 
 	public boolean isForceReload() {
-		return forceReload;
+		return reload;
 	}
 
 	public boolean isIncTimestamp() {

@@ -19,6 +19,7 @@
  */
 package org.olat.restapi.group;
 
+import static org.olat.restapi.security.RestSecurityHelper.getUserRequest;
 import static org.olat.restapi.security.RestSecurityHelper.isGroupManager;
 import static org.olat.restapi.support.ObjectFactory.getInformation;
 
@@ -45,24 +46,29 @@ import javax.ws.rs.core.Request;
 import javax.ws.rs.core.Response;
 import javax.ws.rs.core.Response.Status;
 
+import org.apache.logging.log4j.Logger;
 import org.olat.admin.quota.QuotaConstants;
 import org.olat.basesecurity.BaseSecurityManager;
 import org.olat.basesecurity.GroupRoles;
+import org.olat.collaboration.CollaborationManager;
 import org.olat.collaboration.CollaborationTools;
 import org.olat.collaboration.CollaborationToolsFactory;
+import org.olat.commons.calendar.CalendarModule;
+import org.olat.commons.calendar.restapi.CalWebService;
+import org.olat.commons.calendar.ui.components.KalendarRenderWrapper;
 import org.olat.core.CoreSpringFactory;
-import org.olat.core.commons.modules.bc.vfs.OlatRootFolderImpl;
 import org.olat.core.commons.services.notifications.SubscriptionContext;
+import org.olat.core.commons.services.vfs.restapi.VFSWebServiceSecurityCallback;
+import org.olat.core.commons.services.vfs.restapi.VFSWebservice;
 import org.olat.core.gui.UserRequest;
 import org.olat.core.id.Identity;
-import org.olat.core.logging.OLog;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.StringHelper;
+import org.olat.core.util.vfs.LocalFolderImpl;
 import org.olat.core.util.vfs.Quota;
 import org.olat.core.util.vfs.QuotaManager;
+import org.olat.core.util.vfs.VFSManager;
 import org.olat.core.util.vfs.callbacks.VFSSecurityCallback;
-import org.olat.core.util.vfs.restapi.VFSWebServiceSecurityCallback;
-import org.olat.core.util.vfs.restapi.VFSWebservice;
 import org.olat.group.BusinessGroup;
 import org.olat.group.BusinessGroupAddResponse;
 import org.olat.group.BusinessGroupService;
@@ -77,6 +83,7 @@ import org.olat.restapi.support.vo.GroupInfoVO;
 import org.olat.restapi.support.vo.GroupVO;
 import org.olat.user.restapi.UserVO;
 import org.olat.user.restapi.UserVOFactory;
+import org.springframework.stereotype.Component;
 
 
 /**
@@ -87,10 +94,11 @@ import org.olat.user.restapi.UserVOFactory;
  * Initial Date:  23 mar. 2010 <br>
  * @author srosse, stephane.rosse@frentix.com
  */
+@Component
 @Path("groups")
 public class LearningGroupWebService {
 	
-	private OLog log = Tracing.createLoggerFor(LearningGroupWebService.class);
+	private static final Logger log = Tracing.createLoggerFor(LearningGroupWebService.class);
 	
 	private static final String VERSION = "1.0";
 	
@@ -527,7 +535,9 @@ public class LearningGroupWebService {
 		CollaborationTools collabTools = CollaborationToolsFactory.getInstance().getOrCreateCollaborationTools(bg);
 		if(collabTools.isToolEnabled(CollaborationTools.TOOL_FORUM)) {
 			Forum forum = collabTools.getForum();
-			return new ForumWebService(forum);
+			ForumWebService ws = new ForumWebService(forum);
+			CoreSpringFactory.autowireObject(ws);
+			return ws;
 		}
 		return null;
 	}
@@ -553,15 +563,15 @@ public class LearningGroupWebService {
 		}
 		
 		String relPath = collabTools.getFolderRelPath();
-		QuotaManager qm = QuotaManager.getInstance();
+		QuotaManager qm = CoreSpringFactory.getImpl(QuotaManager.class);
 		Quota folderQuota = qm.getCustomQuota(relPath);
 		if (folderQuota == null) {
 			Quota defQuota = qm.getDefaultQuota(QuotaConstants.IDENTIFIER_DEFAULT_GROUPS);
-			folderQuota = QuotaManager.getInstance().createQuota(relPath, defQuota.getQuotaKB(), defQuota.getUlLimitKB());
+			folderQuota = qm.createQuota(relPath, defQuota.getQuotaKB(), defQuota.getUlLimitKB());
 		}
 		SubscriptionContext subsContext = null;
 		VFSSecurityCallback secCallback = new VFSWebServiceSecurityCallback(true, true, true, folderQuota, subsContext);
-		OlatRootFolderImpl rootContainer = new OlatRootFolderImpl(relPath, null);
+		LocalFolderImpl rootContainer = VFSManager.olatRootContainer(relPath, null);
 		rootContainer.setLocalSecurityCallback(secCallback);
 		return new VFSWebservice(rootContainer);
 	}
@@ -594,6 +604,43 @@ public class LearningGroupWebService {
 		}
 		return null;
 	}
+	
+	/**
+	 * Return the callendar web service
+	 * @param groupKey The key of the group
+	 * @param request The HTTP Request
+	 * @return
+	 */
+	@Path("{groupKey}/calendar")
+	public CalWebService getCalendarWebService(@PathParam("groupKey") Long groupKey, @Context HttpServletRequest request) {
+		CalendarModule calendarModule = CoreSpringFactory.getImpl(CalendarModule.class);
+		if(!calendarModule.isEnabled() || !calendarModule.isEnableGroupCalendar()) {
+			return null;
+		}
+		
+		BusinessGroupService bgs = CoreSpringFactory.getImpl(BusinessGroupService.class);
+		BusinessGroup bg = bgs.loadBusinessGroup(groupKey);
+		if(bg == null) {
+			return null;
+		}
+		
+		if(!isGroupManager(request)) {
+			Identity identity = RestSecurityHelper.getIdentity(request);
+			if(!bgs.isIdentityInBusinessGroup(identity, bg)) {
+				return null;
+			}
+		}
+		
+		CollaborationTools collabTools = CollaborationToolsFactory.getInstance().getOrCreateCollaborationTools(bg);
+		if(collabTools.isToolEnabled(CollaborationTools.TOOL_CALENDAR)) {
+			CollaborationManager collaborationManager = CoreSpringFactory.getImpl(CollaborationManager.class);
+			UserRequest ureq = getUserRequest(request);
+			KalendarRenderWrapper calendar = collaborationManager.getCalendar(bg, ureq, true);
+			return new CalWebService(calendar);
+		}
+		return null;
+	}
+
 	
 	/**
 	 * Returns the list of owners of the group specified by the groupKey.

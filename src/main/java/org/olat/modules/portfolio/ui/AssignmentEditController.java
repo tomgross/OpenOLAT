@@ -20,6 +20,8 @@
 package org.olat.modules.portfolio.ui;
 
 import java.io.File;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.text.Collator;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -28,7 +30,6 @@ import java.util.List;
 
 import javax.servlet.http.HttpServletRequest;
 
-import org.olat.core.commons.modules.bc.vfs.OlatRootFolderImpl;
 import org.olat.core.dispatcher.mapper.Mapper;
 import org.olat.core.gui.UserRequest;
 import org.olat.core.gui.components.form.flexible.FormItem;
@@ -55,8 +56,9 @@ import org.olat.core.util.Util;
 import org.olat.core.util.vfs.VFSContainer;
 import org.olat.core.util.vfs.VFSItem;
 import org.olat.core.util.vfs.VFSLeaf;
+import org.olat.core.util.vfs.VFSManager;
 import org.olat.core.util.vfs.VFSMediaResource;
-import org.olat.core.util.vfs.filters.SystemItemFilter;
+import org.olat.core.util.vfs.filters.VFSSystemItemFilter;
 import org.olat.modules.forms.handler.EvaluationFormResource;
 import org.olat.modules.portfolio.Assignment;
 import org.olat.modules.portfolio.AssignmentType;
@@ -77,10 +79,16 @@ import org.springframework.beans.factory.annotation.Autowired;
  */
 public class AssignmentEditController extends FormBasicController {
 
-	public static final String[] typeKeys = new String[] {
-			AssignmentType.essay.name(),
-			//AssignmentType.document.name(),
-			AssignmentType.form.name()
+	public static final AssignmentType[] assignmentsTypes = new AssignmentType[] {
+			AssignmentType.essay, AssignmentType.form
+	};
+	
+	public static final String[] assignmentsTypeKeys = new String[] {
+			AssignmentType.essay.name(), AssignmentType.form.name()
+	};
+	
+	public static final AssignmentType[] templatesTypes = new AssignmentType[] {
+			AssignmentType.document, AssignmentType.form
 	};
 
 	public static final String[] onKeys = new String[] { "on" };
@@ -91,7 +99,8 @@ public class AssignmentEditController extends FormBasicController {
 	private SingleSelection typeEl;
 	private SingleSelection sectionsEl;
 	private FileElement documentUploadEl;
-	private FormLayoutContainer filesLayout, selectFormLayout;
+	private FormLayoutContainer filesLayout;
+	private FormLayoutContainer selectFormLayout;
 	private RichTextElement contentEl;
 	private FormLink selectFormButton;
 	private SingleSelection evaluationFormEl;
@@ -109,8 +118,10 @@ public class AssignmentEditController extends FormBasicController {
 	private VFSContainer documentContainer;
 
 	private String mapperUri;
-	
 	private boolean assignmentInUse;
+	private final String[] typeKeys;
+	private boolean canChangeType = true;
+	private int maxNumOfDocuments = Integer.MAX_VALUE;
 	
 	@Autowired
 	private PortfolioFileStorage fileStorage;
@@ -123,6 +134,7 @@ public class AssignmentEditController extends FormBasicController {
 		super(ureq, wControl);
 		this.binder = binder;
 		assignmentInUse = false;
+		typeKeys = assignmentsTypeKeys;
 		initForm(ureq);
 	}
 	
@@ -130,6 +142,7 @@ public class AssignmentEditController extends FormBasicController {
 		super(ureq, wControl);
 		this.section = section;
 		assignmentInUse = false;
+		typeKeys = assignmentsTypeKeys;
 		initForm(ureq);
 	}
 	
@@ -138,6 +151,33 @@ public class AssignmentEditController extends FormBasicController {
 		this.assignment = assignment;
 		assignmentInUse = portfolioService.isAssignmentInUse(assignment);
 		formEntry = assignment.getFormEntry();
+		typeKeys = assignmentsTypeKeys;
+		initForm(ureq);
+	}
+	
+	/**
+	 * Use to edit assignment template at the binder level (not linked to a section). The
+	 * type of assignment cannot be changed and for assignment type document, the number of 
+	 * documents is limited to one.
+	 * 
+	 * @param ureq The user request
+	 * @param wControl The window control
+	 * @param assignment The assignment
+	 * @param allowedTypes The types allowed
+	 * @param maxNumOfDocuments The maximum number of documents ofr the type "document"
+	 */
+	public AssignmentEditController(UserRequest ureq, WindowControl wControl, Assignment assignment,
+			AssignmentType[] allowedTypes, int maxNumOfDocuments) {
+		super(ureq, wControl);
+		this.assignment = assignment;
+		this.maxNumOfDocuments = maxNumOfDocuments;
+		assignmentInUse = portfolioService.isAssignmentInUse(assignment);
+		canChangeType = false;
+		formEntry = assignment.getFormEntry();
+		typeKeys = new String[allowedTypes.length];
+		for(int i=allowedTypes.length; i-->0; ) {
+			typeKeys[i] = allowedTypes[i].name();
+		}
 		initForm(ureq);
 	}
 
@@ -200,7 +240,7 @@ public class AssignmentEditController extends FormBasicController {
 		typeEl.addActionListener(FormEvent.ONCHANGE);
 		String selectedType = assignment == null ? typeKeys[0] : assignment.getAssignmentType().name();
 		typeEl.select(selectedType, true);
-		typeEl.setEnabled(!assignmentInUse);
+		typeEl.setEnabled(!assignmentInUse && canChangeType);
 		
 		createAssignmentEvaluationFormForm(formLayout);
 		createAssignmentDocumentForm(formLayout);
@@ -266,7 +306,7 @@ public class AssignmentEditController extends FormBasicController {
 	}
 	
 	protected void updateAssignmentForms() {
-		if(AssignmentType.essay.name().equals(typeEl.getSelectedKey())) {
+		if(AssignmentType.essay.name().equals(typeEl.getSelectedKey()) || AssignmentType.document.name().equals(typeEl.getSelectedKey())) {
 			selectFormLayout.setVisible(false);
 			evaluationFormEl.setVisible(false);
 			reviewerSeeAutoEvaEl.setVisible(false);
@@ -289,12 +329,12 @@ public class AssignmentEditController extends FormBasicController {
 		List<VFSItem> files = new ArrayList<>();
 		if(assignment != null && StringHelper.containsNonWhitespace(assignment.getStorage())) {
 			documentContainer = fileStorage.getAssignmentContainer(assignment);
-			files.addAll(documentContainer.getItems(new SystemItemFilter()));
+			files.addAll(documentContainer.getItems(new VFSSystemItemFilter()));
 		}
 
 		// add files from TempFolder
 		if(tempUploadFolder != null) {
-			files.addAll(tempUploadFolder.getItems(new SystemItemFilter()));
+			files.addAll(tempUploadFolder.getItems(new VFSSystemItemFilter()));
 		}
 		
 		Collections.sort(files, new Comparator<VFSItem>(){
@@ -315,10 +355,19 @@ public class AssignmentEditController extends FormBasicController {
 			deleteLink.setI18nKey("delete");
 		}
 
-		boolean hasFile = files.size() > 0;
-		filesLayout.setVisible(files.size() > 0);
+		boolean hasFile = !files.isEmpty();
+		filesLayout.setVisible(hasFile);
 		filesLayout.showLabel(hasFile);
 		documentUploadEl.showLabel(!hasFile);
+		
+		boolean isDocument = typeEl.isOneSelected()
+				&& AssignmentType.document.name().equals(typeEl.getSelectedKey());
+		boolean canUploadModeDocuments = true;
+		if(isDocument) {
+			canUploadModeDocuments = files.size() < maxNumOfDocuments;
+		}
+		documentUploadEl.setMandatory(isDocument);
+		documentUploadEl.setVisible(canUploadModeDocuments);
 	}
 
 	@Override
@@ -350,7 +399,13 @@ public class AssignmentEditController extends FormBasicController {
 
 	@Override
 	protected boolean validateFormLogic(UserRequest ureq) {
-		boolean allOk = true;
+		boolean allOk = super.validateFormLogic(ureq);
+		
+		titleEl.clearError();
+		if(!StringHelper.containsNonWhitespace(titleEl.getValue())) {
+			titleEl.setErrorKey("form.legende.mandatory", null);
+			allOk &= false;
+		}
 		
 		if(sectionsEl != null) {
 			sectionsEl.clearError();
@@ -374,8 +429,17 @@ public class AssignmentEditController extends FormBasicController {
 			typeEl.setErrorKey("form.legende.mandatory", null);
 			allOk &= false;
 		}
+		
+		documentUploadEl.clearError();
+		if(typeEl.isOneSelected() && AssignmentType.document.name().equals(typeEl.getSelectedKey())) {
+			List<?> files = (List<?>)filesLayout.contextGet("files");
+			if(files == null || files.isEmpty()) {
+				documentUploadEl.setErrorKey("form.legende.mandatory", null);
+				allOk &= false;
+			}
+		}
 
-		return allOk & super.validateFormLogic(ureq);
+		return allOk;
 	}
 
 	@Override
@@ -392,12 +456,12 @@ public class AssignmentEditController extends FormBasicController {
 		Section selectedSection = section;
 		if(sectionsEl != null && sectionsEl.isOneSelected()) {
 			String selectedKey = sectionsEl.getSelectedKey();
-			Long selectedSectionKey = new Long(selectedKey);
+			Long selectedSectionKey = Long.valueOf(selectedKey);
 			selectedSection = portfolioService.getSection(new SectionKeyRef(selectedSectionKey));
 		}
 
 		if(assignment == null) {
-			assignment = portfolioService.addAssignment(title, summary, content, type, selectedSection,
+			assignment = portfolioService.addAssignment(title, summary, content, type, false, selectedSection, null,
 					onlyAutoEvaluation, reviewerCanSeeAutoEvaluation, anonymousExternEvaluation, formEntry);
 		} else {
 			assignment = portfolioService.updateAssignment(assignment, title, summary, content, type,
@@ -413,12 +477,13 @@ public class AssignmentEditController extends FormBasicController {
 		
 		VFSContainer container = portfolioFileStorage.getAssignmentContainer(assignment);
 		if (container != null) {
-			List<VFSItem> tmpFList = tempUploadFolder.getItems(new SystemItemFilter());
+			List<VFSItem> tmpFList = tempUploadFolder.getItems(new VFSSystemItemFilter());
 			for (VFSItem file : tmpFList) {
-				try {
-					VFSLeaf leaf = (VFSLeaf) file;
-					VFSLeaf storedFile = container.createChildLeaf(leaf.getName());
-					FileUtils.bcopy(leaf.getInputStream(), storedFile.getOutputStream(false), "");
+				VFSLeaf leaf = (VFSLeaf) file;
+				VFSLeaf storedFile = container.createChildLeaf(leaf.getName());
+				try(InputStream in=leaf.getInputStream();
+						OutputStream out=storedFile.getOutputStream(false)) {
+					FileUtils.cpio(in, out, "");
 				} catch (Exception e) {
 					logError("", e);
 				}
@@ -477,9 +542,8 @@ public class AssignmentEditController extends FormBasicController {
 		String fileName = documentUploadEl.getUploadFileName();
 		// checking tmp-folder and msg-container for filename
 		boolean fileExists = false;
-		if (tempUploadFolder != null && tempUploadFolder.resolve(fileName) != null) {
-			fileExists = true;
-		} else if (documentContainer != null && documentContainer.resolve(fileName) != null) {
+		if ((tempUploadFolder != null && tempUploadFolder.resolve(fileName) != null)
+				|| (documentContainer != null && documentContainer.resolve(fileName) != null)) {
 			fileExists = true;
 		}
 
@@ -491,7 +555,7 @@ public class AssignmentEditController extends FormBasicController {
 			// files got stored in an extra tempFolder, to use the same
 			// fileUploader multiple times
 			if(tempUploadFolder == null) {
-				tempUploadFolder = new OlatRootFolderImpl(File.separator + "tmp/" + CodeHelper.getGlobalForeverUniqueID() + "/", null);
+				tempUploadFolder = VFSManager.olatRootContainer(File.separator + "tmp/" + CodeHelper.getGlobalForeverUniqueID() + "/", null);
 			}
 			documentUploadEl.moveUploadFileTo(tempUploadFolder);
 			documentUploadEl.showError(false);

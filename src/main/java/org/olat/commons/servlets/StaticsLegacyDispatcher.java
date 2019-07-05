@@ -37,7 +37,7 @@ import org.olat.core.dispatcher.Dispatcher;
 import org.olat.core.dispatcher.DispatcherModule;
 import org.olat.core.gui.media.MediaResource;
 import org.olat.core.gui.media.ServletUtil;
-import org.olat.core.logging.OLog;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
 
 /**
@@ -61,7 +61,7 @@ import org.olat.core.logging.Tracing;
  *             e.g. static resources which are shared by all users
  */
 public class StaticsLegacyDispatcher implements Dispatcher {
-	private static final OLog log = Tracing.createLoggerFor(StaticsLegacyDispatcher.class);
+	private static final Logger log = Tracing.createLoggerFor(StaticsLegacyDispatcher.class);
 
     /**
      * Default constructor.
@@ -89,7 +89,7 @@ public class StaticsLegacyDispatcher implements Dispatcher {
 			 * silently ignore forward errors (except in debug mode), since IE
 			 * causes tons of such messages by its double GET request
 			 */
-			if (log.isDebug()) {
+			if (log.isDebugEnabled()) {
 				log.debug("could not execute legacy statics method:" + e.toString() + ",msg:" + e.getMessage());
 			}
 		}
@@ -152,7 +152,7 @@ public class StaticsLegacyDispatcher implements Dispatcher {
         String handlerName = null;
         long start = 0;
         
-        boolean logDebug = log.isDebug();
+        boolean logDebug = log.isDebugEnabled();
         if (logDebug) start = System.currentTimeMillis();
         try {
             relPath = path.substring(1);
@@ -171,14 +171,14 @@ public class StaticsLegacyDispatcher implements Dispatcher {
 
         if (handler == null || relPath == null) {
             // no handler found or relPath incomplete
-            response.sendError(HttpServletResponse.SC_NOT_FOUND, request.getRequestURI());
+            response.sendError(HttpServletResponse.SC_NOT_FOUND);
             return false;
         }
 
         ResourceDescriptor rd = handler.getResourceDescriptor(request, relPath);
         if (rd == null) {
             // no handler found or relPath incomplete
-            response.sendError(HttpServletResponse.SC_NOT_FOUND, request.getRequestURI());
+            response.sendError(HttpServletResponse.SC_NOT_FOUND);
             return false;
         }
 
@@ -195,7 +195,7 @@ public class StaticsLegacyDispatcher implements Dispatcher {
             InputStream is = handler.getInputStream(request, rd);
             if (is == null) {
                 // resource not found or access denied
-                response.sendError(HttpServletResponse.SC_NOT_FOUND, request.getRequestURI());
+                response.sendError(HttpServletResponse.SC_NOT_FOUND);
                 return false;
             }
             StaticMediaResource smr = new StaticMediaResource(is, rd);
@@ -241,6 +241,11 @@ public class StaticsLegacyDispatcher implements Dispatcher {
 		@Override
 		public String getContentType() {
 			return rd.getContentType();
+		}
+
+		@Override
+		public long getCacheControlDuration() {
+			return ServletUtil.CACHE_ONE_DAY;
 		}
 
 		@Override

@@ -28,10 +28,13 @@ package org.olat.course.groupsandrights;
 import java.io.File;
 import java.util.List;
 
+import org.olat.basesecurity.IdentityRef;
+import org.olat.basesecurity.OrganisationRoles;
 import org.olat.core.id.Identity;
 import org.olat.course.export.CourseEnvironmentMapper;
 import org.olat.group.BusinessGroup;
 import org.olat.group.area.BGArea;
+import org.olat.modules.curriculum.CurriculumElement;
 import org.olat.repository.RepositoryEntry;
 import org.olat.resource.OLATResource;
 
@@ -57,7 +60,10 @@ public interface CourseGroupManager {
 	
 	public RepositoryEntry getCourseEntry();
 	
-	//public void refreshRepositoryEntry(RepositoryEntry entry);
+	/**
+	 * @return true if the status of the course allow notifications
+	 */
+	public boolean isNotificationsAllowed();
 
 	/**
 	 * Checks users course rights in any of the available right group context of
@@ -116,10 +122,12 @@ public interface CourseGroupManager {
 	public boolean isIdentityCourseCoach(Identity identity);
 
 	/**
-	 * Checks if user is course administrator (is owner of repository entry)
+	 * Checks if user is course administrator (is owner, learning resource
+	 * manager or administrator of repository entry)
 	 * 
-	 * @param identity
-	 * @return boolean
+	 * @param identity The identity to check
+	 * @return boolean true if the specified is administrator, learn resource manager or owner
+	 * 			of the course.
 	 */
 	public boolean isIdentityCourseAdministrator(Identity identity);
 	
@@ -157,6 +165,16 @@ public interface CourseGroupManager {
 	public boolean isIdentityAnyCourseParticipant(Identity identity);
 	
 	/**
+	 * Check if the identity has one of the specified roles in the organisation
+	 * 
+	 * @param identity The identity
+	 * @param organisationIdentifier The organisation identifier
+	 * @param roles The roles
+	 * @return true if a role match
+	 */
+	public boolean isIdentityInOrganisation(IdentityRef identity, String organisationIdentifier, OrganisationRoles... roles);
+	
+	/**
 	 * @return True if there are some business groups linked to this resource
 	 */
 	public boolean hasBusinessGroups();
@@ -180,6 +198,20 @@ public interface CourseGroupManager {
 	 * @return A list of all learning groups where this identity is participant
 	 */
 	public List<BusinessGroup> getParticipatingBusinessGroups(Identity identity);
+	
+	/**
+	 * @return A list of curriculum elements linked to this course.
+	 */
+	public List<CurriculumElement> getAllCurriculumElements();
+	
+	/**
+	 * Returns the list of curriculum elements where the specified
+	 * identity has the role "coach".
+	 * 
+	 * @param identity The coach
+	 * @return A list of curriculum elements
+	 */
+	public List<CurriculumElement> getCoachedCurriculumElements(Identity identity);
 	
 	/**
 	 * @return True if the course has some areas configured.
@@ -231,8 +263,7 @@ public interface CourseGroupManager {
 	 * 
 	 * @param fExportDirectory
 	 */
-	public void exportCourseBusinessGroups(File fExportDirectory, CourseEnvironmentMapper env,
-			boolean runtimeDatas, boolean backwardsCompatible);
+	public void exportCourseBusinessGroups(File fExportDirectory, CourseEnvironmentMapper env, boolean runtimeDatas);
 	
 	public CourseEnvironmentMapper getBusinessGroupEnvironment();
 
@@ -256,6 +287,11 @@ public interface CourseGroupManager {
 	
 	public List<Identity> getCoachesFromBusinessGroups(List<Long> groupKeys);
 
+	/**
+	 * The coaches in the course.
+	 * 
+	 * @return A list of identities
+	 */
 	public List<Identity> getCoaches();
 
 	/**
@@ -268,6 +304,11 @@ public interface CourseGroupManager {
 	public List<Identity> getCoachesFromAreas();
 	
 	public List<Identity> getCoachesFromAreas(List<Long> areaKeys);
+	
+
+	public List<Identity> getCoachesFromCurriculumElements();
+	
+	public List<Identity> getCoachesFromCurriculumElements(List<Long> curriculumElementKeys);
 
 	/**
 	 * List with identities being participants in the learning groups of this course. If
@@ -280,6 +321,11 @@ public interface CourseGroupManager {
 	
 	public List<Identity> getParticipantsFromBusinessGroups(List<Long> groupKeys);
 	
+	/**
+	 * The participants in the course.
+	 * 
+	 * @return A list of identities
+	 */
 	public List<Identity> getParticipants();
 
 	/**
@@ -292,6 +338,12 @@ public interface CourseGroupManager {
 	public List<Identity> getParticipantsFromAreas();
 	
 	public List<Identity> getParticipantsFromAreas(List<Long> areaKeys);
+	
+
+	public List<Identity> getParticipantsFromCurriculumElements();
+	
+	public List<Identity> getParticipantsFromCurriculumElements(List<Long> curriculumElementKeys);
+	
 
 	/**
 	 * @param identity

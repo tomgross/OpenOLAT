@@ -31,6 +31,7 @@ import java.io.InputStream;
 import javax.servlet.http.HttpServletResponse;
 
 import org.olat.core.gui.media.MediaResource;
+import org.olat.core.gui.media.ServletUtil;
 import org.olat.core.util.StringHelper;
 import org.olat.core.util.WebappHelper;
 
@@ -49,15 +50,28 @@ public class VFSMediaResource implements MediaResource {
 	}
 	
 	@Override
+	public long getCacheControlDuration() {
+		return ServletUtil.CACHE_ONE_HOUR;
+	}
+
+	@Override
 	public boolean acceptRanges() {
 		return true;
+	}
+	
+	public VFSLeaf getLeaf() {
+		return vfsLeaf;
+	}
+	
+	public void setLeaf(VFSLeaf vfsLeaf) {
+		this.vfsLeaf = vfsLeaf;
 	}
 
 	@Override
 	public String getContentType() {
 		String mimeType;
 		if(downloadable) {
-			mimeType = WebappHelper.getMimeType(vfsLeaf.getName());
+			mimeType = WebappHelper.getMimeType(getLeaf().getName());
 			//html, xhtml and javascript are set to force download
 			if (mimeType == null || "text/html".equals(mimeType)
 					|| "application/xhtml+xml".equals(mimeType)
@@ -69,7 +83,7 @@ public class VFSMediaResource implements MediaResource {
 				mimeType = mimeType + ";charset=" + encoding;
 			}
 		} else {
-			mimeType = WebappHelper.getMimeType(vfsLeaf.getName());
+			mimeType = WebappHelper.getMimeType(getLeaf().getName());
 			if (mimeType == null) {
 				mimeType = MIME_TYPE_OCTET_STREAM;
 				unknownMimeType = true;
@@ -86,28 +100,25 @@ public class VFSMediaResource implements MediaResource {
 
 	@Override
 	public Long getSize() {
-		long size = vfsLeaf.getSize();
-		return (size == VFSConstants.UNDEFINED) ? null : new Long(size);
+		long size = getLeaf().getSize();
+		return (size == VFSConstants.UNDEFINED) ? null : Long.valueOf(size);
 	}
 
 	@Override
 	public InputStream getInputStream() {
-		return vfsLeaf.getInputStream();
+		return getLeaf().getInputStream();
 	}
 
 	@Override
 	public Long getLastModified() {
-		long lastModified = vfsLeaf.getLastModified();
-		return (lastModified == VFSConstants.UNDEFINED) ? null : new Long(lastModified);
+		long lastModified = getLeaf().getLastModified();
+		return (lastModified == VFSConstants.UNDEFINED) ? null : Long.valueOf(lastModified);
 	}
 
-	/**
-	 * @see org.olat.core.gui.media.MediaResource#prepare(javax.servlet.http.HttpServletResponse)
-	 */
 	@Override
 	public void prepare(HttpServletResponse hres) {
-		String filename = StringHelper.urlEncodeUTF8(vfsLeaf.getName());
-		if (unknownMimeType) {
+		String filename = StringHelper.urlEncodeUTF8(getLeaf().getName());
+		if (unknownMimeType || downloadable) {
 			hres.setHeader("Content-Disposition", "attachment; filename*=UTF-8''" + filename);
 		} else {
 			hres.setHeader("Content-Disposition", "filename*=UTF-8''" + filename);
@@ -130,6 +141,20 @@ public class VFSMediaResource implements MediaResource {
 		this.encoding = encoding;
 	}
 	
+	/**
+	 * Set to true to force the browser to download the resource. This is done by 
+	 * a) set the content-disposition to attachment
+	 * b) set the mime-type to some non-existing mime-type for browser-executable, 
+	 * xss-relevant resource such as html files. Since the browser does not 
+	 * understand the mime-type, the file gets downloaded instead of executed. 
+	 * 
+	 * NOTE: make sure when writing the link to properly set the target or 
+	 * download attribute depending on the mime-type or the downloadable nature
+	 * of the file!
+	 * 
+	 * @param downloadable true: force browser to download; false: let browser
+	 * decide, might render inline in browser window
+	 */
 	public void setDownloadable(boolean downloadable) {
 		this.downloadable = downloadable;
 	}

@@ -1,0 +1,53 @@
+<div class="o_library_overview container-fluid">
+	<div class="row">
+		<div class="col-sm-12 o_header_with_buttons">
+			<h2><i class="o_icon $cssIconClass"> </i> $r.translate("library.title")</h2>
+			#if($r.available("library.toolbox.review.singular") || $r.available("edit"))
+			<div class="o_button_group ">
+				<div class='#if($r.visible("library.toolbox.review.singular") && $r.visible("edit")) btn-group #end'>
+					#if($r.available("library.toolbox.review.singular"))
+						$r.render("library.toolbox.review.singular")
+					#end
+					#if($r.available("edit"))
+						$r.render("edit")
+					#end
+				</div>
+			</div>
+			#end
+			<div class="o_library_big_icon">&nbsp;</div>
+			<div class="o_info">
+				$r.translate("library.catalog.intro")<br />
+				$r.translate("library.catalog.general.help")
+			</div>
+		</div>
+	</div>
+	<div class="row">
+		<div class="col-sm-12">
+			<div class="o_info">
+				$r.translate("library.toolbox.upload.desc")
+			</div>
+			<div class="o_button_group">
+				$r.render("library.toolbox.upload")
+			</div>
+		</div>
+	</div>
+	<div class="row o_block">
+		<div class="col-sm-4 col-xs-12">$r.render("search")</div>
+	</div>
+	<div class="row">
+		<div class="col-sm-12">
+			<h4>$r.translate("library.toolbox.newest.files")</h4>
+			$r.render("newestFiles")
+		</div>
+	</div>
+	<div class="row o_block">
+		<div class="col-sm-6">
+			<h4>$r.translate("library.toolbox.most.viewed.files")</h4>
+			$r.render("mostViewedFiles")
+		</div>
+		<div class="col-sm-6">
+			<h4>$r.translate("library.toolbox.most.rated.files")</h4>
+			$r.render("mostRatedFiles")
+		</div>
+	</div>
+</div>

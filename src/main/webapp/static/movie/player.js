@@ -2,14 +2,14 @@ var BPlayer = {
 	/**
 	 * Create a video player within the given DOM element with the given parameters. Same as insertHTML5Player() 
 	 */
-	insertPlayer: function (address,domId,width,height,start,duration,provider,streamer,autostart,repeat,controlbar,poster) {
-		BPlayer.insertHTML5Player(address,domId,width,height,start,duration,provider,streamer,autostart,repeat,controlbar,poster);
+	insertPlayer: function (address,domId,width,height,start,duration,provider,streamer,autostart,repeat,controlbar,poster,errorCallback) {
+		BPlayer.insertHTML5Player(address,domId,width,height,start,duration,provider,streamer,autostart,repeat,controlbar,poster,errorCallback);
 	},
 	
 	/**
 	 * Create a video player within the given DOM element with the given parameters
 	 */
-	insertHTML5Player : function (address, domId, width, height, start, duration, provider, streamer, autostart, repeat, controlbar, poster) {
+	insertHTML5Player : function (address, domId, width, height, start, duration, provider, streamer, autostart, repeat, controlbar, poster, errorCallback) {
 		// Calculate relative video URL
 		var videoUrl = address;
 		if(address.indexOf('://') < 0 && (address.indexOf('/raw/static/') == 0 || address.indexOf('/secstatic/qtieditor/') >= 0 || address.indexOf('/secstatic/qti/') >= 0)) {
@@ -58,8 +58,13 @@ var BPlayer = {
 		if(typeof controlbar != 'undefined' && !controlbar) {
 			args.controlbar = "none";
 		}
-		if(typeof poster != 'undefined') {
+		if(typeof poster != 'undefined' && poster) {
 			args.image = poster;
+		}
+		if(typeof errorCallback != 'undefined') {
+			args.errorCallback = errorCallback;
+		} else {
+			args.errorCallback = function(mediaElement, originalNode, player){};
 		}
 
 		// Finally, load player library and play video
@@ -70,6 +75,8 @@ var BPlayer = {
 				jwplayer(domId).setup(args);
 			};			
 			BPlayer._loadJWPlayer(afterloadCallback);
+		} else if(provider == "nanoo" || videoUrl.indexOf('nanoo.tv/') >= 0) {
+			BPlayer._loadNanooTv(domId, args);
 		} else {
 			// After loading immediately insert HTML5 player
 			var afterloadCallback = function() {
@@ -107,14 +114,75 @@ var BPlayer = {
 					async: false, //prevent 2x load of the mediaelement.js which is deadly
 					url: mediaElementJs
 				}).done(function() {
-				// Add support for AAC audio for flash fallback
-				mejs.plugins.flash[0].types.push("audio/aac")
-				// Now load video
-				if (afterloadCallback) {
-					afterloadCallback();					
-				}
-			});
+					if (afterloadCallback) {
+						afterloadCallback();
+					}
+				});
 		}
+	},
+	
+	_loadNanooTv : function(domId, config) {
+		var frameName = domId + "_frame";
+		for(i=jQuery('#' + frameName).length; i-->0; ) {
+			jQuery('#' + frameName).remove();
+		}
+		
+		if (config.image === undefined || config.image === null || config.image.length == 0) {
+			BPlayer._loadNanooTvFrame(domId, frameName, config);
+		} else {
+			BPlayer._loadNanooTvPoster(domId, frameName, config);
+		}
+	},
+	
+	_loadNanooTvPoster : function(domId, frameName, config) {
+		if(jQuery('#mediaelementplayercss').length == 0) {
+			var mediaElementBaseUrl = BPlayer._mediaElementBaseUrl();
+			var mediaElementcss = mediaElementBaseUrl + (BPlayer.debugEnabled ? 'mediaelementplayer.css' : 'mediaelementplayer.min.css');
+			jQuery('<link>')
+			  .appendTo('head')
+			  .attr({id : 'mediaelementplayercss', type : 'text/css', rel : 'stylesheet'})
+			  .attr('href', mediaElementcss);
+		}
+		
+		var poster = "<div id='" + frameName + "' class='mejs__container' role='application' style='width:" + config.width + "px; height:" + config.height + "px; overflow:hidden; overflow-x:hidden; overflow-y:hidden;'>"
+			       + "<div class='mejs__layers'>"
+		           + "<div class='mejs__poster mejs__layer' style='background-image: url(" + config.image + "); width: 100%; height: 100%;'><img src='" + config.image + "' width='0' height='0'></img></div>"
+		           + "<div class='mejs__overlay mejs__layer mejs__overlay-play' style='width: 100%; height: 100%; z-index:10;'><div class='mejs__overlay-button' style='z-index:10;' role='button' tabindex='0' aria-label='Play' aria-pressed='false'></div></div>"
+		           + "</div>"
+		           + "</div>";
+		jQuery('#' + domId).append(jQuery(poster));
+		jQuery('#' + domId).css("border", "none");
+		jQuery('#' + domId + ' div.mejs__overlay-button').on('click', function(el, index) {
+			var cloneConfig = {
+				file: config.file,
+				width: config.width,
+				height: config.height,
+				autostart: true
+			};
+			BPlayer._loadNanooTvFrame(domId, frameName, cloneConfig);
+		})
+	},
+	
+	_loadNanooTvFrame : function(domId, frameName, config) {
+		for(i=jQuery('#' + frameName).length; i-->0; ) {
+			jQuery('#' + frameName).remove();
+		}
+		
+		var url = config.file;
+		var parts = url.split('?');
+		var nanooId = parts[0].substring(url.lastIndexOf('/') + 1);
+		if(config.autostart) {
+			url = "https://www.nanoo.tv/link/w/" + nanooId;
+		} else {
+			url = "https://www.nanoo.tv/link/n/" + nanooId;
+		}
+		var iframe = '<iframe name="' + frameName + '" id="' + frameName
+		           + '" src="' + url
+		           + '" style="width:' + config.width + 'px; height:' + config.height + 'px; overflow:hidden;"'
+		           + ' frameborder="0" allow="fullscreen" allowfullscreen="true"'
+		           + '></iframe>';
+		jQuery('#' + domId).append(jQuery(iframe));
+		jQuery('#' + domId).css("border", "none");
 	},
 
 	/*
@@ -150,12 +218,31 @@ var BPlayer = {
 		var meConfig = {
 			loop: config.repeat,
 			pluginPath: mediaElementBaseUrl,
-			flashName: 'flashmediaelement.swf',
-			silverlightName: 'silverlightmediaelement.xap',
-			features: ['playpause','current','volume','progress','duration','speed','fullscreen'],
-			enablePluginDebug: BPlayer.debugEnabled,
+			stretching: 'responsive',
+			hls: {
+		        path: mediaElementBaseUrl + 'hls/hls.min.js'
+		    },
+		    flv : {
+		        path: mediaElementBaseUrl + 'flv/flv.min.js',
+		        withCredentials: true
+		    },
+			error: config.errorCallback,
 			success: function(mediaElement, originalNode, player) {
-				if(config.autostart) {
+				if(config.start) {
+					player.load();
+					mediaElement.addEventListener('canplay', function() {
+						try {
+							mediaElement.removeEventListener('canplay');// Firefox reload
+							player.setCurrentTime(config.start);
+							player.play();
+							if(!config.autostart) {
+								setTimeout(function() { player.pause(); }, 100)
+							}
+						} catch(e) {
+							if(window.console) console.log(e);
+						}
+	                });
+				} else if(config.autostart) {
 					try {
 						player.load();
 						player.play();
@@ -163,15 +250,6 @@ var BPlayer = {
 						if(window.console) console.log(e);
 					}
 				}
-				mediaElement.addEventListener('loadeddata', function() {
-                    if(config.start) {
-						try {
-							player.setCurrentTime(config.start);
-						} catch(e) {
-							if(window.console) console.log(e);
-						}
-					}
-                });
 			}
 		};
 
@@ -182,9 +260,8 @@ var BPlayer = {
 				mimeType = "audio/mp3";
 			} else if(extension == 'aac') {
 				mimeType = "audio/aac";
-				meConfig.pluginVars = 'isvideo=true';
 			} else if(extension == 'm4a') {
-				mimeType = "audio/m4a";
+				mimeType = "audio/mp4";
 			}
 		} else if(config.provider == 'youtube') {
 			mimeType = "video/youtube";
@@ -197,35 +274,38 @@ var BPlayer = {
 			config.enablePseudoStreaming = true;
 			if(extension == 'flv') {
 				mimeType = "video/flv";
+				meConfig.renderers = ['flash_video','native_flv'];
 			} else {
 				mimeType = "video/mp4";
 			}
 		} else {
 			if(extension == 'flv') {
 				mimeType = "video/flv";
+				meConfig.renderers = ['flash_video','native_flv'];
 			} else if(extension == 'f4v') {
 				mimeType = "video/flv";
 			} else if(extension == 'mp4') {
 				mimeType = "video/mp4";
 			} else if(extension == 'm4v') {
-				mimeType = "video/m4v";
+				mimeType = "video/mp4";
 			} else if(extension == 'm3u8') {
 				mimeType = "application/x-mpegURL";
 			} else if(extension == 'aac') {
-				mimeType = "audio/aac";
+				mimeType = "audio/mp4";
 				config.provider = "sound";
-				meConfig.pluginVars = 'isvideo=true';
 			} else if(extension == 'mp3') {
 				mimeType = "audio/mp3";
 				config.provider = "sound";
 			} else if(extension == 'm4a') {
-				mimeType = "audio/m4a";
+				mimeType = "audio/mp4";
 				config.provider = "sound";
 			} else if(config.file.indexOf('vimeo.com') > -1) {
 				mimeType = "video/vimeo";
-			} else if(config.file.indexOf('youtube.com') > -1 || config.file.indexOf('youtube.be') > -1) {
+			} else if(config.file.indexOf('youtube.com') > -1 || config.file.indexOf('youtu.be') > -1 || config.file.indexOf('youtube.be') > -1) {
 				mimeType = "video/youtube";
 			} else if(extension.indexOf('mp4?') == 0) {
+				mimeType = "video/mp4";
+			} else if(config.file.indexOf('openmeetings/recording') > 0) {
 				mimeType = "video/mp4";
 			} else {
 				alert('Something go badly wrong!' + config.provider + "  " + extension);
@@ -246,13 +326,6 @@ var BPlayer = {
 			if(typeof config.repeat != 'undefined' && config.repeat) {
 				content += " loop='loop'";
 			}
-			content += " type='" +mimeType + "' src='" + config.file + "'></audio>";
-		} else {
-			//controls are mandatory for Safari at least
-			content = "<video id='" + mediaDomId + "' controls='controls' preload='none' oncontextmenu='return false;'";
-			if(typeof config.repeat != 'undefined' && config.repeat) {
-				content += " loop='loop'";
-			}
 			var objContent = "<object id='" + objectDomId + "' type='application/x-shockwave-flash'";
 			if(typeof config.height != 'undefined') {
 				content += " height='" + config.height + "'";
@@ -267,10 +340,42 @@ var BPlayer = {
 			if(typeof config.image != 'undefined') {
 				content += " poster='" + config.image + "'";
 			}
-			content += "><source type='" +mimeType + "' src='" + config.file + "' />";
+			content += "><source type='" + mimeType + "' src='" + config.file + "'>";
 			
-			content += objContent + " data='" + mediaElementBaseUrl + "flashmediaelement.swf'>";
-			content += "<param name='movie' value='" + mediaElementBaseUrl + "flashmediaelement.swf' />";
+			var flashPlayer = "mediaelement-flash-video.swf";
+			if(mimeType == "audio/mp3") {
+				flashPlayer = "mediaelement-flash-audio.swf";
+			} else if(mimeType == "audio/ogg") {
+				flashPlayer = "mediaelement-flash-audio-ogg.swf";
+			}
+			content += objContent + " data='" + mediaElementBaseUrl + flashPlayer + "'>";
+			content += "<param name='movie' value='" + mediaElementBaseUrl + flashPlayer + "' />";
+			content += "<param name='flashvars' value='controls=true&amp;";
+			if(typeof config.streamer != 'undefined') {
+				content += "&amp;streamer=" + config.streamer;
+			}
+			content += "&amp;file=" + config.file + "' /></object>";
+			content += "</audio>";
+		} else {
+			//controls are mandatory for Safari at least
+			content = "<video id='" + mediaDomId + "' controls='controls' preload='none' oncontextmenu='return false;'";
+			if(typeof config.repeat != 'undefined' && config.repeat) {
+				content += " loop='loop'";
+			}
+			var objContent = "<object id='" + objectDomId + "' type='application/x-shockwave-flash'";
+			if(typeof config.height != 'undefined') {
+				meConfig.videoHeight = config.height;
+			}
+			if(typeof config.width != 'undefined') {
+				meConfig.videoWidth = config.width;
+			}
+			if(typeof config.image != 'undefined') {
+				content += " poster='" + config.image + "'";
+			}
+			content += "><source type='" + mimeType + "' src='" + config.file + "' />";
+			
+			content += objContent + " data='" + mediaElementBaseUrl + "mediaelement-flash-video.swf'>";
+			content += "<param name='movie' value='" + mediaElementBaseUrl + "mediaelement-flash-video.swf' />";
 			content += "<param name='flashvars' value='controls=true";
 			if(typeof config.streamer != 'undefined') {
 				content += "&amp;streamer=" + config.streamer;
@@ -281,19 +386,35 @@ var BPlayer = {
 		var target = jQuery('#' + domId);
 		// Set height on target element to auto to support responsive scaling
 		// with auto-resize
-		target.css({'height' : 'auto'});
+		target.css({'height' : ''});
+		target.css({'border' : 'none'});
 		// Set also width to auto in case the video is larger than the window.
 		// Normally the max-width on the target does already fix this responsive
 		// problem, but this does not work on iOS. 
 		// Don't set it permanently to auto because this will expand all videos
 		// to 100% and discard the configured width
 		if (jQuery(window).width() <= config.width) {
-			target.css({ 'width' : 'auto'});
+			target.css({'width' : ''});
 		}
+		
 		// Now finally add video tags and flash fallback HTML code to DOM and
 		// call player on new video element
 		target.html(content);
-		jQuery('#' + mediaDomId).mediaelementplayer(meConfig);
+		
+		if(mimeType == "video/vimeo") {
+			var mediaElementBaseUrl = BPlayer._mediaElementBaseUrl();
+			var vimeoJs = mediaElementBaseUrl + (BPlayer.debugEnabled ? 'renderers/vimeo.js' : 'renderers/vimeo.min.js');
+			jQuery.ajax({
+				dataType: 'script',
+				cache: true,
+				async: false, //prevent 2x load of the mediaelement.js which is deadly
+				url: vimeoJs
+			}).done(function() {
+				jQuery('#' + mediaDomId).mediaelementplayer(meConfig);
+			});
+		} else {
+			jQuery('#' + mediaDomId).mediaelementplayer(meConfig);
+		}
 	},
 	
 	_mediaElementBaseUrl: function() {

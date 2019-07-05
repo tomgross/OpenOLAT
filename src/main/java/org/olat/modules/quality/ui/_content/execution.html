@@ -1,0 +1,17 @@
+#if($r.available("back"))
+	<div id="o_back_wrapper" class="o_toolbar clearfix">
+		<div class="o_breadcrumb">
+			<ol class="breadcrumb">
+				<li>$r.render("back")</li>
+			</ol>
+		</div>
+	</div>
+#end
+<div class="o_qual_execute">
+	#if($r.available("header"))
+		$r.render("header")
+	#end
+	#if($r.available("execution"))
+		$r.render("execution")
+	#end
+</div>

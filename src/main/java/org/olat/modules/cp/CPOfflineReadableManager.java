@@ -38,7 +38,7 @@ import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
 import org.apache.commons.io.IOUtils;
-import org.apache.commons.lang.StringEscapeUtils;
+import org.apache.logging.log4j.Logger;
 import org.apache.velocity.VelocityContext;
 import org.apache.velocity.app.VelocityEngine;
 import org.apache.velocity.runtime.RuntimeConstants;
@@ -48,10 +48,10 @@ import org.olat.core.gui.components.tree.TreeNode;
 import org.olat.core.gui.render.velocity.VelocityModule;
 import org.olat.core.helpers.Settings;
 import org.olat.core.id.OLATResourceable;
-import org.olat.core.logging.OLog;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.ExportUtil;
 import org.olat.core.util.FileUtils;
+import org.olat.core.util.StringHelper;
 import org.olat.core.util.WebappHelper;
 import org.olat.core.util.ZipUtil;
 import org.olat.core.util.vfs.LocalFileImpl;
@@ -73,7 +73,7 @@ import org.springframework.core.io.Resource;
 public class CPOfflineReadableManager {
 	private static CPOfflineReadableManager instance = new CPOfflineReadableManager();
 
-	private static final OLog log = Tracing.createLoggerFor(CPOfflineReadableManager.class);
+	private static final Logger log = Tracing.createLoggerFor(CPOfflineReadableManager.class);
 	
 	private static final String DIRNAME_CPOFFLINEMENUMAT = "cp_offline_menu_mat";
 	private static final String FILENAME_START = "_START_.html";
@@ -88,20 +88,15 @@ public class CPOfflineReadableManager {
 		// private since singleton
 
 		// init velocity engine
-		Properties p = null;
+		Properties p = new Properties();
 		try {
 			velocityEngine = new VelocityEngine();
-			p = new Properties();
-			p.setProperty(RuntimeConstants.RUNTIME_LOG_LOGSYSTEM_CLASS, "org.apache.velocity.runtime.log.SimpleLog4JLogSystem");
 			p.setProperty(RuntimeConstants.RESOURCE_MANAGER_CACHE_CLASS, "org.olat.core.gui.render.velocity.InfinispanResourceCache");
-			p.setProperty("runtime.log.logsystem.log4j.category", "syslog");
 			p.setProperty(RuntimeConstants.INPUT_ENCODING, VelocityModule.getInputEncoding());
-			p.setProperty(RuntimeConstants.OUTPUT_ENCODING, VelocityModule.getOutputEncoding());
-			p.setProperty("classpath.resource.loader.cache", Settings.isDebuging() ? "false" : "true");
-			
+			p.setProperty("resource.loader.classpath.cache", Settings.isDebuging() ? "false" : "true");
 			velocityEngine.init(p);
 		} catch (Exception e) {
-			throw new RuntimeException("config error " + p.toString());
+			throw new RuntimeException("config error " + p);
 		}
 	}
 
@@ -137,7 +132,7 @@ public class CPOfflineReadableManager {
 			//start page
 			String startPage = getOfflineCPStartHTMLFile(manifest, indexSrc);
 			exportStream.putNextEntry(new ZipEntry("_START_.html"));
-			IOUtils.write(startPage, exportStream);
+			IOUtils.write(startPage, exportStream, "UTF-8");
 			exportStream.closeEntry();
 			
 			OlatServletResource.appendDirectory(exportStream,
@@ -272,15 +267,15 @@ public class CPOfflineReadableManager {
 			sb.append("\" target=\"");
 			sb.append(FRAME_NAME_CONTENT);
 			sb.append("\" alt=\"");
-			sb.append(StringEscapeUtils.escapeHtml(altText));
+			sb.append(StringHelper.escapeHtml(altText));
 			sb.append("\" title=\"");
-			sb.append(StringEscapeUtils.escapeHtml(altText));
+			sb.append(StringHelper.escapeHtml(altText));
 			sb.append("\">");
 			sb.append(title);
 			sb.append("</a>\n");
 		} else {
 			sb.append("<span title=\"");
-			sb.append(StringEscapeUtils.escapeHtml(altText));
+			sb.append(StringHelper.escapeHtml(altText));
 			sb.append("\">");
 			sb.append(title);
 			sb.append("</span>");

@@ -25,8 +25,6 @@
 
 package org.olat.core.commons.services.webdav.manager;
 
-import java.net.InetAddress;
-import java.net.UnknownHostException;
 import java.util.Map;
 import java.util.StringTokenizer;
 import java.util.UUID;
@@ -35,7 +33,7 @@ import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 
 import org.olat.admin.user.delete.service.UserDeletionManager;
-import org.olat.basesecurity.BaseSecurityManager;
+import org.olat.basesecurity.BaseSecurity;
 import org.olat.basesecurity.BaseSecurityModule;
 import org.olat.core.commons.services.webdav.WebDAVManager;
 import org.olat.core.commons.services.webdav.WebDAVModule;
@@ -80,11 +78,15 @@ public class WebDAVManagerImpl implements WebDAVManager, InitializingBean {
 	private CacheWrapper<CacheKey,UserSession> timedSessionCache;
 
 	@Autowired
+	private BaseSecurity securityManager;
+	@Autowired
 	private UserSessionManager sessionManager;
 	@Autowired
 	private WebDAVAuthManager webDAVAuthManager;
 	@Autowired
 	private WebDAVModule webdavModule;
+	@Autowired
+	private UserDeletionManager userDeletionManager;
 
 	@Autowired
 	public WebDAVManagerImpl(CoordinatorManager coordinatorManager) {
@@ -282,9 +284,9 @@ public class WebDAVManagerImpl implements WebDAVManager, InitializingBean {
 		
 			sessionManager.signOffAndClear(usess);
 			usess.setIdentity(identity);
-			UserDeletionManager.getInstance().setIdentityAsActiv(identity);
+			userDeletionManager.setIdentityAsActiv(identity);
 			// set the roles (admin, author, guest)
-			Roles roles = BaseSecurityManager.getInstance().getRoles(identity);
+			Roles roles = securityManager.getRoles(identity);
 			usess.setRoles(roles);
 			// set session info
 			SessionInfo sinfo = new SessionInfo(identity.getKey(), identity.getName(), request.getSession());
@@ -294,13 +296,6 @@ public class WebDAVManagerImpl implements WebDAVManager, InitializingBean {
 			
 			String remoteAddr = request.getRemoteAddr();
 			sinfo.setFromIP(remoteAddr);
-			sinfo.setFromFQN(remoteAddr);
-			try {
-				InetAddress[] iaddr = InetAddress.getAllByName(request.getRemoteAddr());
-				if (iaddr.length > 0) sinfo.setFromFQN(iaddr[0].getHostName());
-			} catch (UnknownHostException e) {
-				 // ok, already set IP as FQDN
-			}
 			sinfo.setAuthProvider(BaseSecurityModule.getDefaultAuthProviderIdentifier());
 			sinfo.setUserAgent(request.getHeader("User-Agent"));
 			sinfo.setSecure(request.isSecure());

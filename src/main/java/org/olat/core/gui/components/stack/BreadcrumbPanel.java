@@ -76,6 +76,13 @@ public interface BreadcrumbPanel extends StackedPanel {
 	public void pushController(String displayName, String iconLeftCss, Object uobject);
 	
 	/**
+	 * Change the display name of the last crumb.
+	 * 
+	 * @param displayName The new display name
+	 */
+	public void changeDisplayname(String displayName);
+	
+	/**
 	 * Change the name and the icon of a bread crumb.
 	 * 
 	 * @param displayName The name shown as bread crumb
@@ -98,6 +105,8 @@ public interface BreadcrumbPanel extends StackedPanel {
 	 * @param controller
 	 */
 	public void popController(Controller controller);
+	
+	public void popUserObject(Object uobject);
 	
 	
 

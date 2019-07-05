@@ -19,13 +19,16 @@
  */
 package org.olat.ims.qti21.model.xml.interactions;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 
-import javax.xml.transform.stream.StreamResult;
-
 import org.olat.core.gui.render.StringOutput;
+import org.apache.logging.log4j.Logger;
+import org.olat.core.logging.Tracing;
+import org.olat.core.util.filter.FilterFactory;
+import org.olat.ims.qti21.model.xml.ResponseIdentifierForFeedback;
 
 import uk.ac.ed.ph.jqtiplus.node.content.basic.Block;
 import uk.ac.ed.ph.jqtiplus.node.item.AssessmentItem;
@@ -47,8 +50,12 @@ import uk.ac.ed.ph.jqtiplus.value.SingleValue;
  * @author srosse, stephane.rosse@frentix.com, http://www.frentix.com
  *
  */
-public abstract class SimpleChoiceAssessmentItemBuilder extends ChoiceAssessmentItemBuilder {
+public abstract class SimpleChoiceAssessmentItemBuilder extends ChoiceAssessmentItemBuilder implements ResponseIdentifierForFeedback {
 	
+	private static final Logger log = Tracing.createLoggerFor(SimpleChoiceAssessmentItemBuilder.class);
+
+	protected int maxChoices;
+	protected int minChoices;
 	protected boolean shuffle;
 	protected String question;
 	protected List<String> cssClass;
@@ -93,26 +100,48 @@ public abstract class SimpleChoiceAssessmentItemBuilder extends ChoiceAssessment
 	}
 	
 	private void extractChoiceInteraction() {
-		StringOutput sb = new StringOutput();
-		List<Block> blocks = assessmentItem.getItemBody().getBlocks();
-		for(Block block:blocks) {
-			if(block instanceof ChoiceInteraction) {
-				choiceInteraction = (ChoiceInteraction)block;
-				responseIdentifier = choiceInteraction.getResponseIdentifier();
-				shuffle = choiceInteraction.getShuffle();
-				break;
-			} else if(block != null) {
-				qtiSerializer.serializeJqtiObject(block, new StreamResult(sb));
+		try(StringOutput sb = new StringOutput()) {
+			List<Block> blocks = assessmentItem.getItemBody().getBlocks();
+			for(Block block:blocks) {
+				if(block instanceof ChoiceInteraction) {
+					choiceInteraction = (ChoiceInteraction)block;
+					responseIdentifier = choiceInteraction.getResponseIdentifier();
+					shuffle = choiceInteraction.getShuffle();
+					break;
+				} else if(block != null) {
+					serializeJqtiObject(block, sb);
+				}
 			}
+			question = sb.toString();
+		} catch(IOException e) {
+			log.error("", e);
 		}
-		question = sb.toString();
 		
 		choices = new ArrayList<>();
 		if(choiceInteraction != null) {
 			choices.addAll(choiceInteraction.getSimpleChoices());
 			orientation = choiceInteraction.getOrientation();
 			cssClass = choiceInteraction.getClassAttr();
+			maxChoices = choiceInteraction.getMaxChoices();
+			minChoices = choiceInteraction.getMinChoices();
 		}
+	}
+	
+	@Override
+	public Identifier getResponseIdentifier() {
+		return responseIdentifier;
+	}
+
+	@Override
+	public List<Answer> getAnswers() {
+		List<SimpleChoice> simpleChoices = getChoices();
+		List<Answer> answers = new ArrayList<>(simpleChoices.size());
+		for(SimpleChoice choice:simpleChoices) {
+			String choiceContent =  getHtmlHelper().flowStaticString(choice.getFlowStatics());
+			String label = FilterFactory.getHtmlTagAndDescapingFilter().filter(choiceContent);
+			answers.add(new Answer(choice.getIdentifier(), label));
+		}
+		return answers;
 	}
 	
 	@Override
@@ -123,7 +152,27 @@ public abstract class SimpleChoiceAssessmentItemBuilder extends ChoiceAssessment
 	public ChoiceInteraction getChoiceInteraction() {
 		return choiceInteraction;
 	}
-	
+
+	@Override
+	public int getMaxChoices() {
+		return maxChoices;
+	}
+
+	@Override
+	public void setMaxChoices(int maxChoices) {
+		this.maxChoices = maxChoices;
+	}
+
+	@Override
+	public int getMinChoices() {
+		return minChoices;
+	}
+
+	@Override
+	public void setMinChoices(int minChoices) {
+		this.minChoices = minChoices;
+	}
+
 	public boolean isShuffle() {
 		return shuffle;
 	}
@@ -157,6 +206,23 @@ public abstract class SimpleChoiceAssessmentItemBuilder extends ChoiceAssessment
 		if(cssClass != null) {
 			cssClass.remove(classAttr);
 		}
+	}
+	
+	/**
+	 * @return A copy of the list of blocks which make the question.
+	 * 		The list is a copy and modification will not be persisted.
+	 */
+	public List<Block> getQuestionBlocks() {
+		List<Block> blocks = assessmentItem.getItemBody().getBlocks();
+		List<Block> questionBlocks = new ArrayList<>(blocks.size());
+		for(Block block:blocks) {
+			if(block instanceof ChoiceInteraction) {
+				break;
+			} else if(block != null) {
+				questionBlocks.add(block);
+			}
+		}
+		return questionBlocks;
 	}
 	
 	/**

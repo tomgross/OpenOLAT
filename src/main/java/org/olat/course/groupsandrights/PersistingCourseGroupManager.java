@@ -31,10 +31,13 @@ import java.util.Collections;
 import java.util.List;
 
 import org.olat.basesecurity.GroupRoles;
+import org.olat.basesecurity.IdentityRef;
+import org.olat.basesecurity.OrganisationRoles;
+import org.olat.basesecurity.OrganisationService;
 import org.olat.core.CoreSpringFactory;
 import org.olat.core.id.Identity;
 import org.olat.core.id.OLATResourceable;
-import org.olat.core.logging.OLog;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.StringHelper;
 import org.olat.course.export.CourseEnvironmentMapper;
@@ -47,7 +50,11 @@ import org.olat.group.model.BusinessGroupEnvironment;
 import org.olat.group.model.BusinessGroupReference;
 import org.olat.group.model.SearchBusinessGroupParams;
 import org.olat.group.right.BGRightManager;
+import org.olat.modules.curriculum.CurriculumElement;
+import org.olat.modules.curriculum.CurriculumRoles;
+import org.olat.modules.curriculum.CurriculumService;
 import org.olat.repository.RepositoryEntry;
+import org.olat.repository.RepositoryEntryRelationType;
 import org.olat.repository.RepositoryManager;
 import org.olat.repository.RepositoryService;
 import org.olat.resource.OLATResource;
@@ -62,20 +69,22 @@ import org.olat.resource.OLATResourceManager;
  */
 public class PersistingCourseGroupManager implements CourseGroupManager {
 	
-	private static final OLog log = Tracing.createLoggerFor(PersistingCourseGroupManager.class);
+	private static final Logger log = Tracing.createLoggerFor(PersistingCourseGroupManager.class);
 
 	private static final String LEARNINGGROUPEXPORT_XML = "learninggroupexport.xml";
 	private static final String RIGHTGROUPEXPORT_XML = "rightgroupexport.xml";
 	private static final String LEARNINGGROUPARCHIVE_XLS = "learninggroup_archiv.xls";
-	//private static final String RIGHTGROUPARCHIVE_XLS = "rightgroup_archiv.xls";
 
 	private RepositoryEntry courseRepoEntry;
 	private final OLATResource courseResource;
 	
 	private final BGAreaManager areaManager;
 	private final BGRightManager rightManager;
+	private final RepositoryManager repositoryManager;
 	private final RepositoryService repositoryService;
+	private final OrganisationService organisationService;
 	private final BusinessGroupService businessGroupService;
+	private final CurriculumService curriculumService;
 
 	private PersistingCourseGroupManager(OLATResourceable course) {
 		this(OLATResourceManager.getInstance().findOrPersistResourceable(course));
@@ -85,8 +94,11 @@ public class PersistingCourseGroupManager implements CourseGroupManager {
 		this.courseResource = courseResource;
 		areaManager = CoreSpringFactory.getImpl(BGAreaManager.class);
 		rightManager = CoreSpringFactory.getImpl(BGRightManager.class);
+		repositoryManager = CoreSpringFactory.getImpl(RepositoryManager.class);
 		repositoryService = CoreSpringFactory.getImpl(RepositoryService.class);
+		organisationService = CoreSpringFactory.getImpl(OrganisationService.class);
 		businessGroupService = CoreSpringFactory.getImpl(BusinessGroupService.class);
+		curriculumService = CoreSpringFactory.getImpl(CurriculumService.class);
 	}
 	
 	private PersistingCourseGroupManager(RepositoryEntry courseRepoEntry) {
@@ -94,8 +106,11 @@ public class PersistingCourseGroupManager implements CourseGroupManager {
 		this.courseResource = courseRepoEntry.getOlatResource();
 		areaManager = CoreSpringFactory.getImpl(BGAreaManager.class);
 		rightManager = CoreSpringFactory.getImpl(BGRightManager.class);
+		repositoryManager = CoreSpringFactory.getImpl(RepositoryManager.class);
 		repositoryService = CoreSpringFactory.getImpl(RepositoryService.class);
+		organisationService = CoreSpringFactory.getImpl(OrganisationService.class);
 		businessGroupService = CoreSpringFactory.getImpl(BusinessGroupService.class);
+		curriculumService = CoreSpringFactory.getImpl(CurriculumService.class);
 	}
 
 	@Override
@@ -106,11 +121,20 @@ public class PersistingCourseGroupManager implements CourseGroupManager {
 	@Override
 	public RepositoryEntry getCourseEntry() {
 		if(courseRepoEntry == null) {
-			courseRepoEntry = RepositoryManager.getInstance().lookupRepositoryEntry(courseResource, false);
+			courseRepoEntry = repositoryManager.lookupRepositoryEntry(courseResource, false);
 		}
 		return courseRepoEntry;
 	}
 	
+	@Override
+	public boolean isNotificationsAllowed() {
+		RepositoryEntry re = getCourseEntry();
+		if(re == null || re.getEntryStatus() == null) {
+			return false;
+		}
+		return !re.getEntryStatus().decommissioned();
+	}
+
 	public void updateRepositoryEntry(RepositoryEntry entry) {
 		courseRepoEntry = entry;
 	}
@@ -135,10 +159,6 @@ public class PersistingCourseGroupManager implements CourseGroupManager {
 		return new PersistingCourseGroupManager(courseRepoEntry);
 	}
 
-	/**
-	 * @see org.olat.course.groupsandrights.CourseGroupManager#hasRight(org.olat.core.id.Identity,
-	 *      java.lang.String)
-	 */
 	@Override
 	public boolean hasRight(Identity identity, String courseRight) {
 		return rightManager.hasBGRight(courseRight, identity, getCourseResource());
@@ -154,9 +174,6 @@ public class PersistingCourseGroupManager implements CourseGroupManager {
 		return businessGroupService.isIdentityInBusinessGroup(identity, groupKey, true, true, getCourseEntry());
 	}
 
-	/**
-	 * @see org.olat.course.groupsandrights.CourseGroupManager#isLearningGroupFull(java.lang.String)
-	 */
 	@Override
 	public boolean isBusinessGroupFull(Long groupKey){
 		boolean isLearningGroupFull = false;
@@ -189,9 +206,6 @@ public class PersistingCourseGroupManager implements CourseGroupManager {
 		return businessGroupService.countBusinessGroups(params, getCourseEntry()) > 0;
 	}
 
-	/**
-	 * @see org.olat.course.groupsandrights.CourseGroupManager#getAllLearningGroupsFromAllContexts()
-	 */
 	@Override
 	public List<BusinessGroup> getAllBusinessGroups() {
 		SearchBusinessGroupParams params = new SearchBusinessGroupParams();
@@ -203,7 +217,7 @@ public class PersistingCourseGroupManager implements CourseGroupManager {
 		SearchBusinessGroupParams params = new SearchBusinessGroupParams();
 		if(StringHelper.isLong(nameOrKey)) {
 			try {
-				params.setGroupKeys(Collections.singletonList(new Long(nameOrKey)));
+				params.setGroupKeys(Collections.singletonList(Long.valueOf(nameOrKey)));
 			} catch (NumberFormatException e) {
 				params.setExactName(nameOrKey);
 			}
@@ -231,79 +245,75 @@ public class PersistingCourseGroupManager implements CourseGroupManager {
 		return areaManager.existArea(nameOrKey, getCourseResource());
 	}
 
-	/**
-	 * @see org.olat.course.groupsandrights.CourseGroupManager#getOwnedBusinessGroups(org.olat.core.id.Identity)
-	 */
 	@Override
 	public List<BusinessGroup> getOwnedBusinessGroups(Identity identity) {
 		if(identity == null) return new ArrayList<>();
 		
 		SearchBusinessGroupParams params = new SearchBusinessGroupParams(identity, true, false);
-		List<BusinessGroup> allGroups =
-				businessGroupService.findBusinessGroups(params, getCourseEntry(), 0, -1);
-		return allGroups;
+		return businessGroupService.findBusinessGroups(params, getCourseEntry(), 0, -1);
 	}
 
-	/**
-	 * @see org.olat.course.groupsandrights.CourseGroupManager#getParticipatingBusinessGroups(org.olat.core.id.Identity)
-	 */
 	@Override
 	public List<BusinessGroup> getParticipatingBusinessGroups(Identity identity) {
 		if(identity == null) return new ArrayList<>();
 		
 		SearchBusinessGroupParams params = new SearchBusinessGroupParams(identity, false, true);
-		List<BusinessGroup> allGroups =
-				businessGroupService.findBusinessGroups(params, getCourseEntry(), 0, -1);
-		return allGroups;
+		return businessGroupService.findBusinessGroups(params, getCourseEntry(), 0, -1);
+	}	
+
+	@Override
+	public List<CurriculumElement> getAllCurriculumElements() {
+		return curriculumService.getCurriculumElements(getCourseEntry());
 	}
 
-	/**
-	 * @see org.olat.course.groupsandrights.CourseGroupManager#isIdentityCourseCoach(org.olat.core.id.Identity)
-	 */
-	public boolean isIdentityCourseCoach(Identity identity) {
-		boolean isCoach = repositoryService.hasRole(identity, getCourseEntry(), GroupRoles.coach.name());
-		if (isCoach) { // don't check any further
-			return true;
-		}
+	@Override
+	public List<CurriculumElement> getCoachedCurriculumElements(Identity identity) {
+		List<CurriculumRoles> coachRoles = Collections.singletonList(CurriculumRoles.coach);
+		return curriculumService.getCurriculumElements(getCourseEntry(), identity, coachRoles);
+	}
 
-		return businessGroupService.isIdentityInBusinessGroup(identity, null, true, false, getCourseEntry());
+	@Override
+	public boolean isIdentityCourseCoach(Identity identity) {
+		return repositoryService.hasRoleExpanded(identity, getCourseEntry(), GroupRoles.coach.name());
 	}
 	
 	@Override
 	public boolean isIdentityCourseParticipant(Identity identity) {
-		boolean participant = repositoryService.hasRole(identity, getCourseEntry(), GroupRoles.participant.name());
-		if (participant) {// don't check any further
-			return true;
-		}
-		return businessGroupService.isIdentityInBusinessGroup(identity, null, false, true, getCourseEntry());
+		return repositoryService.hasRoleExpanded(identity, getCourseEntry(), GroupRoles.participant.name());
 	}
 
 	@Override
 	public boolean isIdentityCourseAdministrator(Identity identity) {
 		// not really a group management method, for your convenience we have a
 		// shortcut here...
-		return repositoryService.hasRole(identity, getCourseEntry(), GroupRoles.owner.name());
+		return repositoryService.hasRoleExpanded(identity, getCourseEntry(), OrganisationRoles.administrator.name(),
+				OrganisationRoles.principal.name(), OrganisationRoles.learnresourcemanager.name(), GroupRoles.owner.name());
 	}
-	
+
+	@Override
+	public boolean isIdentityInOrganisation(IdentityRef identity, String organisationIdentifier, OrganisationRoles... roles) {
+		return organisationService.hasRole(organisationIdentifier, identity, roles);
+	}
+
 	@Override
 	public boolean isIdentityAnyCourseAdministrator(Identity identity) {
-		return repositoryService.hasRole(identity, false, GroupRoles.owner.name());
+		return repositoryService.hasRoleExpanded(identity, GroupRoles.owner.name());
 	}
 
 	@Override
 	public boolean isIdentityAnyCourseCoach(Identity identity) {
-		return repositoryService.hasRole(identity, true, GroupRoles.coach.name());
+		return repositoryService.hasRoleExpanded(identity, GroupRoles.coach.name());
 	}
 
 	@Override
 	public boolean isIdentityAnyCourseParticipant(Identity identity) {
-		return repositoryService.hasRole(identity, true, GroupRoles.participant.name());
+		return repositoryService.hasRoleExpanded(identity, GroupRoles.participant.name());
 	}
 
 	@Override
 	public void deleteCourseGroupmanagement() {
 		//delete permission group to course
-		RepositoryEntry re = RepositoryManager.getInstance().lookupRepositoryEntry(getCourseResource(), false);
+		RepositoryEntry re = repositoryManager.lookupRepositoryEntry(getCourseResource(), false);
 		if(re != null) {
 			businessGroupService.removeResource(re);
 			//delete areas
@@ -311,7 +321,7 @@ public class PersistingCourseGroupManager implements CourseGroupManager {
 			for(BGArea area:areas) {
 				areaManager.deleteBGArea(area);
 			}
-			log.audit("Deleting course groupmanagement for " + re.toString());
+			log.info(Tracing.M_AUDIT, "Deleting course groupmanagement for " + re.toString());
 		}
 	}
 
@@ -320,21 +330,20 @@ public class PersistingCourseGroupManager implements CourseGroupManager {
 	 * @return list of Integers that contain the number of participants for each
 	 *         group
 	 */
+	@Override
 	public List<Integer> getNumberOfMembersFromGroups(List<BusinessGroup> groups) {
-		List<Integer> members = new ArrayList<Integer>();
+		List<Integer> members = new ArrayList<>();
 		for (BusinessGroup group:groups) {
 			int numbMembers = businessGroupService.countMembers(group, GroupRoles.participant.name());
-			members.add(new Integer(numbMembers));
+			members.add(Integer.valueOf(numbMembers));
 		}
 		return members;
 	}
 
-	/**
-	 * @see org.olat.course.groupsandrights.CourseGroupManager#getUniqueAreaNames()
-	 */
+	@Override
 	public List<String> getUniqueAreaNames() {
 		List<BGArea> areas = getAllAreas();
-		List<String> areaNames = new ArrayList<String>();
+		List<String> areaNames = new ArrayList<>();
 		for (BGArea area:areas) {
 			if (!areaNames.contains(area.getName())) {
 				areaNames.add(area.getName().trim());
@@ -344,12 +353,10 @@ public class PersistingCourseGroupManager implements CourseGroupManager {
 		return areaNames;
 	}
 
-	/**
-	 * @see org.olat.course.groupsandrights.CourseGroupManager#getUniqueBusinessGroupNames()
-	 */
+	@Override
 	public List<String> getUniqueBusinessGroupNames() {
 		List<BusinessGroup> groups = getAllBusinessGroups();
-		List<String> groupNames = new ArrayList<String>();
+		List<String> groupNames = new ArrayList<>();
 		for (BusinessGroup group:groups) {
 			if (!groupNames.contains(group.getName())) {
 				groupNames.add(group.getName().trim());
@@ -359,12 +366,8 @@ public class PersistingCourseGroupManager implements CourseGroupManager {
 		return groupNames;
 	}
 
-	/**
-	 * @see org.olat.course.groupsandrights.CourseGroupManager#exportCourseBusinessGroups(java.io.File)
-	 */
 	@Override
-	public void exportCourseBusinessGroups(File fExportDirectory, CourseEnvironmentMapper courseEnv,
-			boolean runtimeDatas, boolean backwardsCompatible) {
+	public void exportCourseBusinessGroups(File fExportDirectory, CourseEnvironmentMapper courseEnv, boolean runtimeDatas) {
 		File fExportFile = new File(fExportDirectory, LEARNINGGROUPEXPORT_XML);
 		List<BGArea> areas = getAllAreas();
 		List<BusinessGroup> groups = getAllBusinessGroups();
@@ -372,7 +375,7 @@ public class PersistingCourseGroupManager implements CourseGroupManager {
 		BusinessGroupEnvironment bgEnv = new BusinessGroupEnvironment();
 		bgEnv.getGroups().addAll(courseEnv.getGroups());
 		bgEnv.getAreas().addAll(courseEnv.getAreas());
-		businessGroupService.exportGroups(groups, areas, fExportFile, bgEnv, runtimeDatas, backwardsCompatible);
+		businessGroupService.exportGroups(groups, areas, fExportFile, runtimeDatas);
 	}
 	
 	/**
@@ -381,6 +384,7 @@ public class PersistingCourseGroupManager implements CourseGroupManager {
 	 * @param fGroupExportXML
 	 * @return
 	 */
+	@Override
 	public CourseEnvironmentMapper getBusinessGroupEnvironment() {
 		CourseEnvironmentMapper env = new CourseEnvironmentMapper();
 		List<BusinessGroup> groups = businessGroupService.findBusinessGroups(null, getCourseEntry(), 0, -1);
@@ -394,14 +398,11 @@ public class PersistingCourseGroupManager implements CourseGroupManager {
 		return env;
 	}
 
-	/**
-	 * @see org.olat.course.groupsandrights.CourseGroupManager#importCourseBusinessGroups(java.io.File)
-	 */
 	@Override
 	public CourseEnvironmentMapper importCourseBusinessGroups(File fImportDirectory) {
 		CourseEnvironmentMapper envMapper = new CourseEnvironmentMapper();
 		OLATResource resource = getCourseResource();
-		RepositoryEntry courseRe = RepositoryManager.getInstance().lookupRepositoryEntry(resource, true);
+		RepositoryEntry courseRe = repositoryManager.lookupRepositoryEntry(resource, true);
 		File fGroupXML1 = new File(fImportDirectory, LEARNINGGROUPEXPORT_XML);
 		if(fGroupXML1.exists()) {
 			BusinessGroupEnvironment env = businessGroupService.importGroups(courseRe, fGroupXML1);
@@ -415,17 +416,13 @@ public class PersistingCourseGroupManager implements CourseGroupManager {
 		return envMapper;
 	}
 
-	/**
-	 * @see org.olat.course.groupsandrights.CourseGroupManager#getCoachesFromBusinessGroups(String)
-	 */
+	@Override
 	public List<Identity> getCoachesFromBusinessGroups() {
 		List<BusinessGroup> bgs = getAllBusinessGroups();
 		return businessGroupService.getMembers(bgs, GroupRoles.coach.name());
 	}
 
-	/**
-	 * @see org.olat.course.groupsandrights.CourseGroupManager#getParticipantsFromBusinessGroups(String)
-	 */
+	@Override
 	public List<Identity> getParticipantsFromBusinessGroups() {
 		List<BusinessGroup> bgs = getAllBusinessGroups();
 		return businessGroupService.getMembers(bgs, GroupRoles.participant.name());
@@ -445,17 +442,15 @@ public class PersistingCourseGroupManager implements CourseGroupManager {
 
 	@Override
 	public List<Identity> getCoaches() {
-		return repositoryService.getMembers(getCourseEntry(), GroupRoles.coach.name());
+		return repositoryService.getMembers(getCourseEntry(), RepositoryEntryRelationType.entryAndCurriculums, GroupRoles.coach.name());
 	}
 
 	@Override
 	public List<Identity> getParticipants() {
-		return repositoryService.getMembers(getCourseEntry(), GroupRoles.participant.name());
+		return repositoryService.getMembers(getCourseEntry(), RepositoryEntryRelationType.entryAndCurriculums, GroupRoles.participant.name());
 	}
 
-	/**
-	 * @see org.olat.course.groupsandrights.CourseGroupManager#getCoachesFromArea(java.lang.String)
-	 */
+	@Override
 	public List<Identity> getCoachesFromAreas() {
 		List<BusinessGroup> bgs = getAllBusinessGroups();
 		return businessGroupService.getMembers(bgs, GroupRoles.coach.name());
@@ -468,9 +463,17 @@ public class PersistingCourseGroupManager implements CourseGroupManager {
 		return businessGroupService.getMembers(groups, GroupRoles.coach.name());
 	}
 
-	/**
-	 * @see org.olat.course.groupsandrights.CourseGroupManager#getParticipantsFromArea(java.lang.String)
-	 */
+	@Override
+	public List<Identity> getCoachesFromCurriculumElements() {
+		return repositoryService.getMembers(getCourseEntry(), RepositoryEntryRelationType.curriculums, GroupRoles.coach.name());
+	}
+
+	@Override
+	public List<Identity> getCoachesFromCurriculumElements(List<Long> curriculumElementKeys) {
+		return curriculumService.getMembersIdentity(curriculumElementKeys, CurriculumRoles.coach);
+	}
+
+	@Override
 	public List<Identity> getParticipantsFromAreas() {
 		List<BusinessGroup> bgs = getAllBusinessGroups();
 		return businessGroupService.getMembers(bgs, GroupRoles.participant.name());
@@ -483,19 +486,26 @@ public class PersistingCourseGroupManager implements CourseGroupManager {
 		return businessGroupService.getMembers(groups, GroupRoles.participant.name());
 	}
 
-	/**
-	 * 
-	 * @see org.olat.course.groupsandrights.CourseGroupManager#getWaitingListGroups(org.olat.core.id.Identity)
-	 */
+	@Override
+	public List<Identity> getParticipantsFromCurriculumElements() {
+		return repositoryService.getMembers(getCourseEntry(), RepositoryEntryRelationType.curriculums, GroupRoles.participant.name());
+	}
+
+	@Override
+	public List<Identity> getParticipantsFromCurriculumElements(List<Long> curriculumElementKeys) {
+		return curriculumService.getMembersIdentity(curriculumElementKeys, CurriculumRoles.participant);
+	}
+
+	@Override
 	public List<BusinessGroup> getWaitingListGroups(Identity identity) {
-		List<BusinessGroup> groups = businessGroupService.findBusinessGroupsWithWaitingListAttendedBy(identity, getCourseEntry());
-		return groups;
+		return businessGroupService.findBusinessGroupsWithWaitingListAttendedBy(identity, getCourseEntry());
 	}
 
 	/**
 	 * Archive all learning-group-contexts and right-group-contexts.
 	 * @param exportDirectory
 	 */
+	@Override
 	public void archiveCourseGroups(File exportDirectory) {
 		File exportLearningGroupFile = new File(exportDirectory, "default_" + LEARNINGGROUPARCHIVE_XLS);
 		businessGroupService.archiveGroups(getAllBusinessGroups(), exportLearningGroupFile);

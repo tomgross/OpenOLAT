@@ -21,6 +21,8 @@ package org.olat.modules.portfolio;
 
 import java.util.List;
 
+import org.olat.modules.assessment.Role;
+
 /**
  * 
  * Initial date: 15.06.2016<br>
@@ -39,6 +41,8 @@ public interface BinderSecurityCallback {
 	public boolean canMoveToTrashBinder(Binder binder);
 	
 	public boolean canDeleteBinder(Binder binder);
+	
+	public boolean canExportBinder();
 	
 	/**
 	 * Can edit the edit the meta-data in this binder inclusive meta-data
@@ -61,7 +65,9 @@ public interface BinderSecurityCallback {
 	public boolean canEditPage(Page page);
 	
 	public boolean canEditPageMetadata(Page page, List<Assignment> assignments);
-	
+
+	public boolean canEditCategories(Page page);
+
 	public boolean canPublish(Page page);
 	
 	public boolean canRevision(Page page);
@@ -76,15 +82,37 @@ public interface BinderSecurityCallback {
 	
 	/**
 	 * 
-	 * @return true if the user can instantiate and begin to fill a page from the assignment
+	 * @return true if the user can instantiate and begin to fill a page
+	 * 			from the assignment
 	 */
 	public boolean canInstantiateAssignment();
+	
+	/**
+	 * 
+	 * @return true if the user can instantiate and begin to fill a page
+	 * 			from the assignment found in the templates folder
+	 */
+	public boolean canInstantianteBinderAssignment();
+	
+	/**
+	 * 
+	 * @return
+	 */
+	public boolean canNewPageWithoutAssignment();
 	
 	/**
 	 * 
 	 * @return true if the user can create a new assignment (limited to the template).
 	 */
 	public boolean canNewAssignment();
+	
+	/**
+	 * 
+	 * @return true if the user can create a new assignment in the templates folder
+	 */
+	public boolean canNewBinderAssignment();
+	
+	
 	
 	public boolean canEditAccessRights(PortfolioElement element);
 	
@@ -93,6 +121,14 @@ public interface BinderSecurityCallback {
 	public boolean canViewAccessRights();
 	
 	public boolean canViewElement(PortfolioElement element);
+	
+	
+	/**
+	 * View only the title of the element but not its content
+	 * @param element
+	 * @return
+	 */
+	public boolean canViewTitleOfElement(PortfolioElement element);
 	
 	public boolean canViewPendingAssignments(Section section);
 	
@@ -107,6 +143,13 @@ public interface BinderSecurityCallback {
 	public boolean canViewAssess(PortfolioElement element);
 	
 	public boolean canViewAssessment();
+	
+	public boolean canBookmark();
+	
+	public boolean canPageUserInfosStatus();
+	
+
+	public Role getRole();
  
 
 }

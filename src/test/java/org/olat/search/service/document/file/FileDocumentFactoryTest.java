@@ -38,14 +38,15 @@ import org.apache.lucene.document.Document;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
-import org.olat.core.commons.modules.bc.vfs.OlatNamedContainerImpl;
-import org.olat.core.commons.modules.bc.vfs.OlatRootFolderImpl;
-import org.olat.core.logging.OLog;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.FileUtils;
 import org.olat.core.util.resource.OresHelper;
 import org.olat.core.util.vfs.LocalFileImpl;
+import org.olat.core.util.vfs.NamedContainerImpl;
+import org.olat.core.util.vfs.VFSContainer;
 import org.olat.core.util.vfs.VFSLeaf;
+import org.olat.core.util.vfs.VFSManager;
 import org.olat.search.model.OlatDocument;
 import org.olat.search.service.SearchResourceContext;
 import org.olat.test.OlatTestCase;
@@ -57,7 +58,7 @@ import org.springframework.beans.factory.annotation.Autowired;
  */
 public class FileDocumentFactoryTest extends OlatTestCase {
 	
-	private static final OLog log = Tracing.createLoggerFor(FileDocumentFactoryTest.class);
+	private static final Logger log = Tracing.createLoggerFor(FileDocumentFactoryTest.class);
 
 	// variables for test fixture
 	
@@ -88,6 +89,8 @@ public class FileDocumentFactoryTest extends OlatTestCase {
 
 		Assert.assertTrue("DOC must be supported", fileDocumentFactory.isFileSupported(getVFSFile("test2.DOC")));
 		Assert.assertTrue("doc must be supported", fileDocumentFactory.isFileSupported(getVFSFile("test.doc")));
+		
+		Assert.assertTrue("doc must be supported", fileDocumentFactory.isFileSupported(getVFSFile("Test_word_indexing.docx")));
 
 		Assert.assertTrue("TXT must be supported", fileDocumentFactory.isFileSupported("test.TXT"));
 		Assert.assertTrue("txt must be supported", fileDocumentFactory.isFileSupported("test.txt"));
@@ -132,8 +135,8 @@ public class FileDocumentFactoryTest extends OlatTestCase {
 		                  + "</body></html>"; // Text = 'Dies ist der Test Text'
 		String text = "Test HTML Seite fuer JUnit Test Dies ist der Test\u00A0Text"; // must include '\u00A0' !!! 19.5.2010/cg
 		// Create a test HTML File  
-		OlatRootFolderImpl rootFolder = new OlatRootFolderImpl(rootPath , null);
-		OlatNamedContainerImpl namedFolder = new OlatNamedContainerImpl(filePath, rootFolder);
+		VFSContainer rootFolder = VFSManager.olatRootContainer(rootPath , null);
+		NamedContainerImpl namedFolder = new NamedContainerImpl(filePath, rootFolder);
 		VFSLeaf leaf = (VFSLeaf)namedFolder.resolve(htmlFileName);
 		if (leaf != null) {
 			leaf.delete();

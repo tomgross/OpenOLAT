@@ -19,6 +19,7 @@
  */
 package org.olat.core.gui.control.navigation.callback;
 
+import org.olat.basesecurity.OrganisationRoles;
 import org.olat.core.gui.UserRequest;
 import org.olat.core.gui.control.navigation.SiteSecurityCallback;
 import org.olat.core.id.Roles;
@@ -34,35 +35,21 @@ public class SiteSecurityCallbackWithRolesRestriction implements SiteSecurityCal
 	
 	@Override
 	public boolean isAllowedToLaunchSite(UserRequest ureq) {
-		if (limitToRole == null) {
+		if (limitToRole == null || limitToRole.length == 0) {
 			// no restriction
 			return true;
-		} else {
-			Roles roles = ureq.getUserSession().getRoles();
-			if(roles != null) {
-				for (String limit : limitToRole) {				
-					String theRole = limit.trim().toLowerCase();
-					if (theRole.equals("invitee") && roles.isInvitee()) {
-						return true;
-					} else if (theRole.equals("guest") && roles.isGuestOnly()) {
-						return true;
-					} else if (theRole.equals("administrator") && roles.isOLATAdmin()) {
-						return true;
-					} else if (theRole.equals("groupmanager") && roles.isGroupManager()) {
-						return true;
-					} else if (theRole.equals("usermanager") && roles.isUserManager()) {
-						return true;
-					} else if (theRole.equals("author") && roles.isAuthor()) {
-						return true;
-					} else if (theRole.equals("pooladmin") && roles.isPoolAdmin()) {
-						return true;
-					} else if (theRole.equals("institutionalresourcemanager") && roles.isInstitutionalResourceManager()) {
-						return true;
-					}
+		}
+		
+		Roles roles = ureq.getUserSession().getRoles();
+		if(roles != null) {
+			for (String limit : limitToRole) {
+				OrganisationRoles theRole = OrganisationRoles.valueOf(limit);
+				if(roles.hasRole(theRole)) {
+					return true;
 				}
 			}
-			return false;
 		}
+		return false;
 	}
 	
 	/**
@@ -71,9 +58,7 @@ public class SiteSecurityCallbackWithRolesRestriction implements SiteSecurityCal
 	 */
 	public void setLimitToRole(String limitToRoleConfig) {
 		if (limitToRoleConfig != null) {
-			limitToRole = limitToRoleConfig.split(",");			
-		} else {
-			limitToRoleConfig = null;
+			limitToRole = limitToRoleConfig.split("[,]");			
 		}
 	}
 }

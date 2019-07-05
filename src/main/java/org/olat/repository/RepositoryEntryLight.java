@@ -29,8 +29,10 @@ public interface RepositoryEntryLight extends RepositoryEntryShort {
 
 	public String getDescription();
 	
-	public int getAccess();
+	public boolean isAllUsers();
 	
-	public boolean isMembersOnly();
+	public boolean isGuests();
+	
+	public boolean isBookable();
 	
 }

@@ -51,7 +51,7 @@ import org.olat.core.gui.render.StringOutput;
 import org.olat.core.gui.util.bandwidth.SlowBandWidthSimulator;
 import org.olat.core.helpers.Settings;
 import org.olat.core.logging.AssertException;
-import org.olat.core.logging.OLog;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.FileUtils;
 import org.olat.core.util.StringHelper;
@@ -61,8 +61,11 @@ import org.olat.core.util.session.UserSessionManager;
  * @author Felix Jost
  */
 public class ServletUtil {
-	private static final OLog log = Tracing.createLoggerFor(ServletUtil.class);
-
+	private static final Logger log = Tracing.createLoggerFor(ServletUtil.class);
+	
+	public static final long CACHE_NO_CACHE = 0l;
+	public static final long CACHE_ONE_HOUR = 60l * 60l;
+	public static final long CACHE_ONE_DAY = 24l * 60l * 60l;
 	
 	
 	public static void printOutRequestParameters(HttpServletRequest request) {
@@ -96,8 +99,7 @@ public class ServletUtil {
 	 * @param mr
 	 */
 	public static void serveResource(HttpServletRequest httpReq, HttpServletResponse httpResp, MediaResource mr) {
-		boolean debug = log.isDebug();
-
+		boolean debug = log.isDebugEnabled();
 		try {
 			Long lastModified = mr.getLastModified();
 			if (lastModified != null) {
@@ -156,21 +158,24 @@ public class ServletUtil {
 	}
 	
 	private static void serveFullResource(HttpServletRequest httpReq, HttpServletResponse httpResp,  MediaResource mr) {
-		boolean debug = log.isDebug();
+		boolean debug = log.isDebugEnabled();
 		
 		InputStream in = null;
 		OutputStream out = null;
 		BufferedInputStream bis = null;
 
 		try {
+			// cache-control first
+			setCacheHeaders(httpResp, mr.getCacheControlDuration());
+			
 			Long size = mr.getSize();
 			Long lastModified = mr.getLastModified();
-
-			//fxdiff FXOLAT-118: accept range to deliver videos for iPad (implementation based on Tomcat)
+			// accept range to deliver videos for iPad (implementation based on Tomcat)
 			List<Range> ranges = parseRange(httpReq, httpResp, (lastModified == null ? -1 : lastModified.longValue()), (size == null ? 0 : size.longValue()));
 			if(ranges != null && mr.acceptRanges()) {
 				httpResp.setHeader("Accept-Ranges", "bytes");
 			}
+			
 			// maybe some more preparations
 			mr.prepare(httpResp);
 			
@@ -227,7 +232,7 @@ public class ServletUtil {
 			FileUtils.closeSafely(out);
 			String className = e.getClass().getSimpleName();
 			if("ClientAbortException".equals(className)) {
-				if(log.isDebug()) {//video generate a lot of these errors
+				if(log.isDebugEnabled()) {//video generate a lot of these errors
 					log.warn("client browser probably abort when serving media resource", e);
 				}
 			} else {
@@ -393,6 +398,8 @@ public class ServletUtil {
 		OutputStream out = null;
 		
 		try {
+			setCacheHeaders(httpResp, mr.getCacheControlDuration());
+			
 			s = new BufferedInputStream(mr.getInputStream());
 			out = httpResp.getOutputStream();
 
@@ -457,7 +464,7 @@ public class ServletUtil {
 		setStringResourceHeaders(response);
 
 		// log the response headers prior to sending the output
-		boolean isDebug = log.isDebug();
+		boolean isDebug = log.isDebugEnabled();
 		
 		if (isDebug) {
 			log.debug("\nResponse headers (some)\ncontent type:" + response.getContentType() + "\ncharacterencoding:"
@@ -465,6 +472,8 @@ public class ServletUtil {
 		}
 
 		try {
+			setNoCacheHeaders(response);
+			
 			long rstart = 0;
 			if (isDebug) {
 				rstart = System.currentTimeMillis();
@@ -509,39 +518,42 @@ public class ServletUtil {
 		}
 	}
 
-	public static void serveStringResource(HttpServletResponse response, StringOutput result) {
+	public static boolean serveStringResource(HttpServletResponse response, StringOutput result) {
 		setStringResourceHeaders(response);
+
 		// log the response headers prior to sending the output
-		boolean isDebug = log.isDebug();
+		boolean isDebug = log.isDebugEnabled();
 		if (isDebug) {
 			log.debug("\nResponse headers (some)\ncontent type:" + response.getContentType() + "\ncharacterencoding:"
 					+ response.getCharacterEncoding() + "\nlocale:" + response.getLocale());
 		}
 
-		try {
-			long rstart = 0;
-			if (isDebug || true) {
-				rstart = System.currentTimeMillis();
-			}
+		try(PrintWriter os = response.getWriter();
+				Reader reader = result.getReader()) {
 			// make a ByteArrayOutputStream to be able to determine the length.
 			// buffer size: assume average length of a char in bytes is max 2
-			int encLen = result.length();
-			Reader reader = result.getReader();
-			//response.setContentLength(encLen); set the number of characters, must be number of bytes
-			
-			PrintWriter os = response.getWriter();
 			IOUtils.copy(reader, os);
-			os.close();
-			
-			if (isDebug) {
-				log.debug("time to serve inline-resource " + result.length() + " chars / " + encLen + " bytes: " 
-					+ (System.currentTimeMillis() - rstart));
-			}
+		} catch (IllegalStateException e) {
+			debugIllegalGetOutputStream(response, result);
+			log.error("Illegal getWriter", e);
+			return false;
 		} catch (IOException e) {
 			if (isDebug) {
 				log.warn("client browser abort when serving inline", e);
 			}
 		}
+		return true;
+	}
+	
+	private static void debugIllegalGetOutputStream(HttpServletResponse response, StringOutput result) {
+		try {
+			for(String header:response.getHeaderNames()) {
+				log.error("Illegal getWriter: " + header + " :: " + response.getHeader(header));
+			}
+		} catch (Exception e) {
+			log.error("Illegal getWriter: ", e);
+		}
+		log.error(result.toString());
 	}
 	
 	public static void setStringResourceHeaders(HttpServletResponse response) {
@@ -549,19 +561,29 @@ public class ServletUtil {
 		// -> see comment below
 		response.setContentType("text/html;charset=utf-8");
 		// never allow to cache pages since they contain a timestamp valid only once
-		// HTTP 1.1
-		response.setHeader("Cache-Control", "private, no-cache, no-store, must-revalidate, proxy-revalidate, s-maxage=0, max-age=0");
-		// HTTP 1.0
-		response.setHeader("Pragma", "no-cache");
-		response.setDateHeader("Expires", 0);
+		setNoCacheHeaders(response);
 	}
 	
 	public static void setJSONResourceHeaders(HttpServletResponse response) {
 		// we ignore the accept-charset from the request and always write in utf-8
 		// -> see comment below
-		//response.setCharacterEncoding("UTF-8");
 		response.setContentType("application/json;charset=utf-8");
 		// never allow to cache pages since they contain a timestamp valid only once
+		setNoCacheHeaders(response);
+	}
+	
+	public static void setCacheHeaders(HttpServletResponse response, long duration) {
+		if(duration == 0) {
+			setNoCacheHeaders(response);
+		} else {
+			long now = System.currentTimeMillis();
+			//res being the HttpServletResponse of the request
+			response.addHeader("Cache-Control", "max-age=" + duration);
+			response.setDateHeader("Expires", now + duration);
+		}
+	}
+	
+	public static void setNoCacheHeaders(HttpServletResponse response) {
 		// HTTP 1.1
 		response.setHeader("Cache-Control", "private, no-cache, no-store, must-revalidate, proxy-revalidate, s-maxage=0, max-age=0");
 		// HTTP 1.0
@@ -644,7 +666,6 @@ public class ServletUtil {
         int pos = -1;
         boolean inQuotes = false;
         for (int i = 0; i < header.length() - 1; ++i) { //-1 because we need room for the = at the end
-            //TODO: a more efficient matching algorithm
             char c = header.charAt(i);
             if (inQuotes) {
                 if (c == '"') {

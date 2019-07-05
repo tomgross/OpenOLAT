@@ -19,16 +19,18 @@
  */
 package org.olat.modules.portfolio.ui.media;
 
-import java.io.File;
-
-import org.olat.core.commons.modules.bc.FolderConfig;
 import org.olat.core.gui.UserRequest;
-import org.olat.core.gui.components.Component;
-import org.olat.core.gui.components.image.ImageComponent;
-import org.olat.core.gui.control.Event;
 import org.olat.core.gui.control.WindowControl;
-import org.olat.core.gui.control.controller.BasicController;
+import org.olat.core.util.Util;
+import org.olat.modules.ceditor.DataStorage;
+import org.olat.modules.ceditor.PageElementRenderingHints;
+import org.olat.modules.ceditor.PageRunElement;
+import org.olat.modules.ceditor.model.StoredData;
+import org.olat.modules.ceditor.ui.ImageRunController;
+import org.olat.modules.ceditor.ui.PageEditorController;
 import org.olat.modules.portfolio.Media;
+import org.olat.modules.portfolio.model.MediaPart;
+import org.olat.modules.portfolio.ui.MediaMetadataController;
 
 /**
  * 
@@ -36,27 +38,22 @@ import org.olat.modules.portfolio.Media;
  * @author srosse, stephane.rosse@frentix.com, http://www.frentix.com
  *
  */
-public class ImageMediaController extends BasicController {
+public class ImageMediaController extends ImageRunController implements PageRunElement {
 	
-	public ImageMediaController(UserRequest ureq, WindowControl wControl, Media media) {
-		super(ureq, wControl);
-		
-		File mediaDir = new File(FolderConfig.getCanonicalRoot(), media.getStoragePath());
-		File mediaFile = new File(mediaDir, media.getRootFilename());
-		ImageComponent imageCmp = new ImageComponent(ureq.getUserSession(), "image");
-		imageCmp.setMedia(mediaFile);
-		
-		putInitialPanel(imageCmp);
+	public ImageMediaController(UserRequest ureq, WindowControl wControl, DataStorage dataStorage, MediaPart media, PageElementRenderingHints hints) {
+		super(ureq, wControl, dataStorage, media, hints);
 	}
 
-
-	@Override
-	protected void event(UserRequest ureq, Component source, Event event) {
-		//
+	public ImageMediaController(UserRequest ureq, WindowControl wControl, DataStorage dataStorage, Media media, PageElementRenderingHints hints) {
+		super(ureq, wControl, dataStorage, media, hints);
+		setTranslator(Util.createPackageTranslator(PageEditorController.class, ureq.getLocale(), getTranslator()));
 	}
 
 	@Override
-	protected void doDispose() {
-		//
+	protected void initMetadata(UserRequest ureq, StoredData storedData) {
+		Media media = (Media)storedData;
+		MediaMetadataController metaCtrl = new MediaMetadataController(ureq, getWindowControl(), media);
+		listenTo(metaCtrl);
+		mainVC.put("meta", metaCtrl.getInitialComponent());
 	}
 }

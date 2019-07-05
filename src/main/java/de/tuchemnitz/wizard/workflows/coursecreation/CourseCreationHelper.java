@@ -36,24 +36,24 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 
-import org.olat.basesecurity.BaseSecurityManager;
+import org.apache.logging.log4j.Logger;
 import org.olat.collaboration.CollaborationTools;
 import org.olat.collaboration.CollaborationToolsFactory;
 import org.olat.core.CoreSpringFactory;
 import org.olat.core.gui.UserRequest;
 import org.olat.core.gui.translator.Translator;
 import org.olat.core.id.UserConstants;
-import org.olat.core.logging.OLog;
 import org.olat.core.logging.Tracing;
+import org.olat.core.util.StringHelper;
 import org.olat.core.util.Util;
 import org.olat.course.CourseFactory;
 import org.olat.course.ICourse;
 import org.olat.course.condition.Condition;
+import org.olat.course.editor.CourseAccessAndProperties;
 import org.olat.course.editor.CourseEditorHelper;
 import org.olat.course.editor.PublishProcess;
 import org.olat.course.editor.PublishSetInformations;
 import org.olat.course.editor.StatusDescription;
-import org.olat.course.nodes.AbstractAccessableCourseNode;
 import org.olat.course.nodes.BCCourseNode;
 import org.olat.course.nodes.COCourseNode;
 import org.olat.course.nodes.CourseNode;
@@ -69,6 +69,9 @@ import org.olat.repository.CatalogEntry;
 import org.olat.repository.RepositoryEntry;
 import org.olat.repository.RepositoryManager;
 import org.olat.repository.manager.CatalogManager;
+import org.olat.resource.accesscontrol.ACService;
+import org.olat.resource.accesscontrol.Offer;
+import org.olat.resource.accesscontrol.OfferAccess;
 
 import de.tuchemnitz.wizard.helper.course.CourseExtensionHelper;
 import de.tuchemnitz.wizard.helper.course.HTMLDocumentHelper;
@@ -88,7 +91,7 @@ import de.tuchemnitz.wizard.workflows.coursecreation.model.CourseCreationConfigu
  */
 public class CourseCreationHelper {
 	
-	private static final OLog log = Tracing.createLoggerFor(CourseCreationHelper.class);
+	private static final Logger log = Tracing.createLoggerFor(CourseCreationHelper.class);
 
 	private CourseCreationConfiguration courseConfig;
 	private final Translator translator;
@@ -172,10 +175,13 @@ public class CourseCreationHelper {
 					.translate("cce.contactform.descr"));
 			if (contactNode instanceof COCourseNode) {
 
-				final List<String> emails = new ArrayList<String>();
+				final List<String> emails = new ArrayList<>();
 				String subject = translator.translate("cce.contactform.subject") + " " + courseConfig.getCourseTitle();
 
-				emails.add(ureq.getIdentity().getUser().getProperty(UserConstants.EMAIL, ureq.getLocale()));
+				String email = ureq.getIdentity().getUser().getProperty(UserConstants.EMAIL, ureq.getLocale());
+				if (StringHelper.containsNonWhitespace(email)) {
+					emails.add(email);
+				}
 
 				COCourseNode cocn = (COCourseNode) contactNode;
 
@@ -195,9 +201,8 @@ public class CourseCreationHelper {
 			// get default context for learning groups
 			
 			// create n learning groups with m allowed members
-			String comma = "";
-			String tmpGroupList = "";
-			String groupNamesList = "";
+	
+			List<Long> groupIdsList = new ArrayList<>();
 			for (int i = 0; i < courseConfig.getGroupCount(); i++) {
 				// create group
 				String name = groupBaseName + " " + (i + 1);
@@ -208,62 +213,49 @@ public class CourseCreationHelper {
 				CollaborationTools ct = CollaborationToolsFactory.getInstance().getOrCreateCollaborationTools(learningGroup);
 				ct.setToolEnabled(CollaborationTools.TOOL_CONTACT, true);
 				// append to current learning group list
-				groupNamesList = tmpGroupList + comma + learningGroup.getName();
-				enCourseNode.getModuleConfiguration().set(ENCourseNode.CONFIG_GROUPNAME, groupNamesList);
-				if (i == 0) {
-					comma = ",";
-				}
-				tmpGroupList = (String) enCourseNode.getModuleConfiguration().get(ENCourseNode.CONFIG_GROUPNAME);
+				groupIdsList.add(learningGroup.getKey());
 			}
+			enCourseNode.getModuleConfiguration().set(ENCourseNode.CONFIG_GROUP_IDS, groupIdsList);
 
 			// set signout property
 			enCourseNode.getModuleConfiguration().set(ENCourseNode.CONF_CANCEL_ENROLL_ENABLED, courseConfig.getEnableSignout());
 
 			// access limits on chosen course elements
 			if (courseConfig.getEnableAccessLimit()) {
-				if (courseConfig.isEnableAclContactForm()) {
-					if (contactNode instanceof COCourseNode) {
-						Condition c = ((COCourseNode) contactNode).getPreConditionVisibility();
-						c.setEasyModeGroupAccess(groupNamesList);
-						((COCourseNode) contactNode).setNoAccessExplanation(translator.translate("noaccessexplain"));
-						// calculate expression from easy mode form
-						String condString = c.getConditionFromEasyModeConfiguration();
-						c.setConditionExpression(condString);
-						c.setExpertMode(false);
-					}
+				if (courseConfig.isEnableAclContactForm() && contactNode instanceof COCourseNode) {
+					Condition c = ((COCourseNode) contactNode).getPreConditionVisibility();
+					c.setEasyModeGroupAccessIdList(groupIdsList);
+					((COCourseNode) contactNode).setNoAccessExplanation(translator.translate("noaccessexplain"));
+					// calculate expression from easy mode form
+					String condString = c.getConditionFromEasyModeConfiguration();
+					c.setConditionExpression(condString);
 				}
-				if (courseConfig.isEnableAclSinglePage()) {
-					if (singlePageNode instanceof SPCourseNode) {
-						Condition c = ((SPCourseNode) singlePageNode).getPreConditionVisibility();
-						c.setEasyModeGroupAccess(groupNamesList);
-						((SPCourseNode) singlePageNode).setNoAccessExplanation(translator.translate("noaccessexplain"));
-						// calculate expression from easy mode form
-						String condString = c.getConditionFromEasyModeConfiguration();
-						c.setConditionExpression(condString);
-						c.setExpertMode(false);
-					}
+				if (courseConfig.isEnableAclSinglePage() && singlePageNode instanceof SPCourseNode) {
+					Condition c = ((SPCourseNode) singlePageNode).getPreConditionVisibility();
+					c.setEasyModeGroupAccessIdList(groupIdsList);
+					((SPCourseNode) singlePageNode).setNoAccessExplanation(translator.translate("noaccessexplain"));
+					// calculate expression from easy mode form
+					String condString = c.getConditionFromEasyModeConfiguration();
+					c.setConditionExpression(condString);
+					c.setExpertMode(false);
 				}
-				if (courseConfig.isEnableAclForum()) {
-					if (forumNode instanceof FOCourseNode) {
-						Condition c = ((FOCourseNode) forumNode).getPreConditionVisibility();
-						c.setEasyModeGroupAccess(groupNamesList);
-						((FOCourseNode) forumNode).setNoAccessExplanation(translator.translate("noaccessexplain"));
-						// calculate expression from easy mode form
-						String condString = c.getConditionFromEasyModeConfiguration();
-						c.setConditionExpression(condString);
-						c.setExpertMode(false);
-					}
+				if (courseConfig.isEnableAclForum() && forumNode instanceof FOCourseNode) {
+					Condition c = ((FOCourseNode) forumNode).getPreConditionVisibility();
+					c.setEasyModeGroupAccessIdList(groupIdsList);
+					((FOCourseNode) forumNode).setNoAccessExplanation(translator.translate("noaccessexplain"));
+					// calculate expression from easy mode form
+					String condString = c.getConditionFromEasyModeConfiguration();
+					c.setConditionExpression(condString);
+					c.setExpertMode(false);
 				}
-				if (courseConfig.isEnableAclDownloadFolder()) {
-					if (downloadFolderNode instanceof BCCourseNode) {
-						Condition c = ((BCCourseNode) downloadFolderNode).getPreConditionVisibility();
-						c.setEasyModeGroupAccess(groupNamesList);
-						((BCCourseNode) downloadFolderNode).setNoAccessExplanation(translator.translate("noaccessexplain"));
-						// calculate expression from easy mode form
-						String condString = c.getConditionFromEasyModeConfiguration();
-						c.setConditionExpression(condString);
-						c.setExpertMode(false);
-					}
+				if (courseConfig.isEnableAclDownloadFolder() && downloadFolderNode instanceof BCCourseNode) {
+					Condition c = ((BCCourseNode) downloadFolderNode).getPreConditionVisibility();
+					c.setEasyModeGroupAccessIdList(groupIdsList);
+					((BCCourseNode) downloadFolderNode).setNoAccessExplanation(translator.translate("noaccessexplain"));
+					// calculate expression from easy mode form
+					String condString = c.getConditionFromEasyModeConfiguration();
+					c.setConditionExpression(condString);
+					c.setExpertMode(false);
 				}
 			}
 		}
@@ -276,33 +268,36 @@ public class CourseCreationHelper {
 		// 3.1. setup rights
 		// --------------------------
 		if (courseConfig.getPublish()) {
+			ACService acService = CoreSpringFactory.getImpl(ACService.class);
+			RepositoryManager repositoryManager = CoreSpringFactory.getImpl(RepositoryManager.class);
 			
-			int access = RepositoryEntry.ACC_OWNERS;
-			if (courseConfig.getAclType().equals(CourseCreationConfiguration.ACL_GUEST)) {
-				// set "BARG" as rule
-				access = RepositoryEntry.ACC_USERS_GUESTS;
-			} else if (courseConfig.getAclType().equals(CourseCreationConfiguration.ACL_OLAT)) {
-				// set "BAR" as rule
-				access = RepositoryEntry.ACC_USERS;
-			} else if (courseConfig.getAclType().equals(CourseCreationConfiguration.ACL_UNI)) {
-				// set "BAR" rule + expert rule on university
-				// hasAttribute("institution","[Hochschule]")
-				access = RepositoryEntry.ACC_USERS;
-				final CourseNode cnRoot = course.getEditorTreeModel().getCourseEditorNodeById(course.getEditorTreeModel().getRootNode().getIdent())
-				.getCourseNode();
-				String shibInstitution = ureq.getIdentity().getUser().getProperty(UserConstants.INSTITUTIONALNAME, ureq.getLocale());
-				if (shibInstitution == null) {
-					shibInstitution = ureq.getUserSession().getSessionInfo().getAuthProvider();
+			CourseAccessAndProperties accessAndProps = courseConfig.getAccessAndProperties();	
+			
+			addedEntry = repositoryManager.setAccess(accessAndProps.getRepositoryEntry(),
+					 accessAndProps.isAllUsers(), accessAndProps.isGuests(), accessAndProps.isBookable(),
+					 accessAndProps.getSetting(), accessAndProps.getOrganisations());
+			
+			addedEntry = repositoryManager.setAccessAndProperties(addedEntry, accessAndProps.getStatus(),
+					accessAndProps.isAllUsers(), accessAndProps.isGuests(),
+					accessAndProps.isCanCopy(), accessAndProps.isCanReference(), accessAndProps.isCanDownload());
+			
+			if(accessAndProps.isBookable()) {
+				Boolean confirmationEmail = accessAndProps.getConfirmationEmail();
+				boolean sendConfirmationEmail = confirmationEmail != null && confirmationEmail.booleanValue();
+	
+				List<OfferAccess> offerAccess = accessAndProps.getOfferAccess();
+				for (OfferAccess newLink : offerAccess) {
+					if(sendConfirmationEmail) {
+						Offer offer = newLink.getOffer();
+						offer.setConfirmationEmail(sendConfirmationEmail);
+						if(offer.getKey() != null) {
+							acService.save(offer);
+						}
+					}
+					
+					acService.saveOfferAccess(newLink);
 				}
-				cnRoot.setNoAccessExplanation(translator.translate("noaccessroot", new String[] {shibInstitution}));
-				if (cnRoot instanceof AbstractAccessableCourseNode) {
-					((AbstractAccessableCourseNode) cnRoot).setPreConditionAccess(new Condition("hasAttribute(\"institution\",\"" + shibInstitution
-							+ "\")"));
-				}
-			} else {
-				log.error("No valid ACL Rule: " + courseConfig.getAclType());
 			}
-			addedEntry = RepositoryManager.getInstance().setAccess(addedEntry, access, false);
 		}
 
 		course = CourseFactory.openCourseEditSession(course.getResourceableId());
@@ -323,7 +318,7 @@ public class CourseCreationHelper {
 		final PublishProcess pp = PublishProcess.getInstance(course, cetm, ureq.getLocale());
 		final StatusDescription[] sds;
 		// create publish node list
-		List<String> nodeIds = new ArrayList<String>();
+		List<String> nodeIds = new ArrayList<>();
 		nodeIds.add(cetm.getRootNode().getIdent());
 		for (int i = 0; i < cetm.getRootNode().getChildCount(); i++) {
 			nodeIds.add(cetm.getRootNode().getChildAt(i).getIdent());
@@ -347,7 +342,6 @@ public class CourseCreationHelper {
 			newEntry.setName(addedEntry.getDisplayname());
 			newEntry.setDescription(addedEntry.getDescription());
 			newEntry.setType(CatalogEntry.TYPE_LEAF);
-			newEntry.setOwnerGroup(BaseSecurityManager.getInstance().createAndPersistSecurityGroup());
 			// save entry
 			cm.addCatalogEntry(getConfiguration().getSelectedCatalogEntry(), newEntry);
 		}

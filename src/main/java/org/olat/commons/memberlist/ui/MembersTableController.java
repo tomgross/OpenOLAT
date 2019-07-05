@@ -29,6 +29,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import org.olat.NewControllerFactory;
 import org.olat.basesecurity.BaseSecurity;
+import org.olat.commons.memberlist.model.CurriculumMemberInfos;
 import org.olat.core.commons.persistence.SortKey;
 import org.olat.core.gui.UserRequest;
 import org.olat.core.gui.components.form.flexible.FormItem;
@@ -58,13 +59,14 @@ import org.olat.core.id.context.BusinessControl;
 import org.olat.core.id.context.BusinessControlFactory;
 import org.olat.core.util.mail.ContactList;
 import org.olat.core.util.mail.ContactMessage;
-import org.olat.course.nodes.members.MembersCourseNodeRunController;
 import org.olat.course.run.environment.CourseEnvironment;
 import org.olat.group.BusinessGroup;
 import org.olat.group.BusinessGroupMembership;
+import org.olat.group.model.MemberView;
+import org.olat.group.ui.main.AbstractMemberListController;
 import org.olat.group.ui.main.MemberListTableModel;
 import org.olat.group.ui.main.MemberListTableModel.Cols;
-import org.olat.group.ui.main.MemberView;
+import org.olat.group.ui.main.MemberRow;
 import org.olat.instantMessaging.InstantMessagingModule;
 import org.olat.instantMessaging.InstantMessagingService;
 import org.olat.instantMessaging.OpenInstantMessageEvent;
@@ -80,9 +82,6 @@ import org.springframework.beans.factory.annotation.Autowired;
  * @author fkiefer, fabian.kiefer@frentix.com, www.frentix.com
  */
 public class MembersTableController extends FormBasicController {
-	
-	public static final String USER_PROPS_ID = MembersCourseNodeRunController.class.getName();
-	public static final int USER_PROPS_OFFSET = 500;
 
 	protected FlexiTableElement membersTable;
 	protected MemberListTableModel membersModel;
@@ -96,9 +95,10 @@ public class MembersTableController extends FormBasicController {
 	private final boolean chatEnabled, canEmail, deduplicateList, editable, userLastTimeVisible;
 	
 	private final List<UserPropertyHandler> userPropertyHandlers;
-	private final List<MemberView> membersList;
+	private final List<MemberRow> membersList;
 	private final RepositoryEntry repoEntry; 
-	private Set<MemberView> duplicateCatcher;
+	private Set<MemberRow> duplicateCatcher;
+	private final Map<Long,CurriculumMemberInfos> curriculumInfos;
 
 	@Autowired
 	private UserManager userManager;
@@ -113,8 +113,10 @@ public class MembersTableController extends FormBasicController {
 	private CourseEnvironment courseEnv;
 	
 	private int pageSize = 20;
+	private boolean curriculum;
 	
-	public MembersTableController(UserRequest ureq, WindowControl wControl, List<Identity> members, Set<MemberView> duplicateCatcher, Map<Long,Date> recentLaunches, Map<Long,Date> initialLaunches,
+	public MembersTableController(UserRequest ureq, WindowControl wControl, List<Identity> members, Set<MemberRow> duplicateCatcher,
+			Map<Long,Date> recentLaunches, Map<Long,Date> initialLaunches, Map<Long,CurriculumMemberInfos> curriculumInfos,
 			List<UserPropertyHandler> userPropertyHandlers, Map<Long,BusinessGroupMembership> groupmemberships, RepositoryEntry repoEntry, BusinessGroup businessGroup, 
 			CourseEnvironment courseEnv, boolean deduplicateList, Translator translator, boolean editable, boolean canEmail, boolean userLastTimeVisible) {
 		super(ureq, wControl, "table");
@@ -132,8 +134,10 @@ public class MembersTableController extends FormBasicController {
 		
 		this.businessGroup = businessGroup;
 		this.courseEnv = courseEnv;
+		this.curriculumInfos = curriculumInfos;
 		
-		this.membersList = getMembersFromIdentity(ureq, members, groupmemberships, recentLaunches, initialLaunches);
+		membersList = getMembersFromIdentity(members, groupmemberships, recentLaunches, initialLaunches);
+		curriculum = curriculumInfos != null && !curriculumInfos.isEmpty();
 	
 		initForm(ureq);
 	}
@@ -146,6 +150,7 @@ public class MembersTableController extends FormBasicController {
 		//TODO: Do not give businessGroupColumnHeaders here because the export functionality of the table is not enabled. Be aware that the columnHeaders cannot be null if export is enabled
 		membersModel = new MemberListTableModel(columnsModel, imModule.isOnlineStatusEnabled(),null);
 		membersModel.setObjects(membersList);
+		membersModel.setCurriculumInfos(curriculumInfos);
 		membersTable = uifactory.addTableElement(getWindowControl(), "table", membersModel, pageSize, false, getTranslator(), formLayout);
 		membersTable.setEmtpyTableMessageKey("nomembers");
 		membersTable.setAndLoadPersistedPreferences(ureq, this.getClass().getSimpleName());
@@ -166,17 +171,17 @@ public class MembersTableController extends FormBasicController {
 				SelectionEvent se = (SelectionEvent)event;
 				String cmd = se.getCommand();
 				if ("vcard".equals(cmd)) {
-					MemberView row = membersModel.getObject(se.getIndex());
+					MemberRow row = membersModel.getObject(se.getIndex());
 					doOpenHomePage(row, ureq);
 				} else if ("email".equals(cmd)) {
-					MemberView row = membersModel.getObject(se.getIndex());
+					MemberRow row = membersModel.getObject(se.getIndex());
 					doSendEmailToMember(row, ureq);
 				}
 			}	
 		} else if (source instanceof FormLink) {
 			FormLink link = (FormLink)source;
 			String cmd = link.getCmd();
-			MemberView row = (MemberView)link.getUserObject();
+			MemberRow row = (MemberRow)link.getUserObject();
 			if ("im".equals(cmd)) {
 				doOpenChat(row, ureq);
 			} 
@@ -212,14 +217,14 @@ public class MembersTableController extends FormBasicController {
 		//
 	}
 	
-	private List<MemberView> getMembersFromIdentity(UserRequest ureq, List<Identity> identities, 
-			Map<Long,BusinessGroupMembership> groupmemberships,	Map<Long,Date> recentLaunches, Map<Long,Date> initialLaunches) {
+	private List<MemberRow> getMembersFromIdentity(List<Identity> identities, Map<Long,BusinessGroupMembership> groupmemberships,
+			Map<Long,Date> recentLaunches, Map<Long,Date> initialLaunches) {
 		if (!deduplicateList) {
 			duplicateCatcher = new HashSet<>();
 		}
-		List<MemberView> memberList = new ArrayList<>();		
+		List<MemberRow> memberList = new ArrayList<>();		
 		for (Identity identity : identities) {
-			MemberView member = new MemberView(identity, userPropertyHandlers, getLocale());
+			MemberRow member = new MemberRow(new MemberView(identity, userPropertyHandlers, getLocale()));
 			if (userLastTimeVisible) {
 				if (repoEntry == null) {
 					BusinessGroupMembership groupmembership = groupmemberships.get(identity.getKey());
@@ -234,7 +239,7 @@ public class MembersTableController extends FormBasicController {
 			}
 			if (!duplicateCatcher.contains(member)) {
 				memberList.add(member);
-				if (!identity.equals(ureq.getIdentity())){
+				if (!identity.equals(getIdentity())){
 					forgeChatLink(member);
 				}
 			}
@@ -243,7 +248,7 @@ public class MembersTableController extends FormBasicController {
 		return memberList;
 	}
 	
-	protected void forgeChatLink(MemberView row) {
+	protected void forgeChatLink(MemberRow row) {
 		FormLink chatLink = uifactory.addFormLink("tools_" + counter.incrementAndGet(), "im", "", null, null, Link.NONTRANSLATED);
 		chatLink.setIconLeftCSS("o_icon o_icon_status_unavailable");
 		chatLink.setUserObject(row);
@@ -251,31 +256,31 @@ public class MembersTableController extends FormBasicController {
 	}
 	
 	private SortKey initColumns(FlexiTableColumnModel columnsModel) {
+		int colPos = AbstractMemberListController.USER_PROPS_OFFSET;
 		SortKey defaultSortKey = null;
-		String editAction = "vcard";
-		
+		String rowAction = "vcard";
+				
 		if (chatEnabled && editable) {
 			DefaultFlexiColumnModel chatCol = new DefaultFlexiColumnModel(Cols.online.i18n(), Cols.online.ordinal());
 			chatCol.setExportable(false);
 			columnsModel.addFlexiColumnModel(chatCol);
 		}
 			
-		int colPos = USER_PROPS_OFFSET;
 		for (UserPropertyHandler userPropertyHandler : userPropertyHandlers) {
 			if (userPropertyHandler == null) continue;
 
 			String propName = userPropertyHandler.getName();
-			boolean visible = userManager.isMandatoryUserProperty(USER_PROPS_ID , userPropertyHandler);
-			String myEditAction = editAction;
+			boolean visible = userManager.isMandatoryUserProperty(MembersDisplayRunController.USER_PROPS_LIST_ID , userPropertyHandler);
+			String emailRowAction = rowAction;
 			FlexiColumnModel col;
 			if(UserConstants.FIRSTNAME.equals(propName) || UserConstants.LASTNAME.equals(propName) || UserConstants.EMAIL.equals(propName)) {
-				if (UserConstants.EMAIL.equals(propName)) {
-					// LMSUZH-566: Do not show email addresses even if email functionality is enabled in course element
-					continue;
+				// when email is enabled, the action will trigger email workflow
+				if (UserConstants.EMAIL.equals(propName) && canEmail) {
+					emailRowAction = "email";
 				}
 				col = new DefaultFlexiColumnModel(userPropertyHandler.i18nColumnDescriptorLabelKey(),
-						colPos, myEditAction, true, propName,
-						new StaticFlexiCellRenderer(myEditAction, new TextFlexiCellRenderer()));
+						colPos, emailRowAction, true, propName,
+						new StaticFlexiCellRenderer(emailRowAction, new TextFlexiCellRenderer()));
 			} else {
 				col = new DefaultFlexiColumnModel(visible, userPropertyHandler.i18nColumnDescriptorLabelKey(), colPos, true, propName);
 			}
@@ -286,6 +291,12 @@ public class MembersTableController extends FormBasicController {
 				defaultSortKey = new SortKey(propName, true);
 			}
 		}
+		
+		if(curriculum) {
+			columnsModel.addFlexiColumnModel(new DefaultFlexiColumnModel(false, Cols.curriculumDisplayName));
+			columnsModel.addFlexiColumnModel(new DefaultFlexiColumnModel(false, Cols.rootCurriculumElementIdentifier));
+		}
+		
 		if (userLastTimeVisible) {
 			columnsModel.addFlexiColumnModel(new DefaultFlexiColumnModel(Cols.firstTime.i18n(), Cols.firstTime.ordinal(), true, Cols.firstTime.name()));
 			columnsModel.addFlexiColumnModel(new DefaultFlexiColumnModel(Cols.lastTime.i18n(), Cols.lastTime.ordinal(), true, Cols.lastTime.name()));
@@ -293,7 +304,7 @@ public class MembersTableController extends FormBasicController {
 		return defaultSortKey;
 	}
 	
-	private void doSendEmailToMember(MemberView member, UserRequest ureq) {
+	private void doSendEmailToMember(MemberRow member, UserRequest ureq) {
 		if (!editable) return;
 		ContactList memberList;
 		Identity identity = securityManager.loadIdentityByKey(member.getIdentityKey());
@@ -316,7 +327,7 @@ public class MembersTableController extends FormBasicController {
 			cmsg.addEmailTo(contactList);
 			// preset body template from i18n
 			cmsg.setBodyText(createBodyTemplate());
-			emailController = new ContactFormController(ureq, getWindowControl(), true, false, false, cmsg);
+			emailController = new ContactFormController(ureq, getWindowControl(), true, false, false, cmsg, null);
 			listenTo(emailController);
 			
 			String title = translate("members.email.title");
@@ -345,14 +356,14 @@ public class MembersTableController extends FormBasicController {
 		}
 	}
 	
-	private void doOpenHomePage(MemberView member, UserRequest ureq) {
+	private void doOpenHomePage(MemberRow member, UserRequest ureq) {
 		String url = "[HomePage:" + member.getIdentityKey() + "]";
 		BusinessControl bc = BusinessControlFactory.getInstance().createFromString(url);
 		WindowControl bwControl = BusinessControlFactory.getInstance().createBusinessWindowControl(bc, getWindowControl());
 		NewControllerFactory.getInstance().launch(ureq, bwControl);
 	}
 	
-	private void doOpenChat(MemberView member, UserRequest ureq) {
+	private void doOpenChat(MemberRow member, UserRequest ureq) {
 		Buddy buddy = imService.getBuddyById(member.getIdentityKey());
 		OpenInstantMessageEvent e = new OpenInstantMessageEvent(ureq, buddy);
 		ureq.getUserSession().getSingleUserEventCenter().fireEventToListenersOf(e, InstantMessagingService.TOWER_EVENT_ORES);

@@ -37,17 +37,14 @@ import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
-import javax.persistence.EntityManager;
-
+import org.apache.logging.log4j.Logger;
 import org.junit.Assert;
 import org.junit.Test;
 import org.olat.basesecurity.model.GroupImpl;
 import org.olat.core.logging.DBRuntimeException;
-import org.olat.core.logging.OLog;
 import org.olat.core.logging.Tracing;
 import org.olat.properties.Property;
 import org.olat.properties.PropertyManager;
-import org.olat.repository.RepositoryManager;
 import org.olat.test.OlatTestCase;
 import org.springframework.beans.factory.annotation.Autowired;
 
@@ -60,12 +57,10 @@ import org.springframework.beans.factory.annotation.Autowired;
  */
 public class DBTest extends OlatTestCase {
 	
-	private static final OLog log = Tracing.createLoggerFor(DBTest.class);
+	private static final Logger log = Tracing.createLoggerFor(DBTest.class);
 	
 	@Autowired
 	private DBImpl dbInstance;
-	@Autowired
- 	private RepositoryManager repositoryManager;
 		
 	/**
 	 * testCloseOfUninitializedSession
@@ -77,52 +72,6 @@ public class DBTest extends OlatTestCase {
 		// and close it.
 		dbInstance.closeSession();
 	}
-	
-	@Test
-	public void testMergeEntityManager_transactional() {
-		CountDownLatch latch = new CountDownLatch(1);
-		TestThread test = new TestThread(repositoryManager, latch);
-		test.start();
- 
-		try {
-			latch.await(20, TimeUnit.SECONDS);
-		} catch (InterruptedException e) {
-			fail("Takes too long (more than 20sec)");
-		}
-		
-		Assert.assertFalse(test.hasError());
- 	}
-	
- 	private class TestThread extends Thread {
- 		private boolean error;
- 		private final CountDownLatch latch;
- 		private final RepositoryManager repoManager;
- 		
- 		public TestThread(RepositoryManager repositoryManager, CountDownLatch latch) {
- 			this.latch = latch;
- 			this.repoManager = repositoryManager;
- 		}
- 		
- 		public boolean hasError() {
- 			return error;
- 		}
-		
- 		public void run() {
- 			try {
-				EntityManager em1 = dbInstance.getCurrentEntityManager();
-				Assert.assertNull(em1);
-				repoManager.lookupRepositoryEntry(27l, false);
-				EntityManager em2 = dbInstance.getCurrentEntityManager();
-				//Transactional annotation must clean-up the entity manager
-				Assert.assertNull(em2);
-			} catch (Exception e) {
-				error = true;
-				log.error("", e);
-			} finally {
-				latch.countDown();
-			}
- 		}
- 	}
 	
 	/**
 	 * testErrorHandling
@@ -303,13 +252,13 @@ public class DBTest extends OlatTestCase {
 		// forget session cache etc.
 		dbInstance.closeSession();
 		// 2. try to find object
-		Object testObject = dbInstance.findObject(Property.class, propertyKey);
+		Object testObject = dbInstance.getCurrentEntityManager().find(Property.class, propertyKey);
 		assertNotNull(testObject);
 		// 3. Delete object
 		PropertyManager.getInstance().deleteProperty( (Property)testObject );
 		dbInstance.closeSession();
 		// 4. try again to find object, now no-one should be found, must return null
-		testObject = DBFactory.getInstance().findObject(Property.class, propertyKey);
+		testObject = DBFactory.getInstance().getCurrentEntityManager().find(Property.class, propertyKey);
 		assertNull(testObject);
 	}
 	

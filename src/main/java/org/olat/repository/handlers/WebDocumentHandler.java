@@ -31,6 +31,7 @@ import java.nio.file.Files;
 import java.nio.file.StandardCopyOption;
 import java.util.Locale;
 
+import org.apache.logging.log4j.Logger;
 import org.olat.core.CoreSpringFactory;
 import org.olat.core.commons.persistence.DBFactory;
 import org.olat.core.gui.UserRequest;
@@ -42,13 +43,13 @@ import org.olat.core.gui.control.generic.wizard.StepsMainRunController;
 import org.olat.core.gui.media.MediaResource;
 import org.olat.core.id.Identity;
 import org.olat.core.id.OLATResourceable;
+import org.olat.core.id.Organisation;
+import org.olat.core.id.Roles;
 import org.olat.core.logging.AssertException;
-import org.olat.core.logging.OLog;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.FileUtils;
 import org.olat.core.util.StringHelper;
 import org.olat.core.util.coordinate.LockResult;
-import org.olat.course.assessment.AssessmentMode;
 import org.olat.course.assessment.manager.UserCourseInformationsManager;
 import org.olat.fileresource.FileResourceManager;
 import org.olat.fileresource.types.AnimationFileResource;
@@ -62,10 +63,10 @@ import org.olat.fileresource.types.ResourceEvaluation;
 import org.olat.fileresource.types.SoundFileResource;
 import org.olat.fileresource.types.XlsFileResource;
 import org.olat.repository.RepositoryEntry;
+import org.olat.repository.RepositoryEntryStatusEnum;
 import org.olat.repository.RepositoryService;
 import org.olat.repository.model.RepositoryEntrySecurity;
 import org.olat.repository.ui.RepositoryEntryRuntimeController;
-import org.olat.repository.ui.RepositoryEntryRuntimeController.RuntimeControllerCreator;
 import org.olat.repository.ui.WebDocumentRunController;
 import org.olat.resource.OLATResource;
 import org.olat.resource.OLATResourceManager;
@@ -76,38 +77,50 @@ import org.olat.resource.OLATResourceManager;
  *
  * @author Mike Stock
  * 
- * Comment:  
- * 
  */
 public class WebDocumentHandler extends FileHandler {
-	
-	private static final OLog log = Tracing.createLoggerFor(WebDocumentHandler.class);
-	private final String supportedType;
 
+	private static final Logger log = Tracing.createLoggerFor(WebDocumentHandler.class);
+	private final String supportedType;
+	private final WebDocumentCreateDelegate createDelegate;
+	private final WebDocumentEditDelegate editDelegate;
+	
 	public WebDocumentHandler(String type) {
-		supportedType = type;
+		this(type, new NullCreateDelegate(), new NullEditDelegate());
+	}
+	
+	public WebDocumentHandler(String type, WebDocumentCreateDelegate createDelegate, WebDocumentEditDelegate editDelegate) {
+		this.supportedType = type;
+		this.createDelegate = createDelegate;
+		this.editDelegate = editDelegate;
 	}
 	
 	@Override
-	public boolean isCreate() {
-		return false;
+	public boolean supportCreate(Identity identity, Roles roles) {
+		return createDelegate.supportCreate(identity, roles);
 	}
 
 	@Override
 	public String getCreateLabelI18nKey() {
-		return null;
+		return createDelegate.getCreateLabelI18nKey();
 	}
 	
 	@Override
-	public RepositoryEntry createResource(Identity initialAuthor, String displayname, String description, Object createObject, Locale locale) {
-		return null;
+	public RepositoryEntry createResource(Identity initialAuthor, String displayname, String description,
+			Object createObject, Organisation organisation, Locale locale) {
+		return createDelegate.createResource(initialAuthor, displayname, description, createObject, organisation, locale);
 	}
 	
 	@Override
 	public boolean isPostCreateWizardAvailable() {
 		return false;
 	}
-	
+
+	@Override
+	public boolean supportImport() {
+		return true;
+	}
+
 	@Override
 	public ResourceEvaluation acceptImport(File file, String filename) {
 		if(!StringHelper.containsNonWhitespace(filename)) {
@@ -139,8 +152,18 @@ public class WebDocumentHandler extends FileHandler {
 	}
 	
 	@Override
+	public boolean supportImportUrl() {
+		return false;
+	}
+
+	@Override
+	public ResourceEvaluation acceptImport(String url) {
+		return ResourceEvaluation.notValid();
+	}
+	
+	@Override
 	public RepositoryEntry importResource(Identity initialAuthor, String initialAuthorAlt, String displayname, String description,
-			boolean withReferences, Locale locale, File file, String filename) {
+			boolean withReferences, Organisation organisation, Locale locale, File file, String filename) {
 		
 		FileResource ores;
 		if (DocFileResource.TYPE_NAME.equals(supportedType) && DocFileResource.validate(filename)) {
@@ -173,10 +196,16 @@ public class WebDocumentHandler extends FileHandler {
 			log.error("", e);
 		}
 
-		RepositoryEntry re = CoreSpringFactory.getImpl(RepositoryService.class)
-				.create(initialAuthor, null, "", displayname, description, resource, RepositoryEntry.ACC_OWNERS);
+		RepositoryEntry re = CoreSpringFactory.getImpl(RepositoryService.class).create(initialAuthor, null, "", displayname,
+				description, resource, RepositoryEntryStatusEnum.preparation, organisation);
 		DBFactory.getInstance().commit();
 		return re;
+	}
+	
+	@Override
+	public RepositoryEntry importResource(Identity initialAuthor, String initialAuthorAlt, String displayname,
+			String description, Organisation organisation, Locale locale, String url) {
+		return null;
 	}
 	
 	@Override
@@ -190,7 +219,7 @@ public class WebDocumentHandler extends FileHandler {
 	}
 
 	@Override
-	public MediaResource getAsMediaResource(OLATResourceable res, boolean backwardsCompatible) {
+	public MediaResource getAsMediaResource(OLATResourceable res) {
 		return FileResourceManager.getInstance().getAsDownloadeableMediaResource(res);
 	}
 
@@ -205,8 +234,8 @@ public class WebDocumentHandler extends FileHandler {
 	}
 
 	@Override
-	public EditionSupport supportsEdit(OLATResourceable resource) {
-		return EditionSupport.no;
+	public EditionSupport supportsEdit(OLATResourceable resource, Identity identity, Roles roles) {
+		return editDelegate.supportsEdit(identity, roles);
 	}
 	
 	@Override
@@ -221,20 +250,16 @@ public class WebDocumentHandler extends FileHandler {
 
 	@Override
 	public MainLayoutController createLaunchController(RepositoryEntry re,  RepositoryEntrySecurity reSecurity, UserRequest ureq, WindowControl wControl) {
-		return new RepositoryEntryRuntimeController(ureq, wControl, re, reSecurity, new RuntimeControllerCreator() {
-			@Override
-			public Controller create(UserRequest uureq, WindowControl wwControl, TooledStackedPanel toolbarPanel,
-					RepositoryEntry entry, RepositoryEntrySecurity rereSecurity, AssessmentMode assessmentMode) {
-				CoreSpringFactory.getImpl(UserCourseInformationsManager.class)
-					.updateUserCourseInformations(entry.getOlatResource(), uureq.getIdentity());
-				return new WebDocumentRunController(uureq, wwControl, entry);
-			}
+		return new RepositoryEntryRuntimeController(ureq, wControl, re, reSecurity, (uureq, wwControl, toolbarPanel, entry, rereSecurity, assessmentMode) -> {
+			CoreSpringFactory.getImpl(UserCourseInformationsManager.class)
+				.updateUserCourseInformations(entry.getOlatResource(), uureq.getIdentity());
+			return new WebDocumentRunController(uureq, wwControl, entry);
 		});
 	}
 
 	@Override
 	public Controller createEditorController(RepositoryEntry re, UserRequest ureq, WindowControl wControl, TooledStackedPanel toolbar) {
-		throw new AssertException("a web document is not editable!!! res-id:"+re.getResourceableId());
+		return editDelegate.createEditorController(re, ureq, wControl, toolbar);
 	}
 	
 	@Override
@@ -242,6 +267,7 @@ public class WebDocumentHandler extends FileHandler {
 		return null;
 	}
 
+	@Override
 	protected String getDeletedFilePrefix() {
 		return "del_webdoc_"; 
 	}
@@ -260,5 +286,48 @@ public class WebDocumentHandler extends FileHandler {
 	@Override
 	public boolean isLocked(OLATResourceable ores) {
 		return false;
+	}
+	
+
+	
+	/**
+	 * 
+	 * Initial date: 25 Mar 2019<br>
+	 * @author uhensler, urs.hensler@frentix.com, http://www.frentix.com
+	 *
+	 */
+	private static class NullCreateDelegate implements WebDocumentCreateDelegate {
+
+		@Override
+		public boolean supportCreate(Identity identity, Roles roles) {
+			return false;
+		}
+
+		@Override
+		public String getCreateLabelI18nKey() {
+			return null;
+		}
+		
+		@Override
+		public RepositoryEntry createResource(Identity initialAuthor, String displayname, String description,
+				Object createObject, Organisation organisation, Locale locale) {
+			return null;
+		}
+
+	}
+	
+	private static class NullEditDelegate implements WebDocumentEditDelegate {
+
+		@Override
+		public EditionSupport supportsEdit(Identity identity, Roles roles) {
+			return EditionSupport.no;
+		}
+
+		@Override
+		public Controller createEditorController(RepositoryEntry re, UserRequest ureq, WindowControl wControl,
+				TooledStackedPanel toolbar) {
+			throw new AssertException("This web document is not editable!!! res-id: " + re.getResourceableId());
+		}
+		
 	}
 }

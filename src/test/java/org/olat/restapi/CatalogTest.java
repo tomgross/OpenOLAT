@@ -40,24 +40,28 @@ import java.util.List;
 import javax.ws.rs.core.MediaType;
 import javax.ws.rs.core.UriBuilder;
 
+import org.apache.http.HttpEntity;
 import org.apache.http.HttpResponse;
 import org.apache.http.client.methods.HttpDelete;
 import org.apache.http.client.methods.HttpGet;
 import org.apache.http.client.methods.HttpPost;
 import org.apache.http.client.methods.HttpPut;
 import org.apache.http.message.BasicNameValuePair;
-import org.codehaus.jackson.map.ObjectMapper;
-import org.codehaus.jackson.type.TypeReference;
+import org.apache.logging.log4j.Logger;
 import org.junit.Before;
 import org.junit.Test;
 import org.olat.basesecurity.BaseSecurity;
-import org.olat.basesecurity.BaseSecurityManager;
-import org.olat.core.commons.persistence.DBFactory;
+import org.olat.basesecurity.OrganisationService;
+import org.olat.basesecurity.manager.SecurityGroupDAO;
+import org.olat.core.commons.persistence.DB;
 import org.olat.core.id.Identity;
 import org.olat.core.id.OLATResourceable;
+import org.olat.core.id.Organisation;
+import org.olat.core.logging.Tracing;
 import org.olat.course.CourseModule;
 import org.olat.repository.CatalogEntry;
 import org.olat.repository.RepositoryEntry;
+import org.olat.repository.RepositoryEntryStatusEnum;
 import org.olat.repository.RepositoryManager;
 import org.olat.repository.RepositoryService;
 import org.olat.repository.manager.CatalogManager;
@@ -66,9 +70,12 @@ import org.olat.resource.OLATResourceManager;
 import org.olat.restapi.support.vo.CatalogEntryVO;
 import org.olat.restapi.support.vo.CatalogEntryVOes;
 import org.olat.test.JunitTestHelper;
-import org.olat.test.OlatJerseyTestCase;
+import org.olat.test.OlatRestTestCase;
 import org.olat.user.restapi.UserVO;
 import org.springframework.beans.factory.annotation.Autowired;
+
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 /**
  * 
@@ -79,25 +86,35 @@ import org.springframework.beans.factory.annotation.Autowired;
  * Initial Date:  6 mai 2010 <br>
  * @author srosse, stephane.rosse@frentix.com
  */
-public class CatalogTest extends OlatJerseyTestCase {
+public class CatalogTest extends OlatRestTestCase {
 	
+	private static final Logger log = Tracing.createLoggerFor(CatalogTest.class);
+	
+	@Autowired
+	private DB dbInstance;
+	@Autowired
+	private BaseSecurity securityManager;
 	@Autowired
 	private CatalogManager catalogManager;
 	@Autowired
+	private SecurityGroupDAO securityGroupDao;
+	@Autowired
+	private OLATResourceManager orm;
+	@Autowired
+	private RepositoryManager repositoryManager;
+	@Autowired
 	private RepositoryService repositoryService;
+	@Autowired
+	private OrganisationService organisationService;
 	
 	private Identity admin, id1;
 	private CatalogEntry root1, entry1, entry2, subEntry11, subEntry12;
 	private CatalogEntry entryToMove1, entryToMove2, subEntry13move;
 	
 	@Before
-	@Override
 	public void setUp() throws Exception {
-		super.setUp();
-
 		id1 = JunitTestHelper.createAndPersistIdentityAsUser("rest-catalog-one");
 		JunitTestHelper.createAndPersistIdentityAsUser("rest-catalog-two");
-		BaseSecurity securityManager = BaseSecurityManager.getInstance();
 		admin = securityManager.findIdentityByName("administrator");
 
 		//create a catalog
@@ -107,12 +124,11 @@ public class CatalogTest extends OlatJerseyTestCase {
 		entry1.setType(CatalogEntry.TYPE_NODE);
 		entry1.setName("Entry-1");
 		entry1.setDescription("Entry-description-1");
-		entry1.setOwnerGroup(securityManager.createAndPersistSecurityGroup());
 		catalogManager.addCatalogEntry(root1, entry1);
 		
-		DBFactory.getInstance().intermediateCommit();
+		dbInstance.intermediateCommit();
 		entry1 = catalogManager.loadCatalogEntry(entry1);
-		securityManager.addIdentityToSecurityGroup(admin, entry1.getOwnerGroup());
+		securityGroupDao.addIdentityToSecurityGroup(admin, entry1.getOwnerGroup());
 		
 		subEntry11 = catalogManager.createCatalogEntry();
 		subEntry11.setType(CatalogEntry.TYPE_NODE);
@@ -150,7 +166,7 @@ public class CatalogTest extends OlatJerseyTestCase {
 		subEntry13move.setDescription("Sub-entry-description-13-move target");
 		catalogManager.addCatalogEntry(root1, subEntry13move);
 		
-		DBFactory.getInstance().intermediateCommit();
+		dbInstance.intermediateCommit();
 	}
 
 	@Test
@@ -162,8 +178,7 @@ public class CatalogTest extends OlatJerseyTestCase {
 		HttpGet method = conn.createGet(uri, MediaType.APPLICATION_JSON, true);
 		HttpResponse response = conn.execute(method);
 		assertEquals(200, response.getStatusLine().getStatusCode());
-		InputStream body = response.getEntity().getContent();
-		List<CatalogEntryVO> vos = parseEntryArray(body);
+		List<CatalogEntryVO> vos = parseEntryArray(response.getEntity());
 		assertNotNull(vos);
 		assertEquals(1, vos.size());//Root-1
 		
@@ -215,8 +230,7 @@ public class CatalogTest extends OlatJerseyTestCase {
 		HttpGet method = conn.createGet(uri, MediaType.APPLICATION_JSON, true);
 		HttpResponse response = conn.execute(method);
 		assertEquals(200, response.getStatusLine().getStatusCode());
-		InputStream body = response.getEntity().getContent();
-		List<CatalogEntryVO> vos = parseEntryArray(body);
+		List<CatalogEntryVO> vos = parseEntryArray(response.getEntity());
 		assertNotNull(vos);
 		assertTrue(vos.size() >= 2);
 
@@ -534,12 +548,11 @@ public class CatalogTest extends OlatJerseyTestCase {
 
 		HttpResponse response = conn.execute(method);
 		assertEquals(200, response.getStatusLine().getStatusCode());
-		InputStream body = response.getEntity().getContent();
-		List<UserVO> voes = parseUserArray(body);
+		List<UserVO> voes = parseUserArray(response.getEntity());
 		assertNotNull(voes);
 		
 		CatalogEntry entry = catalogManager.loadCatalogEntry(entry1.getKey());
-		List<Identity> identities = BaseSecurityManager.getInstance().getIdentitiesOfSecurityGroup(entry.getOwnerGroup());
+		List<Identity> identities = securityGroupDao.getIdentitiesOfSecurityGroup(entry.getOwnerGroup());
 		assertNotNull(identities);
 		assertEquals(identities.size(), voes.size());
 
@@ -585,7 +598,7 @@ public class CatalogTest extends OlatJerseyTestCase {
 		assertEquals(200, response.getStatusLine().getStatusCode());
 		
 		CatalogEntry entry = catalogManager.loadCatalogEntry(entry1.getKey());
-		List<Identity> identities = BaseSecurityManager.getInstance().getIdentitiesOfSecurityGroup(entry.getOwnerGroup());
+		List<Identity> identities = securityGroupDao.getIdentitiesOfSecurityGroup(entry.getOwnerGroup());
 		boolean found = false;
 		for(Identity identity:identities) {
 			if(identity.getKey().equals(id1.getKey())) {
@@ -610,7 +623,7 @@ public class CatalogTest extends OlatJerseyTestCase {
 		assertEquals(200, response.getStatusLine().getStatusCode());
 		
 		CatalogEntry entry = catalogManager.loadCatalogEntry(entry1.getKey());
-		List<Identity> identities = BaseSecurityManager.getInstance().getIdentitiesOfSecurityGroup(entry.getOwnerGroup());
+		List<Identity> identities = securityGroupDao.getIdentitiesOfSecurityGroup(entry.getOwnerGroup());
 		boolean found = false;
 		for(Identity identity:identities) {
 			if(identity.getKey().equals(id1.getKey())) {
@@ -651,25 +664,26 @@ public class CatalogTest extends OlatJerseyTestCase {
 		conn.shutdown();
 	}
 	
-	protected List<CatalogEntryVO> parseEntryArray(InputStream body) {
-		try {
+	protected List<CatalogEntryVO> parseEntryArray(HttpEntity body) {
+		try(InputStream in=body.getContent()) {
 			ObjectMapper mapper = new ObjectMapper(jsonFactory); 
-			return mapper.readValue(body, new TypeReference<List<CatalogEntryVO>>(){/* */});
+			return mapper.readValue(in, new TypeReference<List<CatalogEntryVO>>(){/* */});
 		} catch (Exception e) {
-			e.printStackTrace();
+			log.error("", e);
 			return null;
 		}
 	}
 	
-	protected List<UserVO> parseUserArray(InputStream body) {
-		try {
+	protected List<UserVO> parseUserArray(HttpEntity body) {
+		try(InputStream in=body.getContent()) {
 			ObjectMapper mapper = new ObjectMapper(jsonFactory); 
-			return mapper.readValue(body, new TypeReference<List<UserVO>>(){/* */});
+			return mapper.readValue(in, new TypeReference<List<UserVO>>(){/* */});
 		} catch (Exception e) {
-			e.printStackTrace();
+			log.error("", e);
 			return null;
 		}
 	}
+
 	
 	private RepositoryEntry createRepository(String displayName, final Long resourceableId) {
 		OLATResourceable resourceable = new OLATResourceable() {
@@ -677,22 +691,23 @@ public class CatalogTest extends OlatJerseyTestCase {
 			public Long getResourceableId() {return resourceableId;}
 		};
 
-		OLATResourceManager rm = OLATResourceManager.getInstance();
 		// create course and persist as OLATResourceImpl
 
-		OLATResource r = rm.findResourceable(resourceable);
+		OLATResource r = orm.findResourceable(resourceable);
 		if(r == null) {
-			r = rm.createOLATResourceInstance(resourceable);
+			r = orm.createOLATResourceInstance(resourceable);
 		}
-		DBFactory.getInstance().saveObject(r);
-		DBFactory.getInstance().intermediateCommit();
+		dbInstance.saveObject(r);
+		dbInstance.intermediateCommit();
 		
-		RepositoryEntry d = RepositoryManager.getInstance().lookupRepositoryEntry(resourceable, false);
+		RepositoryEntry d = repositoryManager.lookupRepositoryEntry(resourceable, false);
 		if(d == null) {
-			d = repositoryService.create("Rei Ayanami", "-", displayName, "Repo entry", r);
-			DBFactory.getInstance().saveObject(d);
+			Organisation defOrganisation = organisationService.getDefaultOrganisation();
+			d = repositoryService.create(null, "Rei Ayanami", "-", displayName, "Repo entry",
+					r, RepositoryEntryStatusEnum.trash, defOrganisation);
+			dbInstance.saveObject(d);
 		}
-		DBFactory.getInstance().intermediateCommit();
+		dbInstance.intermediateCommit();
 		return d;
 	}
 }

@@ -28,13 +28,13 @@ import org.olat.admin.quota.QuotaConstants;
 import org.olat.collaboration.CollaborationManager;
 import org.olat.collaboration.CollaborationTools;
 import org.olat.core.CoreSpringFactory;
-import org.olat.core.commons.modules.bc.vfs.OlatRootFolderImpl;
 import org.olat.core.commons.services.notifications.SubscriptionContext;
 import org.olat.core.commons.services.webdav.manager.WebDAVMergeSource;
 import org.olat.core.commons.services.webdav.servlets.RequestUtil;
 import org.olat.core.id.Identity;
 import org.olat.core.util.vfs.NamedContainerImpl;
 import org.olat.core.util.vfs.VFSContainer;
+import org.olat.core.util.vfs.VFSManager;
 import org.olat.core.util.vfs.callbacks.FullAccessWithLazyQuotaCallback;
 import org.olat.core.util.vfs.callbacks.ReadOnlyCallback;
 import org.olat.core.util.vfs.callbacks.VFSSecurityCallback;
@@ -114,10 +114,10 @@ class GroupfoldersWebDAVMergeSource extends WebDAVMergeSource {
 	private VFSContainer getGroupContainer(String name, BusinessGroup group, boolean isOwner) {
 		String folderPath = collaborationManager.getFolderRelPath(group);
 		// create container and set quota
-		OlatRootFolderImpl localImpl = new OlatRootFolderImpl(folderPath, this);
+		VFSContainer localImpl = VFSManager.olatRootContainer(folderPath, this);
 		//already done in OlatRootFolderImpl localImpl.getBasefile().mkdirs(); // lazy initialize dirs
 		String containerName = RequestUtil.normalizeFilename(name);
-		NamedContainerImpl grpContainer = new NamedContainerImpl(containerName, localImpl);
+		NamedContainerImpl grpContainer = new GroupNamedContainer(containerName, localImpl);
 
 		boolean writeAccess;
 		if (!isOwner) {
@@ -127,7 +127,7 @@ class GroupfoldersWebDAVMergeSource extends WebDAVMergeSource {
 			if (lFolderAccess != null) {
 				folderAccess = lFolderAccess.intValue();
 			}
-			writeAccess = (folderAccess == CollaborationTools.CALENDAR_ACCESS_ALL);
+			writeAccess = (folderAccess == CollaborationTools.FOLDER_ACCESS_ALL);
 		} else {
 			writeAccess = true;
 		}
@@ -141,5 +141,17 @@ class GroupfoldersWebDAVMergeSource extends WebDAVMergeSource {
 		}
 		grpContainer.setLocalSecurityCallback(secCallback);
 		return grpContainer;
+	}
+	
+	private static class GroupNamedContainer extends NamedContainerImpl {
+		
+		public GroupNamedContainer(String containerName, VFSContainer container) {
+			super(containerName, container);
+		}
+
+		@Override
+		public boolean exists() {
+			return true;
+		}
 	}
 }

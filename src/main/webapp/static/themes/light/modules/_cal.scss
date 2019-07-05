@@ -117,6 +117,77 @@ $o-cal-color-width : 20px;
 	top: 0;
 }
 
+.o_cal_wv_event_tooltip_content {
+	.o_cal_description {
+		background-color: $o-cal-desc-background-color;
+		padding: 10px 7px;
+		margin: 10px -7px;
+	}
+	.o_cal_tooltip_buttons {
+		text-align: center;
+		margin-top: 20px;
+	}
+}
+
+.o_cal_event_managed .fc-content:after  {
+	margin-right: 2px;
+	float: right;
+	font-family: FontAwesome;
+	font-style: normal;
+	font-weight: normal;
+	font-size: 100%;
+	-webkit-font-smoothing: antialiased;
+	-moz-osx-font-smoothing: grayscale;
+	content: $fa-var-lock;
+}
+
+.o_cal_event_not_managed .fc-content:after {
+	margin-right: 2px;
+	float: right;
+	font-family: FontAwesome;
+	font-style: normal;
+	font-weight: normal;
+	font-size: 100%;
+	-webkit-font-smoothing: antialiased;
+	-moz-osx-font-smoothing: grayscale;
+	content: $fa-var-user;
+}
+
+.o_cal_event_livestream .fc-content:after {
+	margin-right: 2px;
+	float: right;
+	font-family: FontAwesome;
+	font-style: normal;
+	font-weight: normal;
+	font-size: 100%;
+	-webkit-font-smoothing: antialiased;
+	-moz-osx-font-smoothing: grayscale;
+	content: $fa-var-video-camera;
+}
+
+.o_cal_event_managed.o_cal_event_livestream .fc-content:after {
+	margin-right: 2px;
+	float: right;
+	font-family: FontAwesome;
+	font-style: normal;
+	font-weight: normal;
+	font-size: 100%;
+	-webkit-font-smoothing: antialiased;
+	-moz-osx-font-smoothing: grayscale;
+	content: "#{$fa-var-video-camera}\00a0#{$fa-var-lock}"
+}
+
+.o_cal_event_not_managed.o_cal_event_livestream .fc-content:after {
+	margin-right: 2px;
+	float: right;
+	font-family: FontAwesome;
+	font-style: normal;
+	font-weight: normal;
+	font-size: 100%;
+	-webkit-font-smoothing: antialiased;
+	-moz-osx-font-smoothing: grayscale;
+	content: "#{$fa-var-video-camera}\00a0#{$fa-var-user}"
+}
 
 /* 
  * fullcalendar bootstrapify
@@ -129,6 +200,26 @@ $o-cal-color-width : 20px;
 	}
 	&.fc-state-active {
 		@include button-variant($btn-primary-color, $btn-primary-bg, $btn-primary-border);
+	}
+}
+
+.fc-listYear-button:before, .fc-listMonth-button:before, .fc-listWeek-button:before, .fc-listDay-button:before {
+	content: $fa-var-list-alt;
+	margin-right: 5px;
+	font-family: FontAwesome;
+	font-style: normal;
+	font-weight: normal;
+	font-size: 80%;
+	webkit-font-smoothing: antialiased;
+	-moz-osx-font-smoothing: grayscale;
+}
+
+table.fc-list-table .fc-list-item {
+	background-color: white;
+	color: #5D5D5D ! important;
+	
+	a, span {
+		color: #5D5D5D ! important;
 	}
 }
 

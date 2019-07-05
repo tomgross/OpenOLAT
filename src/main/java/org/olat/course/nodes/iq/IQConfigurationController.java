@@ -21,10 +21,12 @@ package org.olat.course.nodes.iq;
 
 import java.io.File;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
-import org.olat.basesecurity.BaseSecurity;
-import org.olat.basesecurity.Constants;
+import org.olat.basesecurity.GroupRoles;
+import org.olat.basesecurity.OrganisationRoles;
 import org.olat.core.CoreSpringFactory;
 import org.olat.core.commons.fullWebApp.LayoutMain3ColsController;
 import org.olat.core.gui.UserRequest;
@@ -40,7 +42,6 @@ import org.olat.core.gui.control.WindowControl;
 import org.olat.core.gui.control.controller.BasicController;
 import org.olat.core.gui.control.generic.closablewrapper.CloseableModalController;
 import org.olat.core.id.Identity;
-import org.olat.core.id.Roles;
 import org.olat.core.util.StringHelper;
 import org.olat.core.util.coordinate.CoordinatorManager;
 import org.olat.core.util.coordinate.LockResult;
@@ -52,6 +53,7 @@ import org.olat.course.nodes.AbstractAccessableCourseNode;
 import org.olat.course.nodes.CourseNodeFactory;
 import org.olat.course.nodes.IQSELFCourseNode;
 import org.olat.course.nodes.IQSURVCourseNode;
+import org.olat.course.nodes.QTICourseNode;
 import org.olat.fileresource.types.ImsQTI21Resource;
 import org.olat.ims.qti.QTIResult;
 import org.olat.ims.qti.QTIResultManager;
@@ -68,18 +70,16 @@ import org.olat.ims.qti21.QTI21Service;
 import org.olat.ims.qti21.model.InMemoryOutcomeListener;
 import org.olat.ims.qti21.ui.AssessmentTestDisplayController;
 import org.olat.ims.qti21.ui.QTI21OverrideOptions;
+import org.olat.ims.qti21.ui.event.RestartEvent;
 import org.olat.modules.ModuleConfiguration;
 import org.olat.modules.iq.IQManager;
 import org.olat.modules.iq.IQPreviewSecurityCallback;
 import org.olat.repository.RepositoryEntry;
 import org.olat.repository.RepositoryManager;
+import org.olat.repository.RepositoryService;
 import org.olat.repository.controllers.ReferencableEntriesSearchController;
 import org.olat.user.UserManager;
 import org.springframework.beans.factory.annotation.Autowired;
-
-import de.bps.onyx.plugin.OnyxModule;
-import de.bps.onyx.plugin.course.nodes.iq.IQEditForm;
-import de.bps.onyx.plugin.run.OnyxRunController;
 
 /**
  * 
@@ -94,21 +94,24 @@ public class IQConfigurationController extends BasicController {
 	private VelocityContainer myContent;
 	private final BreadcrumbPanel stackPanel;
 	
-	private Link previewLink, previewButton, chooseTestButton, changeTestButton, editTestButton;
+	private Link previewLink;
+	private Link previewButton;
+	private Link chooseTestButton;
+	private Link changeTestButton;
+	private Link editTestButton;
 
 	private Controller previewLayoutCtr;
 	private CloseableModalController cmc;
 	private IQEditReplaceWizard replaceWizard;
 	private AssessmentTestDisplayController previewQTI21Ctrl;
 	private ReferencableEntriesSearchController searchController;
+	private ConfirmChangeResourceController confirmChangeResourceCtrl;
 	
-	private IQEditForm modOnyxConfigForm;
 	private IQ12EditForm mod12ConfigForm;
 	private QTI21EditForm mod21ConfigForm;
 	
 	private String type;
 	private ICourse course;
-	private List<Identity> learners;
 	private ModuleConfiguration moduleConfiguration;
 	private AbstractAccessableCourseNode courseNode;
 
@@ -117,9 +120,9 @@ public class IQConfigurationController extends BasicController {
 	@Autowired
 	private QTI21Service qti21service;
 	@Autowired
-	private BaseSecurity securityManager;
-	@Autowired
 	private RepositoryManager repositoryManager;
+	@Autowired
+	private RepositoryService repositoryService;
 
 	/**
 	 * 
@@ -157,14 +160,9 @@ public class IQConfigurationController extends BasicController {
 			myContent.contextPut(VC_CHOSENTEST, displayName);
 			myContent.contextPut("dontRenderRepositoryButton", new Boolean(true));
 			// Put values to velocity container
-
-			boolean isOnyx = OnyxModule.isOnyxTest(re.getOlatResource());
-			if(isOnyx) {
-				//
-			} else if (isEditable(ureq.getIdentity(), ureq.getUserSession().getRoles(), re)) {
+			if (isEditable(re)) {
 				editTestButton = LinkFactory.createButtonSmall("command.editRepFile", myContent, this);
 			}
-
 			previewLink = LinkFactory.createCustomLink("command.preview.link", "command.preview", displayName, Link.NONTRANSLATED, myContent, this);
 			previewLink.setIconLeftCSS("o_icon o_icon-fw o_icon_preview");
 			previewLink.setCustomEnabledLinkCSS("o_preview");
@@ -205,16 +203,20 @@ public class IQConfigurationController extends BasicController {
 	protected void updateEditController(UserRequest ureq, boolean replacedTest) {
 		removeAsListenerAndDispose(mod12ConfigForm);
 		removeAsListenerAndDispose(mod21ConfigForm);
-		removeAsListenerAndDispose(modOnyxConfigForm);
 		mod12ConfigForm = null;
 		mod21ConfigForm = null;
-		modOnyxConfigForm = null;
 		
 		RepositoryEntry re = getIQReference();
 		if(re == null) {
 			myContent.remove("iqeditform");
 		} else if(ImsQTI21Resource.TYPE_NAME.equals(re.getOlatResource().getResourceableTypeName())) {
-			boolean needManualCorrection = needManualCorrectionQTI21(re);
+			boolean needManualCorrection = false;
+			try {// in case of an unreadable test
+				needManualCorrection = needManualCorrectionQTI21(re);
+			} catch (Exception e) {
+				logError("Test cannot be read: " + re, e);
+				showError("error.resource.corrupted");
+			}
 			if(replacedTest) {// set some default settings in case the user don't save the next panel
 				moduleConfiguration.setStringValue(IQEditController.CONFIG_CORRECTION_MODE, needManualCorrection ? "manual" : "auto");
 				fireEvent(ureq, NodeEditController.NODECONFIG_CHANGED_EVENT);
@@ -224,11 +226,9 @@ public class IQConfigurationController extends BasicController {
 			mod21ConfigForm.update(re);
 			listenTo(mod21ConfigForm);
 			myContent.put("iqeditform", mod21ConfigForm.getInitialComponent());
-		} else if(OnyxModule.isOnyxTest(re.getOlatResource())) {
-			modOnyxConfigForm = new IQEditForm(ureq, getWindowControl(), moduleConfiguration, courseNode, re);
-			modOnyxConfigForm.update(re);
-			listenTo(modOnyxConfigForm);
-			myContent.put("iqeditform", modOnyxConfigForm.getInitialComponent());
+		} else if(QTIResourceTypeModule.isOnyxTest(re.getOlatResource())) {
+			myContent.remove("iqeditform");
+			showError("error.onyx");
 		} else {
 			boolean hasEssay = needManualCorrectionQTI12(re);
 			if(replacedTest) {// set some default settings in case the user don't save the next panel
@@ -247,15 +247,14 @@ public class IQConfigurationController extends BasicController {
 	 * @param repository entry
 	 * @return
 	 */
-	private boolean isEditable(Identity identity, Roles roles, RepositoryEntry re) {
-		boolean isOnyx = OnyxModule.isOnyxTest(re.getOlatResource());
+	private boolean isEditable(RepositoryEntry re) {
+		boolean isOnyx = QTIResourceTypeModule.isOnyxTest(re.getOlatResource());
 		if (isOnyx) {
 			return false;
 		}
-
-		return (securityManager.isIdentityPermittedOnResourceable(identity, Constants.PERMISSION_HASROLE, Constants.ORESOURCE_ADMIN)
-				|| repositoryManager.isOwnerOfRepositoryEntry(identity, re)
-				|| repositoryManager.isInstitutionalRessourceManagerFor(identity, roles, re));
+		return repositoryService.hasRoleExpanded(getIdentity(), re,
+				OrganisationRoles.administrator.name(), OrganisationRoles.learnresourcemanager.name(),
+				GroupRoles.owner.name());
 	}
 
 	@Override
@@ -287,20 +286,19 @@ public class IQConfigurationController extends BasicController {
 	
 	@Override
 	public void event(UserRequest urequest, Controller source, Event event) {
-		if (source.equals(searchController)) {
+		if (source == searchController) {
 			if (event == ReferencableEntriesSearchController.EVENT_REPOSITORY_ENTRY_SELECTED) {
 				// repository search controller done				
 				cmc.deactivate();
 				RepositoryEntry re = searchController.getSelectedEntry();
-				try {
-					boolean needManualCorrection = checkManualCorrectionNeeded(re);
-					doIQReference(urequest, re, needManualCorrection);
-					updateEditController(urequest, true);
-				} catch (Exception e) {
-					logError("", e);
-					showError("error.resource.corrupted");
-				}
+				doConfirmChangeTestAndSurvey(urequest, re);
 			}
+		} else if(source == confirmChangeResourceCtrl) {
+			if(event == Event.DONE_EVENT) {
+				RepositoryEntry newEntry = confirmChangeResourceCtrl.getNewTestEntry();
+				doChangeResource(urequest, newEntry);
+			}
+			cmc.deactivate();
 		} else if (source == replaceWizard) {
 			if(event == Event.CANCELLED_EVENT) {
 				cmc.deactivate();
@@ -329,24 +327,75 @@ public class IQConfigurationController extends BasicController {
 			if (event == Event.DONE_EVENT || event == Event.CHANGED_EVENT) {
 				fireEvent(urequest, NodeEditController.NODECONFIG_CHANGED_EVENT);
 			}
-		} else if (source == modOnyxConfigForm) {
-			if (event == Event.DONE_EVENT || event == Event.CHANGED_EVENT) {
-				fireEvent(urequest, NodeEditController.NODECONFIG_CHANGED_EVENT);
+		} else if(source == previewQTI21Ctrl) {
+			if(event instanceof RestartEvent) {
+				stackPanel.popContent();
+				cleanUpQti21PreviewSession();
+				doPreview(urequest);
 			}
+		}
+	}
+	
+	/**
+	 * This check if there is some QTI 2.1 results for the current selected test.
+	 * 
+	 * @param ureq
+	 * @param newEntry
+	 */
+	private void doConfirmChangeTestAndSurvey(UserRequest ureq, RepositoryEntry newEntry) {
+		try {
+			RepositoryEntry currentEntry = courseNode.getReferencedRepositoryEntry();
+			RepositoryEntry courseEntry = course.getCourseEnvironment().getCourseGroupManager().getCourseEntry();
+			
+			int numOfAssessedIdentities = 0;
+			if(currentEntry != null) {
+				List<AssessmentTestSession> assessmentTestSessions = qti21service.getAssessmentTestSessions(courseEntry, courseNode.getIdent(), currentEntry);
+				Set<Identity> assessedIdentities = new HashSet<>(); 
+				for(AssessmentTestSession assessmentTestSession:assessmentTestSessions) {
+					if(StringHelper.containsNonWhitespace(assessmentTestSession.getAnonymousIdentifier())) {
+						numOfAssessedIdentities++;
+					} else if(assessmentTestSession.getIdentity() != null) {
+						assessedIdentities.add(assessmentTestSession.getIdentity());
+					}
+				}
+				numOfAssessedIdentities += assessedIdentities.size();
+			}
+			
+			if(numOfAssessedIdentities > 0) {
+				confirmChangeResourceCtrl = new ConfirmChangeResourceController(ureq, getWindowControl(),
+						course, (QTICourseNode)courseNode, newEntry, currentEntry, numOfAssessedIdentities);
+				listenTo(confirmChangeResourceCtrl);
+				cmc = new CloseableModalController(getWindowControl(), translate("close"), confirmChangeResourceCtrl.getInitialComponent());
+				listenTo(cmc);
+				cmc.activate();
+			} else {
+				doChangeResource(ureq, newEntry);
+			}
+		} catch (Exception e) {
+			logError("", e);
+			showError("error.resource.corrupted");
+		}
+	}
+	
+	private void doChangeResource(UserRequest ureq, RepositoryEntry newEntry) {
+		try {
+			boolean needManualCorrection = checkManualCorrectionNeeded(newEntry);
+			doIQReference(ureq, newEntry, needManualCorrection);
+			updateEditController(ureq, true);
+		} catch (Exception e) {
+			logError("", e);
+			showError("error.resource.corrupted");
 		}
 	}
 	
 	private void doPreview(UserRequest ureq) {
 		removeAsListenerAndDispose(previewLayoutCtr);
+		removeAsListenerAndDispose(previewQTI21Ctrl);
 		
 		RepositoryEntry re = getIQReference();
 		if(re != null) {
-			Controller previewController;
-			if(OnyxModule.isOnyxTest(re.getOlatResource())) {
-				Controller previewCtrl = new OnyxRunController(ureq, getWindowControl(), re, false);
-				listenTo(previewCtrl);
-				previewLayoutCtr = new LayoutMain3ColsController(ureq, getWindowControl(), previewCtrl);
-				stackPanel.pushController(translate("preview"), previewLayoutCtr);
+			if(QTIResourceTypeModule.isOnyxTest(re.getOlatResource())) {
+				showError("error.onyx");
 			} else if(ImsQTI21Resource.TYPE_NAME.equals(re.getOlatResource().getResourceableTypeName())) {
 				cleanUpQti21PreviewSession();//clean up last session
 				// need to clean up the assessment test session
@@ -360,7 +409,7 @@ public class IQConfigurationController extends BasicController {
 				stackPanel.pushController(translate("preview"), previewQTI21Ctrl);
 			} else {
 				long courseResId = course.getResourceableId().longValue();
-				previewController = iqManager.createIQDisplayController(moduleConfiguration, new IQPreviewSecurityCallback(), ureq, getWindowControl(), courseResId, courseNode.getIdent(), null);
+				Controller previewController = iqManager.createIQDisplayController(moduleConfiguration, new IQPreviewSecurityCallback(), ureq, getWindowControl(), courseResId, courseNode.getIdent(), null);
 				previewLayoutCtr = new LayoutMain3ColsController(ureq, getWindowControl(), previewController);
 				stackPanel.pushController(translate("preview"), previewLayoutCtr);
 			}
@@ -435,28 +484,21 @@ public class IQConfigurationController extends BasicController {
 				onyxSuccess = QTIResultManager.getInstance().countResults(course.getResourceableId(), courseNode.getIdent(), re.getKey());
 			}
 		}
-		
-		
+	
 		if (moduleConfiguration.get(IQEditController.CONFIG_KEY_TYPE_QTI) != null
 				&& moduleConfiguration.get(IQEditController.CONFIG_KEY_TYPE_QTI).equals(IQEditController.CONFIG_VALUE_QTI2)
 				&& onyxSuccess > 0) {
-			
-			replaceWizard = new IQEditReplaceWizard(ureq, getWindowControl(), course, courseNode, types, learners, null, onyxSuccess, true);
-			replaceWizard.addControllerListener(this);
-			
-			String title = replaceWizard.getAndRemoveWizardTitle();
-			cmc = new CloseableModalController(getWindowControl(), translate("close"), replaceWizard.getInitialComponent(), true, title);
-			cmc.activate();
+			showError("error.onyx");
 		} else {
 			
 			List<QTIResult> results = QTIResultManager.getInstance().selectResults(course.getResourceableId(), courseNode.getIdent(), re.getKey(), null, 1);
 			// test was passed from an user
-			boolean passed = (results != null && results.size() > 0) ? true : false;
+			boolean passed = (results != null && !results.isEmpty()) ? true : false;
 			// test was started and not passed
 			// it exists partly results for this test
 			List<Identity> identitiesWithQtiSerEntry = iqManager.getIdentitiesWithQtiSerEntry(course.getResourceableId(), courseNode.getIdent());
-			if(passed || identitiesWithQtiSerEntry.size() > 0) {
-				learners = new ArrayList<Identity>();
+			if(passed || !identitiesWithQtiSerEntry.isEmpty()) {
+				List<Identity> learners = new ArrayList<>();
 				for(QTIResult result : results) {
 					Identity identity = result.getResultSet().getIdentity();
 					if(identity != null && !learners.contains(identity)){
@@ -469,7 +511,7 @@ public class IQConfigurationController extends BasicController {
 						learners.add(identity);
 					}
 				}
-				replaceWizard = new IQEditReplaceWizard(ureq, getWindowControl(), course, courseNode, types, learners, results, identitiesWithQtiSerEntry.size(), false);
+				replaceWizard = new IQEditReplaceWizard(ureq, getWindowControl(), course, courseNode, types, learners, results, identitiesWithQtiSerEntry.size());
 				replaceWizard.addControllerListener(this);
 				
 				cmc = new CloseableModalController(getWindowControl(), translate("close"), replaceWizard.getInitialComponent());
@@ -494,16 +536,17 @@ public class IQConfigurationController extends BasicController {
 	 * @param re Needed to check if this Test is of QTI Type 2.1
 	 */
 	private void updateQtiType(RepositoryEntry re) {
-		boolean isOnyx = OnyxModule.isOnyxTest(re.getOlatResource());
-		if (isOnyx) {
+		if (QTIResourceTypeModule.isOnyxTest(re.getOlatResource())) {
 			moduleConfiguration.set(IQEditController.CONFIG_KEY_TYPE_QTI, IQEditController.CONFIG_VALUE_QTI2);
+		} else if(QTIResourceTypeModule.isQtiWorks(re.getOlatResource())) {
+			moduleConfiguration.set(IQEditController.CONFIG_KEY_TYPE_QTI, IQEditController.CONFIG_VALUE_QTI21);
 		} else {
 			moduleConfiguration.set(IQEditController.CONFIG_KEY_TYPE_QTI, IQEditController.CONFIG_VALUE_QTI1);
 		}
 	}
 
 	private boolean checkManualCorrectionNeeded(RepositoryEntry re) {
-		if(OnyxModule.isOnyxTest(re.getOlatResource())) {
+		if(QTIResourceTypeModule.isOnyxTest(re.getOlatResource())) {
 			return false;
 		}
 		if(courseNode instanceof IQSURVCourseNode || courseNode instanceof IQSELFCourseNode) {
@@ -575,19 +618,19 @@ public class IQConfigurationController extends BasicController {
 				// If of type test, get min, max, cut - put in module config and push
 				// to velocity
 				
-				boolean isOnyx = OnyxModule.isOnyxTest(re.getOlatResource());
-				myContent.contextPut("isOnyx", new Boolean(isOnyx));
+				boolean isOnyx = QTIResourceTypeModule.isOnyxTest(re.getOlatResource());
+				myContent.contextPut("isOnyx", Boolean.valueOf(isOnyx));
 				if(isOnyx) {
 					myContent.contextPut("onyxDisplayName", displayName);
 					moduleConfiguration.set(IQEditController.CONFIG_KEY_TYPE_QTI, IQEditController.CONFIG_VALUE_QTI2);
 				} else if(ImsQTI21Resource.TYPE_NAME.equals(re.getOlatResource().getResourceableTypeName())) {
 					moduleConfiguration.set(IQEditController.CONFIG_KEY_TYPE_QTI, IQEditController.CONFIG_VALUE_QTI21);
-					if (isEditable(urequest.getIdentity(), urequest.getUserSession().getRoles(), re)) {
+					if (isEditable(re)) {
 						editTestButton = LinkFactory.createButtonSmall("command.editRepFile", myContent, this);
 					}
 				} else {
 					moduleConfiguration.set(IQEditController.CONFIG_KEY_TYPE_QTI, IQEditController.CONFIG_VALUE_QTI1);
-					if (isEditable(urequest.getIdentity(), urequest.getUserSession().getRoles(), re)) {
+					if (isEditable(re)) {
 						editTestButton = LinkFactory.createButtonSmall("command.editRepFile", myContent, this);
 					}
 				}

@@ -19,9 +19,9 @@
  */
 package org.olat.course.nodes.gta.ui;
 
+import java.io.BufferedInputStream;
 import java.io.File;
 import java.io.FileInputStream;
-import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -31,16 +31,19 @@ import java.util.zip.ZipOutputStream;
 
 import javax.servlet.http.HttpServletResponse;
 
-import org.cyberneko.html.parsers.SAXParser;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.gui.media.MediaResource;
-import org.olat.core.logging.OLog;
+import org.olat.core.gui.media.ServletUtil;
 import org.olat.core.logging.Tracing;
+import org.olat.core.util.FileUtils;
 import org.olat.core.util.StringHelper;
 import org.olat.core.util.ZipUtil;
 import org.xml.sax.Attributes;
 import org.xml.sax.InputSource;
-import org.xml.sax.SAXException;
 import org.xml.sax.helpers.DefaultHandler;
+
+import nu.validator.htmlparser.common.XmlViolationPolicy;
+import nu.validator.htmlparser.sax.HtmlParser;
 
 /**
  * 
@@ -50,7 +53,7 @@ import org.xml.sax.helpers.DefaultHandler;
  */
 public class HTMLZippedMediaResource implements MediaResource {
 	
-	private static final OLog log = Tracing.createLoggerFor(HTMLZippedMediaResource.class);
+	private static final Logger log = Tracing.createLoggerFor(HTMLZippedMediaResource.class);
 	
 	private final String filename;
 	private final File documentsDir;
@@ -58,6 +61,11 @@ public class HTMLZippedMediaResource implements MediaResource {
 	public HTMLZippedMediaResource(String filename, File documentsDir) {
 		this.filename = filename;
 		this.documentsDir = documentsDir;
+	}
+
+	@Override
+	public long getCacheControlDuration() {
+		return ServletUtil.CACHE_NO_CACHE;
 	}
 
 	@Override
@@ -120,18 +128,13 @@ public class HTMLZippedMediaResource implements MediaResource {
 	}
 	
 	public HTMLHandler filter(File file) {
-		try(InputStream in = new FileInputStream(file)) {
-			SAXParser parser = new SAXParser();
+		try(InputStream in = new FileInputStream(file);
+				BufferedInputStream bis = new BufferedInputStream(in, FileUtils.BSIZE)) {
+			HtmlParser parser = new HtmlParser(XmlViolationPolicy.ALTER_INFOSET);
 			HTMLHandler contentHandler = new HTMLHandler();
 			parser.setContentHandler(contentHandler);
-			parser.parse(new InputSource(in));
+			parser.parse(new InputSource(bis));
 			return contentHandler;
-		} catch (SAXException e) {
-			log.error("", e);
-			return null;
-		} catch (IOException e) {
-			log.error("", e);
-			return null;
 		} catch (Exception e) {
 			log.error("", e);
 			return null;

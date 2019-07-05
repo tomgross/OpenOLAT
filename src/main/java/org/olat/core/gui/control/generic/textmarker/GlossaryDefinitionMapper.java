@@ -27,6 +27,7 @@ import java.util.Set;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 
+import org.olat.core.CoreSpringFactory;
 import org.olat.core.commons.modules.bc.FolderConfig;
 import org.olat.core.commons.modules.glossary.GlossaryItem;
 import org.olat.core.commons.modules.glossary.GlossaryItemManager;
@@ -34,7 +35,8 @@ import org.olat.core.dispatcher.mapper.Mapper;
 import org.olat.core.gui.media.MediaResource;
 import org.olat.core.gui.media.NotFoundMediaResource;
 import org.olat.core.gui.media.StringMediaResource;
-import org.olat.core.logging.LogDelegator;
+import org.apache.logging.log4j.Logger;
+import org.olat.core.logging.Tracing;
 import org.olat.core.util.vfs.LocalFolderImpl;
 import org.olat.core.util.vfs.VFSContainer;
 
@@ -48,14 +50,13 @@ import org.olat.core.util.vfs.VFSContainer;
  * 
  * @author Roman Haag, frentix GmbH, roman.haag@frentix.com
  */
-class GlossaryDefinitionMapper extends LogDelegator implements Mapper {
+class GlossaryDefinitionMapper implements Mapper {
 	
-	/**
-	 * @see org.olat.core.dispatcher.mapper.Mapper#handle(java.lang.String,
-	 *      javax.servlet.http.HttpServletRequest)
-	 */
+	private static final Logger log = Tracing.createLoggerFor(GlossaryDefinitionMapper.class);
+	
+	@Override
 	public MediaResource handle(String relPath, HttpServletRequest request) {
-		GlossaryItemManager gIM = GlossaryItemManager.getInstance();
+		GlossaryItemManager gIM = CoreSpringFactory.getImpl(GlossaryItemManager.class);
 
 		String[] parts = relPath.split("/");
 		String glossaryId = parts[1];
@@ -63,13 +64,13 @@ class GlossaryDefinitionMapper extends LogDelegator implements Mapper {
 				+ GlossaryMarkupItemController.INTERNAL_FOLDER_NAME;
 		File glossaryFolderFile = new File(glossaryFolderString);
 		if (!glossaryFolderFile.isDirectory()) {
-			logWarn("GlossaryDefinition delivery failed; path to glossaryFolder not existing: " + relPath, null);
-			return new NotFoundMediaResource(relPath);
+			log.warn("GlossaryDefinition delivery failed; path to glossaryFolder not existing: " + relPath);
+			return new NotFoundMediaResource();
 		}
 		VFSContainer glossaryFolder = new LocalFolderImpl(glossaryFolderFile);
 		if (!gIM.isFolderContainingGlossary(glossaryFolder)) {
-			logWarn("GlossaryDefinition delivery failed; glossaryFolder doesn't contain a valid Glossary: " + glossaryFolder, null);
-			return new NotFoundMediaResource(relPath);
+			log.warn("GlossaryDefinition delivery failed; glossaryFolder doesn't contain a valid Glossary: " + glossaryFolder);
+			return new NotFoundMediaResource();
 		}
 
 		String glossaryMainTerm = parts[2];
@@ -84,7 +85,7 @@ class GlossaryDefinitionMapper extends LogDelegator implements Mapper {
 		}
 		glossaryMainTerm = glossaryMainTerm.toLowerCase();
 		
-		Set<String> alternatives = new HashSet<String>();
+		Set<String> alternatives = new HashSet<>();
 		prepareAlternatives(glossaryMainTerm, alternatives);
 
 		// Create a media resource
@@ -108,7 +109,7 @@ class GlossaryDefinitionMapper extends LogDelegator implements Mapper {
 			}
 		}
 		if (foundItem == null) {
-			return new NotFoundMediaResource(relPath);
+			return new NotFoundMediaResource();
 		}
 		
 		StringBuilder sb = new StringBuilder();
@@ -117,7 +118,7 @@ class GlossaryDefinitionMapper extends LogDelegator implements Mapper {
 		resource.setData(sb.toString());
 		resource.setEncoding("utf-8");
 
-		if (isLogDebugEnabled()) logDebug("loaded definition for " + glossaryMainTerm, null);
+		if (log.isDebugEnabled()) log.debug("loaded definition for " + glossaryMainTerm);
 		return resource;
 	}
 	

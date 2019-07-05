@@ -46,6 +46,7 @@ import org.olat.ims.qti21.QTI21Service;
 import org.olat.ims.qti21.QTI21StatisticsManager;
 import org.olat.ims.qti21.model.QTI21QuestionType;
 import org.olat.ims.qti21.model.QTI21StatisticSearchParams;
+import org.olat.ims.qti21.model.xml.QtiNodesExtractor;
 import org.olat.repository.RepositoryEntry;
 
 import uk.ac.ed.ph.jqtiplus.node.item.AssessmentItem;
@@ -136,14 +137,24 @@ public class QTI21StatisticResourceResult implements StatisticResourceResult {
 	
 	public StatisticAssessment getQTIStatisticAssessment() {
 		if(statisticAssessment == null) {
-			statisticAssessment = qtiStatisticsManager.getAssessmentStatistics(searchParams);
+			Double cutValue = getCutValue();
+			statisticAssessment = qtiStatisticsManager.getAssessmentStatistics(searchParams, cutValue);
 		}
 		return statisticAssessment;
+	}
+	
+	public Double getCutValue() {
+		AssessmentTest assessmentTest = resolvedAssessmentTest.getRootNodeLookup().extractIfSuccessful();
+		return QtiNodesExtractor.extractCutValue(assessmentTest);
 	}
 	
 	public File getAssessmentItemFile(AssessmentItemRef itemRef) {
 		URI itemUri = resolvedAssessmentTest.getSystemIdByItemRefMap().get(itemRef);
 		return new File(itemUri);
+	}
+	
+	public File getUnzippedDirectory() {
+		return FileResourceManager.getInstance().unzipFileResource(testEntry.getOlatResource());
 	}
 	
 	public boolean canViewAnonymousUsers() {
@@ -348,8 +359,9 @@ public class QTI21StatisticResourceResult implements StatisticResourceResult {
 	private Controller createAssessmentItemController(UserRequest ureq, WindowControl wControl,
 			AssessmentItemRef assessmentItemRef, String sectionTitle, boolean printMode) {
 		ResolvedAssessmentItem resolvedAssessmentItem = resolvedAssessmentTest.getResolvedAssessmentItem(assessmentItemRef);
-		AssessmentItem assessmentItem = resolvedAssessmentItem.getItemLookup().getRootNodeHolder().getRootNode();
-		Controller ctrl = new QTI21AssessmentItemStatisticsController(ureq, wControl, assessmentItemRef, assessmentItem, sectionTitle, this, withFilter, printMode);
+		
+		Controller ctrl = new QTI21AssessmentItemStatisticsController(ureq, wControl,
+				assessmentItemRef, resolvedAssessmentItem, sectionTitle, this, withFilter, printMode);
 		String iconCssClass = "o_mi_qtisc";
 		if(courseNode != null) {
 			ctrl = TitledWrapperHelper.getWrapper(ureq, wControl, ctrl, courseNode, iconCssClass);

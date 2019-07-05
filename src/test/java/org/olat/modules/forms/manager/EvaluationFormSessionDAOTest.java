@@ -19,23 +19,23 @@
  */
 package org.olat.modules.forms.manager;
 
-import org.junit.Assert;
+import static org.assertj.core.api.Assertions.assertThat;
+
+import java.util.Arrays;
+import java.util.List;
+
+import org.junit.Before;
 import org.junit.Test;
 import org.olat.core.commons.persistence.DB;
-import org.olat.core.id.Identity;
+import org.olat.core.commons.persistence.SortKey;
+import org.olat.modules.forms.EvaluationFormParticipation;
 import org.olat.modules.forms.EvaluationFormSession;
-import org.olat.modules.forms.handler.EvaluationFormResource;
-import org.olat.modules.portfolio.Page;
-import org.olat.modules.portfolio.PageBody;
-import org.olat.modules.portfolio.Section;
-import org.olat.modules.portfolio.manager.BinderDAO;
-import org.olat.modules.portfolio.manager.PageDAO;
-import org.olat.modules.portfolio.model.BinderImpl;
-import org.olat.repository.RepositoryEntry;
-import org.olat.repository.RepositoryService;
-import org.olat.resource.OLATResource;
-import org.olat.resource.OLATResourceManager;
-import org.olat.test.JunitTestHelper;
+import org.olat.modules.forms.EvaluationFormSessionRef;
+import org.olat.modules.forms.EvaluationFormSurvey;
+import org.olat.modules.forms.EvaluationFormSurveyRef;
+import org.olat.modules.forms.SessionFilter;
+import org.olat.modules.forms.SessionFilterFactory;
+import org.olat.modules.forms.ui.SessionSelectionModel.SessionSelectionCols;
 import org.olat.test.OlatTestCase;
 import org.springframework.beans.factory.annotation.Autowired;
 
@@ -50,46 +50,246 @@ public class EvaluationFormSessionDAOTest extends OlatTestCase {
 	@Autowired
 	private DB dbInstance;
 	@Autowired
-	private PageDAO pageDao;
+	private EvaluationFormSessionDAO sut;
 	@Autowired
-	private BinderDAO binderDao;
-	@Autowired
-	private RepositoryService repositoryService;
-	@Autowired
-	private EvaluationFormSessionDAO evaluationFormSessionDao;
+	private EvaluationFormTestsHelper evaTestHelper;
 	
+	@Before
+	public void cleanUp() {
+		evaTestHelper.deleteAll();
+	}
 	
 	@Test
-	public void createSessionForPortfolio() {
-		Identity id = JunitTestHelper.createAndPersistIdentityAsRndUser("eva-1");
-		
-		BinderImpl binder = binderDao.createAndPersist("Binder evaluation 1", "A binder with an evaluation", null, null);
-		Section section = binderDao.createSection("Section", "First section", null, null, binder);
-		dbInstance.commit();
-		Section reloadedSection = binderDao.loadSectionByKey(section.getKey());
-		Page page = pageDao.createAndPersist("Page 1", "A page with an evalutation.", null, null, true, reloadedSection, null);
-		dbInstance.commit();
-		RepositoryEntry formEntry = createFormEntry("Eva. form for session");
-
-		PageBody reloadedBody = pageDao.loadPageBodyByKey(page.getBody().getKey());
-		EvaluationFormSession session = evaluationFormSessionDao.createSessionForPortfolio(id, reloadedBody, formEntry);
+	public void shouldCreateSession() {
+		EvaluationFormParticipation participation = evaTestHelper.createParticipation();
 		dbInstance.commit();
 		
-		Assert.assertNotNull(session);
-		Assert.assertNotNull(session.getKey());
-		Assert.assertNotNull(session.getCreationDate());
-		Assert.assertNotNull(session.getLastModified());
-		Assert.assertEquals(reloadedBody, session.getPageBody());
-		Assert.assertEquals(id, session.getIdentity());	
+		EvaluationFormSession session = sut.createSession(participation);
+		dbInstance.commit();
+		
+		assertThat(session).isNotNull();
+		assertThat(session.getKey()).isNotNull();
+		assertThat(session.getCreationDate()).isNotNull();
+		assertThat(session.getLastModified()).isNotNull();
+		assertThat(session.getParticipation()).isEqualTo(participation);
+		assertThat(session.getSurvey()).isEqualTo(participation.getSurvey());
 	}
 	
-	private RepositoryEntry createFormEntry(String displayname) {
-		EvaluationFormResource ores = new EvaluationFormResource();
-		OLATResource resource = OLATResourceManager.getInstance().findOrPersistResourceable(ores);
-		Identity author = JunitTestHelper.createAndPersistIdentityAsRndUser("eva-form-author");
-		RepositoryEntry re = repositoryService.create(author, null, "", displayname, "Description", resource, RepositoryEntry.ACC_OWNERS);
+	@Test
+	public void shouldUpdateSession() {
+		EvaluationFormSession session = evaTestHelper.createSession();
 		dbInstance.commit();
-		return re;
+		
+		String email = "1";
+		String firstname = "2";
+		String lastname = "3";
+		String age = "4";
+		String gender = "5";
+		String orgUnit = "6";
+		String studySubject = "7";
+		EvaluationFormSession updatedSession = sut.updateSession(session, email, firstname, lastname, age, gender, orgUnit, studySubject);
+		
+		assertThat(updatedSession.getEmail()).isEqualTo(email);
+		assertThat(updatedSession.getFirstname()).isEqualTo(firstname);
+		assertThat(updatedSession.getLastname()).isEqualTo(lastname);
+		assertThat(updatedSession.getAge()).isEqualTo(age);
+		assertThat(updatedSession.getGender()).isEqualTo(gender);
+		assertThat(updatedSession.getOrgUnit()).isEqualTo(orgUnit);
+		assertThat(updatedSession.getStudySubject()).isEqualTo(studySubject);
+	}
+	
+	@Test
+	public void shouldMakeSessionAnonymous() {
+		EvaluationFormParticipation participation = evaTestHelper.createParticipation();
+		EvaluationFormSession session = sut.createSession(participation);
+		dbInstance.commit();
+		
+		EvaluationFormSession anonymousSession = sut.makeAnonymous(session);
+		
+		assertThat(anonymousSession.getParticipation()).isNull();
+	}
+	
+	@Test
+	public void shouldLoadByKey() {
+		EvaluationFormSession session = evaTestHelper.createSession();
+		dbInstance.commit();
+		
+		EvaluationFormSession loadedSession = sut.loadSessionByKey(session);
+		
+		assertThat(loadedSession).isEqualTo(session);
 	}
 
+	@Test
+	public void shouldLoadFilteredCount() {
+		EvaluationFormSession session1 = evaTestHelper.createSession();
+		EvaluationFormSession session2 = evaTestHelper.createSession();
+		evaTestHelper.createSession();
+		dbInstance.commit();
+		
+		List<EvaluationFormSession> sessions = Arrays.asList(session1, session2);
+		SessionFilter filter = SessionFilterFactory.create(sessions);
+		Long count = sut.loadSessionsCount(filter);
+		
+		long expected = sessions.size();
+		assertThat(count).isEqualTo(expected);
+	}
+	
+	@Test
+	public void shouldLoadFiltered() {
+		EvaluationFormSession session1 = evaTestHelper.createSession();
+		EvaluationFormSession session2 = evaTestHelper.createSession();
+		EvaluationFormSession otherSession = evaTestHelper.createSession();
+		dbInstance.commit();
+		
+		List<EvaluationFormSession> sessions = Arrays.asList(session1, session2);
+		SessionFilter filter = SessionFilterFactory.create(sessions);
+		List<EvaluationFormSession> loadedSessions = sut.loadSessionsFiltered(filter, 0, -1);
+		
+		assertThat(loadedSessions)
+				.containsExactlyInAnyOrder(session1, session2)
+				.doesNotContain(otherSession);
+	}
+	
+	@Test
+	public void shouldLoadFilteredPaged() {
+		EvaluationFormSession session1 = evaTestHelper.createSession();
+		EvaluationFormSession session2 = evaTestHelper.createSession();
+		dbInstance.commit();
+		
+		List<EvaluationFormSession> sessions = Arrays.asList(session1, session2);
+		SessionFilter filter = SessionFilterFactory.create(sessions);
+		List<EvaluationFormSession> unpaged = sut.loadSessionsFiltered(filter, 0, -1);
+		assertThat(unpaged) .hasSize(2);
+		
+		List<EvaluationFormSession> paged = sut.loadSessionsFiltered(filter, 1, 1);
+		assertThat(paged).hasSize(1);
+	}
+	
+	@Test
+	public void shouldLoadFilteredOrdered() {
+		EvaluationFormSession session1 = evaTestHelper.createSession();
+		dbInstance.commit();
+		
+		List<EvaluationFormSession> sessions = Arrays.asList(session1);
+		SessionFilter filter = SessionFilterFactory.create(sessions);
+		SortKey sortKey = new SortKey(SessionSelectionCols.email.name(), true);
+		List<EvaluationFormSession> loadedSessions = sut.loadSessionsFiltered(filter, 0, -1, sortKey);
+		
+		assertThat(loadedSessions).containsExactlyInAnyOrder(session1);
+	}
+	
+	@Test
+	public void shouldLoadByParticipation() {
+		EvaluationFormParticipation participation = evaTestHelper.createParticipation();
+		EvaluationFormSessionRef session = sut.createSession(participation);
+		dbInstance.commitAndCloseSession();
+		
+		EvaluationFormSession loadedSession = sut.loadSessionByParticipation(participation);
+		
+		assertThat(loadedSession).isNotNull();
+		assertThat(loadedSession).isEqualTo(session);
+	}
+	
+	@Test
+	public void shouldCheckIfSurveyHasSessions() {
+		EvaluationFormParticipation participation = evaTestHelper.createParticipation();
+		EvaluationFormSurveyRef survey = participation.getSurvey();
+		sut.createSession(participation);
+		dbInstance.commitAndCloseSession();
+		
+		boolean hasSessions = sut.hasSessions(survey);
+		
+		assertThat(hasSessions).isTrue();
+	}
+	
+	@Test
+	public void shouldCheckIfSurveyHasNoSessions() {
+		EvaluationFormSurveyRef survey = evaTestHelper.createSurvey();
+		dbInstance.commit();
+		
+		boolean hasSessions = sut.hasSessions(survey);
+		
+		assertThat(hasSessions).isFalse();
+	}
+	
+	@Test
+	public void shouldCheckIfFormHasSessions() {
+		EvaluationFormParticipation participation = evaTestHelper.createParticipation();
+		EvaluationFormSurvey survey = participation.getSurvey();
+		sut.createSession(participation);
+		dbInstance.commitAndCloseSession();
+		
+		boolean hasSessions = sut.hasSessions(survey.getFormEntry());
+		
+		assertThat(hasSessions).isTrue();
+	}
+	
+	@Test
+	public void shouldCheckIfFormHasNoSessions() {
+		EvaluationFormSurvey survey = evaTestHelper.createSurvey();
+		dbInstance.commit();
+		
+		boolean hasSessions = sut.hasSessions(survey.getFormEntry());
+		
+		assertThat(hasSessions).isFalse();
+	}
+	
+	@Test
+	public void shouldGetCountOfSessionsForSurvey() {
+		EvaluationFormSurvey survey = evaTestHelper.createSurvey();
+		dbInstance.commit();
+		
+		long countOfSessions = sut.getCountOfSessions(survey);
+		assertThat(countOfSessions).isEqualTo(0);
+		
+		evaTestHelper.createSession(survey);
+		evaTestHelper.createSession(survey);
+		dbInstance.commit();
+		
+		countOfSessions = sut.getCountOfSessions(survey);
+		assertThat(countOfSessions).isEqualTo(2);
+		
+	}
+	
+	@Test
+	public void shouldDeleteSessionsOfSurvey() {
+		EvaluationFormSurvey survey = evaTestHelper.createSurvey();
+		EvaluationFormSession session1 = evaTestHelper.createSession(survey);
+		EvaluationFormSession session2 = evaTestHelper.createSession(survey);
+		EvaluationFormSession otherSession = evaTestHelper.createSession();
+		dbInstance.commit();
+		
+		sut.deleteSessions(survey);
+		dbInstance.commit();
+		
+		EvaluationFormSession loadedSession1 = sut.loadSessionByParticipation(session1.getParticipation());
+		assertThat(loadedSession1).isNull();
+		EvaluationFormSession loadedSession2 = sut.loadSessionByParticipation(session2.getParticipation());
+		assertThat(loadedSession2).isNull();
+		EvaluationFormSession loadedOtherSession = sut.loadSessionByParticipation(otherSession.getParticipation());
+		assertThat(loadedOtherSession).isEqualTo(otherSession);
+	}
+	
+	@Test
+	public void shouldDeleteSessionsOfParticipations() {
+		EvaluationFormParticipation participation1 = evaTestHelper.createParticipation();
+		EvaluationFormSession session1 = evaTestHelper.createSession(participation1);
+		EvaluationFormParticipation participation2 = evaTestHelper.createParticipation();
+		EvaluationFormSession session2 = evaTestHelper.createSession(participation2);
+		EvaluationFormParticipation otherParticipation = evaTestHelper.createParticipation();
+		EvaluationFormSession otherSession = evaTestHelper.createSession(otherParticipation);
+		dbInstance.commit();
+		
+		List<EvaluationFormParticipation> participations = Arrays.asList(participation1, participation2);
+		sut.deleteSessions(participations);
+		dbInstance.commit();
+		
+		EvaluationFormSession loadedSession1 = sut.loadSessionByParticipation(session1.getParticipation());
+		assertThat(loadedSession1).isNull();
+		EvaluationFormSession loadedSession2 = sut.loadSessionByParticipation(session2.getParticipation());
+		assertThat(loadedSession2).isNull();
+		EvaluationFormSession loadedOtherSession = sut.loadSessionByParticipation(otherSession.getParticipation());
+		assertThat(loadedOtherSession).isEqualTo(otherSession);
+	}
+	
 }

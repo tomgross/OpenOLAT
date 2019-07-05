@@ -21,6 +21,7 @@ package org.olat.course.assessment;
 
 import java.util.List;
 
+import org.olat.basesecurity.IdentityRef;
 import org.olat.basesecurity.IdentityShort;
 import org.olat.core.id.Identity;
 import org.olat.course.assessment.model.AssessedBusinessGroup;
@@ -29,6 +30,7 @@ import org.olat.course.assessment.model.SearchAssessedIdentityParams;
 import org.olat.modules.assessment.AssessmentEntry;
 import org.olat.modules.assessment.model.AssessmentEntryStatus;
 import org.olat.modules.assessment.model.AssessmentMembersStatistics;
+import org.olat.repository.RepositoryEntry;
 
 /**
  * The manager taylored for the assessment tool.
@@ -62,19 +64,21 @@ public interface AssessmentToolManager {
 	 */
 	public AssessmentMembersStatistics getNumberOfParticipants(Identity coach, SearchAssessedIdentityParams params);
 	
-	/**
-	 * The number of user who launched the course / resource
-	 * @param coach
-	 * @param params
-	 * @return
-	 */
-	public int getNumberOfInitialLaunches(Identity coach, SearchAssessedIdentityParams params);
 	
 	public List<Identity> getAssessedIdentities(Identity coach, SearchAssessedIdentityParams params);
 	
 	public List<IdentityShort> getShortAssessedIdentities(Identity coach, SearchAssessedIdentityParams params, int maxResults);
 	
 	public List<AssessmentEntry> getAssessmentEntries(Identity coach, SearchAssessedIdentityParams params, AssessmentEntryStatus status);
+	
+	/**
+	 * 
+	 * @param assessedIdentity
+	 * @param entry
+	 * @param subIdent
+	 * @return
+	 */
+	public AssessmentEntry getAssessmentEntries(IdentityRef assessedIdentity, RepositoryEntry entry, String subIdent);
 	
 
 }

@@ -19,41 +19,67 @@
  */
 package org.olat.basesecurity;
 
+import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.Date;
+import java.util.List;
 import java.util.Map;
+
+import org.olat.core.id.Identity;
+import org.olat.core.id.Organisation;
+import org.olat.core.id.OrganisationRef;
+import org.olat.modules.curriculum.CurriculumRoles;
 
 /**
  * 
  * @author srosse, stephane.rosse@frentix.com, http://www.frentix.com
  */
 public class SearchIdentityParams {
+	private String idAndExternalIds;
 	private String login;
 	private Map<String, String> userProperties;
 	private boolean userPropertiesAsIntersectionSearch;
-	private SecurityGroup[] groups;
-	private PermissionOnResourceable[] permissionOnResources;
+	
+	private OrganisationRoles[] roles;
+	private OrganisationRoles[] excludedRoles;
+	private GroupRoles repositoryEntryRole;
+	private boolean repositoryEntryRoleInDefaultOnly;
+	private GroupRoles businessGroupRole;
+	private CurriculumRoles curriculumRole;
+	
 	private String[] authProviders;
 	private Date createdAfter;
 	private Date createdBefore;
 	private Date userLoginAfter;
 	private Date userLoginBefore;
 	private Integer status;
+	private List<Integer> exactStatusList;
 	private Collection<Long> identityKeys;
 	private Boolean managed;
+	private boolean withoutBusinessGroup;
+	private boolean withoutResources;
+	private boolean withoutEfficiencyStatements;
+	
+	private List<Organisation> organisationParents;
+	private List<OrganisationRef> organisations;
 	
 	public SearchIdentityParams() {
 		//
 	}
 	
+	public SearchIdentityParams(OrganisationRoles[] roles, Integer status) {
+		this.roles = roles;
+		this.status = status;
+	}
+	
 	public SearchIdentityParams(String login, Map<String, String> userproperties, boolean userPropertiesAsIntersectionSearch,
-			SecurityGroup[] groups, PermissionOnResourceable[] permissionOnResources, String[] authProviders,
+			OrganisationRoles[] roles, String[] authProviders,
 			Date createdAfter, Date createdBefore, Date userLoginAfter, Date userLoginBefore, Integer status) {
 		this.login = login;
 		this.userProperties = userproperties;
 		this.userPropertiesAsIntersectionSearch = userPropertiesAsIntersectionSearch;
-		this.groups = groups;
-		this.permissionOnResources = permissionOnResources;
+		this.roles = roles;
 		this.authProviders = authProviders;
 		this.createdAfter = createdAfter;
 		this.createdBefore = createdBefore;
@@ -62,6 +88,72 @@ public class SearchIdentityParams {
 		this.status = status;
 	}
 	
+	public static SearchIdentityParams params(Date createdAfter, Date createdBefore, Integer status) {
+		return new SearchIdentityParams(null, null, true, null, null, createdAfter, createdBefore, null, null, status);
+	}
+	
+	public static SearchIdentityParams params(OrganisationRoles[] roles, Integer status) {
+		return new SearchIdentityParams(null, null, true, roles, null, null, null, null, null, status);
+	}
+	
+	public static SearchIdentityParams authenticationProviders(String[] authProviders, Integer status) {
+		return new SearchIdentityParams(null, null, true, null, authProviders, null, null, null, null, status);
+	}
+	
+	public static SearchIdentityParams resources(GroupRoles repositoryEntryRole, boolean defOnly,
+			GroupRoles businessGroupRole, CurriculumRoles curriculumRole,
+			OrganisationRoles[] roles, OrganisationRoles[] excludedRoles, Integer status) {
+		SearchIdentityParams params = new SearchIdentityParams(null, null, true, null, null, null, null, null, null, status);
+		params.setRepositoryEntryRole(repositoryEntryRole, defOnly);
+		params.setBusinessGroupRole(businessGroupRole);
+		params.setCurriculumRole(curriculumRole);
+		params.setRoles(roles);
+		params.setExcludedRoles(excludedRoles);
+		return params;
+	}
+	
+	public static SearchIdentityParams organisation(Organisation organisation, Integer status) {
+		SearchIdentityParams params = new SearchIdentityParams();
+		params.setOrganisations(Collections.singletonList(organisation));
+		params.setStatus(status);
+		return params;
+	}
+	
+	public static SearchIdentityParams withBusinesGroups() {
+		SearchIdentityParams params = new SearchIdentityParams();
+		params.setWithoutBusinessGroup(true);
+		params.setStatus(Identity.STATUS_VISIBLE_LIMIT);
+		return params;
+	}
+	
+	public boolean hasOrganisationParents() {
+		return organisationParents != null && !organisationParents.isEmpty();
+	}
+	
+	public List<Organisation> getOrganisationParents() {
+		return organisationParents;
+	}
+
+	public void setOrganisationParents(List<Organisation> organisationParents) {
+		this.organisationParents = organisationParents;
+	}
+	
+	public boolean hasOrganisations() {
+		return organisations != null && !organisations.isEmpty();
+	}
+
+	public List<OrganisationRef> getOrganisations() {
+		return organisations;
+	}
+
+	public void setOrganisations(List<? extends OrganisationRef> organisations) {
+		if(organisations == null) {
+			this.organisations = null;
+		} else {
+			this.organisations = new ArrayList<>(organisations);
+		}
+	}
+
 	public String getLogin() {
 		return login;
 	}
@@ -70,6 +162,10 @@ public class SearchIdentityParams {
 		this.login = login;
 	}
 	
+	public boolean hasUserProperties() {
+		return userProperties != null && !userProperties.isEmpty();  
+	}
+
 	public Map<String, String> getUserProperties() {
 		return userProperties;
 	}
@@ -86,20 +182,65 @@ public class SearchIdentityParams {
 		this.userPropertiesAsIntersectionSearch = userPropertiesAsIntersectionSearch;
 	}
 	
-	public SecurityGroup[] getGroups() {
-		return groups;
+	public boolean hasRoles() {
+		return roles != null && roles.length > 0;
 	}
 	
-	public void setGroups(SecurityGroup[] groups) {
-		this.groups = groups;
+	public OrganisationRoles[] getRoles() {
+		return roles;
+	}
+
+	public void setRoles(OrganisationRoles[] roles) {
+		this.roles = roles;
 	}
 	
-	public PermissionOnResourceable[] getPermissionOnResources() {
-		return permissionOnResources;
+	public boolean hasExcludedRoles() {
+		return excludedRoles != null && excludedRoles.length > 0;
 	}
 	
-	public void setPermissionOnResources(PermissionOnResourceable[] permissionOnResources) {
-		this.permissionOnResources = permissionOnResources;
+	public OrganisationRoles[] getExcludedRoles() {
+		return excludedRoles;
+	}
+
+	public void setExcludedRoles(OrganisationRoles[] excludedRoles) {
+		this.excludedRoles = excludedRoles;
+	}
+
+	public GroupRoles getRepositoryEntryRole() {
+		return repositoryEntryRole;
+	}
+
+	public void setRepositoryEntryRole(GroupRoles repositoryEntryRole, boolean defaultOnly) {
+		this.repositoryEntryRole = repositoryEntryRole;
+		this.repositoryEntryRoleInDefaultOnly = defaultOnly;
+	}
+
+	public GroupRoles getBusinessGroupRole() {
+		return businessGroupRole;
+	}
+
+	public void setBusinessGroupRole(GroupRoles businessGroupRole) {
+		this.businessGroupRole = businessGroupRole;
+	}
+
+	public boolean isRepositoryEntryRoleInDefaultOnly() {
+		return repositoryEntryRoleInDefaultOnly;
+	}
+
+	public void setRepositoryEntryRoleInDefaultOnly(boolean repositoryEntryRoleInDefaultOnly) {
+		this.repositoryEntryRoleInDefaultOnly = repositoryEntryRoleInDefaultOnly;
+	}
+
+	public CurriculumRoles getCurriculumRole() {
+		return curriculumRole;
+	}
+
+	public void setCurriculumRole(CurriculumRoles curriculumRole) {
+		this.curriculumRole = curriculumRole;
+	}
+
+	public boolean hasAuthProviders() {
+		return authProviders != null && authProviders.length > 0;
 	}
 	
 	public String[] getAuthProviders() {
@@ -109,7 +250,7 @@ public class SearchIdentityParams {
 	public void setAuthProviders(String[] authProviders) {
 		this.authProviders = authProviders;
 	}
-	
+
 	public Boolean getManaged() {
 		return managed;
 	}
@@ -158,11 +299,60 @@ public class SearchIdentityParams {
 		this.status = status;
 	}
 	
+	public String getIdAndExternalIds() {
+		return idAndExternalIds;
+	}
+
+	public void setIdAndExternalIds(String idAndExternalIds) {
+		this.idAndExternalIds = idAndExternalIds;
+	}
+
+	public List<Integer> getExactStatusList() {
+		return exactStatusList;
+	}
+
+	/**
+	 * These status will override the one set with setStatus()
+	 * 
+	 * @param statusList A lsit of status
+	 */
+	public void setExactStatusList(List<Integer> statusList) {
+		this.exactStatusList = statusList;
+	}
+
+	public boolean hasIdentityKeys() {
+		return identityKeys != null && !identityKeys.isEmpty();
+	}
+	
 	public Collection<Long> getIdentityKeys() {
 		return identityKeys;
 	}
 	
 	public void setIdentityKeys(Collection<Long> identityKeys) {
 		this.identityKeys = identityKeys;
+	}
+
+	public boolean isWithoutBusinessGroup() {
+		return withoutBusinessGroup;
+	}
+
+	public void setWithoutBusinessGroup(boolean withoutBusinessGroup) {
+		this.withoutBusinessGroup = withoutBusinessGroup;
+	}
+
+	public boolean isWithoutResources() {
+		return withoutResources;
+	}
+
+	public void setWithoutResources(boolean withoutResources) {
+		this.withoutResources = withoutResources;
+	}
+
+	public boolean isWithoutEfficiencyStatements() {
+		return withoutEfficiencyStatements;
+	}
+
+	public void setWithoutEfficiencyStatements(boolean withoutEfficiencyStatements) {
+		this.withoutEfficiencyStatements = withoutEfficiencyStatements;
 	}
 }

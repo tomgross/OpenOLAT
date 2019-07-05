@@ -25,12 +25,17 @@
 
 package org.olat.course.run.userview;
 
+import java.util.List;
+
+import org.olat.basesecurity.OrganisationRoles;
 import org.olat.core.gui.control.WindowControl;
 import org.olat.core.id.IdentityEnvironment;
 import org.olat.course.condition.interpreter.ConditionInterpreter;
 import org.olat.course.editor.CourseEditorEnv;
 import org.olat.course.run.environment.CourseEnvironment;
 import org.olat.course.run.scoring.ScoreAccounting;
+import org.olat.group.BusinessGroup;
+import org.olat.modules.curriculum.CurriculumElement;
 import org.olat.repository.model.RepositoryEntryLifecycle;
 
 /**
@@ -62,8 +67,8 @@ public interface UserCourseEnvironment {
 	public ScoreAccounting getScoreAccounting();
 	
 	/**
-	 * Is admin of the course, as administrator in OpenOLAT, resource manager
-	 * or owner of the course.
+	 * Is admin of a course an administrator, learn resource manager or principal
+	 * of an organization linked to the course or an owner of the course.
 	 * @return
 	 */
 	public boolean isAdmin();
@@ -82,11 +87,20 @@ public interface UserCourseEnvironment {
 	
 	public boolean isIdentityInCourseGroup(Long groupKey);
 	
+	
+	public boolean isInOrganisation(String organisationIdentifier, OrganisationRoles... roles);
+	
+	
+	public List<BusinessGroup> getCoachedGroups();
+	
+	public List<CurriculumElement> getCoachedCurriculumElements();
+	
+	
 	/**
 	 * Is administrator of some courses (as owner, OpenOLAT administrator or institutional resource manager).
 	 * @return
 	 */
-	public boolean isAdminOfAnyCourse();
+	public boolean isAdministratorOfAnyCourse();
 	
 	/**
 	 * Is coach of some course.

@@ -25,12 +25,13 @@
 
 package org.olat.course.run.environment;
 
-import org.olat.core.commons.modules.bc.vfs.OlatRootFolderImpl;
+import org.olat.core.util.vfs.LocalFolderImpl;
 import org.olat.core.util.vfs.VFSContainer;
 import org.olat.course.Structure;
 import org.olat.course.assessment.AssessmentManager;
 import org.olat.course.auditing.UserNodeAuditManager;
 import org.olat.course.config.CourseConfig;
+import org.olat.course.folder.CourseContainerOptions;
 import org.olat.course.groupsandrights.CourseGroupManager;
 import org.olat.course.properties.CoursePropertyManager;
 import org.olat.repository.RepositoryEntry;
@@ -103,11 +104,13 @@ public interface CourseEnvironment {
 	 */
 	public VFSContainer getCourseFolderContainer();
 	
+	public VFSContainer getCourseFolderContainer(CourseContainerOptions options);
+	
 	/**
 	 * Return the course base path.
 	 * @return the course base path
 	 */
-	public OlatRootFolderImpl getCourseBaseContainer();
+	public LocalFolderImpl getCourseBaseContainer();
 	
 	/**
 	 * Return the course run structure

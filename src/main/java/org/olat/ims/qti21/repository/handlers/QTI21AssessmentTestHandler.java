@@ -25,6 +25,7 @@ import java.io.IOException;
 import java.net.URISyntaxException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.util.Locale;
 
 import org.olat.core.CoreSpringFactory;
@@ -42,23 +43,26 @@ import org.olat.core.gui.media.MediaResource;
 import org.olat.core.gui.translator.Translator;
 import org.olat.core.id.Identity;
 import org.olat.core.id.OLATResourceable;
+import org.olat.core.id.Organisation;
 import org.olat.core.id.Roles;
-import org.olat.core.logging.OLog;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.FileUtils;
+import org.olat.core.util.PathUtils;
 import org.olat.core.util.PathUtils.YesMatcher;
 import org.olat.core.util.Util;
 import org.olat.core.util.coordinate.LockResult;
 import org.olat.course.assessment.AssessmentMode;
 import org.olat.course.assessment.manager.UserCourseInformationsManager;
+import org.olat.course.nodes.iq.QTIResourceTypeModule;
 import org.olat.fileresource.FileResourceManager;
-import org.olat.fileresource.ZippedDirectoryMediaResource;
 import org.olat.fileresource.types.FileResource;
 import org.olat.fileresource.types.ImsQTI21Resource;
 import org.olat.fileresource.types.ResourceEvaluation;
 import org.olat.ims.qti.editor.QTIEditorPackage;
 import org.olat.ims.qti.fileresource.TestFileResource;
 import org.olat.ims.qti21.QTI21DeliveryOptions;
+import org.olat.ims.qti21.QTI21Module;
 import org.olat.ims.qti21.QTI21Service;
 import org.olat.ims.qti21.manager.AssessmentTestSessionDAO;
 import org.olat.ims.qti21.model.IdentifierGenerator;
@@ -75,6 +79,7 @@ import org.olat.ims.qti21.ui.editor.AssessmentTestComposerController;
 import org.olat.modules.qpool.model.QItemList;
 import org.olat.repository.ErrorList;
 import org.olat.repository.RepositoryEntry;
+import org.olat.repository.RepositoryEntryStatusEnum;
 import org.olat.repository.RepositoryManager;
 import org.olat.repository.RepositoryService;
 import org.olat.repository.handlers.EditionSupport;
@@ -86,7 +91,6 @@ import org.olat.resource.OLATResourceManager;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
-import de.bps.onyx.plugin.OnyxModule;
 import uk.ac.ed.ph.jqtiplus.node.item.AssessmentItem;
 import uk.ac.ed.ph.jqtiplus.node.test.AssessmentSection;
 import uk.ac.ed.ph.jqtiplus.node.test.AssessmentTest;
@@ -101,10 +105,12 @@ import uk.ac.ed.ph.jqtiplus.serialization.QtiSerializer;
 @Service
 public class QTI21AssessmentTestHandler extends FileHandler {
 	
-	private static final OLog log = Tracing.createLoggerFor(QTI21AssessmentTestHandler.class);
+	private static final Logger log = Tracing.createLoggerFor(QTI21AssessmentTestHandler.class);
 	
 	@Autowired
 	private DB dbInstance;
+	@Autowired
+	private QTI21Module qtiModule;
 	@Autowired
 	private QTI21Service qtiService;
 	@Autowired
@@ -121,7 +127,7 @@ public class QTI21AssessmentTestHandler extends FileHandler {
 	}
 
 	@Override
-	public boolean isCreate() {
+	public boolean supportCreate(Identity identity, Roles roles) {
 		return true;
 	}
 
@@ -131,11 +137,13 @@ public class QTI21AssessmentTestHandler extends FileHandler {
 	}
 
 	@Override
-	public RepositoryEntry createResource(Identity initialAuthor, String displayname, String description, Object createObject, Locale locale) {
+	public RepositoryEntry createResource(Identity initialAuthor, String displayname, String description,
+			Object createObject, Organisation organisation, Locale locale) {
 		ImsQTI21Resource ores = new ImsQTI21Resource();
 		
 		OLATResource resource = OLATResourceManager.getInstance().findOrPersistResourceable(ores);
-		RepositoryEntry re = repositoryService.create(initialAuthor, null, "", displayname, description, resource, RepositoryEntry.ACC_OWNERS);
+		RepositoryEntry re = repositoryService.create(initialAuthor, null, "", displayname, description,
+				resource, RepositoryEntryStatusEnum.preparation, organisation);
 		dbInstance.commit();
 		
 		File repositoryDir = new File(FileResourceManager.getInstance().getFileResourceRoot(re.getOlatResource()), FileResourceManager.ZIPDIR);
@@ -147,17 +155,21 @@ public class QTI21AssessmentTestHandler extends FileHandler {
 			qpoolServiceProvider.exportToEditorPackage(repositoryDir, itemToImport.getItems(), locale);
 		} else if(createObject instanceof QTIEditorPackage) {
 			QTIEditorPackage testToConvert = (QTIEditorPackage)createObject;
-			qpoolServiceProvider.convertFromEditorPackage(testToConvert, repositoryDir, locale);
+			QTI21DeliveryOptions options = qtiService.getDeliveryOptions(re);
+			qpoolServiceProvider.convertFromEditorPackage(testToConvert, repositoryDir, locale, options);
+			qtiService.setDeliveryOptions(re, options);
 		} else if(createObject instanceof OLATResource) {
 			//convert a Onyx test in QTI 2.1
 			OLATResource onyxResource = (OLATResource)createObject;
 			RepositoryEntry onyxRe = CoreSpringFactory.getImpl(RepositoryService.class)
 					.loadByResourceKey(onyxResource.getKey());
-			if(OnyxModule.isOnyxTest((OLATResource)createObject)) {
+			if(QTIResourceTypeModule.isOnyxTest((OLATResource)createObject)) {
 				copyOnyxResources(onyxResource, repositoryDir);
 			} else {
+				QTI21DeliveryOptions options = qtiService.getDeliveryOptions(re);
 				QTIEditorPackage testToConvert = TestFileResource.getQTIEditorPackageReader(onyxResource);
-				qpoolServiceProvider.convertFromEditorPackage(testToConvert, repositoryDir, locale);
+				qpoolServiceProvider.convertFromEditorPackage(testToConvert, repositoryDir, locale, options);
+				qtiService.setDeliveryOptions(re, options);
 			}
 			copyMetadata(onyxRe, re, repositoryDir);
 		} else {
@@ -254,6 +266,11 @@ public class QTI21AssessmentTestHandler extends FileHandler {
 	public boolean isPostCreateWizardAvailable() {
 		return false;
 	}
+	
+	@Override
+	public boolean supportImport() {
+		return true;
+	}
 
 	@Override
 	public ResourceEvaluation acceptImport(File file, String filename) {
@@ -261,23 +278,44 @@ public class QTI21AssessmentTestHandler extends FileHandler {
 	}
 
 	@Override
+	public boolean supportImportUrl() {
+		return false;
+	}
+	
+	@Override
+	public ResourceEvaluation acceptImport(String url) {
+		return ResourceEvaluation.notValid();
+	}
+
+	@Override
 	public RepositoryEntry importResource(Identity initialAuthor, String initialAuthorAlt, String displayname, String description,
-			boolean withReferences, Locale locale, File file, String filename) {
+			boolean withReferences, Organisation organisation, Locale locale, File file, String filename) {
 		ImsQTI21Resource ores = new ImsQTI21Resource();
 		OLATResource resource = OLATResourceManager.getInstance().createAndPersistOLATResourceInstance(ores);
-		File fResourceFileroot = FileResourceManager.getInstance().getFileResourceRootImpl(resource).getBasefile();
+		File fResourceFileroot = FileResourceManager.getInstance().getFileResourceRoot(resource);
 		File zipDir = new File(fResourceFileroot, FileResourceManager.ZIPDIR);
 		copyResource(file, filename, zipDir);
+		
+		File optionsFile = new File(zipDir, QTI21Service.PACKAGE_CONFIG_FILE_NAME);
+		if(optionsFile.exists()) {
+			try {// move the options to the root directory
+				File target = new File(fResourceFileroot, QTI21Service.PACKAGE_CONFIG_FILE_NAME);
+				Files.move(optionsFile.toPath(), target.toPath(), StandardCopyOption.REPLACE_EXISTING);
+			} catch (IOException e) {
+				log.error("", e);
+			}
+		} 
 
-		RepositoryEntry re = CoreSpringFactory.getImpl(RepositoryService.class)
-				.create(initialAuthor, null, "", displayname, description, resource, RepositoryEntry.ACC_OWNERS);
+		RepositoryEntry re = CoreSpringFactory.getImpl(RepositoryService.class).create(initialAuthor, null, "", displayname, description,
+					resource, RepositoryEntryStatusEnum.preparation, organisation);
 		DBFactory.getInstance().commit();
 		return re;
 	}
 	
 	private boolean copyResource(File file, String filename, File targetDirectory) {
 		try {
-			Path path = FileResource.getResource(file, filename);
+			String fallbackEncoding = qtiModule.getImportEncodingFallback();
+			Path path = FileResource.getResource(file, filename, fallbackEncoding);
 			if(path == null) {
 				return false;
 			}
@@ -286,19 +324,23 @@ public class QTI21AssessmentTestHandler extends FileHandler {
 			QTI21IMSManifestExplorerVisitor visitor = new QTI21IMSManifestExplorerVisitor();
 			Files.walkFileTree(path, visitor);
 			Files.walkFileTree(path, new CopyAndConvertVisitor(path, destDir, visitor.getInfos(), new YesMatcher()));
+			PathUtils.closeSubsequentFS(path);
 			return true;
 		} catch (IOException e) {
 			log.error("", e);
 			return false;
 		}
 	}
+	
+	@Override
+	public RepositoryEntry importResource(Identity initialAuthor, String initialAuthorAlt, String displayname,
+			String description, Organisation organisation, Locale locale, String url) {
+		return null;
+	}
 
 	@Override
-	public MediaResource getAsMediaResource(OLATResourceable res, boolean backwardsCompatible) {
-		File unzippedDir = FileResourceManager.getInstance().unzipFileResource(res);
-		String displayName = CoreSpringFactory.getImpl(RepositoryManager.class)
-				.lookupDisplayNameByOLATResourceableId(res.getResourceableId());
-		return new ZippedDirectoryMediaResource(displayName, unzippedDir);
+	public MediaResource getAsMediaResource(OLATResourceable res) {
+		return new QTI21AssessmentTestMediaResource(res);
 	}
 	
 	@Override
@@ -308,6 +350,10 @@ public class QTI21AssessmentTestHandler extends FileHandler {
 		File sourceDir = new File(sourceRootFile, FileResourceManager.ZIPDIR);
 		File targetDir = new File(targetRootDir, FileResourceManager.ZIPDIR);
 		FileUtils.copyDirContentsToDir(sourceDir, targetDir, false, "Copy");
+		File sourceOptionsFile = new File(sourceRootFile, QTI21Service.PACKAGE_CONFIG_FILE_NAME);
+		if(sourceOptionsFile.exists()) {
+			FileUtils.copyFileToDir(sourceOptionsFile, targetRootDir, "Copy QTI 2.1 Options");
+		}
 		return target;
 	}
 
@@ -317,7 +363,7 @@ public class QTI21AssessmentTestHandler extends FileHandler {
 	}
 
 	@Override
-	public EditionSupport supportsEdit(OLATResourceable resource) {
+	public EditionSupport supportsEdit(OLATResourceable resource, Identity identity, Roles roles) {
 		return EditionSupport.yes;
 	}
 	
@@ -354,14 +400,13 @@ public class QTI21AssessmentTestHandler extends FileHandler {
 
 	@Override
 	public Controller createEditorController(RepositoryEntry re, UserRequest ureq, WindowControl wControl, TooledStackedPanel toolbar) {
-		AssessmentTestComposerController editorCtrl = new AssessmentTestComposerController(ureq, wControl, toolbar, re);
-		return editorCtrl;
+		return new AssessmentTestComposerController(ureq, wControl, toolbar, re);
 	}
 
 	@Override
 	public Controller createAssessmentDetailsController(RepositoryEntry re, UserRequest ureq, WindowControl wControl,
 			TooledStackedPanel toolbar, Identity assessedIdentity) {
-		return new QTI21AssessmentDetailsController(ureq, wControl, re, assessedIdentity);
+		return new QTI21AssessmentDetailsController(ureq, wControl, toolbar, re, assessedIdentity);
 	}
 
 	@Override

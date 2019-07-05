@@ -21,6 +21,7 @@ package org.olat.modules.qpool.ui.datasource;
 
 import java.util.Collection;
 import java.util.List;
+import java.util.Locale;
 
 import org.olat.core.CoreSpringFactory;
 import org.olat.core.commons.persistence.ResultInfos;
@@ -34,6 +35,7 @@ import org.olat.modules.qpool.QPoolService;
 import org.olat.modules.qpool.QuestionItem;
 import org.olat.modules.qpool.QuestionItemShort;
 import org.olat.modules.qpool.QuestionItemView;
+import org.olat.modules.qpool.QuestionStatus;
 import org.olat.modules.qpool.model.SearchQuestionItemParams;
 import org.olat.modules.qpool.ui.QuestionItemsSource;
 
@@ -46,13 +48,15 @@ import org.olat.modules.qpool.ui.QuestionItemsSource;
 public abstract class DefaultItemsSource implements QuestionItemsSource {
 
 	private boolean removeEnabled = false;
+	private final Identity identity;
 	private final String name;
 	protected final QPoolService qpoolService;
 	private final SearchQuestionItemParams defaultParams;
 	
-	public DefaultItemsSource(Identity me, Roles roles, String name) {
+	public DefaultItemsSource(Identity me, Roles roles, Locale locale, String name) {
 		this.name = name;
-		defaultParams = new SearchQuestionItemParams(me, roles);
+		this.identity = me;
+		defaultParams = new SearchQuestionItemParams(me, roles, locale);
 		qpoolService = CoreSpringFactory.getImpl(QPoolService.class);
 	}
 	
@@ -86,9 +90,21 @@ public abstract class DefaultItemsSource implements QuestionItemsSource {
 	public void setRemoveEnabled(boolean removeEnabled) {
 		this.removeEnabled = removeEnabled;
 	}
+	
+	@Override
+	public boolean isAdminItemSource() {
+		return false;
+	}
 
 	@Override
-	public abstract boolean isDeleteEnabled();
+	public QuestionStatus getStatusFilter() {
+		return getDefaultParams().getQuestionStatus();
+	}
+	
+	@Override
+	public void setStatusFilter(QuestionStatus statusFilter) {
+		getDefaultParams().setQuestionStatus(statusFilter);
+	}
 
 	@Override
 	public abstract int postImport(List<QuestionItem> items, boolean editable);
@@ -109,6 +125,11 @@ public abstract class DefaultItemsSource implements QuestionItemsSource {
 		params.setItemKeys(keys);
 		ResultInfos<QuestionItemView> items = qpoolService.getItems(params, 0, -1);
 		return items.getObjects();
+	}
+
+	@Override
+	public QuestionItemView getItemWithoutRestrictions(Long key) {
+		return qpoolService.getItem(key, identity, getDefaultParams().getPoolKey(), null);
 	}
 
 	@Override

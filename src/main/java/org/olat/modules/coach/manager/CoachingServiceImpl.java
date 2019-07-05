@@ -19,13 +19,18 @@
  */
 package org.olat.modules.coach.manager;
 
+import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 
 import org.olat.basesecurity.GroupRoles;
 import org.olat.core.id.Identity;
 import org.olat.course.assessment.UserEfficiencyStatement;
+import org.olat.course.assessment.manager.EfficiencyStatementManager;
+import org.olat.course.assessment.model.UserEfficiencyStatementForCoaching;
 import org.olat.group.BusinessGroup;
 import org.olat.group.BusinessGroupService;
 import org.olat.modules.coach.CoachingService;
@@ -55,6 +60,8 @@ public class CoachingServiceImpl implements CoachingService {
 	private CoachingDAO coachingDao;
 	@Autowired
 	private BusinessGroupService businessGroupService;
+	@Autowired
+	private EfficiencyStatementManager efficiencyStatementManager;
 
 	@Override
 	public boolean isCoach(Identity coach) {
@@ -67,13 +74,14 @@ public class CoachingServiceImpl implements CoachingService {
 	}
 	
 	@Override
-	public List<StudentStatEntry> getUsersStatistics(SearchCoachedIdentityParams params, List<UserPropertyHandler> userPropertyHandlers) {
-		return coachingDao.getUsersStatisticsNative(params, userPropertyHandlers);
+	public List<StudentStatEntry> getUsersStatistics(SearchCoachedIdentityParams params,
+			List<UserPropertyHandler> userPropertyHandlers, Locale locale) {
+		return coachingDao.getUsersStatisticsNative(params, userPropertyHandlers, locale);
 	}
 
 	@Override
-	public List<StudentStatEntry> getStudentsStatistics(Identity coach, List<UserPropertyHandler> userPropertyHandlers) {
-		return coachingDao.getStudentsStatisticsNative(coach, userPropertyHandlers);
+	public List<StudentStatEntry> getStudentsStatistics(Identity coach, List<UserPropertyHandler> userPropertyHandlers, Locale locale) {
+		return coachingDao.getStudentsStatisticsNative(coach, userPropertyHandlers, locale);
 	}
 
 	@Override
@@ -95,13 +103,41 @@ public class CoachingServiceImpl implements CoachingService {
 	public List<EfficiencyStatementEntry> getGroup(BusinessGroup group, List<UserPropertyHandler> userPropertyHandlers, Locale locale) {
 		List<Identity> students = businessGroupService.getMembers(group, GroupRoles.participant.name());
 		List<RepositoryEntry> courses = businessGroupService.findRepositoryEntries(Collections.singletonList(group), 0, -1);
-		return coachingDao.getEfficencyStatementEntries(students, courses, userPropertyHandlers, locale);
+		List<UserEfficiencyStatementForCoaching> statements = efficiencyStatementManager.getUserEfficiencyStatementForCoaching(group);
+		
+		Map<IdentityRepositoryEntryKey,UserEfficiencyStatementForCoaching> identityToStatements = new HashMap<>();
+		for(UserEfficiencyStatementForCoaching statement:statements) {
+			IdentityRepositoryEntryKey key = new IdentityRepositoryEntryKey(statement.getIdentityKey(), statement.getCourseRepoKey());
+			identityToStatements.put(key, statement);
+		}
+		
+		List<EfficiencyStatementEntry> entries = new ArrayList<>(students.size() * courses.size());
+		for(RepositoryEntry course:courses) {
+			for(Identity student:students) {
+				IdentityRepositoryEntryKey key = new IdentityRepositoryEntryKey(student.getKey(), course.getKey());
+				UserEfficiencyStatementForCoaching statement = identityToStatements.get(key);
+				entries.add(new EfficiencyStatementEntry(student, course, statement, userPropertyHandlers, locale));
+			}
+		}
+		return entries;
 	}
 
 	@Override
 	public List<EfficiencyStatementEntry> getCourse(Identity coach, RepositoryEntry entry, List<UserPropertyHandler> userPropertyHandlers, Locale locale) {
 		List<Identity> students = coachingDao.getStudents(coach, entry);
-		return coachingDao.getEfficencyStatementEntries(students, Collections.singletonList(entry), userPropertyHandlers, locale);
+
+		List<UserEfficiencyStatementForCoaching> statements = efficiencyStatementManager.getUserEfficiencyStatementForCoaching(entry);
+		Map<Long,UserEfficiencyStatementForCoaching> identityToStatements = new HashMap<>();
+		for(UserEfficiencyStatementForCoaching statement:statements) {
+			identityToStatements.put(statement.getIdentityKey(), statement);
+		}
+		
+		List<EfficiencyStatementEntry> entries = new ArrayList<>(students.size());
+		for(Identity student:students) {
+			UserEfficiencyStatementForCoaching statement = identityToStatements.get(student.getKey());
+			entries.add(new EfficiencyStatementEntry(student, entry, statement, userPropertyHandlers, locale));
+		}
+		return entries;
 	}
 
 	@Override
@@ -111,13 +147,51 @@ public class CoachingServiceImpl implements CoachingService {
 
 	@Override
 	public List<EfficiencyStatementEntry> getEfficencyStatements(Identity student, List<RepositoryEntry> courses, List<UserPropertyHandler> userPropertyHandlers, Locale locale) {
-		List<Identity> students = Collections.singletonList(student);
-		return coachingDao.getEfficencyStatementEntries(students, courses, userPropertyHandlers, locale);
+		List<UserEfficiencyStatement> statements = efficiencyStatementManager.getUserEfficiencyStatementLight(student, courses);
+		Map<Long,UserEfficiencyStatement> courseKeyToStatements = new HashMap<>();
+		for(UserEfficiencyStatement statement:statements) {
+			courseKeyToStatements.put(statement.getCourseRepoKey(), statement);
+		}
+		
+		List<EfficiencyStatementEntry> entries = new ArrayList<>(courses.size());
+		for(RepositoryEntry course:courses) {
+			UserEfficiencyStatement statement = courseKeyToStatements.get(course.getKey());
+			entries.add(new EfficiencyStatementEntry(student, course, statement, userPropertyHandlers, locale));
+		}
+		return entries;
 	}
 	
 	@Override
 	public List<UserEfficiencyStatement> getEfficencyStatements(Identity student) {
-		return coachingDao.getEfficencyStatementEntries(student);
+		return efficiencyStatementManager.getUserEfficiencyStatementLight(student);
 	}
+	
+	private static class IdentityRepositoryEntryKey {
+		private final Long identityKey;
+		private final Long repositoryEntryKey;
 
+		public IdentityRepositoryEntryKey(Long identityKey, Long repositoryEntryKey) {
+			this.identityKey = identityKey;
+			this.repositoryEntryKey = repositoryEntryKey;
+		}
+		
+		@Override
+		public int hashCode() {
+			return (identityKey == null ? 365784 : identityKey.hashCode())
+					+ (repositoryEntryKey == null ? 234 : repositoryEntryKey.hashCode());
+		}
+		
+		@Override
+		public boolean equals(Object obj) {
+			if(this == obj) {
+				return true;
+			}
+			if(obj instanceof IdentityRepositoryEntryKey) {
+				IdentityRepositoryEntryKey key = (IdentityRepositoryEntryKey)obj;
+				return identityKey != null && identityKey.equals(key.identityKey)
+						&& repositoryEntryKey != null && repositoryEntryKey.equals(key.repositoryEntryKey);
+			}
+			return false;
+		}
+	}
 }

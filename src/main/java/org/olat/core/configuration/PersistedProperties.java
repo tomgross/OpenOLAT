@@ -27,7 +27,6 @@ package org.olat.core.configuration;
 
 import java.io.File;
 import java.io.FileInputStream;
-import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -44,12 +43,12 @@ import javax.crypto.CipherInputStream;
 import javax.crypto.CipherOutputStream;
 import javax.crypto.SecretKey;
 import javax.crypto.SecretKeyFactory;
-import javax.crypto.spec.IvParameterSpec;
 import javax.crypto.spec.PBEKeySpec;
 
 import org.bouncycastle.jce.provider.BouncyCastleProvider;
 import org.olat.core.id.OLATResourceable;
-import org.olat.core.logging.LogDelegator;
+import org.apache.logging.log4j.Logger;
+import org.olat.core.logging.Tracing;
 import org.olat.core.util.StringHelper;
 import org.olat.core.util.WebappHelper;
 import org.olat.core.util.coordinate.CoordinatorManager;
@@ -138,7 +137,10 @@ import org.olat.core.util.resource.OresHelper;
  * 
  * @author Florian Gnägi, http://www.frentix.com
  */
-public class PersistedProperties extends LogDelegator implements Initializable, Destroyable{
+public class PersistedProperties implements Initializable, Destroyable{
+
+	private static final Logger log = Tracing.createLoggerFor(PersistedProperties.class);
+	
 	// base directory where all system config files are located
 	private File configurationPropertiesFile;
 	// the properties loaded from disk
@@ -231,18 +233,14 @@ public class PersistedProperties extends LogDelegator implements Initializable, 
 				if(secured) {
 					SecretKey key = generateKey("rk6R9pQy7dg3usJk");
 					Cipher cipher = Cipher.getInstance("AES/CTR/NOPADDING");
-					cipher.init(Cipher.DECRYPT_MODE, key, generateIV(cipher), random);
-					is =  new CipherInputStream(is, cipher);	
+					cipher.init(Cipher.DECRYPT_MODE, key, random);
+					is =  new CipherInputStream(is, cipher);
 				}
 				
 				configuredProperties.load(is);
 				is.close();
-			} catch (FileNotFoundException e) {
-				logError("Could not load config file from path::" + configurationPropertiesFile.getAbsolutePath(), e);
-			} catch (IOException e) {
-				logError("Could not load config file from path::" + configurationPropertiesFile.getAbsolutePath(), e);
 			} catch (Exception e) {
-				logError("Could not load config file from path::" + configurationPropertiesFile.getAbsolutePath(), e);
+				log.error("Could not load config file from path::" + configurationPropertiesFile.getAbsolutePath(), e);
 			}
 		}
 	}
@@ -282,9 +280,20 @@ public class PersistedProperties extends LogDelegator implements Initializable, 
 	 * Return an int value for a certain propertyName
 	 * 
 	 * @param propertyName
-	 * @return the value from the configuration or the default value or 0
+	 * @return The value from the configuration or 0
 	 */
 	public int getIntPropertyValue(String propertyName) {
+		return getIntPropertyValue(propertyName, 0);
+	}
+	
+	/**
+	 * Return an int value for a certain propertyName
+	 * 
+	 * @param propertyName The property name
+	 * @param defaultValue The default value
+	 * @return The value from the configuration or the default value
+	 */
+	public int getIntPropertyValue(String propertyName, int defaultValue) {
 		// 1) Try from configuration
 		String stringValue = configuredProperties.getProperty(propertyName);
 		// 2) Try from default configuration
@@ -295,14 +304,14 @@ public class PersistedProperties extends LogDelegator implements Initializable, 
 			try {
 				return Integer.parseInt(stringValue.trim());
 			} catch (Exception ex) {
-				logWarn("Cannot parse to integer property::" + propertyName + ", value=" + stringValue, null);
+				log.warn("Cannot parse to integer property::" + propertyName + ", value=" + stringValue);
 			}
 		}
 		// 3) Not even a value found in the fallback, use 0
-		if(isLogDebugEnabled()) {
-			logDebug("No value found for int property::" + propertyName + ", using value=0 instead", null);
+		if(log.isDebugEnabled()) {
+			log.debug("No value found for int property::" + propertyName + ", using value=0 instead");
 		}
-		return 0;
+		return defaultValue;
 	}
 
 	/**
@@ -326,8 +335,8 @@ public class PersistedProperties extends LogDelegator implements Initializable, 
 		}
 		// 3) Not even a value found in the fallback, return empty string
 		stringValue = (allowEmptyString ? "" : null);
-		if(isLogDebugEnabled()) {
-			logDebug("No value found for string property::" + propertyName + ", using value=\"\" instead");
+		if(log.isDebugEnabled()) {
+			log.debug("No value found for string property::" + propertyName + ", using value=\"\" instead");
 		}
 		return stringValue;
 	}
@@ -348,8 +357,8 @@ public class PersistedProperties extends LogDelegator implements Initializable, 
 		if ((stringValue != null) && stringValue.trim().equalsIgnoreCase("TRUE")) { return true; }
 		if ((stringValue != null) && stringValue.trim().equalsIgnoreCase("FALSE")) { return false; }
 		// 3) Not even a value found in the fallback, return false
-		if(isLogDebugEnabled()) {
-			logWarn("No value found for boolean property::" + propertyName + ", using value=false instead", null);
+		if(log.isDebugEnabled()) {
+			log.warn("No value found for boolean property::" + propertyName + ", using value=false instead");
 		}
 		return false;
 	}
@@ -366,7 +375,11 @@ public class PersistedProperties extends LogDelegator implements Initializable, 
 		synchronized (configuredProperties) { // make read/write save in VM
 			String oldValue = configuredProperties.getProperty(propertyName);
 			if (oldValue == null || !oldValue.equals(value)) {
-				configuredProperties.setProperty(propertyName, value);
+				if(value == null) {
+					configuredProperties.remove(propertyName);
+				} else {
+					configuredProperties.setProperty(propertyName, value);
+				}
 				propertiesDirty = true;
 				if (saveConfiguration) savePropertiesAndFireChangedEvent();
 			}
@@ -443,7 +456,8 @@ public class PersistedProperties extends LogDelegator implements Initializable, 
 	
 	public void removeProperty(String propertyName, boolean saveConfiguration) {
 		synchronized (configuredProperties) { // make read/write save in VM
-			configuredProperties.remove(propertyName);
+			Object removedProperty = configuredProperties.remove(propertyName);
+			propertiesDirty |= removedProperty != null;
 			if (saveConfiguration) {
 				savePropertiesAndFireChangedEvent();
 			}
@@ -471,8 +485,8 @@ public class PersistedProperties extends LogDelegator implements Initializable, 
 				if(secured) {
 					SecretKey key = generateKey("rk6R9pQy7dg3usJk");
 					Cipher cipher = Cipher.getInstance("AES/CTR/NOPADDING");
-        	cipher.init(Cipher.ENCRYPT_MODE, key, generateIV(cipher), random);
-        	fileStream =  new CipherOutputStream(fileStream, cipher);	
+		        	cipher.init(Cipher.ENCRYPT_MODE, key, random);
+		        	fileStream =  new CipherOutputStream(fileStream, cipher);	
 				}
 				
 				configuredProperties.store(fileStream, null);
@@ -482,17 +496,13 @@ public class PersistedProperties extends LogDelegator implements Initializable, 
 				// Notify other cluster nodes about changed configuration
 				PersistedPropertiesChangedEvent changedConfigEvent = new PersistedPropertiesChangedEvent(configuredProperties);
 				coordinatorManager.getCoordinator().getEventBus().fireEventToListenersOf(changedConfigEvent, PROPERTIES_CHANGED_EVENT_CHANNEL);
-			} catch (FileNotFoundException e) {
-				logError("Could not write config file from path::" + configurationPropertiesFile.getAbsolutePath(), e);
-			} catch (IOException e) {
-				logError("Could not write config file from path::" + configurationPropertiesFile.getAbsolutePath(), e);
 			} catch (Exception e) {
-				logError("Could not write config file from path::" + configurationPropertiesFile.getAbsolutePath(), e);
+				log.error("Could not write config file from path::" + configurationPropertiesFile.getAbsolutePath(), e);
 			} finally {
 				try {
 					if (fileStream != null ) fileStream.close();
 				} catch (IOException e) {
-					logError("Could not close stream after storing config to file::" + configurationPropertiesFile.getAbsolutePath(), e);
+					log.error("Could not close stream after storing config to file::" + configurationPropertiesFile.getAbsolutePath(), e);
 				}
 			}
 			// Reset for next save cycle
@@ -543,11 +553,5 @@ public class PersistedProperties extends LogDelegator implements Initializable, 
 		PBEKeySpec keySpec = new PBEKeySpec(passphrase.toCharArray(), salt.getBytes(), iterations, keyLength);
 		SecretKeyFactory keyFactory = SecretKeyFactory.getInstance("PBEWITHSHA256AND128BITAES-CBC-BC");
 		return keyFactory.generateSecret(keySpec);
-	}
-  
-	private static IvParameterSpec generateIV(Cipher cipher) throws Exception {
-		byte [] ivBytes = new byte[cipher.getBlockSize()];
-		random.nextBytes(ivBytes);
-		return new IvParameterSpec(ivBytes);
 	}
 }

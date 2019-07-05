@@ -26,7 +26,6 @@
 
 package org.olat.core.gui.components.form.flexible.impl.elements.table;
 
-
 /**
  * 
  * @author Christian Guretzki
@@ -59,7 +58,11 @@ public interface FlexiColumnModel {
 	
 	String getHeaderLabel();
 	
-	String getColumnKey();
+	public String getIconHeader();
+	
+	public Integer getHeaderAlignment();
+	
+	public String getColumnKey();
 	
 	int getColumnIndex();
 	
@@ -73,4 +76,8 @@ public interface FlexiColumnModel {
 
 	void setCellRenderer(FlexiCellRenderer cellRenderer);
 
+	public FlexiCellRenderer getFooterCellRenderer();
+	
+	public void setFooterCellRenderer(FlexiCellRenderer cellRenderer);
+	
 }

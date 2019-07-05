@@ -19,8 +19,7 @@
  */
 package org.olat.ims.qti21.model.xml;
 
-import java.io.ByteArrayInputStream;
-import java.io.IOException;
+import java.io.StringReader;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -28,29 +27,33 @@ import javax.xml.parsers.DocumentBuilder;
 import javax.xml.parsers.DocumentBuilderFactory;
 import javax.xml.transform.stream.StreamResult;
 
-import org.cyberneko.html.parsers.SAXParser;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.gui.render.StringOutput;
-import org.olat.core.logging.OLog;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.StringHelper;
-import org.olat.core.util.filter.FilterFactory;
+import org.olat.core.util.filter.impl.HtmlFilter;
 import org.w3c.dom.Attr;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
 import org.w3c.dom.Node;
 import org.xml.sax.Attributes;
 import org.xml.sax.InputSource;
-import org.xml.sax.SAXException;
+import org.xml.sax.helpers.DefaultHandler;
 
+import nu.validator.htmlparser.common.XmlViolationPolicy;
+import nu.validator.htmlparser.sax.HtmlParser;
 import uk.ac.ed.ph.jqtiplus.JqtiExtensionManager;
 import uk.ac.ed.ph.jqtiplus.exception.QtiModelException;
 import uk.ac.ed.ph.jqtiplus.node.AbstractNode;
 import uk.ac.ed.ph.jqtiplus.node.LoadingContext;
+import uk.ac.ed.ph.jqtiplus.node.QtiNode;
 import uk.ac.ed.ph.jqtiplus.node.content.basic.Block;
 import uk.ac.ed.ph.jqtiplus.node.content.basic.FlowStatic;
 import uk.ac.ed.ph.jqtiplus.node.content.basic.InlineStatic;
 import uk.ac.ed.ph.jqtiplus.serialization.QtiSerializer;
+import uk.ac.ed.ph.jqtiplus.serialization.SaxFiringOptions;
 import uk.ac.ed.ph.jqtiplus.xmlutils.SimpleDomBuilderHandler;
+import uk.ac.ed.ph.jqtiplus.xmlutils.xslt.XsltSerializationOptions;
 
 /**
  * Do the ugly job to convert the Tiny MCE HTML code to the object model
@@ -62,7 +65,7 @@ import uk.ac.ed.ph.jqtiplus.xmlutils.SimpleDomBuilderHandler;
  */
 public class AssessmentHtmlBuilder {
 	
-	private static final OLog log = Tracing.createLoggerFor(AssessmentHtmlBuilder.class);
+	private static final Logger log = Tracing.createLoggerFor(AssessmentHtmlBuilder.class);
 	
 	private final QtiSerializer qtiSerializer;
 	
@@ -76,14 +79,26 @@ public class AssessmentHtmlBuilder {
 	}
 	
 	public boolean containsSomething(String html) {
-		return StringHelper.containsNonWhitespace(FilterFactory.getHtmlTagsFilter().filter(html));
+		if(!StringHelper.containsNonWhitespace(html)) return false;
+
+		try {
+			// return always true? Neko send always an html tag -> content true
+			HtmlParser parser = new HtmlParser(XmlViolationPolicy.ALTER_INFOSET);
+			ContentDetectionHandler contentHandler = new ContentDetectionHandler();
+			parser.setContentHandler(contentHandler);
+			parser.parse(new InputSource(new StringReader(html)));
+			return contentHandler.isContentAvailable();
+		} catch (Exception e) {
+			log.error("", e);
+			return false;
+		}
 	}
 	
 	public String flowStaticString(List<? extends FlowStatic> statics) {
 		StringOutput sb = new StringOutput();
-		if(statics != null && statics.size() > 0) {
+		if(statics != null && !statics.isEmpty()) {
 			for(FlowStatic flowStatic:statics) {
-				qtiSerializer.serializeJqtiObject(flowStatic, new StreamResult(sb));
+				serializeJqtiObject(flowStatic, sb);
 			}
 		}
 		return cleanUpNamespaces(sb);
@@ -91,9 +106,9 @@ public class AssessmentHtmlBuilder {
 	
 	public String blocksString(List<? extends Block> statics) {
 		StringOutput sb = new StringOutput();
-		if(statics != null && statics.size() > 0) {
+		if(statics != null && !statics.isEmpty()) {
 			for(Block flowStatic:statics) {
-				qtiSerializer.serializeJqtiObject(flowStatic, new StreamResult(sb));
+				serializeJqtiObject(flowStatic, sb);
 			}
 		}
 		
@@ -102,12 +117,18 @@ public class AssessmentHtmlBuilder {
 	
 	public String inlineStaticString(List<? extends InlineStatic> statics) {
 		StringOutput sb = new StringOutput();
-		if(statics != null && statics.size() > 0) {
+		if(statics != null && !statics.isEmpty()) {
 			for(InlineStatic inlineStatic:statics) {
-				qtiSerializer.serializeJqtiObject(inlineStatic, new StreamResult(sb));
+				serializeJqtiObject(inlineStatic, sb);
 			}
 		}
 		return cleanUpNamespaces(sb);
+	}
+	
+	private void serializeJqtiObject(QtiNode node, StringOutput sb) {
+		final XsltSerializationOptions xsltSerializationOptions = new XsltSerializationOptions();
+        xsltSerializationOptions.setIndenting(false);
+		qtiSerializer.serializeJqtiObject(node, new StreamResult(sb), new SaxFiringOptions(), xsltSerializationOptions);
 	}
 	
 	private String cleanUpNamespaces(StringOutput sb) {
@@ -115,8 +136,10 @@ public class AssessmentHtmlBuilder {
 		content = content.replace(" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\"", "");
 		content = content.replace("xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\"", "");
 		content = content.replace("\n   xmlns=\"http://www.imsglobal.org/xsd/imsqti_v2p1\"", "");
+		content = content.replace(" xmlns=\"http://www.imsglobal.org/xsd/imsqti_v2p1\"", "");
 		content = content.replace("xmlns=\"http://www.imsglobal.org/xsd/imsqti_v2p1\"", "");
 		content = content.replace("\n   xsi:schemaLocation=\"http://www.imsglobal.org/xsd/imsqti_v2p1 http://www.imsglobal.org/xsd/imsqti_v2p1.xsd\"", "");
+		content = content.replace(" xsi:schemaLocation=\"http://www.imsglobal.org/xsd/imsqti_v2p1 http://www.imsglobal.org/xsd/imsqti_v2p1.xsd\"", "");
 		content = content.replace("xsi:schemaLocation=\"http://www.imsglobal.org/xsd/imsqti_v2p1 http://www.imsglobal.org/xsd/imsqti_v2p1.xsd\"", "");
 		return content.trim();
 	}
@@ -132,11 +155,14 @@ public class AssessmentHtmlBuilder {
 			} else {
 				htmlFragment = "<p>" + htmlFragment + "</p>";
 			}
-			//wrap around <html> to have a root element for neko
-			Document document = filter("<html>" + htmlFragment + "</html>");
-			Element docElement = document.getDocumentElement();
-			cleanUpNamespaces(docElement);
-			parent.getNodeGroups().load(docElement, new HTMLLoadingContext());
+			//root element is an <html> element
+			Document document = filter(htmlFragment);
+			if(document != null) {
+				Element docElement = document.getDocumentElement();
+				cleanUpNamespaces(docElement);
+				// load the elements under the <html> root element
+				parent.getNodeGroups().load(docElement, new HTMLLoadingContext());
+			}
 		}
 	}
 	
@@ -150,6 +176,16 @@ public class AssessmentHtmlBuilder {
 			element.removeAttribute("xmlns");
 		}
 		
+		// escaped by the HTML parser -> always remove them
+		Attr schemaLocationAttr = element.getAttributeNode("xsiU00003Aschemalocation");
+		if(schemaLocationAttr != null) {
+			element.removeAttribute("xsiU00003Aschemalocation");
+		}
+		Attr xsiattrEscaped = element.getAttributeNode("xmlnsU00003Axsi");
+		if(xsiattrEscaped != null) {
+			element.removeAttribute("xmlnsU00003Axsi");
+		}
+
 		for(Node child=element.getFirstChild(); child != null; child = child.getNextSibling()) {
 			if(child instanceof Element) {
 				cleanUpNamespaces((Element)child);
@@ -157,33 +193,31 @@ public class AssessmentHtmlBuilder {
 		}
 	}
 
+	/**
+	 * The method filters the content of textEntryInteraction (rename it correctly
+	 * and remove TinyMCE attributes) and repackage the video from TinyMCE format
+	 * to an object suited for QTI 2.1.
+	 * 
+	 * @param content The content to filter
+	 * @return A document object with an HTML root element with the actual
+	 * 		blocks under this root element.
+	 */
 	private Document filter(String content) {
 		try {
-			SAXParser parser = new SAXParser();
-			parser.setProperty("http://cyberneko.org/html/properties/names/elems", "lower");
-			parser.setFeature("http://cyberneko.org/html/features/balance-tags/document-fragment", true);
-			parser.setProperty("http://cyberneko.org/html/properties/default-encoding", "UTF-8");
-			
+			// Alter infoset because of special namespace on tag p
+			HtmlParser parser = new HtmlParser(XmlViolationPolicy.ALTER_INFOSET);
 			DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
 			DocumentBuilder builder = factory.newDocumentBuilder();
 			Document document = builder.newDocument();
 			HtmlToDomBuilderHandler contentHandler = new HtmlToDomBuilderHandler(document);
 			parser.setContentHandler(contentHandler);
-			parser.parse(new InputSource(new ByteArrayInputStream(content.getBytes())));
+			parser.parse(new InputSource(new StringReader(content)));
 			return document;
-		} catch (SAXException e) {
-			log.error("", e);
-			return null;
-		} catch (IOException e) {
-			log.error("", e);
-			return null;
 		} catch (Exception e) {
 			log.error("", e);
 			return null;
 		}
 	}
-	
-
 	
 	/**
 	 * Convert:<br>
@@ -206,27 +240,40 @@ public class AssessmentHtmlBuilder {
 
 		@Override
 		public void startElement(String uri, String localName, String qName, Attributes attributes) {
-			if(video) return;
+			if(video || "head".equalsIgnoreCase(localName) || "body".equalsIgnoreCase(localName)) {
+				return;
+			}
 			
-			if("textentryinteraction".equals(localName)) {
+			if("textentryinteraction".equalsIgnoreCase(localName)) {
 				localName = qName = "textEntryInteraction";
 
 				AttributesImpl attributesCleaned = new AttributesImpl("");
 				for(int i=0; i<attributes.getLength(); i++) {
 					String name = attributes.getLocalName(i);
-					if(!"openolattype".equalsIgnoreCase(name)) {
+					if(!"openolattype".equalsIgnoreCase(name)
+							&& !"data-qti-solution".equalsIgnoreCase(name)
+							&& !"data-qti-solution-empty".equalsIgnoreCase(name)) {
 						String value = attributes.getValue(i);
 						attributesCleaned.addAttribute(name, value);
 					}
 				}
 
 				attributes = new AttributesDelegate(attributesCleaned);
-			} else if("span".equals(localName)) {
+				super.startElement(uri, localName, qName, attributes);
+				super.endElement(uri, localName, qName);
+				return;
+			} else if("span".equalsIgnoreCase(localName)) {
 				String cssClass = attributes.getValue("class");
 				if(cssClass != null && "olatFlashMovieViewer".equals(cssClass)) {
 					video = true;
 					return;
 				}
+			} else if("u".equalsIgnoreCase(localName)) {
+				qName = "span";
+				AttributesImpl underlineAttributes = new AttributesImpl("");
+				underlineAttributes.addAttributes(attributes);
+				underlineAttributes.addAttribute("style", "text-decoration: underline;");
+				attributes = underlineAttributes;
 			}
 			super.startElement(uri, localName, qName, attributes);
 		}
@@ -242,13 +289,16 @@ public class AssessmentHtmlBuilder {
 
 		@Override
 		public void endElement(String uri, String localName, String qName) {
+			if("head".equalsIgnoreCase(localName) || "body".equalsIgnoreCase(localName)) {
+				return;
+			}
 			if(video) {
-				if("span".equals(localName)) {
+				if("span".equalsIgnoreCase(localName)) {
 					String content = scriptBuffer.toString();
 					String startScript = "BPlayer.insertPlayer(";
 					int start = content.indexOf(startScript);
 					if(start >= 0) {
-						int end = content.indexOf(")", start);
+						int end = content.indexOf(')', start);
 						String parameters = content.substring(start + startScript.length(), end);
 						translateToObject(uri, parameters);
 					}
@@ -256,10 +306,9 @@ public class AssessmentHtmlBuilder {
 				}
 				return;
 			}
-			
-			if("textentryinteraction".equals(localName)) {
-				localName = qName = "textEntryInteraction";
-			} 
+			if("textentryinteraction".equalsIgnoreCase(localName)) {
+				return;
+			}
 			super.endElement(uri, localName, qName);
 		}
 		
@@ -273,7 +322,7 @@ public class AssessmentHtmlBuilder {
 			String type = array[6].replace("\"", "");
 			String ooData = parameters.replace("\"", "'");
 
-			AttributesImpl attributes = new AttributesImpl(uri);
+			AttributesImpl attributes = new AttributesImpl("");
 			attributes.addAttribute("data", data);
 			attributes.addAttribute("id", id);
 			attributes.addAttribute("class", "olatFlashMovieViewer");
@@ -282,8 +331,8 @@ public class AssessmentHtmlBuilder {
 			attributes.addAttribute("type", type);
 			attributes.addAttribute("data-oo-movie", ooData);
 
-			super.startElement(uri, "object", "object", attributes);
-			super.endElement(uri, "object", "object");
+			super.startElement("", "object", "object", attributes);
+			super.endElement("", "object", "object");
 		}
 	}
 	
@@ -321,6 +370,14 @@ public class AssessmentHtmlBuilder {
 		
 		public AttributesImpl(String uri) {
 			this.attributesUri = uri;
+		}
+		
+		public void addAttributes(Attributes attrs) {
+			for(int i=0; i<attrs.getLength(); i++) {
+				String name = attrs.getLocalName(i);
+				String value = attrs.getValue(i);
+				addAttribute(name, value);
+			}
 		}
 		
 		public void addAttribute(String name, String value) {
@@ -493,6 +550,46 @@ public class AssessmentHtmlBuilder {
 		@Override
 		public void modelBuildingError(QtiModelException exception, Node badNode) {
 			//
+		}
+	}
+	
+	private static class ContentDetectionHandler extends DefaultHandler {
+		
+		private boolean collect = false;
+		private boolean content = false;
+		
+		public boolean isContentAvailable() {
+			return content;
+		}
+
+		@Override
+		public void startElement(String uri, String localName, String qName, Attributes attributes) {
+			String elem = localName.toLowerCase();
+			if("script".equals(elem)) {
+				collect = false;
+			} else if(!HtmlFilter.blockTags.contains(localName)) {
+				content = true;
+			}
+		}
+		
+		@Override
+		public void characters(char[] chars, int offset, int length) {
+			if(!content && collect && offset >= 0 && length > 0) {
+				String text = new String(chars, offset, length);
+				if(text.trim().length() > 0) {
+					content = true;
+				}
+			}
+		}
+
+		@Override
+		public void endElement(String uri, String localName, String qName) {
+			String elem = localName.toLowerCase();
+			if("script".equals(elem)) {
+				collect = true;
+			} else if(!HtmlFilter.blockTags.contains(localName)) {
+				content = true;
+			}
 		}
 	}
 }

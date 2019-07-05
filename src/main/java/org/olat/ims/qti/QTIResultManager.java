@@ -25,7 +25,6 @@
 
 package org.olat.ims.qti;
 
-import java.io.File;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -38,7 +37,7 @@ import javax.persistence.TypedQuery;
 import org.olat.basesecurity.Group;
 import org.olat.core.commons.persistence.DB;
 import org.olat.core.id.Identity;
-import org.olat.core.logging.OLog;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
 import org.olat.user.UserDataDeletable;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -52,7 +51,7 @@ import org.springframework.stereotype.Service;
 @Service("qtiResultManager")
 public class QTIResultManager implements UserDataDeletable {
 	
-	private static final OLog log = Tracing.createLoggerFor(QTIResultManager.class);
+	private static final Logger log = Tracing.createLoggerFor(QTIResultManager.class);
 
 	private static QTIResultManager instance;
 	
@@ -337,12 +336,12 @@ public class QTIResultManager implements UserDataDeletable {
 	 * @param identity
 	 */
 	@Override
-	public void deleteUserData(Identity identity, String newDeletedUserName, File archivePath) {
+	public void deleteUserData(Identity identity, String newDeletedUserName) {
 		List<QTIResultSet> qtiResults = findQtiResultSets(identity);
 		for (QTIResultSet set:qtiResults) {
 			deleteResultSet(set);
 		}
-		if(log.isDebug()) {
+		if(log.isDebugEnabled()) {
 			log.debug("Delete all QTI result data in db for identity=" + identity);
 		}
 	}

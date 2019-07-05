@@ -1,0 +1,17 @@
+<div class="o_onlyoffice">
+	#if($r.notNull($warning))
+		<div class="o_warning">
+			$warning
+		</div>
+	#else
+		<div id="$id"></div>
+		<script type="text/javascript" src="$apiUrl"></script>
+		<script type="text/javascript">
+		/* <![CDATA[ */
+			jQuery('$id').ready(function(){
+				new DocsAPI.DocEditor("$id", $apiConfig);
+			});
+		/* ]]> */
+		</script>
+	#end
+</div>

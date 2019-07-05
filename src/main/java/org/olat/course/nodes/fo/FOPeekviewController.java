@@ -23,7 +23,6 @@ import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 
-import org.apache.commons.lang.StringEscapeUtils;
 import org.olat.NewControllerFactory;
 import org.olat.core.gui.UserRequest;
 import org.olat.core.gui.components.Component;
@@ -86,31 +85,23 @@ public class FOPeekviewController extends BasicController implements Controller 
 		VelocityContainer peekviewVC = createVelocityContainer("peekview");
 		// add items, only as many as configured
 		List<MessagePeekview> messages = forumManager.getPeekviewMessages(forum, itemsToDisplay);
-
-		final boolean isModerator = forumCallback.mayEditMessageAsModerator();
-		List<MessageView> views = new ArrayList<MessageView>(itemsToDisplay);
-		for (MessagePeekview message : messages) {
-			Status status = Status.getStatus(message.getStatusCode());
-			// OLATNG-198: allow moderators seeing hidden messages
-			if (!status.isHidden() || isModerator) {
-				// add link to item
-				// Add link to jump to course node
-				Link nodeLink = LinkFactory.createLink("nodeLink_" + message.getKey(), peekviewVC, this);
-				nodeLink.setCustomDisplayText(StringHelper.escapeHtml(message.getTitle()));
-				nodeLink.setIconLeftCSS("o_icon o_icon_post");
-				nodeLink.setCustomEnabledLinkCSS("o_gotoNode");
-				nodeLink.setUserObject(message);
-
-				String body = message.getBody();
-				if(body.length() > 256) {
-					String truncateBody = FilterFactory.getHtmlTagsFilter().filter(body);
-					truncateBody = StringEscapeUtils.unescapeHtml(truncateBody);// remove entities
-					if(truncateBody.length() < 256) {
-						body = StringHelper.xssScan(body);
-					} else {
-						truncateBody = Formatter.truncate(truncateBody, 256);// truncate
-						body = StringHelper.escapeHtml(truncateBody);//ok because html tags are filtered
-					}
+		// only take the configured amount of messages
+		List<MessageView> views = new ArrayList<>(itemsToDisplay);
+		for (MessagePeekview message :messages) {
+			// add link to item
+			// Add link to jump to course node
+			Link nodeLink = LinkFactory.createLink("nodeLink_" + message.getKey(), peekviewVC, this);
+			nodeLink.setCustomDisplayText(StringHelper.escapeHtml(message.getTitle()));
+			nodeLink.setIconLeftCSS("o_icon o_icon_post");
+			nodeLink.setCustomEnabledLinkCSS("o_gotoNode");
+			nodeLink.setUserObject(message);	
+			
+			String body = message.getBody();
+			if(body.length() > 256) {
+				String truncateBody = FilterFactory.getHtmlTagsFilter().filter(body);
+				truncateBody = StringHelper.unescapeHtml(truncateBody);// remove entities
+				if(truncateBody.length() < 256) {
+					body = StringHelper.xssScan(body);
 				} else {
 					body = StringHelper.xssScan(body);
 				}

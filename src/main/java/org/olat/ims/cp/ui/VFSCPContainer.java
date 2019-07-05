@@ -22,8 +22,9 @@ package org.olat.ims.cp.ui;
 import java.util.ArrayList;
 import java.util.List;
 
+import org.olat.core.CoreSpringFactory;
 import org.olat.core.gui.components.tree.TreeNode;
-import org.olat.core.logging.OLog;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.Encoder;
 import org.olat.core.util.vfs.AbstractVirtualContainer;
@@ -36,7 +37,6 @@ import org.olat.core.util.vfs.VFSStatus;
 import org.olat.core.util.vfs.callbacks.VFSSecurityCallback;
 import org.olat.core.util.vfs.filters.VFSItemFilter;
 import org.olat.ims.cp.CPManager;
-import org.olat.ims.cp.CPManagerImpl;
 import org.olat.ims.cp.CPTreeDataModel;
 import org.olat.ims.cp.ContentPackage;
 
@@ -49,14 +49,12 @@ import org.olat.ims.cp.ContentPackage;
  * Initial Date:  4 mai 2011 <br>
  * @author srosse, stephane.rosse@frentix.com, http://www.frentix.com
  */
-//fxdiff FXOLAT-125: virtual file system for CP
 public class VFSCPContainer extends AbstractVirtualContainer implements VFSContainer {
 	
-	private static final OLog log = Tracing.createLoggerFor(VFSCPContainer.class);
+	private static final Logger log = Tracing.createLoggerFor(VFSCPContainer.class);
 	
 	private VFSSecurityCallback secCallback;
 	private final CPTreeDataModel treeModel;
-	private final CPManagerImpl cpMgm;
 	private final ContentPackage cp;
 	private String rootNodeId;
 	
@@ -67,7 +65,7 @@ public class VFSCPContainer extends AbstractVirtualContainer implements VFSConta
 		rootNodeId = Encoder.md5hash(orgaIdentifier);
 
 		this.cp = cp;
-		cpMgm = (CPManagerImpl) CPManager.getInstance();
+		CPManager cpMgm = CoreSpringFactory.getImpl(CPManager.class);
 		treeModel = cpMgm.getTreeDataModel(cp);
 	}
 
@@ -75,13 +73,15 @@ public class VFSCPContainer extends AbstractVirtualContainer implements VFSConta
 	public boolean exists() {
 		return true;
 	}
+	
+	@Override
+	public boolean isHidden() {
+		return false;
+	}
 
 	@Override
 	public boolean isSame(VFSItem vfsItem) {
-		if(this == vfsItem) {
-			return true;
-		}
-		return false;
+		return this == vfsItem;
 	}
 	
 	@Override
@@ -93,37 +93,43 @@ public class VFSCPContainer extends AbstractVirtualContainer implements VFSConta
 	}
 
 	@Override
+	public String getRelPath() {
+		return null;
+	}
+
+	@Override
 	public List<VFSItem> getItems() {
 		return getItems(cp, treeModel, rootNodeId);
 	}
 
 	protected static List<VFSItem> getItems(ContentPackage cp, CPTreeDataModel model, String nodeId) {
 		List<TreeNode> nodes = model.getChildrenFor(nodeId);
+		List<VFSItem> items = new ArrayList<>(nodes.size());
 		
-		CPManager cpMgm =CPManager.getInstance();
-
-		List<VFSItem> items = new ArrayList<VFSItem>();
-		for(TreeNode node:nodes) {
-			try {
-				String nid = node.getIdent();
-				String id = model.getIdentifierForNodeID(nid);
-				String filePath = cpMgm.getPageByItemId(cp, id);
-				String title = cpMgm.getItemTitle(cp, id);
-				VFSItem f = cp.getRootDir().resolve(filePath);
-				if(f instanceof VFSLeaf) {
-					title += " (" + filePath + ")";
-					
-					VFSItem item;
-					List<TreeNode> children = model.getChildrenFor(nid);
-					if(children.isEmpty()) {
-						item = new VFSCPNamedItem(title, (VFSLeaf)f);
-					} else {
-						item = new VFSCPNamedContainerItem(nid, title, (VFSLeaf)f, cp, model);
+		if(!nodes.isEmpty()) {
+			CPManager cpMgm = CoreSpringFactory.getImpl(CPManager.class);
+			for(TreeNode node:nodes) {
+				try {
+					String nid = node.getIdent();
+					String id = model.getIdentifierForNodeID(nid);
+					String filePath = cpMgm.getPageByItemId(cp, id);
+					String title = cpMgm.getItemTitle(cp, id);
+					VFSItem f = cp.getRootDir().resolve(filePath);
+					if(f instanceof VFSLeaf) {
+						title += " (" + filePath + ")";
+						
+						VFSItem item;
+						List<TreeNode> children = model.getChildrenFor(nid);
+						if(children.isEmpty()) {
+							item = new VFSCPNamedItem(title, (VFSLeaf)f);
+						} else {
+							item = new VFSCPNamedContainerItem(nid, title, (VFSLeaf)f, cp, model);
+						}
+						items.add(item);
 					}
-					items.add(item);
+				} catch (Exception e) {
+					log.error("", e);
 				}
-			} catch (Exception e) {
-				log.error("", e);
 			}
 		}
 

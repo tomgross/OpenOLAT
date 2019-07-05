@@ -26,7 +26,6 @@
 package org.olat.collaboration;
 
 import java.io.File;
-import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.Serializable;
 import java.util.ArrayList;
@@ -34,32 +33,30 @@ import java.util.Collections;
 import java.util.Hashtable;
 import java.util.List;
 
+import org.apache.logging.log4j.Logger;
 import org.olat.admin.quota.QuotaConstants;
-import org.olat.basesecurity.BaseSecurityManager;
-import org.olat.basesecurity.Constants;
 import org.olat.basesecurity.GroupRoles;
 import org.olat.commons.calendar.CalendarManager;
+import org.olat.commons.calendar.manager.ImportToCalendarManager;
 import org.olat.commons.calendar.ui.CalendarController;
 import org.olat.commons.calendar.ui.WeeklyCalendarController;
 import org.olat.commons.calendar.ui.components.KalendarRenderWrapper;
 import org.olat.core.CoreSpringFactory;
 import org.olat.core.commons.modules.bc.FolderRunController;
-import org.olat.core.commons.modules.bc.vfs.OlatNamedContainerImpl;
-import org.olat.core.commons.modules.bc.vfs.OlatRootFolderImpl;
 import org.olat.core.commons.services.notifications.SubscriptionContext;
 import org.olat.core.gui.UserRequest;
 import org.olat.core.gui.components.stack.TooledStackedPanel;
 import org.olat.core.gui.control.Controller;
 import org.olat.core.gui.control.WindowControl;
+import org.olat.core.gui.control.generic.messages.MessageUIFactory;
 import org.olat.core.gui.control.generic.title.TitleInfo;
 import org.olat.core.gui.translator.Translator;
 import org.olat.core.id.Identity;
 import org.olat.core.id.OLATResourceable;
-import org.olat.core.id.context.BusinessControl;
+import org.olat.core.id.Roles;
 import org.olat.core.id.context.BusinessControlFactory;
 import org.olat.core.id.context.ContextEntry;
 import org.olat.core.logging.AssertException;
-import org.olat.core.logging.OLog;
 import org.olat.core.logging.Tracing;
 import org.olat.core.logging.activity.ThreadLocalUserActivityLogger;
 import org.olat.core.util.FileUtils;
@@ -71,11 +68,14 @@ import org.olat.core.util.coordinate.SyncerExecutor;
 import org.olat.core.util.i18n.I18nModule;
 import org.olat.core.util.mail.ContactMessage;
 import org.olat.core.util.vfs.LocalFolderImpl;
+import org.olat.core.util.vfs.NamedContainerImpl;
 import org.olat.core.util.vfs.Quota;
 import org.olat.core.util.vfs.QuotaManager;
 import org.olat.core.util.vfs.VFSContainer;
 import org.olat.core.util.vfs.VFSLeaf;
+import org.olat.core.util.vfs.VFSManager;
 import org.olat.core.util.vfs.callbacks.VFSSecurityCallback;
+import org.olat.course.CorruptedCourseException;
 import org.olat.course.CourseFactory;
 import org.olat.course.CourseModule;
 import org.olat.course.ICourse;
@@ -85,6 +85,8 @@ import org.olat.group.BusinessGroupService;
 import org.olat.group.ui.run.InfoGroupRunController;
 import org.olat.instantMessaging.InstantMessagingModule;
 import org.olat.instantMessaging.ui.ChatToolController;
+import org.olat.modules.adobeconnect.ui.AdobeConnectMeetingDefaultConfiguration;
+import org.olat.modules.adobeconnect.ui.AdobeConnectRunController;
 import org.olat.modules.co.ContactFormController;
 import org.olat.modules.fo.Forum;
 import org.olat.modules.fo.ForumCallback;
@@ -151,55 +153,60 @@ public class CollaborationTools implements Serializable {
 
 	private static final long serialVersionUID = -155629068939748789L;
 	boolean dirty = false;
-	private final static String TRUE = "true";
-	private final static String FALSE = "false";
-	public final static String KEY_FORUM = "forumKey";
-	public final static String KEY_PORTFOLIO = "portfolioMapKey";
-	public final static String KEY_OPENMEETINGS = "openMeetingsKey";
+	private static final String TRUE = "true";
+	private static final String FALSE = "false";
+	public static final String KEY_FORUM = "forumKey";
+	public static final String KEY_PORTFOLIO = "portfolioMapKey";
+	public static final String KEY_OPENMEETINGS = "openMeetingsKey";
+	public static final String KEY_ACONNECTMEETINGS = "adobeConnectKey";
 
 	/**
 	 * <code>PROP_CAT_BG_COLLABTOOLS</code> identifies properties concerning
 	 * Collaboration Tools
 	 */
-	public final static String PROP_CAT_BG_COLLABTOOLS = "collabtools";
+	public static final String PROP_CAT_BG_COLLABTOOLS = "collabtools";
 	/**
 	 * constant used to identify the calendar for a BuddyGroup
 	 */
-	public final static String TOOL_CALENDAR = "hasCalendar";
+	public static final String TOOL_CALENDAR = "hasCalendar";
 	/**
 	 * constant used to identify the forum for a BuddyGroup
 	 */
-	public final static String TOOL_FORUM = "hasForum";
+	public static final String TOOL_FORUM = "hasForum";
 	/**
 	 * constant used to identify the folder for a BuddyGroup
 	 */
-	public final static String TOOL_FOLDER = "hasFolder";
+	public static final String TOOL_FOLDER = "hasFolder";
 	/**
 	 * constant used to identify the chat for a BuddyGroup
 	 */
-	public final static String TOOL_CHAT = "hasChat";
+	public static final String TOOL_CHAT = "hasChat";
 	/**
 	 * constant used to identify the contact form for a BuddyGroup
 	 */
-	public final static String TOOL_CONTACT = "hasContactForm";
+	public static final String TOOL_CONTACT = "hasContactForm";
 	/**
 	 * constant used to identify the contact form for a BuddyGroup
 	 */
-	public final static String TOOL_NEWS = "hasNews";
+	public static final String TOOL_NEWS = "hasNews";
 	/**
 	 * constant used to identify the wiki for a BuddyGroup
 	 */
-	public final static String TOOL_WIKI = "hasWiki";
+	public static final String TOOL_WIKI = "hasWiki";
 	
 	/**
 	 * constant used to identify the portfolio for a BuddyGroup
 	 */
-	public final static String TOOL_PORTFOLIO = "hasPortfolio";
+	public static final String TOOL_PORTFOLIO = "hasPortfolio";
 	
 	/**
 	 * constant used to identify the open meetings for a group
 	 */
-	public final static String TOOL_OPENMEETINGS = "hasOpenMeetings";
+	public static final String TOOL_OPENMEETINGS = "hasOpenMeetings";
+	/**
+	 * constant used to identify the open meetings for a group
+	 */
+	public static final String TOOL_ADOBECONNECT = "hasAdobeConnect";
 	
 	/**
 	 * Only owners have write access to the calendar.
@@ -222,16 +229,16 @@ public class CollaborationTools implements Serializable {
 	/**
 	 * cache for Boolean Objects representing the State
 	 */
-	private final static String KEY_NEWS = "news";
-	private final static String KEY_NEWS_ACCESS = "newsAccess";
-	public final static String KEY_CALENDAR_ACCESS = "cal";
-	public final static String KEY_FOLDER_ACCESS = "folder";
+	private static final String KEY_NEWS = "news";
+	private static final String KEY_NEWS_ACCESS = "newsAccess";
+	public static final String KEY_CALENDAR_ACCESS = "cal";
+	public static final String KEY_FOLDER_ACCESS = "folder";
 
 	//o_clusterOK by guido
 	private Hashtable<String, Boolean> cacheToolStates;
 	private final BusinessGroup ores;
 	
-	private static OLog log = Tracing.createLoggerFor(CollaborationTools.class);
+	private static final Logger log = Tracing.createLoggerFor(CollaborationTools.class);
 	private transient CoordinatorManager coordinatorManager;
 
 	/**
@@ -242,7 +249,7 @@ public class CollaborationTools implements Serializable {
 	CollaborationTools(CoordinatorManager coordinatorManager, BusinessGroup ores) {
 		this.coordinatorManager = coordinatorManager;
 		this.ores = ores;
-		this.cacheToolStates = new Hashtable<String, Boolean>();
+		this.cacheToolStates = new Hashtable<>();
 	}
 
 	/**
@@ -261,7 +268,6 @@ public class CollaborationTools implements Serializable {
 	}
 
 	/**
-	 * TODO: rename to getForumController and save instance?
 	 * 
 	 * @param ureq
 	 * @param wControl
@@ -280,8 +286,7 @@ public class CollaborationTools implements Serializable {
 		Translator trans = Util.createPackageTranslator(this.getClass(), ureq.getLocale());
 		TitleInfo titleInfo = new TitleInfo(null, trans.translate("collabtools.named.hasForum"));
 		titleInfo.setSeparatorEnabled(true);
-		Controller forumController = ForumUIFactory.getTitledForumController(ureq, wControl, forum, new ForumCallback() {
-
+		return ForumUIFactory.getTitledForumController(ureq, wControl, forum, new ForumCallback() {
 			@Override
 			public boolean mayUsePseudonym() {
 				return false;
@@ -332,11 +337,10 @@ public class CollaborationTools implements Serializable {
 				return subsContext;
 			}
 		}, titleInfo);
-		return forumController;
 	}
 	
 	public Forum getForum() {
-		final ForumManager fom = ForumManager.getInstance();
+		final ForumManager fom = CoreSpringFactory.getImpl(ForumManager.class);
 		final NarrowedPropertyManager npm = NarrowedPropertyManager.getInstance(ores);
 		Property forumProperty = npm.findProperty(null, null, PROP_CAT_BG_COLLABTOOLS, KEY_FORUM);
 		
@@ -344,8 +348,8 @@ public class CollaborationTools implements Serializable {
 		if(forumProperty != null) {
 			forum = fom.loadForum(forumProperty.getLongValue());
 		} else {
-			//TODO gsync
 			forum = coordinatorManager.getCoordinator().getSyncer().doInSync(ores, new SyncerCallback<Forum>(){
+				@Override
 				public Forum execute() {
 					Forum aforum;
 					Long forumKey;
@@ -354,7 +358,7 @@ public class CollaborationTools implements Serializable {
 						// First call of forum, create new forum and save
 						aforum = fom.addAForum();
 						forumKey = aforum.getKey();
-						if (log.isDebug()) {
+						if (log.isDebugEnabled()) {
 							log.debug("created new forum in collab tools: foid::" + forumKey.longValue() + " for ores::"
 									+ ores.getResourceableTypeName() + "/" + ores.getResourceableId());
 						}
@@ -366,7 +370,7 @@ public class CollaborationTools implements Serializable {
 						aforum = fom.loadForum(forumKey);
 						if (aforum == null) { throw new AssertException("Unable to load forum with key " + forumKey.longValue() + " for ores "
 								+ ores.getResourceableTypeName() + " with key " + ores.getResourceableId()); }
-						if (log.isDebug()) {
+						if (log.isDebugEnabled()) {
 							log.debug("loading forum in collab tools from properties: foid::" + forumKey.longValue() + " for ores::"
 									+ ores.getResourceableTypeName() + "/" + ores.getResourceableId());
 						}
@@ -395,25 +399,24 @@ public class CollaborationTools implements Serializable {
 		// do not use a global translator since in the fututre a collaborationtools
 		// may be shared among users
 		Translator trans = Util.createPackageTranslator(this.getClass(), ureq.getLocale());
-		OlatRootFolderImpl rootContainer = getSecuredFolder(businessGroup, subsContext, ureq.getIdentity(), isAdmin);
-		OlatNamedContainerImpl namedContainer = new OlatNamedContainerImpl(trans.translate("folder"), rootContainer);
-		
-		FolderRunController frc = new FolderRunController(namedContainer, true, true, true, ureq, wControl);
-		return frc;
+		VFSContainer rootContainer = getSecuredFolder(businessGroup, subsContext, ureq.getIdentity(), isAdmin);
+		VFSContainer namedContainer = new NamedContainerImpl(trans.translate("folder"), rootContainer);
+		return new FolderRunController(namedContainer, true, true, true, ureq, wControl);
 	}
 	
 	/**
 	 * Return the root VFS container with security callback set
 	 * @return
 	 */
-	public OlatRootFolderImpl getSecuredFolder(BusinessGroup businessGroup, SubscriptionContext subsContext, Identity identity, boolean isAdmin) {
+	public VFSContainer getSecuredFolder(BusinessGroup businessGroup, SubscriptionContext subsContext,
+			Identity identity, boolean isBusinessGroupAdmin) {
 		if(!isToolEnabled(CollaborationTools.TOOL_FOLDER)) {
 			return null;
 		}
 
 		boolean writeAccess;
 		boolean isOwner = CoreSpringFactory.getImpl(BusinessGroupService.class).hasRoles(identity, businessGroup, GroupRoles.coach.name());
-		if (!(isAdmin || isOwner)) {
+		if (!(isBusinessGroupAdmin || isOwner)) {
 				// check if participants have read/write access
 			int folderAccess = CollaborationTools.FOLDER_ACCESS_ALL;
 			Long lFolderAccess = CollaborationToolsFactory.getInstance().getOrCreateCollaborationTools(businessGroup).lookupFolderAccess();
@@ -427,7 +430,7 @@ public class CollaborationTools implements Serializable {
 
 		String relPath = getFolderRelPath();
 		VFSSecurityCallback secCallback = new CollabSecCallback(writeAccess, relPath, subsContext);
-		OlatRootFolderImpl rootContainer = new OlatRootFolderImpl(relPath, null);
+		VFSContainer rootContainer = VFSManager.olatRootContainer(relPath, null);
 		rootContainer.setLocalSecurityCallback(secCallback);
 		return rootContainer;
 	}
@@ -449,11 +452,15 @@ public class CollaborationTools implements Serializable {
 		// add linking
 		List<RepositoryEntry> repoEntries = CoreSpringFactory.getImpl(BusinessGroupService.class).findRepositoryEntries(Collections.singleton(businessGroup), 0, -1);
 		
-		List<ICourse> courses = new ArrayList<ICourse>(repoEntries.size());
+		List<ICourse> courses = new ArrayList<>(repoEntries.size());
 		for (RepositoryEntry repoEntry:repoEntries) {
 			if (repoEntry.getOlatResource().getResourceableTypeName().equals(CourseModule.getCourseTypeName())) {
-				ICourse course = CourseFactory.loadCourse(repoEntry);
-				courses.add(course);
+				try {
+					ICourse course = CourseFactory.loadCourse(repoEntry);
+					courses.add(course);
+				} catch (CorruptedCourseException e) {
+					log.error("Course corrupted: " + repoEntry.getKey() + " (" + repoEntry.getOlatResource().getResourceableId() + ")", e);
+				}
 			}
 		}
 		if(!courses.isEmpty()) {
@@ -461,11 +468,11 @@ public class CollaborationTools implements Serializable {
 			calRenderWrapper.setLinkProvider(clp);
 		}
 
-		List<KalendarRenderWrapper> calendars = new ArrayList<KalendarRenderWrapper>();
+		List<KalendarRenderWrapper> calendars = new ArrayList<>();
 		calendars.add(calRenderWrapper);
 		
 		return new WeeklyCalendarController(ureq, wControl, calendars,
-				WeeklyCalendarController.CALLER_COLLAB, false);
+				WeeklyCalendarController.CALLER_COLLAB, businessGroup, false);
 	}
 
 	/**
@@ -474,8 +481,7 @@ public class CollaborationTools implements Serializable {
 	 * @return a contact form controller
 	 */
 	public ContactFormController createContactFormController(UserRequest ureq, WindowControl wControl, ContactMessage cmsg) {
-		ContactFormController cfc = new ContactFormController(ureq, wControl, true, false, false, cmsg);
-		return cfc;
+		return new ContactFormController(ureq, wControl, true, false, false, cmsg, null);
 	}
 
 	
@@ -501,25 +507,22 @@ public class CollaborationTools implements Serializable {
 	 */
 	public Controller createWikiController(UserRequest ureq, WindowControl wControl) {
 		// Check for jumping to certain wiki page
-		BusinessControl bc = wControl.getBusinessControl();
-		ContextEntry ce = bc.popLauncherContextEntry();
-		
+		ContextEntry ce = wControl.getBusinessControl().popLauncherContextEntry();
+
+		Roles roles = ureq.getUserSession().getRoles();
 		SubscriptionContext subContext = new SubscriptionContext(ores, WikiManager.WIKI_RESOURCE_FOLDER_NAME);
-		boolean isOlatAdmin = ureq.getUserSession().getRoles().isOLATAdmin();
-		boolean isGuestOnly = ureq.getUserSession().getRoles().isGuestOnly();
-		boolean isResourceOwner = BaseSecurityManager.getInstance().isIdentityPermittedOnResourceable(ureq.getIdentity(), Constants.PERMISSION_ACCESS, ores);
-		WikiSecurityCallback callback = new WikiSecurityCallbackImpl(null, isOlatAdmin, isGuestOnly, true, isResourceOwner, subContext);
-		if ( ce != null ) { //jump to a certain context
+		boolean administrator = roles.isAdministrator() || roles.isGroupManager();
+		WikiSecurityCallback callback = new WikiSecurityCallbackImpl(null, administrator, roles.isGuestOnly(), true, false, subContext);
+		String initialPage = null;
+		if (ce != null) { //jump to a certain context
 			OLATResourceable ceOres = ce.getOLATResourceable();
 			String typeName = ceOres.getResourceableTypeName();
-			String page = typeName.substring("page=".length());
-			if(page != null && page.endsWith(":0")) {
-				page = page.substring(0, page.length() - 2);
+			initialPage = typeName.substring("page=".length());
+			if(initialPage != null && initialPage.endsWith(":0")) {
+				initialPage = initialPage.substring(0, initialPage.length() - 2);
 			}
-			return WikiManager.getInstance().createWikiMainController(ureq, wControl, ores, callback, page);
-		} else {
-			return WikiManager.getInstance().createWikiMainController(ureq, wControl, ores, callback, null);
 		}
+		return WikiManager.getInstance().createWikiMainController(ureq, wControl, ores, callback, initialPage);
 	}
 	
 	/**
@@ -528,48 +531,48 @@ public class CollaborationTools implements Serializable {
 	 * @param wControl
 	 * @return
 	 */
-
-	// LMSUZH-465: Reverted code to OO-10.5 using ePortfolio-1.0 in group collaboration tools
-	public EPMapViewController createPortfolioController(final UserRequest ureq, WindowControl wControl, final BusinessGroup group) {
-		final EPFrontendManager ePFMgr = (EPFrontendManager)CoreSpringFactory.getBean("epFrontendManager");
+	public Controller createPortfolioController(final UserRequest ureq, final WindowControl wControl,
+			final TooledStackedPanel stackPanel, final BusinessGroup group) {
 		final NarrowedPropertyManager npm = NarrowedPropertyManager.getInstance(ores);
-		//TODO gsync
-		PortfolioStructureMap map = coordinatorManager.getCoordinator().getSyncer().doInSync(ores, new SyncerCallback<PortfolioStructureMap>(){
-			public PortfolioStructureMap execute() {
-				PortfolioStructureMap aMap;
-				Long mapKey;
+		Property mapProperty = npm.findProperty(null, null, PROP_CAT_BG_COLLABTOOLS, KEY_PORTFOLIO);
+		if(mapProperty != null) {
+			return createPortfolioController(ureq, wControl, stackPanel, mapProperty);
+		} else {
+			return coordinatorManager.getCoordinator().getSyncer().doInSync(ores, () -> {
+				Controller ctrl;
 				Property mapKeyProperty = npm.findProperty(null, null, PROP_CAT_BG_COLLABTOOLS, KEY_PORTFOLIO);
 				if (mapKeyProperty == null) {
-					// First call of portfolio-tool, create new map and save
-					aMap = ePFMgr.createAndPersistPortfolioDefaultMap(group.getName(), group.getDescription());
-					Translator pT = Util.createPackageTranslator(EPCreateMapController.class, ureq.getLocale());
-					// add a page, as each map should have at least one per default!
-					final String title = pT.translate("new.page.title");
-					final String description = pT.translate("new.page.desc");
-					ePFMgr.createAndPersistPortfolioPage(aMap, title, description);
-					mapKey = aMap.getKey();
-					if (log.isDebug()) {
-						log.debug("created new portfolio map in collab tools: mapid::" + mapKey + " for ores::" + ores.getResourceableTypeName() + "/"
-								+ ores.getResourceableId());
+					PortfolioV2Module moduleV2 = CoreSpringFactory.getImpl(PortfolioV2Module.class);
+					if(moduleV2.isEnabled()) {
+						PortfolioService portfolioService = CoreSpringFactory.getImpl(PortfolioService.class);
+						Binder binder = portfolioService.createNewBinder(group.getName(), group.getDescription(), null, null);
+						CoreSpringFactory.getImpl(BinderUserInformationsDAO.class).updateBinderUserInformationsInSync(binder, ureq.getIdentity());
+						mapKeyProperty = npm.createPropertyInstance(null, null, PROP_CAT_BG_COLLABTOOLS, KEY_PORTFOLIO, null, binder.getKey(), "2", null);
+						BinderSecurityCallback secCallback = BinderSecurityCallbackFactory.getCallbackForBusinessGroup();
+						BinderController binderCtrl = new BinderController(ureq, wControl, stackPanel, secCallback, binder, BinderConfiguration.createBusinessGroupConfig());					
+						List<ContextEntry> entries = BusinessControlFactory.getInstance().createCEListFromResourceType("Toc");
+						binderCtrl.activate(ureq, entries, null);
+						ctrl = binderCtrl;
+
+						ThreadLocalUserActivityLogger.addLoggingResourceInfo(LoggingResourceable.wrap(binder));
+						ThreadLocalUserActivityLogger.log(PortfolioLoggingAction.PORTFOLIO_BINDER_CREATED, getClass());
+					} else {
+						EPFrontendManager ePFMgr = CoreSpringFactory.getImpl(EPFrontendManager.class);
+						PortfolioStructureMap map = ePFMgr.createAndPersistPortfolioDefaultMap(group.getName(), group.getDescription());					
+						Translator pT = Util.createPackageTranslator(EPCreateMapController.class, ureq.getLocale());					
+						// add a page, as each map should have at least one per default!
+						ePFMgr.createAndPersistPortfolioPage(map, pT.translate("new.page.title"), pT.translate("new.page.desc"));
+						mapKeyProperty = npm.createPropertyInstance(null, null, PROP_CAT_BG_COLLABTOOLS, KEY_PORTFOLIO, null, map.getKey(), null, null);
+						EPSecurityCallback secCallback = new EPSecurityCallbackImpl(true, true);
+						ctrl = EPUIFactory.createMapViewController(ureq, wControl, map, secCallback);
 					}
-					mapKeyProperty = npm.createPropertyInstance(null, null, PROP_CAT_BG_COLLABTOOLS, KEY_PORTFOLIO, null, mapKey, null, null);
 					npm.saveProperty(mapKeyProperty);
 				} else {
-					// map does already exist, load map with key from properties
-					mapKey = mapKeyProperty.getLongValue();
-					aMap = (PortfolioStructureMap) ePFMgr.loadPortfolioStructureByKey(mapKey);
-					if (aMap == null) { throw new AssertException("Unable to load portfolio map with key " + mapKey + " for ores "
-							+ ores.getResourceableTypeName() + " with key " + ores.getResourceableId()); }
-					if (log.isDebug()) {
-						log.debug("loading portfolio map in collab tools from properties: foid::" + mapKey + " for ores::"
-								+ ores.getResourceableTypeName() + "/" + ores.getResourceableId());
-					}
+					ctrl = createPortfolioController(ureq, wControl, stackPanel, mapProperty);
 				}
-				return aMap;
-			}});
-
-		EPSecurityCallback secCallback = new EPSecurityCallbackImpl(true, true);
-		return EPUIFactory.createMapViewController(ureq, wControl, map, secCallback);
+				return ctrl;
+			});
+		}
 	}
 
 	/**
@@ -588,22 +591,37 @@ public class CollaborationTools implements Serializable {
 		if("2".equals(version)) {
 			PortfolioService portfolioService = CoreSpringFactory.getImpl(PortfolioService.class);
 			Binder binder = portfolioService.getBinderByKey(key);
-			portfolioService.updateBinderUserInformations(binder, ureq.getIdentity());
-			BinderSecurityCallback secCallback = BinderSecurityCallbackFactory.getCallbackForBusinessGroup();
-			BinderController binderCtrl = new BinderController(ureq, wControl, stackPanel, secCallback, binder, BinderConfiguration.createBusinessGroupConfig());
-			ctrl = binderCtrl;
+			if(binder == null) {
+				Translator trans = Util.createPackageTranslator(this.getClass(), ureq.getLocale());
+				String text = trans.translate("error.missing.map");
+				ctrl = MessageUIFactory.createErrorMessage(ureq, wControl, "", text);
+			} else {
+				portfolioService.updateBinderUserInformations(binder, ureq.getIdentity());
+				BinderSecurityCallback secCallback = BinderSecurityCallbackFactory.getCallbackForBusinessGroup();
+				ctrl = new BinderController(ureq, wControl, stackPanel, secCallback, binder, BinderConfiguration.createBusinessGroupConfig());
+			}
 		} else {
 			PortfolioStructureMap map = (PortfolioStructureMap) CoreSpringFactory.getImpl(EPFrontendManager.class)
 					.loadPortfolioStructureByKey(key);
-		EPSecurityCallback secCallback = new EPSecurityCallbackImpl(true, true);
-			ctrl = EPUIFactory.createMapViewController(ureq, wControl, map, secCallback);
+			if(map == null) {
+				Translator trans = Util.createPackageTranslator(this.getClass(), ureq.getLocale());
+				String text = trans.translate("error.missing.map");
+				ctrl = MessageUIFactory.createErrorMessage(ureq, wControl, "", text);
+			} else {
+				EPSecurityCallback secCallback = new EPSecurityCallbackImpl(true, true);
+				ctrl = EPUIFactory.createMapViewController(ureq, wControl, map, secCallback);
+			}
 		}
 		return ctrl;
 	}
 	
 	public Controller createOpenMeetingsController(final UserRequest ureq, WindowControl wControl, final BusinessGroup group, boolean admin) {
-		OpenMeetingsRunController runController = new OpenMeetingsRunController(ureq, wControl, group, null, null, admin, admin, false);
-		return runController;
+		return new OpenMeetingsRunController(ureq, wControl, group, null, null, admin, admin, false);
+	}
+	
+	public Controller createAdobeConnectController(final UserRequest ureq, WindowControl wControl, final BusinessGroup group, boolean admin) {
+		AdobeConnectMeetingDefaultConfiguration configuration = new AdobeConnectMeetingDefaultConfiguration(true);
+		return new AdobeConnectRunController(ureq, wControl, null, null, group, configuration, admin, admin, false);
 	}
 
 	/**
@@ -641,35 +659,35 @@ public class CollaborationTools implements Serializable {
 		/*
 		 * delete the forum, if existing
 		 */
-		ForumManager fom = ForumManager.getInstance();
 		Property forumKeyProperty = npm.findProperty(null, null, PROP_CAT_BG_COLLABTOOLS, KEY_FORUM);
 		if (forumKeyProperty != null) {
 			// if there was a forum, delete it
 			Long forumKey = forumKeyProperty.getLongValue();
 			if (forumKey == null) throw new AssertException("property had no longValue, prop:" + forumKeyProperty);
-			fom.deleteForum(forumKey);
+			CoreSpringFactory.getImpl(ForumManager.class).deleteForum(forumKey);
 		}
 		/*
 		 * delete the folder, if existing
 		 */
-		OlatRootFolderImpl vfsContainer = new OlatRootFolderImpl(getFolderRelPath(), null);
-		File fFolderRoot = vfsContainer.getBasefile();
-		if (fFolderRoot.exists()) {
-			FileUtils.deleteDirsAndFiles(fFolderRoot, true, true);
+		VFSContainer vfsContainer = VFSManager.olatRootContainer(getFolderRelPath(), null);
+		if (vfsContainer.exists()) {
+			vfsContainer.deleteSilently();
 		}
 		
 		/*
 		 * delete the wiki if existing
 		 */
 		VFSContainer rootContainer = WikiManager.getInstance().getWikiRootContainer(ores);
-		if(rootContainer != null) rootContainer.delete();
+		if(rootContainer != null) {
+			rootContainer.deleteSilently();
+		}
 		
 		/*
 		 * Delete calendar if exists
 		 */
 		if (businessGroupTodelete != null) {
-			CalendarManager calManager =  CoreSpringFactory.getImpl(CalendarManager.class);
-			calManager.deleteGroupCalendar(businessGroupTodelete);
+			CoreSpringFactory.getImpl(ImportToCalendarManager.class).deleteGroupImportedCalendars(businessGroupTodelete);
+			CoreSpringFactory.getImpl(CalendarManager.class).deleteGroupCalendar(businessGroupTodelete);
 		}
 		
 		/*
@@ -687,9 +705,8 @@ public class CollaborationTools implements Serializable {
 		 */
 		OpenMeetingsModule omModule = CoreSpringFactory.getImpl(OpenMeetingsModule.class);
 		if(omModule.isEnabled()) {
-			OpenMeetingsManager omManager = CoreSpringFactory.getImpl(OpenMeetingsManager.class);
 			try {
-				omManager.deleteAll(ores, null, null);
+				CoreSpringFactory.getImpl(OpenMeetingsManager.class).deleteAll(ores, null, null);
 			} catch (OpenMeetingsException e) {
 				log.error("A room could not be deleted for group: " + ores, e);
 			}
@@ -740,10 +757,9 @@ public class CollaborationTools implements Serializable {
 		// handle Boolean Values via String Field in Property DB Table
 		final String toolValueStr = toolValue ? TRUE : FALSE;
 		final PropertyManager pm = PropertyManager.getInstance();
-		//TODO gsync
 		coordinatorManager.getCoordinator().getSyncer().doInSync(ores, new SyncerExecutor() {
+			@Override
 			public void execute() {				
-				//was: synchronized (CollaborationTools.class) {
 				Property property = getPropertyOf(selectedTool);
 				if (property == null) {
 					// not existing -> create it
@@ -800,8 +816,7 @@ public class CollaborationTools implements Serializable {
 			return null;
 		}
 		// read the text value of the existing property
-		String text = property.getStringValue();
-		return text;
+		return property.getStringValue();
 	}
 	
 	/**
@@ -829,8 +844,7 @@ public class CollaborationTools implements Serializable {
 			return null;
 		}
 		// read the text value of the existing property
-		String text = property.getTextValue();
-		return text;
+		return property.getTextValue();
 	}
 	
 	public Property lookupNewsDBEntry() {
@@ -838,7 +852,8 @@ public class CollaborationTools implements Serializable {
 		Property property = npm.findProperty(null, null, PROP_CAT_BG_COLLABTOOLS, KEY_NEWS);
 		if (property == null) { // no entry
 			return null;
-		} else return property;
+		}
+		return property;
 	}
 
 	/**
@@ -859,15 +874,15 @@ public class CollaborationTools implements Serializable {
 	public void setToolAccess(String tool, Integer access) {
 		if (TOOL_FOLDER.equals(tool) && access != null) {
 			if (FOLDER_ACCESS_ALL == access.intValue()) {
-				saveFolderAccess(new Long(FOLDER_ACCESS_ALL));
+				saveFolderAccess(Long.valueOf(FOLDER_ACCESS_ALL));
 			} else if (FOLDER_ACCESS_OWNERS == access.intValue()) {
-				saveFolderAccess(new Long(FOLDER_ACCESS_OWNERS));
+				saveFolderAccess(Long.valueOf(FOLDER_ACCESS_OWNERS));
 			} 			
 		} else if (TOOL_CALENDAR.equals(tool) && access != null) {
 			if (CALENDAR_ACCESS_ALL == access.intValue()) {
-				saveCalendarAccess(new Long(CALENDAR_ACCESS_ALL));
+				saveCalendarAccess(Long.valueOf(CALENDAR_ACCESS_ALL));
 			} else if (CALENDAR_ACCESS_OWNERS == access.intValue()) {
-				saveCalendarAccess(new Long(CALENDAR_ACCESS_OWNERS));
+				saveCalendarAccess(Long.valueOf(CALENDAR_ACCESS_OWNERS));
 			} 						
 		}
 	}
@@ -930,18 +945,20 @@ public class CollaborationTools implements Serializable {
 		}
 
 		private void initFolderQuota(String relPath) {
-			QuotaManager qm = QuotaManager.getInstance();
+			QuotaManager qm = CoreSpringFactory.getImpl(QuotaManager.class);
 			folderQuota = qm.getCustomQuota(relPath);
 			if (folderQuota == null) {
 				Quota defQuota = qm.getDefaultQuota(QuotaConstants.IDENTIFIER_DEFAULT_GROUPS);
-				folderQuota = QuotaManager.getInstance().createQuota(relPath, defQuota.getQuotaKB(), defQuota.getUlLimitKB());
+				folderQuota = qm.createQuota(relPath, defQuota.getQuotaKB(), defQuota.getUlLimitKB());
 			}
 		}
 
+		@Override
 		public boolean canRead() {
 			return true;
 		}
 
+		@Override
 		public boolean canWrite() {
 			return write;
 		}
@@ -951,30 +968,37 @@ public class CollaborationTools implements Serializable {
 			return write;
 		}
 
+		@Override
 		public boolean canDelete() {
 			return write;
 		}
 
+		@Override
 		public boolean canList() {
 			return true;
 		}
 
+		@Override
 		public boolean canCopy() {
 			return true;
 		}
-		
+
+		@Override
 		public boolean canDeleteRevisionsPermanently() {
 			return write;
 		}
 
+		@Override
 		public Quota getQuota() {
 			return folderQuota;
 		}
 
+		@Override
 		public void setQuota(Quota quota) {
 			this.folderQuota = quota;
 		}
 
+		@Override
 		public SubscriptionContext getSubscriptionContext() {
 			return subsContext;
 		}
@@ -1004,7 +1028,7 @@ public class CollaborationTools implements Serializable {
 			String archiveForumName = "del_forum_" + forumKeyProperty.getLongValue();
 			VFSContainer archiveForumContainer = archiveContainer.createChildContainer(archiveForumName);
 			ForumFormatter ff = new ForumRTFFormatter(archiveForumContainer, false, I18nModule.getDefaultLocale());
-			ForumArchiveManager.getInstance().applyFormatter(ff, forumKeyProperty.getLongValue(), null);
+			CoreSpringFactory.getImpl(ForumArchiveManager.class).applyFormatter(ff, forumKeyProperty.getLongValue(), null);
 		}
 	}
 
@@ -1020,15 +1044,13 @@ public class CollaborationTools implements Serializable {
 		
 		try {
 			FileUtils.bcopy(wikiZip.getInputStream(), new File(fullFilePath), "archive wiki");
-		} catch (FileNotFoundException e) {
-			log.warn("Can not archive wiki repoEntry=" + ores.getResourceableId());
 		} catch (IOException ioe) {
 			log.warn("Can not archive wiki repoEntry=" + ores.getResourceableId());
 		}		
 	}
 
 	private void archiveFolder(String archiveFilePath) {
-		OlatRootFolderImpl folderContainer = new OlatRootFolderImpl(getFolderRelPath(), null);
+		LocalFolderImpl folderContainer = VFSManager.olatRootContainer(getFolderRelPath(), null);
 		File fFolderRoot = folderContainer.getBasefile();
 		if (fFolderRoot.exists()) {
 			String zipFileName = "del_folder_" + ores.getResourceableId() + ".zip";

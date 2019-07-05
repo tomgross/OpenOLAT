@@ -1,4 +1,5 @@
 /**
+
  * <a href="http://www.openolat.org">
  * OpenOLAT - Online Learning and Training</a><br>
  * <p>
@@ -22,49 +23,72 @@ package org.olat.modules.qpool.manager;
 import java.io.File;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Date;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
+import java.util.stream.Collectors;
 import java.util.zip.ZipOutputStream;
 
-import org.olat.basesecurity.BaseSecurity;
 import org.olat.basesecurity.IdentityRef;
 import org.olat.basesecurity.SecurityGroup;
+import org.olat.basesecurity.manager.SecurityGroupDAO;
 import org.olat.core.commons.persistence.DB;
 import org.olat.core.commons.persistence.DefaultResultInfos;
 import org.olat.core.commons.persistence.ResultInfos;
 import org.olat.core.commons.persistence.SortKey;
+import org.olat.core.commons.services.commentAndRating.CommentAndRatingService;
+import org.olat.core.commons.services.license.LicenseService;
+import org.olat.core.commons.services.mark.MarkManager;
 import org.olat.core.gui.media.MediaResource;
 import org.olat.core.id.Identity;
 import org.olat.core.id.Roles;
-import org.olat.core.logging.OLog;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
+import org.olat.core.util.StringHelper;
+import org.olat.core.util.coordinate.CoordinatorManager;
+import org.olat.core.util.coordinate.LockResult;
 import org.olat.core.util.vfs.LocalImpl;
 import org.olat.core.util.vfs.VFSContainer;
 import org.olat.core.util.vfs.VFSItem;
 import org.olat.core.util.vfs.VFSLeaf;
 import org.olat.group.BusinessGroup;
 import org.olat.modules.qpool.ExportFormatOptions;
+import org.olat.modules.qpool.ExportFormatOptions.Outcome;
 import org.olat.modules.qpool.Pool;
 import org.olat.modules.qpool.QPoolSPI;
 import org.olat.modules.qpool.QPoolService;
 import org.olat.modules.qpool.QuestionItem;
 import org.olat.modules.qpool.QuestionItem2Pool;
 import org.olat.modules.qpool.QuestionItem2Resource;
+import org.olat.modules.qpool.QuestionItemAuditLog;
+import org.olat.modules.qpool.QuestionItemAuditLog.Action;
+import org.olat.modules.qpool.QuestionItemAuditLogBuilder;
 import org.olat.modules.qpool.QuestionItemCollection;
 import org.olat.modules.qpool.QuestionItemFull;
 import org.olat.modules.qpool.QuestionItemShort;
 import org.olat.modules.qpool.QuestionItemView;
 import org.olat.modules.qpool.QuestionPoolModule;
-import org.olat.modules.qpool.TaxonomyLevel;
+import org.olat.modules.qpool.QuestionStatus;
+import org.olat.modules.qpool.ReviewService;
 import org.olat.modules.qpool.model.DefaultExportFormat;
 import org.olat.modules.qpool.model.PoolImpl;
 import org.olat.modules.qpool.model.QEducationalContext;
 import org.olat.modules.qpool.model.QItemDocument;
 import org.olat.modules.qpool.model.QItemType;
-import org.olat.modules.qpool.model.QLicense;
+import org.olat.modules.qpool.model.QuestionItemAuditLogBuilderImpl;
 import org.olat.modules.qpool.model.QuestionItemImpl;
+import org.olat.modules.qpool.model.ReviewDecision;
 import org.olat.modules.qpool.model.SearchQuestionItemParams;
+import org.olat.modules.taxonomy.Taxonomy;
+import org.olat.modules.taxonomy.TaxonomyCompetenceTypes;
+import org.olat.modules.taxonomy.TaxonomyLevel;
+import org.olat.modules.taxonomy.TaxonomyLevelRef;
+import org.olat.modules.taxonomy.TaxonomyRef;
+import org.olat.modules.taxonomy.manager.TaxonomyCompetenceDAO;
+import org.olat.modules.taxonomy.manager.TaxonomyDAO;
+import org.olat.modules.taxonomy.manager.TaxonomyLevelDAO;
+import org.olat.modules.taxonomy.model.TaxonomyRefImpl;
 import org.olat.resource.OLATResource;
 import org.olat.search.model.AbstractOlatDocument;
 import org.olat.search.service.indexer.LifeFullIndexer;
@@ -81,7 +105,7 @@ import org.springframework.stereotype.Service;
 @Service("qpoolService")
 public class QuestionPoolServiceImpl implements QPoolService {
 	
-	private static final OLog log = Tracing.createLoggerFor(QuestionPoolServiceImpl.class);
+	private static final Logger log = Tracing.createLoggerFor(QuestionPoolServiceImpl.class);
 	
 	private static final int MAX_NUMBER_DOCS = 990;
 	
@@ -94,53 +118,73 @@ public class QuestionPoolServiceImpl implements QPoolService {
 	@Autowired
 	private CollectionDAO collectionDao;
 	@Autowired
-	private QLicenseDAO qpoolLicenseDao;
-	@Autowired
 	private QItemTypeDAO qpoolItemTypeDao;
 	@Autowired
 	private QEducationalContextDAO qEduContextDao;
 	@Autowired
-	private TaxonomyLevelDAO taxonomyLevelDao;
-	@Autowired
 	private QuestionItemDAO questionItemDao;
+	@Autowired
+	private QPoolFileStorage qpoolFileStorage;
 	@Autowired
 	private QuestionPoolModule qpoolModule;
 	@Autowired
-	private BaseSecurity securityManager;
+	private SecurityGroupDAO securityGroupDao;
 	@Autowired
 	private SearchClient searchClient;
 	@Autowired
 	private LifeFullIndexer lifeIndexer;
-	
+	@Autowired
+	private TaxonomyDAO taxonomyDao;
+	@Autowired
+	private TaxonomyLevelDAO taxonomyLevelDao;
+	@Autowired
+	private TaxonomyCompetenceDAO taxonomyCompetenceDao;
+	@Autowired
+	private CommentAndRatingService commentAndRatingService;
+	@Autowired
+	private MarkManager markManager;
+	@Autowired
+	private ReviewService reviewService;
+	@Autowired
+	private QuestionItemAuditLogDAO auditLogDao;
+	@Autowired
+	private LicenseService licenseService;
 
 	@Override
-	public void deleteItems(List<QuestionItemShort> items) {
+	public void deleteItems(List<? extends QuestionItemShort> items) {
 		if(items == null || items.isEmpty()) {
 			return; //nothing to do
+		}
+		
+		List<SecurityGroup> secGroups = new ArrayList<>();
+		for (QuestionItemShort item: items) {
+			markManager.deleteMarks(item);
+			commentAndRatingService.deleteAllIgnoringSubPath(item);
+			licenseService.delete(item);
+			QuestionItem loadedItem = loadItemById(item.getKey());
+			if (loadedItem instanceof QuestionItemImpl) {
+				QuestionItemImpl itemImpl = (QuestionItemImpl) loadedItem;
+				qpoolFileStorage.deleteDir(itemImpl.getDirectory());
+				secGroups.add(itemImpl.getOwnerGroup());
+			}
+			dbInstance.intermediateCommit();
 		}
 		
 		poolDao.removeFromPools(items);
 		questionItemDao.removeFromShares(items);
 		collectionDao.deleteItemFromCollections(items);
-		//TODO unmark
 		questionItemDao.delete(items);
+		
+		// Delete SecurityGroup after the item to avoid foreign key constraint violation.
+		for (SecurityGroup secGroup: secGroups) {
+			securityGroupDao.deleteSecurityGroup(secGroup);
+		}
 		
 		for(QuestionItemShort item:items) {
 			lifeIndexer.deleteDocument(QItemDocument.TYPE, item.getKey());
 		}
 		
 		dbInstance.getCurrentEntityManager().flush();//allow reload of data
-	}
-
-	@Override
-	public boolean isAuthor(QuestionItem item, Identity identity) {
-		QuestionItemImpl itemImpl;
-		if(item instanceof QuestionItemImpl) {
-			itemImpl = (QuestionItemImpl)item;
-		} else {
-			itemImpl = questionItemDao.loadById(item.getKey());
-		}
-		return securityManager.isIdentityInSecurityGroup(identity, itemImpl.getOwnerGroup());
 	}
 
 	@Override
@@ -173,20 +217,47 @@ public class QuestionPoolServiceImpl implements QPoolService {
 		} else {
 			itemImpl = questionItemDao.loadById(item.getKey());
 		}
-		return securityManager.getIdentitiesOfSecurityGroup(itemImpl.getOwnerGroup());
+		return securityGroupDao.getIdentitiesOfSecurityGroup(itemImpl.getOwnerGroup());
 	}
 	
 	@Override
 	public QuestionItem loadItemById(Long key) {
 		return questionItemDao.loadById(key);
 	}
+	
+	@Override
+	public List<QuestionItem> loadItemByIdentifier(String identifier) {
+		return questionItemDao.loadByIdentifier(identifier);
+	}
 
 	@Override
 	public QuestionItem updateItem(QuestionItem item) {
+		QuestionItem previousItem = loadItemById(item.getKey());
+		QuestionStatus previousStatus = previousItem != null? previousItem.getQuestionStatus(): null;
+		QuestionStatus newStatus = item.getQuestionStatus();
+		if (statusChanged(previousStatus, newStatus)) {
+			if (item instanceof QuestionItemImpl) {
+				QuestionItemImpl itemImpl = (QuestionItemImpl) item;
+				itemImpl.setQuestionStatusLastModified(new Date());
+			}
+			if (reviewService.isReviewStarting(previousStatus, newStatus)) {
+				reviewService.startReview(item);
+			}
+		}
 		QuestionItem mergedItem = questionItemDao.merge(item);
-		dbInstance.commit();//
+		dbInstance.commit();
 		lifeIndexer.indexDocument(QItemDocument.TYPE, mergedItem.getKey());
 		return mergedItem;
+	}
+	
+	private boolean statusChanged(QuestionStatus previousStatus, QuestionStatus newStatus) {
+		return previousStatus != null && !previousStatus.equals(newStatus);
+	}
+
+	@Override
+	public void backupQuestion(QuestionItem item) {
+		String dir = item.getDirectory();
+		qpoolFileStorage.backupDir(dir);
 	}
 
 	@Override
@@ -199,10 +270,22 @@ public class QuestionPoolServiceImpl implements QPoolService {
 		}
 		lifeIndexer.indexDocument(QItemDocument.TYPE, keys);
 	}
+	
+	@Override
+	public void releaseLock(LockResult lock) {
+		if (lock != null) {
+			CoordinatorManager.getInstance().getCoordinator().getLocker().releaseLock(lock);
+		}
+	}
+
+	@Override
+	public LockResult acquireLock(QuestionItemShort item, Identity identity) {
+		return CoordinatorManager.getInstance().getCoordinator().getLocker().acquireLock(item, identity, null);
+	}
 
 	@Override
 	public List<QuestionItem> copyItems(Identity owner, List<QuestionItemShort> itemsToCopy) {
-		List<QuestionItem> copies = new ArrayList<QuestionItem>();
+		List<QuestionItem> copies = new ArrayList<>();
 		for(QuestionItemShort itemToCopy:itemsToCopy) {
 			QuestionItemImpl original = questionItemDao.loadById(itemToCopy.getKey());
 			QuestionItemImpl copy = questionItemDao.copy(original);
@@ -211,12 +294,31 @@ public class QuestionPoolServiceImpl implements QPoolService {
 			if(provider != null) {
 				provider.copyItem(original, copy);
 			}
+			licenseService.copy(original, copy);
 			copies.add(copy);
 		}
-		if(copies.size()> 0) {// reload of data must be possible in the same transaction
-			dbInstance.getCurrentEntityManager().flush();
-		}
+		
+		dbInstance.commit();
+		index(copies);
 		return copies;
+	}
+
+	@Override
+	public List<QuestionItem> convertItems(Identity cloner, List<QuestionItemShort> itemsToConvert,  String format, Locale locale) {
+		QPoolSPI sp = qpoolModule.getQuestionPoolProvider(format);
+		
+		List<QuestionItem> convertedQuestions = new ArrayList<>(itemsToConvert.size());
+		for(QuestionItemShort item: itemsToConvert) {
+			QuestionItem convertedQuestion = sp.convert(cloner, item, locale);
+			licenseService.copy(item, convertedQuestion);
+			if(convertedQuestion != null) {
+				convertedQuestions.add(convertedQuestion);
+			}
+		}
+		
+		dbInstance.commit();
+		index(convertedQuestions);
+		return convertedQuestions;
 	}
 
 	@Override
@@ -228,9 +330,9 @@ public class QuestionPoolServiceImpl implements QPoolService {
 				importedItem = provider.importItems(owner, defaultLocale, filename, file);
 			}	
 		}
-		if(importedItem != null && importedItem.size() > 0) {
-			dbInstance.getCurrentEntityManager().flush();
-		}
+		
+		dbInstance.commit();
+		index(importedItem);
 		return importedItem;
 	}
 	
@@ -261,7 +363,7 @@ public class QuestionPoolServiceImpl implements QPoolService {
 	
 	private List<Long> toKeys(List<? extends QuestionItemShort> items) {
 		if(items == null || items.isEmpty()) return Collections.emptyList();
-		List<Long> keys = new ArrayList<Long>(items.size());
+		List<Long> keys = new ArrayList<>(items.size());
 		for(QuestionItemShort item:items) {
 			keys.add(item.getKey());
 		}
@@ -282,6 +384,18 @@ public class QuestionPoolServiceImpl implements QPoolService {
 			}
 			provider.exportItem(fullItem, zout, locale, names);
 		}
+	}
+
+	@Override
+	public Set<ExportFormatOptions> getExportFormatOptions(List<QuestionItemShort> items, Outcome outcome) {
+		return items.stream()
+				.filter(item -> item != null && StringHelper.containsNonWhitespace(item.getFormat()))
+				.map(QuestionItemShort::getFormat)
+				.map(qpoolModule::getQuestionPoolProvider)
+				.map(QPoolSPI::getTestExportFormats)
+				.flatMap(List::stream)
+				.filter(exportFormat -> outcome.equals(exportFormat.getOutcome()))
+				.collect(Collectors.toSet()); 
 	}
 
 	@Override
@@ -330,6 +444,7 @@ public class QuestionPoolServiceImpl implements QPoolService {
 	public QuestionItem createAndPersistItem(Identity owner, String subject, String format, String language,
 			TaxonomyLevel taxonLevel, String dir, String rootFilename, QItemType type) {
 		QuestionItemImpl newItem = questionItemDao.createAndPersist(owner, subject, format, language, taxonLevel, dir, rootFilename, type);
+		dbInstance.commit();
 		lifeIndexer.indexDocument(QItemDocument.TYPE, newItem.getKey());
 		return newItem;
 	}
@@ -341,7 +456,7 @@ public class QuestionPoolServiceImpl implements QPoolService {
 
 	@Override
 	public List<Pool> getPools(Identity identity, Roles roles) {
-		if(roles.isOLATAdmin()) {
+		if(roles.isAdministrator() || roles.isPoolManager()) {
 			return poolDao.getPools(0, -1);
 		}
 		return poolDao.getPools(identity, 0, -1);
@@ -362,7 +477,7 @@ public class QuestionPoolServiceImpl implements QPoolService {
 		if(pool == null || owner == null) return false;
 		
 		SecurityGroup secGroup = ((PoolImpl)pool).getOwnerGroup();
-		return securityManager.isIdentityInSecurityGroup(owner, secGroup);
+		return securityGroupDao.isIdentityInSecurityGroup(owner, secGroup);
 	}
 
 	@Override
@@ -374,8 +489,8 @@ public class QuestionPoolServiceImpl implements QPoolService {
 		for(Pool pool:pools) {
 			SecurityGroup secGroup = ((PoolImpl)pool).getOwnerGroup();
 			for(Identity owner:owners) {
-				if(!securityManager.isIdentityInSecurityGroup(owner, secGroup)) {
-					securityManager.addIdentityToSecurityGroup(owner, secGroup);
+				if(!securityGroupDao.isIdentityInSecurityGroup(owner, secGroup)) {
+					securityGroupDao.addIdentityToSecurityGroup(owner, secGroup);
 				}
 			}
 		}
@@ -387,12 +502,12 @@ public class QuestionPoolServiceImpl implements QPoolService {
 			return;//nothing to do
 		}
 
-		List<SecurityGroup> secGroups = new ArrayList<SecurityGroup>(pools.size());
+		List<SecurityGroup> secGroups = new ArrayList<>(pools.size());
 		for(Pool pool:pools) {
 			SecurityGroup secGroup = ((PoolImpl)pool).getOwnerGroup();
 			secGroups.add(secGroup);
 		}
-		securityManager.removeIdentityFromSecurityGroups(owners, secGroups);
+		securityGroupDao.removeIdentityFromSecurityGroups(owners, secGroups);
 	}
 
 	@Override
@@ -406,6 +521,7 @@ public class QuestionPoolServiceImpl implements QPoolService {
 			poolDao.addItemToPool(item, pools, editable);
 			keys.add(item.getKey());
 		}
+		dbInstance.commit();
 		lifeIndexer.indexDocument(QItemDocument.TYPE, keys);
 	}
 
@@ -421,6 +537,11 @@ public class QuestionPoolServiceImpl implements QPoolService {
 	}
 
 	@Override
+	public List<QuestionItemShort> getItems(TaxonomyLevelRef level) {
+		return questionItemDao.getItems(level);
+	}
+
+	@Override
 	public int countItems(SearchQuestionItemParams searchParams) {
 		if(searchParams.isFavoritOnly()) {
 			return itemQueriesDao.countFavoritItems(searchParams);
@@ -428,8 +549,9 @@ public class QuestionPoolServiceImpl implements QPoolService {
 			return poolDao.countItemsInPool(searchParams);
 		} else if(searchParams.getAuthor() != null) {
 			return itemQueriesDao.countItemsByAuthor(searchParams);
+		} else {
+			return itemQueriesDao.countItems(searchParams);
 		}
-		return 0;
 	}
 
 	@Override
@@ -441,34 +563,70 @@ public class QuestionPoolServiceImpl implements QPoolService {
 			return searchByAuthor(searchParams, firstResult, maxResults, orderBy);
 		} else if(searchParams.getPoolKey() != null) {
 			return getItemsByPool(searchParams, firstResult, maxResults, orderBy);
+		} else {
+			return getItemsByParams(searchParams, firstResult, maxResults, orderBy);
 		}
-		return new DefaultResultInfos<QuestionItemView>();
+	}
+
+	private ResultInfos<QuestionItemView> getItemsByParams(SearchQuestionItemParams searchParams, int firstResult,
+			int maxResults, SortKey... orderBy) {
+		ResultInfos<QuestionItemView> resultInfo = new DefaultResultInfos<>();
+		if (searchParams.isFulltextSearch()) {
+			try {
+				String queryString = searchParams.getSearchString();
+				List<String> condQueries = new ArrayList<>();
+				if (searchParams.getCondQueries() != null) {
+					condQueries.addAll(searchParams.getCondQueries());
+				}
+				addConditionsOfParams(condQueries, searchParams);
+				List<Long> results = searchClient.doSearch(queryString, condQueries, searchParams.getIdentity(),
+						searchParams.getRoles(), searchParams.getLocale(), 0, MAX_NUMBER_DOCS);
+				if (!results.isEmpty()) {
+					List<QuestionItemView> items = itemQueriesDao.getItems(searchParams, results, firstResult,
+							maxResults, orderBy);
+					resultInfo = new DefaultResultInfos<>(firstResult + items.size(), results.size(), items);
+				}
+			} catch (Exception e) {
+				log.error("", e);
+			}
+		} else {
+			List<QuestionItemView> items = itemQueriesDao.getItems(searchParams, searchParams.getItemKeys(),
+					firstResult, maxResults, orderBy);
+			resultInfo = new DefaultResultInfos<>(firstResult + items.size(), -1, items);
+		}
+		return resultInfo;
+	}
+
+	private void addConditionsOfParams(List<String> condQueries, SearchQuestionItemParams searchParams) {
+		if (searchParams.getQuestionStatus() != null) {
+			condQueries.add(QItemDocument.ITEM_STATUS_FIELD + ":" + searchParams.getQuestionStatus());
+		}
 	}
 
 	private ResultInfos<QuestionItemView> getItemsByPool(SearchQuestionItemParams searchParams, int firstResult, int maxResults, SortKey... orderBy) {
 		if(searchParams.isFulltextSearch()) {
 			try {
 				String queryString = searchParams.getSearchString();
-				List<String> condQueries = new ArrayList<String>();
+				List<String> condQueries = new ArrayList<>();
 				if(searchParams.getCondQueries() != null) {
 					condQueries.addAll(searchParams.getCondQueries());
 				}
 				condQueries.add("pool:" + searchParams.getPoolKey());
 				List<Long> results = searchClient.doSearch(queryString, condQueries,
-						searchParams.getIdentity(), searchParams.getRoles(), 0, MAX_NUMBER_DOCS);
+						searchParams.getIdentity(), searchParams.getRoles(), searchParams.getLocale(), 0, MAX_NUMBER_DOCS);
 
 				if(results.isEmpty()) {
-					return new DefaultResultInfos<QuestionItemView>();
+					return new DefaultResultInfos<>();
 				}
 				List<QuestionItemView> items = itemQueriesDao.getItemsOfPool(searchParams, results, firstResult, maxResults, orderBy);
-				return new DefaultResultInfos<QuestionItemView>(firstResult + items.size(), results.size(), items);
+				return new DefaultResultInfos<>(firstResult + items.size(), results.size(), items);
 			} catch (Exception e) {
 				log.error("", e);
 			}
-			return new DefaultResultInfos<QuestionItemView>();
+			return new DefaultResultInfos<>();
 		} else {
 			List<QuestionItemView> items = itemQueriesDao.getItemsOfPool(searchParams, searchParams.getItemKeys(), firstResult, maxResults, orderBy);
-			return new DefaultResultInfos<QuestionItemView>(firstResult + items.size(), -1, items);
+			return new DefaultResultInfos<>(firstResult + items.size(), -1, items);
 		}
 	}
 
@@ -477,26 +635,26 @@ public class QuestionPoolServiceImpl implements QPoolService {
 		if(searchParams.isFulltextSearch()) {
 			try {
 				String queryString = searchParams.getSearchString();
-				List<String> condQueries = new ArrayList<String>();
+				List<String> condQueries = new ArrayList<>();
 				if(searchParams.getCondQueries() != null) {
 					condQueries.addAll(searchParams.getCondQueries());
 				}
 				condQueries.add(QItemDocument.OWNER_FIELD + ":" + author.getKey());
 				List<Long> results = searchClient.doSearch(queryString, condQueries,
-						searchParams.getIdentity(), searchParams.getRoles(), 0, MAX_NUMBER_DOCS);
+						searchParams.getIdentity(), searchParams.getRoles(), searchParams.getLocale(), 0, MAX_NUMBER_DOCS);
 
 				if(results.isEmpty()) {
-					return new DefaultResultInfos<QuestionItemView>();
+					return new DefaultResultInfos<>();
 				}
 				List<QuestionItemView> items = itemQueriesDao.getItemsByAuthor(searchParams, results, firstResult, maxResults, orderBy);
-				return new DefaultResultInfos<QuestionItemView>(firstResult + items.size(), results.size(), items);
+				return new DefaultResultInfos<>(firstResult + items.size(), results.size(), items);
 			} catch (Exception e) {
 				log.error("", e);
 			}
-			return new DefaultResultInfos<QuestionItemView>();
+			return new DefaultResultInfos<>();
 		} else {
 			List<QuestionItemView> items = itemQueriesDao.getItemsByAuthor(searchParams, searchParams.getItemKeys(), firstResult, maxResults, orderBy);
-			return new DefaultResultInfos<QuestionItemView>(firstResult + items.size(), -1, items);
+			return new DefaultResultInfos<>(firstResult + items.size(), -1, items);
 		}
 	}
 	
@@ -517,26 +675,26 @@ public class QuestionPoolServiceImpl implements QPoolService {
 				List<Long> favoritKeys = questionItemDao.getFavoritKeys(searchParams.getIdentity());
 
 				String queryString = searchParams.getSearchString();
-				List<String> condQueries = new ArrayList<String>();
+				List<String> condQueries = new ArrayList<>();
 				if(searchParams.getCondQueries() != null) {
 					condQueries.addAll(searchParams.getCondQueries());
 				}
 				condQueries.add(getDbKeyConditionalQuery(favoritKeys));
 				List<Long> results = searchClient.doSearch(queryString, condQueries,
-						searchParams.getIdentity(), searchParams.getRoles(), 0, MAX_NUMBER_DOCS);
+						searchParams.getIdentity(), searchParams.getRoles(), searchParams.getLocale(), 0, MAX_NUMBER_DOCS);
 
 				if(results.isEmpty()) {
-					return new DefaultResultInfos<QuestionItemView>();
+					return new DefaultResultInfos<>();
 				}
 				List<QuestionItemView> items = itemQueriesDao.getFavoritItems(searchParams, results, firstResult, maxResults, orderBy);
-				return new DefaultResultInfos<QuestionItemView>(firstResult + items.size(), results.size(), items);
+				return new DefaultResultInfos<>(firstResult + items.size(), results.size(), items);
 			} catch (Exception e) {
 				log.error("", e);
 			}
-			return new DefaultResultInfos<QuestionItemView>();
+			return new DefaultResultInfos<>();
 		} else {
 			List<QuestionItemView> items = itemQueriesDao.getFavoritItems(searchParams, searchParams.getItemKeys(), firstResult, maxResults, orderBy);
-			return new DefaultResultInfos<QuestionItemView>(firstResult + items.size(), -1, items);
+			return new DefaultResultInfos<>(firstResult + items.size(), -1, items);
 		}
 	}
 	
@@ -549,6 +707,11 @@ public class QuestionPoolServiceImpl implements QPoolService {
 		}
 		return sb.append(')').toString();
 	}
+	
+	@Override
+	public QuestionItemView getItem(Long key, Identity identity, Long restrictToPoolKey, Long restrictToGroupKey) {
+		return itemQueriesDao.getItem(key, identity, restrictToPoolKey, restrictToGroupKey);
+	}
 
 	@Override
 	public void shareItemsWithGroups(List<? extends QuestionItemShort> items, List<BusinessGroup> groups, boolean editable) {
@@ -556,7 +719,7 @@ public class QuestionPoolServiceImpl implements QPoolService {
 			return;//nothing to do
 		}
 		
-		List<OLATResource> resources = new ArrayList<OLATResource>(groups.size());
+		List<OLATResource> resources = new ArrayList<>(groups.size());
 		for(BusinessGroup group:groups) {
 			resources.add(group.getResource());
 		}
@@ -589,27 +752,27 @@ public class QuestionPoolServiceImpl implements QPoolService {
 		if(searchParams != null && searchParams.isFulltextSearch()) {
 			try {
 				String queryString = searchParams.getSearchString();
-				List<String> condQueries = new ArrayList<String>();
+				List<String> condQueries = new ArrayList<>();
 				if(searchParams.getCondQueries() != null) {
 					condQueries.addAll(searchParams.getCondQueries());
 				}
 				condQueries.add(QItemDocument.SHARE_FIELD + ":" + resource.getKey());
 				List<Long> results = searchClient.doSearch(queryString, condQueries,
-						searchParams.getIdentity(), searchParams.getRoles(), 0, MAX_NUMBER_DOCS);
+						searchParams.getIdentity(), searchParams.getRoles(), searchParams.getLocale(), 0, MAX_NUMBER_DOCS);
 				if(results.isEmpty()) {
-					return new DefaultResultInfos<QuestionItemView>();
+					return new DefaultResultInfos<>();
 				}
 				List<QuestionItemView> items = itemQueriesDao.getSharedItemByResource(searchParams.getIdentity(), resource, results,
 						searchParams.getFormat(), firstResult, maxResults);
-				return new DefaultResultInfos<QuestionItemView>(firstResult + items.size(), results.size(), items);
+				return new DefaultResultInfos<>(firstResult + items.size(), results.size(), items);
 			} catch (Exception e) {
 				log.error("", e);
 			}
-			return new DefaultResultInfos<QuestionItemView>();
+			return new DefaultResultInfos<>();
 		} else {
 			List<QuestionItemView> items = itemQueriesDao.getSharedItemByResource(searchParams.getIdentity(), resource, null,
 					searchParams.getFormat(), firstResult, maxResults, orderBy);
-			return new DefaultResultInfos<QuestionItemView>(firstResult + items.size(), -1, items);
+			return new DefaultResultInfos<>(firstResult + items.size(), -1, items);
 		}
 	}
 
@@ -673,28 +836,28 @@ public class QuestionPoolServiceImpl implements QPoolService {
 			try {
 				List<Long> content = collectionDao.getItemKeysOfCollection(collection);
 				String queryString = searchParams.getSearchString();
-				List<String> condQueries = new ArrayList<String>();
+				List<String> condQueries = new ArrayList<>();
 				if(searchParams.getCondQueries() != null) {
 					condQueries.addAll(searchParams.getCondQueries());
 				}
 				condQueries.add(getDbKeyConditionalQuery(content));
 				List<Long> results = searchClient.doSearch(queryString, condQueries,
-						searchParams.getIdentity(), searchParams.getRoles(), 0, MAX_NUMBER_DOCS);
+						searchParams.getIdentity(), searchParams.getRoles(), searchParams.getLocale(), 0, MAX_NUMBER_DOCS);
 
 				if(results.isEmpty()) {
-					return new DefaultResultInfos<QuestionItemView>();
+					return new DefaultResultInfos<>();
 				}
 				List<QuestionItemView> items = itemQueriesDao.getItemsOfCollection(searchParams.getIdentity(), collection, results, 
 						searchParams.getFormat(), firstResult, maxResults, orderBy);
-				return new DefaultResultInfos<QuestionItemView>(firstResult + items.size(), results.size(), items);
+				return new DefaultResultInfos<>(firstResult + items.size(), results.size(), items);
 			} catch (Exception e) {
 				log.error("", e);
 			}
-			return new DefaultResultInfos<QuestionItemView>();
+			return new DefaultResultInfos<>();
 		} else {
 			List<QuestionItemView> items = itemQueriesDao.getItemsOfCollection(searchParams.getIdentity(), collection, searchParams.getItemKeys(),
 					searchParams.getFormat(), firstResult, maxResults, orderBy);
-			return new DefaultResultInfos<QuestionItemView>(firstResult + items.size(), -1, items);
+			return new DefaultResultInfos<>(firstResult + items.size(), -1, items);
 		}
 	}
 
@@ -721,7 +884,7 @@ public class QuestionPoolServiceImpl implements QPoolService {
 	@Override
 	public ResultInfos<Pool> getPools(int firstResult, int maxResults, SortKey... orderBy) {
 		List<Pool> pools = poolDao.getPools(firstResult, maxResults);
-		return new DefaultResultInfos<Pool>(firstResult + pools.size(), -1, pools);
+		return new DefaultResultInfos<>(firstResult + pools.size(), -1, pools);
 	}
 
 	@Override
@@ -770,48 +933,115 @@ public class QuestionPoolServiceImpl implements QPoolService {
 		return qEduContextDao.delete(context);
 	}
 
-	@Override
-	public QLicense createLicense(String licenseKey, String text) {
-		return qpoolLicenseDao.create(licenseKey, text, true);
+	private TaxonomyRef getQPoolTaxonomyRef() {
+		String key = qpoolModule.getTaxonomyQPoolKey();
+		try {
+			return new TaxonomyRefImpl(new Long(key));
+		} catch (NumberFormatException e) {
+			log.error("", e);
+			return null;
+		}
 	}
-
+	
 	@Override
-	public List<QLicense> getAllLicenses() {
-		return qpoolLicenseDao.getLicenses();
-	}
-
-	@Override
-	public QLicense getLicense(String licenseKey) {
-		return qpoolLicenseDao.loadByLicenseKey(licenseKey);
-	}
-
-	@Override
-	public QLicense updateLicense(QLicense license) {
-		return qpoolLicenseDao.update(license);
-	}
-
-	@Override
-	public boolean deleteLicense(QLicense license) {
-		return qpoolLicenseDao.delete(license);
+	public Taxonomy getQPoolTaxonomy() {
+		TaxonomyRef ref = getQPoolTaxonomyRef() ;
+		return ref == null ? null: taxonomyDao.loadByKey(ref.getKey());
 	}
 
 	@Override
 	public List<TaxonomyLevel> getTaxonomyLevels() {
-		return taxonomyLevelDao.loadAllLevels();
+		TaxonomyRef qpoolTaxonomy = getQPoolTaxonomyRef();
+		if(qpoolTaxonomy == null) {
+			return new ArrayList<>();
+		}
+		return taxonomyLevelDao.getLevels(qpoolTaxonomy);
 	}
 
 	@Override
-	public TaxonomyLevel createTaxonomyLevel(TaxonomyLevel parentField, String field) {
-		return taxonomyLevelDao.createAndPersist(parentField, field);
+	public List<TaxonomyLevel> getTaxonomyLevelBy(TaxonomyLevel parent, String displayName) {
+		Taxonomy qpoolTaxonomy = getQPoolTaxonomy();
+		if(qpoolTaxonomy == null) {
+			return new ArrayList<>();
+		}
+		return taxonomyLevelDao.getLevelsByDisplayName(qpoolTaxonomy, displayName);
 	}
 
 	@Override
-	public TaxonomyLevel updateTaxonomyLevel(String newField, TaxonomyLevel level) {
-		return taxonomyLevelDao.update(newField, level);
+	public TaxonomyLevel createTaxonomyLevel(TaxonomyLevel parent, String identifier, String displayName) {
+		if (!qpoolModule.isImportCreateTaxonomyLevel()) return null;
+		
+		Taxonomy qpoolTaxonomy = getQPoolTaxonomy();
+		if(qpoolTaxonomy == null) {
+			return null;
+		}
+		return taxonomyLevelDao.createTaxonomyLevel(identifier, displayName, "", null, null, parent, null, qpoolTaxonomy);
+	}
+	
+	@Override
+	public List<TaxonomyLevel> getTaxonomyLevel(Identity identity, TaxonomyCompetenceTypes... competenceType) {
+		return taxonomyCompetenceDao.getCompetencesByTaxonomy(getQPoolTaxonomyRef(), identity, new Date(), competenceType).stream()
+				.map(competence -> competence.getTaxonomyLevel())
+				.collect(Collectors.toList());
+	}
+	
+	@Override
+	public void resetAllStatesToDraft(Identity reseter) {
+		questionItemDao.resetAllStatesToDraft();
+		log.info("The states of all questions in the question bank were reseted to the status 'draft' by " + reseter);
 	}
 
 	@Override
-	public boolean delete(TaxonomyLevel level) {
-		return taxonomyLevelDao.delete(level);
+	public void rateItemInReview(QuestionItem item, Identity identity, Float rating, String comment) {
+		if (item == null || identity == null) return;
+		
+		if (rating != null && rating > 0f) {
+			// Review is only in status review possible
+			QuestionItem previousItem = loadItemById(item.getKey());
+			if (QuestionStatus.review.equals(previousItem.getQuestionStatus())) {
+				QuestionItemAuditLogBuilder builder = createAuditLogBuilder(identity, Action.REVIEW_QUESTION_ITEM);
+				builder.withBefore(item);
+				Integer newRating = Float.valueOf(rating).intValue();
+				builder.withMessage("Rating: " + newRating);
+				commentAndRatingService.createRating(identity, item, null, newRating);
+				ReviewDecision decision = reviewService.decideStatus(item, rating);
+				if (item instanceof QuestionItemImpl && decision.isStatusChanged()) {
+					QuestionItemImpl itemImpl = (QuestionItemImpl) item;
+					itemImpl.setQuestionStatus(decision.getStatus());
+					updateItem(itemImpl);
+				}
+				builder.withAfter(item);
+				persist(builder.create());
+			}
+		}
+		if (StringHelper.containsNonWhitespace(comment)) {
+			commentAndRatingService.createComment(identity, item, null, comment);
+		}
 	}
+
+	@Override
+	public QuestionItemAuditLogBuilder createAuditLogBuilder(Identity author, Action action) {
+		return new QuestionItemAuditLogBuilderImpl(author, action);
+	}
+
+	@Override
+	public void persist(QuestionItemAuditLog auditLog) {
+		auditLogDao.persist(auditLog);
+	}
+
+	@Override
+	public String toAuditXml(QuestionItem item) {
+		return auditLogDao.toXml(item);
+	}
+
+	@Override
+	public QuestionItem toAuditQuestionItem(String xml) {
+		return auditLogDao.questionItemFromXml(xml);
+	}
+
+	@Override
+	public List<QuestionItemAuditLog> getAuditLogByQuestionItem(QuestionItemShort item) {
+		return auditLogDao.getAuditLogByQuestionItem(item);
+	}
+
 }

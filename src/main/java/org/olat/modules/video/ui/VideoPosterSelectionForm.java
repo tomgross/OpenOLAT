@@ -21,14 +21,14 @@ package org.olat.modules.video.ui;
 
 
 import java.io.File;
-import java.io.RandomAccessFile;
-import java.nio.channels.FileChannel;
-import java.util.HashMap;
-import java.util.Map;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.UUID;
 
-import org.jcodec.common.FileChannelWrapper;
-import org.jcodec.containers.mp4.demuxer.MP4Demuxer;
+import javax.servlet.http.HttpServletRequest;
+
 import org.olat.core.commons.modules.bc.FolderEvent;
+import org.olat.core.dispatcher.mapper.Mapper;
 import org.olat.core.gui.UserRequest;
 import org.olat.core.gui.components.Component;
 import org.olat.core.gui.components.link.Link;
@@ -37,13 +37,18 @@ import org.olat.core.gui.components.velocity.VelocityContainer;
 import org.olat.core.gui.control.Event;
 import org.olat.core.gui.control.WindowControl;
 import org.olat.core.gui.control.controller.BasicController;
-import org.olat.core.helpers.Settings;
-import org.olat.core.util.CodeHelper;
+import org.olat.core.gui.media.ForbiddenMediaResource;
+import org.olat.core.gui.media.MediaResource;
+import org.olat.core.gui.media.NotFoundMediaResource;
+import org.olat.core.util.StringHelper;
+import org.olat.core.util.WebappHelper;
 import org.olat.core.util.vfs.LocalFolderImpl;
 import org.olat.core.util.vfs.VFSContainer;
+import org.olat.core.util.vfs.VFSItem;
 import org.olat.core.util.vfs.VFSLeaf;
+import org.olat.core.util.vfs.VFSMediaResource;
 import org.olat.modules.video.VideoManager;
-import org.olat.modules.video.manager.VideoMediaMapper;
+import org.olat.modules.video.VideoMeta;
 import org.olat.resource.OLATResource;
 import org.springframework.beans.factory.annotation.Autowired;
 
@@ -56,96 +61,133 @@ public class VideoPosterSelectionForm extends BasicController {
 	private static final String FILENAME_POSTFIX_JPG = ".jpg";
 	private static final String FILENAME_PREFIX_PROPOSAL_POSTER = "proposalPoster";
 	
+	private VFSLeaf tmpFile;
 	private VFSContainer tmpContainer;
 
 	@Autowired
 	private VideoManager videoManager;
-	private VelocityContainer proposalLayout = createVelocityContainer("video_poster_proposal");
+	private final VelocityContainer proposalLayout;
 
-	private Map<String, String> generatedPosters = new HashMap<String, String>();
+	private static final int STEP = 24;
+	private final boolean hasProposals;
 
-	public VideoPosterSelectionForm(UserRequest ureq, WindowControl wControl, OLATResource videoResource) {
+	public VideoPosterSelectionForm(UserRequest ureq, WindowControl wControl,
+			OLATResource videoResource, VideoMeta videoMetadata) {
 		super(ureq, wControl);
 		
+		proposalLayout = createVelocityContainer("video_poster_proposal");
 		// posters are generated in tmp. 
-		File tmp = new File(System.getProperty("java.io.tmpdir"), CodeHelper.getGlobalForeverUniqueID());
-		tmp.mkdirs();
-		tmpContainer = new LocalFolderImpl(tmp);
+		tmpContainer = new LocalFolderImpl(new File(WebappHelper.getTmpDir(), "poster_" + UUID.randomUUID()));
 		
-		long duration = 1000;
-
-		File videoFile = videoManager.getVideoFile(videoResource);
-		RandomAccessFile accessFile;
-		try {
-			accessFile = new RandomAccessFile(videoFile,"r");
-			FileChannel ch = accessFile.getChannel();
-			FileChannelWrapper in = new FileChannelWrapper(ch);
-			MP4Demuxer demuxer1 = new MP4Demuxer(in);
-			duration = demuxer1.getVideoTrack().getFrameCount();
-		} catch (Exception | AssertionError e) {
-			logError("Error while accessing master video::" + videoFile.getAbsolutePath(), e);
+		VFSLeaf videoFile;
+		if(StringHelper.containsNonWhitespace(videoMetadata.getUrl())) {
+			videoFile = videoManager.downloadTmpVideo(videoResource, videoMetadata);
+			tmpFile = videoFile;// delete temporary file
+		} else {
+			videoFile = videoManager.getMasterVideo(videoResource);
 		}
-
-		long firstThirdDuration = duration/7;
-		for (int currentFrame = 0; currentFrame <= duration; currentFrame += firstThirdDuration) {
-			try {
-				String fileName;
-				boolean imgBlack;
-				int adjust = 0;
-				do {
-					fileName = FILENAME_PREFIX_PROPOSAL_POSTER + (currentFrame+adjust) + FILENAME_POSTFIX_JPG;
-					VFSLeaf posterProposal = tmpContainer.createChildLeaf(fileName);
-					imgBlack = videoManager.getFrameWithFilter(videoResource, (currentFrame+adjust), duration, posterProposal);
-					int step = 24;
-					if (currentFrame + step <= duration) {
-						adjust += step;
-					} else {
-						adjust -= step;
-					}
-					// set lower bound to avoid endless loop
-					if (currentFrame+adjust < 0) {
-						// if all poster images are mostly black just take current frame
-						videoManager.getFrame(videoResource, currentFrame, posterProposal);
-						break;
-					}
-				} while (imgBlack);
-				VideoMediaMapper mediaMapper = new VideoMediaMapper(tmpContainer);
-				String mediaUrl = registerMapper(ureq, mediaMapper);
-				String serverUrl = Settings.createServerURI();
-				proposalLayout.contextPut("serverUrl", serverUrl);
-
-				Link button = LinkFactory.createButton(String.valueOf(currentFrame), proposalLayout, this);
-				button.setCustomEnabledLinkCSS("o_video_poster_selct");
-				button.setCustomDisplayText(translate("poster.select"));
-				button.setUserObject(fileName);
-				
-				generatedPosters.put(mediaUrl + "/" + fileName,	String.valueOf(currentFrame));
-			} catch (Exception | AssertionError e) {
-				logError("Error while creating poster images for video::" + videoFile.getAbsolutePath(), e);
-			}
+		
+		List<String> proposals = generatePosterProposals(videoFile);
+		proposalLayout.contextPut("proposals", proposals);
+		hasProposals = !proposals.isEmpty();
+		
+		if(!proposals.isEmpty()) {
+			String mediaUrl = registerMapper(ureq, new PosterMapper());
+			proposalLayout.contextPut("mediaUrl", mediaUrl);
 		}
-		proposalLayout.contextPut("pics", generatedPosters);
-
 		putInitialPanel(proposalLayout);
 	}
-
+	
 	@Override
 	protected void doDispose() {
 		// cleanup tmp file
-		if (tmpContainer != null) {
-			tmpContainer.delete();
+		if(tmpContainer != null) {
+			tmpContainer.deleteSilently();
 			tmpContainer = null;
 		}
+		if(tmpFile != null && tmpFile.exists()) {
+			tmpFile.deleteSilently();
+		}
+	}
+	
+	public boolean hasProposals() {
+		return hasProposals;
+	}
+	
+	private List<String> generatePosterProposals(VFSLeaf videoFile) {
+		long frames = videoManager.getVideoFrameCount(videoFile);
+
+		long framesStepping = frames / 7;
+		if(framesStepping == 0) {
+			framesStepping = 256;
+		}
+		long maxAdjust = framesStepping / STEP;
+		
+		int proposalCounter = 0;
+		List<String> generatedPosters = new ArrayList<>();
+		
+		a_a:
+		for (int currentFrame = 0; currentFrame <= frames && generatedPosters.size() < 8; currentFrame += framesStepping) {
+			try {
+				int adjust = 0;
+				String fileName = FILENAME_PREFIX_PROPOSAL_POSTER + (proposalCounter++) + FILENAME_POSTFIX_JPG;
+				VFSLeaf posterProposal = tmpContainer.createChildLeaf(fileName);
+
+				boolean imgBlack = true;
+				for(int i=0; i<maxAdjust && imgBlack; i++) {
+					imgBlack = videoManager.getFrameWithFilter(videoFile, (currentFrame+adjust), frames, posterProposal);
+					
+					if (currentFrame + STEP <= frames) {
+						adjust += STEP;
+					} else {
+						adjust -= STEP;
+					}
+					// set lower bound to avoid endless loop
+					if (currentFrame + adjust < 0) {
+						// if all poster images are mostly black just take current frame
+						if(videoManager.getFrame(videoFile, currentFrame, posterProposal)) {
+							break;
+						} else {
+							break a_a;
+						}
+					}
+				} 
+
+				Link button = LinkFactory.createButton(fileName, proposalLayout, this);
+				button.setCustomEnabledLinkCSS("o_video_poster_selct");
+				button.setCustomDisplayText(translate("poster.select"));
+				button.setUserObject(fileName);
+				generatedPosters.add(fileName);
+			} catch (Exception | AssertionError e) {
+				logError("Error while creating poster images for video: " + videoFile, e);
+			}
+		}
+		
+		return generatedPosters;
 	}
 
 	@Override
 	protected void event(UserRequest ureq, Component source, Event event) {
 		if (source instanceof Link) {
 			Link button = (Link) source;
-			VFSLeaf posterFile = (VFSLeaf)tmpContainer.resolve((String)button.getUserObject());
-			if (posterFile != null) {
+			VFSItem posterFile = tmpContainer.resolve((String)button.getUserObject());
+			if (posterFile instanceof VFSLeaf) {
 				fireEvent(ureq, new FolderEvent(FolderEvent.UPLOAD_EVENT, posterFile));
 			}
+		}
+	}
+	
+	private class PosterMapper implements Mapper {
+		@Override
+		public MediaResource handle(String relPath, HttpServletRequest request) {
+			if(relPath != null && relPath.contains("..") && !relPath.endsWith(FILENAME_POSTFIX_JPG)) { 
+				return new ForbiddenMediaResource();
+			}
+			VFSItem mediaFile = tmpContainer.resolve(relPath);
+			if (mediaFile instanceof VFSLeaf){
+				return new VFSMediaResource((VFSLeaf)mediaFile);
+			}
+	 		return new NotFoundMediaResource();
 		}
 	}
 }

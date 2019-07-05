@@ -24,7 +24,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
-import org.olat.core.logging.OLog;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
 
 /**
@@ -38,10 +38,10 @@ import org.olat.core.logging.Tracing;
  */
 public class RestRegistrationServiceImpl implements RestRegistrationService {
 	
-	private OLog log = Tracing.createLoggerFor(RestRegistrationServiceImpl.class);
+	private static final Logger log = Tracing.createLoggerFor(RestRegistrationServiceImpl.class);
 
-	private final Set<Object> singletons = new HashSet<Object>();
-	private final Set<Class<?>> classes = new HashSet<Class<?>>();
+	private final Set<Object> singletons = new HashSet<>();
+	private final Set<Class<?>> classes = new HashSet<>();
 	
 	public RestRegistrationServiceImpl() {
 		//
@@ -49,12 +49,12 @@ public class RestRegistrationServiceImpl implements RestRegistrationService {
 	
 	@Override
 	public Set<Class<?>> getClasses() {
-		return new HashSet<Class<?>>(classes);
+		return new HashSet<>(classes);
 	}
 	
 	//[for spring]
 	public List<String> getClassnames() {
-		List<String> classnames = new ArrayList<String>(classes.size());
+		List<String> classnames = new ArrayList<>(classes.size());
 		for(Class<?> cl:classes) {
 			classnames.add(cl.getName());
 		}
@@ -84,12 +84,12 @@ public class RestRegistrationServiceImpl implements RestRegistrationService {
 
 	@Override
 	public Set<Object> getSingletons() {
-		return new HashSet<Object>(singletons);
+		return new HashSet<>(singletons);
 	}
 	
 	//[spring]
 	public List<Object> getSingletonBeans() {
-		List<Object> beans = new ArrayList<Object>();
+		List<Object> beans = new ArrayList<>();
 		beans.addAll(singletons);
 		return beans;
 	}

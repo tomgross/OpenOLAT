@@ -8,10 +8,10 @@
   http://www.springframework.org/schema/context
   http://www.springframework.org/schema/context/spring-context.xsd">
 
-	<!-- 
-		Configure the users properties, forms and tables 
+	<!--
+		Configure the users properties, forms and tables
 	-->
-	<bean id="org.olat.user.UserPropertiesConfig" class="org.olat.user.propertyhandlers.UserPropertiesConfigImpl" init-method="init">
+	<bean id="org.olat.user.UserPropertiesConfig" class="org.olat.user.propertyhandlers.UserPropertiesConfigImpl">
 		<property name="maxNumOfInterests" value="${user.interests.max.number:5}" />
 		<property name="userPropertyHandlers">
 			<list>
@@ -27,6 +27,8 @@
 				<ref bean="userPropertySmsTelMobile" />
 				<ref bean="userPropertyTelOffice" />
 				<ref bean="userPropertySkype" />
+                <ref bean="userPropertyXing" />
+                <ref bean="userPropertyICQ" />
 				<ref bean="userPropertyHomepage" />
 				<ref bean="userPropertyStreet" />
 				<ref bean="userPropertyExtendedAddress" />
@@ -82,27 +84,17 @@
 				<ref bean="userPropertyCreationDateDisplay" />
 				<ref bean="userPropertylastLoginDateDisplay" />
 
-				<!-- usertracking attributes -->
-				<ref bean="usertrackingAttrEduPersonAffiliation" />
-				<ref bean="usertrackingAttrSwissEduHomeOrganisation" />
-				<ref bean="usertrackingAttrSwissEduPersonStudyLevel" />
-				<ref bean="usertrackingAttrSwissEduPersonHomeOrganisationType" />
-				<ref bean="usertrackingAttrEmployeeNumber" />
-				<ref bean="usertrackingAttrMatriculationNumber" />
-				<ref bean="usertrackingAttrSwissEduPersonStaffCategory" />
-				<ref bean="usertrackingAttrOrganizationalUnit" />
-				<ref bean="usertrackingAttrSwissEduPersonStudyBranch1" />
-				<ref bean="usertrackingAttrSwissEduPersonStudyBranch2" />
-				<ref bean="usertrackingAttrSwissEduPersonStudyBranch3" />
-				<ref bean="usertrackingLanguage" />
-				<ref bean="usertrackingWebDAV" />
+				<!-- example
+				<ref bean="userPropertyAttrEduPersonAffiliation" />
+				<ref bean="userPropertyAttrSwissEduPersonStudyLevel" />
+				-->
 			</list>
 		</property>
-		
+
 		<property name="userPropertyUsageContexts">
 			<map>
-			
-				<!-- 
+
+				<!--
 					Forms that show user properties
 				-->
 				<entry key="org.olat.user.ProfileFormController">
@@ -120,6 +112,8 @@
 								<ref bean="userPropertyTelMobile" />
 								<ref bean="userPropertyTelOffice" />
 								<ref bean="userPropertySkype" />
+								<ref bean="userPropertyXing" />
+								<ref bean="userPropertyICQ" />
 								<ref bean="userPropertyHomepage" />
 								<ref bean="userPropertyStreet" />
 								<ref bean="userPropertyExtendedAddress" />
@@ -167,7 +161,7 @@
 					</bean>
 				</entry>
 
-				<!-- 
+				<!--
 					Indexed for fulltext search (only the fields that a user selects to publish are indexed)
 				-->
 				<entry key="org.olat.search.service.document.IdentityDocument">
@@ -184,6 +178,8 @@
 								<ref bean="userPropertyTelMobile" />
 								<ref bean="userPropertyTelOffice" />
 								<ref bean="userPropertySkype" />
+                                <ref bean="userPropertyXing" />
+                                <ref bean="userPropertyICQ" />
 								<ref bean="userPropertyHomepage" />
 								<ref bean="userPropertyStreet" />
 								<ref bean="userPropertyExtendedAddress" />
@@ -227,11 +223,12 @@
 								<ref bean="userPropertyInstitutionalEmployeeNumber" />
 								<ref bean="userPropertyInstitutionalMatriculationNumber" />
 								<ref bean="userPropertyInstitutionalEmail" />
-							</set>						
+								<ref bean="userPropertyStudySubject" />
+							</set>
 						</property>
 					</bean>
 				</entry>
-				
+
 				<entry key="org.olat.course.member.MemberSearchForm">
 					<bean class="org.olat.user.propertyhandlers.UserPropertyUsageContext">
 						<property name="propertyHandlers">
@@ -248,11 +245,11 @@
 								<ref bean="userPropertyEmail" />
 								<ref bean="userPropertyInstitutionalName" />
 								<ref bean="userPropertyInstitutionalEmail" />
-							</set>						
+							</set>
 						</property>
 					</bean>
 				</entry>
-				
+
 				<entry key="org.olat.course.nodes.pf.ui.PFCoachController">
 					<bean class="org.olat.user.propertyhandlers.UserPropertyUsageContext">
 						<property name="propertyHandlers">
@@ -302,8 +299,6 @@
 								<ref bean="userPropertyEmail" />
 								<ref bean="userPropertyInstitutionalName" />
 								<ref bean="userPropertyInstitutionalEmail" />
-								<ref bean="userPropertyInstitutionalEmployeeNumber" />
-								<ref bean="userPropertyInstitutionalMatriculationNumber" />
 							</set>
 						</property>
 						<property name="mandatoryProperties">
@@ -317,7 +312,7 @@
 						</property>
 					</bean>
 				</entry>
-				
+
 				<entry key="org.olat.modules.fo.ui.ForumUserListController">
 					<bean class="org.olat.user.propertyhandlers.UserPropertyUsageContext">
 						<property name="propertyHandlers">
@@ -327,7 +322,7 @@
 							</list>
 						</property>
 						<property name="adminViewOnlyProperties">
-							<set/>
+							<set></set>
 						</property>
 						<property name="mandatoryProperties">
 							<set>
@@ -337,7 +332,97 @@
 						</property>
 					</bean>
 				</entry>
+
+				<entry key="org.olat.modules.lecture.ui.TeacherRollCallController">
+					<bean class="org.olat.user.propertyhandlers.UserPropertyUsageContext">
+						<property name="description" value="List of users in roll call" />
+						<property name="propertyHandlers">
+							<list>
+								<ref bean="userPropertyFirstName" />
+								<ref bean="userPropertyLastName" />
+								<ref bean="userPropertyEmail" />
+							</list>
+						</property>
+						<property name="adminViewOnlyProperties">
+							<set></set>
+						</property>
+						<property name="mandatoryProperties">
+							<set>
+								<ref bean="userPropertyFirstName" />
+								<ref bean="userPropertyLastName" />
+								<ref bean="userPropertyEmail" />
+							</set>
+						</property>
+					</bean>
+				</entry>
 				
+				<entry key="org.olat.modules.taxonomy.ui.TaxonomyLevelCompetenceController">
+					<bean class="org.olat.user.propertyhandlers.UserPropertyUsageContext">
+						<property name="description" value="List of users in competence management" />
+						<property name="propertyHandlers">
+							<list>
+								<ref bean="userPropertyFirstName" />
+								<ref bean="userPropertyLastName" />
+								<ref bean="userPropertyEmail" />
+							</list>
+						</property>
+						<property name="adminViewOnlyProperties">
+							<set></set>
+						</property>
+						<property name="mandatoryProperties">
+							<set>
+								<ref bean="userPropertyFirstName" />
+								<ref bean="userPropertyLastName" />
+								<ref bean="userPropertyEmail" />
+							</set>
+						</property>
+					</bean>
+				</entry>
+
+				<entry key="org.olat.modules.lecture.ui.ParticipantListRepositoryController">
+					<bean class="org.olat.user.propertyhandlers.UserPropertyUsageContext">
+						<property name="description" value="List of users in lecture blocks overview" />
+						<property name="propertyHandlers">
+							<list>
+								<ref bean="userPropertyFirstName" />
+								<ref bean="userPropertyLastName" />
+								<ref bean="userPropertyEmail" />
+							</list>
+						</property>
+						<property name="adminViewOnlyProperties">
+							<set></set>
+						</property>
+						<property name="mandatoryProperties">
+							<set>
+								<ref bean="userPropertyFirstName" />
+								<ref bean="userPropertyLastName" />
+								<ref bean="userPropertyEmail" />
+							</set>
+						</property>
+					</bean>
+				</entry>
+				
+				<entry key="org.olat.ims.qti21.ui.assessment.CorrectionIdentityListController">
+					<bean class="org.olat.user.propertyhandlers.UserPropertyUsageContext">
+						<property name="description" value="List of users in the QTI 2.1 correction workflow" />
+						<property name="propertyHandlers">
+							<list>
+								<ref bean="userPropertyFirstName" />
+								<ref bean="userPropertyLastName" />
+							</list>
+						</property>
+						<property name="adminViewOnlyProperties">
+							<set></set>
+						</property>
+						<property name="mandatoryProperties">
+							<set>
+								<ref bean="userPropertyFirstName" />
+								<ref bean="userPropertyLastName" />
+							</set>
+						</property>
+					</bean>
+				</entry>
+
 				<entry key="org.olat.group.ui.main.MemberInfoController">
 					<!-- First name and last name are already shown -->
 					<bean class="org.olat.user.propertyhandlers.UserPropertyUsageContext">
@@ -348,9 +433,16 @@
 								<ref bean="userPropertyInstitutionalEmail" />
 							</list>
 						</property>
+						<property name="adminViewOnlyProperties">
+							<set>
+								<ref bean="userPropertyEmail" />
+								<ref bean="userPropertyInstitutionalUserIdentifier" />
+								<ref bean="userPropertyInstitutionalEmail" />
+							</set>
+						</property>
 					</bean>
 				</entry>
-				
+
 				<entry key="org.olat.resource.accesscontrol.ui.OrdersAdminController">
 					<bean class="org.olat.user.propertyhandlers.UserPropertyUsageContext">
 						<property name="description" value="Booking list" />
@@ -396,7 +488,7 @@
 						</property>
 					</bean>
 				</entry>
-				
+
 				<entry key="org.olat.course.nodes.gta.ui.GTACoachedGroupGradingController">
 					<bean class="org.olat.user.propertyhandlers.UserPropertyUsageContext">
 						<property name="description" value="Assessment table in the group task." />
@@ -418,26 +510,109 @@
 						</property>
 					</bean>
 				</entry>
-				
-				<entry key="org.olat.course.nodes.members.MembersCourseNodeRunController">
+
+				<entry key="org.olat.commons.memberlist.ui.MembersPrintController">
 					<bean class="org.olat.user.propertyhandlers.UserPropertyUsageContext">
-						<property name="description" value="Print view in the members course element." />
+						<property name="description" value="Print view in the members course element and group member tool" />
 						<property name="propertyHandlers">
 							<list>
 								<ref bean="userPropertyFirstName" />
 								<ref bean="userPropertyLastName" />
 								<ref bean="userPropertyEmail" />
-								
+
 							</list>
 						</property>
 						<property name="adminViewOnlyProperties">
-							<set></set>						
+							<set>
+								<ref bean="userPropertyEmail" />
+							</set>
 						</property>
 						<property name="mandatoryProperties">
 							<set>
 								<ref bean="userPropertyFirstName" />
 								<ref bean="userPropertyLastName" />
 								<ref bean="userPropertyEmail" />
+							</set>
+						</property>
+					</bean>
+				</entry>
+
+				<entry key="org.olat.commons.memberlist.ui.MembersAvatarDisplayRunController">
+					<bean class="org.olat.user.propertyhandlers.UserPropertyUsageContext">
+						<property name="description" value="Avatar view in the members course element and group member tool" />
+						<property name="propertyHandlers">
+							<list>
+								<ref bean="userPropertyFirstName" />
+								<ref bean="userPropertyLastName" />
+								<ref bean="userPropertyInstitutionalName" />
+								<ref bean="userPropertyOrgUnit" />
+							</list>
+						</property>
+					</bean>
+				</entry>
+
+				<entry key="org.olat.commons.memberlist.ui.MembersTableController">
+					<bean class="org.olat.user.propertyhandlers.UserPropertyUsageContext">
+						<property name="description" value="List view and Excel export in the members course element and group member tool" />
+						<property name="propertyHandlers">
+							<list>
+								<ref bean="userPropertyFirstName" />
+								<ref bean="userPropertyLastName" />
+								<ref bean="userPropertyEmail" />
+								<ref bean="userPropertyBirthDay" />
+								<ref bean="userPropertyGender" />
+								<ref bean="userPropertyTelPrivate" />
+								<ref bean="userPropertyTelMobile" />
+								<ref bean="userPropertyTelOffice" />
+								<ref bean="userPropertySkype" />
+                                <ref bean="userPropertyXing" />
+                                <ref bean="userPropertyICQ" />
+								<ref bean="userPropertyHomepage" />
+								<ref bean="userPropertyStreet" />
+								<ref bean="userPropertyExtendedAddress" />
+								<ref bean="userPropertyPoBox" />
+								<ref bean="userPropertyZipCode" />
+								<ref bean="userPropertyRegion" />
+								<ref bean="userPropertyCity" />
+								<ref bean="userPropertyCountry" />
+								<ref bean="userPropertyInstitutionalName" />
+								<ref bean="userPropertyInstitutionalUserIdentifier" />
+								<ref bean="userPropertyInstitutionalEmail" />
+								<ref bean="userPropertyOrgUnit" />
+								<ref bean="userPropertyStudySubject" />
+							</list>
+						</property>
+						<property name="mandatoryProperties">
+							<set>
+								<ref bean="userPropertyFirstName" />
+								<ref bean="userPropertyLastName" />
+								<ref bean="userPropertyEmail" />
+							</set>
+						</property>
+						<property name="adminViewOnlyProperties">
+							<set>
+								<ref bean="userPropertyEmail" />
+								<ref bean="userPropertyBirthDay" />
+								<ref bean="userPropertyGender" />
+								<ref bean="userPropertyTelPrivate" />
+								<ref bean="userPropertyTelMobile" />
+								<ref bean="userPropertyTelOffice" />
+								<ref bean="userPropertySkype" />
+                                <ref bean="userPropertyXing" />
+                                <ref bean="userPropertyICQ" />
+								<ref bean="userPropertyHomepage" />
+								<ref bean="userPropertyStreet" />
+								<ref bean="userPropertyExtendedAddress" />
+								<ref bean="userPropertyPoBox" />
+								<ref bean="userPropertyZipCode" />
+								<ref bean="userPropertyRegion" />
+								<ref bean="userPropertyCity" />
+								<ref bean="userPropertyCountry" />
+								<ref bean="userPropertyInstitutionalName" />
+								<ref bean="userPropertyInstitutionalUserIdentifier" />
+								<ref bean="userPropertyInstitutionalEmail" />
+								<ref bean="userPropertyOrgUnit" />
+								<ref bean="userPropertyStudySubject" />
 							</set>
 						</property>
 					</bean>
@@ -456,7 +631,7 @@
 						</property>
 					</bean>
 				</entry>
-				
+
 				<entry key="org.olat.admin.user.UsermanagerUserSearchForm">
 					<bean class="org.olat.user.propertyhandlers.UserPropertyUsageContext">
 						<property name="propertyHandlers">
@@ -508,11 +683,12 @@
 				<!--  RegistrationForm2 is used in the self registration process -->
 				<entry key="org.olat.registration.RegistrationForm2">
 					<bean class="org.olat.user.propertyhandlers.UserPropertyUsageContext">
+						<property name="description" value="Registration form for self-registrated users" />
 						<property name="propertyHandlers">
 							<list>
-								<!--  
-									don't add email as form elemente here, email is already 
-									collected in the previous step of the registration workflow 
+								<!--
+									don't add email as form elemente here, email is already
+									collected in the previous step of the registration workflow
 								-->
 								<ref bean="userPropertyFirstName" />
 								<ref bean="userPropertyLastName" />
@@ -526,9 +702,64 @@
 						</property>
 					</bean>
 				</entry>
-
 				
-				<!-- 
+				<!--  RegistrationForm2 is used in the self registration process -->
+				<entry key="org.olat.registration.RegistrationAdditionalForm">
+					<bean class="org.olat.user.propertyhandlers.UserPropertyUsageContext">
+						<property name="description" value="Additional registration form for self-registrated users (if empty, the step doesn't appear)" />
+						<property name="propertyHandlers">
+							<list />
+						</property>
+						<property name="mandatoryProperties">
+							<set />
+						</property>
+					</bean>
+				</entry>
+
+				<!--  OAuthRegistrationController is used in the OAuth registration process -->
+				<entry key="org.olat.login.oauth.ui.OAuthRegistrationController">
+					<bean class="org.olat.user.propertyhandlers.UserPropertyUsageContext">
+						<property name="description" value="Registration form for OAuth users (LinkedIn...)" />
+						<property name="propertyHandlers">
+							<list>
+								<ref bean="userPropertyFirstName" />
+								<ref bean="userPropertyLastName" />
+								<ref bean="userPropertyEmail" />
+							</list>
+						</property>
+						<property name="mandatoryProperties">
+							<set>
+								<ref bean="userPropertyFirstName" />
+								<ref bean="userPropertyLastName" />
+								<ref bean="userPropertyEmail" />
+							</set>
+						</property>
+					</bean>
+				</entry>
+
+				<!--  ShibbolethRegistrationUserPropertiesFrom is used in the Shibboleth registration process -->
+				<entry key="org.olat.shibboleth.ShibbolethRegistrationUserPropertiesFrom">
+					<bean class="org.olat.user.propertyhandlers.UserPropertyUsageContext">
+						<property name="description" value="Registration form for Shibboleth users" />
+						<property name="propertyHandlers">
+							<list>
+								<ref bean="userPropertyFirstName" />
+								<ref bean="userPropertyLastName" />
+								<ref bean="userPropertyEmail" />
+							</list>
+						</property>
+						<property name="mandatoryProperties">
+							<set>
+								<ref bean="userPropertyFirstName" />
+								<ref bean="userPropertyLastName" />
+								<ref bean="userPropertyEmail" />
+							</set>
+						</property>
+					</bean>
+				</entry>
+
+
+				<!--
 					Tables that show user properties
 				-->
 				<entry key="org.olat.admin.user.UserTableDataModel">
@@ -544,6 +775,8 @@
 								<ref bean="userPropertyTelMobile" />
 								<ref bean="userPropertyTelOffice" />
 								<ref bean="userPropertySkype" />
+                                <ref bean="userPropertyXing" />
+                                <ref bean="userPropertyICQ" />
 								<ref bean="userPropertyHomepage" />
 								<ref bean="userPropertyStreet" />
 								<ref bean="userPropertyExtendedAddress" />
@@ -562,33 +795,53 @@
 							<set>
 								<ref bean="userPropertyFirstName" />
 								<ref bean="userPropertyLastName" />
+								<ref bean="userPropertyEmail" />
 							</set>
 						</property>
 						<property name="adminViewOnlyProperties">
 							<set>
-								<ref bean="userPropertyInstitutionalEmployeeNumber" />
-								<ref bean="userPropertyInstitutionalMatriculationNumber" />
+								<ref bean="userPropertyEmail" />
+								<ref bean="userPropertyBirthDay" />
+								<ref bean="userPropertyGender" />
+								<ref bean="userPropertyTelPrivate" />
+								<ref bean="userPropertyTelMobile" />
+								<ref bean="userPropertyTelOffice" />
+								<ref bean="userPropertySkype" />
+								<ref bean="userPropertyXing" />
+								<ref bean="userPropertyICQ" />
+								<ref bean="userPropertyHomepage" />
+								<ref bean="userPropertyStreet" />
+								<ref bean="userPropertyExtendedAddress" />
+								<ref bean="userPropertyPoBox" />
+								<ref bean="userPropertyZipCode" />
+								<ref bean="userPropertyRegion" />
+								<ref bean="userPropertyCity" />
+								<ref bean="userPropertyCountry" />
+								<ref bean="userPropertyInstitutionalUserIdentifier" />
+								<ref bean="userPropertyInstitutionalEmail" />
+								<ref bean="userPropertyOrgUnit" />
+								<ref bean="userPropertyStudySubject" />
 							</set>
 						</property>
 					</bean>
 				</entry>
-				
+
 				<entry key="org.olat.admin.user.delete.UserDeleteTableModel">
 					<bean class="org.olat.user.propertyhandlers.UserPropertyUsageContext">
 						<property name="propertyHandlers">
 							<list>
-							    	<ref bean="userPropertyLastName" />
+							    <ref bean="userPropertyLastName" />
 								<ref bean="userPropertyFirstName" />
-								<ref bean="userPropertyEmail" />								
+								<ref bean="userPropertyEmail" />
 							</list>
 						</property>
 						<property name="mandatoryProperties">
 							<set>
-							    	<ref bean="userPropertyLastName" />
+							    <ref bean="userPropertyLastName" />
 								<ref bean="userPropertyFirstName" />
 								<ref bean="userPropertyEmail" />
 							</set>
-						</property>						
+						</property>
 					</bean>
 				</entry>
 
@@ -605,6 +858,8 @@
 								<ref bean="userPropertyTelMobile" />
 								<ref bean="userPropertyTelOffice" />
 								<ref bean="userPropertySkype" />
+                                <ref bean="userPropertyXing" />
+                                <ref bean="userPropertyICQ" />
 								<ref bean="userPropertyHomepage" />
 								<ref bean="userPropertyStreet" />
 								<ref bean="userPropertyExtendedAddress" />
@@ -630,13 +885,14 @@
 						</property>
 						<property name="adminViewOnlyProperties">
 							<set>
-								<ref bean="userPropertyInstitutionalEmployeeNumber" />
-								<ref bean="userPropertyInstitutionalMatriculationNumber" />
+								<ref bean="userPropertyEmail" />
+								<ref bean="userPropertyInstitutionalUserIdentifier" />
+								<ref bean="userPropertyInstitutionalEmail" />
 							</set>
 						</property>
 					</bean>
 				</entry>
-				
+
 				<entry key="org.olat.admin.securitygroup.gui.IdentitiesOfGroupTableDataModel">
 					<bean class="org.olat.user.propertyhandlers.UserPropertyUsageContext">
 						<property name="propertyHandlers">
@@ -650,6 +906,8 @@
 								<ref bean="userPropertyTelMobile" />
 								<ref bean="userPropertyTelOffice" />
 								<ref bean="userPropertySkype" />
+                                <ref bean="userPropertyXing" />
+                                <ref bean="userPropertyICQ" />
 								<ref bean="userPropertyHomepage" />
 								<ref bean="userPropertyStreet" />
 								<ref bean="userPropertyExtendedAddress" />
@@ -675,8 +933,28 @@
 						</property>
 						<property name="adminViewOnlyProperties">
 							<set>
-								<ref bean="userPropertyInstitutionalEmployeeNumber" />
-								<ref bean="userPropertyInstitutionalMatriculationNumber" />
+								<ref bean="userPropertyEmail" />
+								<ref bean="userPropertyBirthDay" />
+								<ref bean="userPropertyGender" />
+								<ref bean="userPropertyTelPrivate" />
+								<ref bean="userPropertyTelMobile" />
+								<ref bean="userPropertyTelOffice" />
+								<ref bean="userPropertySkype" />
+                                <ref bean="userPropertyXing" />
+                                <ref bean="userPropertyICQ" />
+								<ref bean="userPropertyHomepage" />
+								<ref bean="userPropertyStreet" />
+								<ref bean="userPropertyExtendedAddress" />
+								<ref bean="userPropertyPoBox" />
+								<ref bean="userPropertyZipCode" />
+								<ref bean="userPropertyRegion" />
+								<ref bean="userPropertyCity" />
+								<ref bean="userPropertyCountry" />
+								<ref bean="userPropertyInstitutionalName" />
+								<ref bean="userPropertyInstitutionalUserIdentifier" />
+								<ref bean="userPropertyInstitutionalEmail" />
+								<ref bean="userPropertyOrgUnit" />
+								<ref bean="userPropertyStudySubject" />
 							</set>
 						</property>
 					</bean>
@@ -699,6 +977,8 @@
 								<ref bean="userPropertyTelMobile" />
 								<ref bean="userPropertyTelOffice" />
 								<ref bean="userPropertySkype" />
+                                <ref bean="userPropertyXing" />
+                                <ref bean="userPropertyICQ" />
 								<ref bean="userPropertyHomepage" />
 								<ref bean="userPropertyStreet" />
 								<ref bean="userPropertyExtendedAddress" />
@@ -714,8 +994,8 @@
 						</property>
 					</bean>
 				</entry>
-				
-				
+
+
 				<entry key="org.olat.course.archiver.ScoreAccountingHelper">
 					<bean class="org.olat.user.propertyhandlers.UserPropertyUsageContext">
 						<property name="propertyHandlers">
@@ -735,7 +1015,7 @@
 					</bean>
 				</entry>
 
-				<entry key="org.olat.course.assessment.EfficiencyStatementArchiver">
+				<entry key="org.olat.course.assessment.manager.EfficiencyStatementArchiver">
 					<bean class="org.olat.user.propertyhandlers.UserPropertyUsageContext">
 						<property name="propertyHandlers">
 							<list>
@@ -752,7 +1032,7 @@
 						</property>
 					</bean>
 				</entry>
-				
+
 				<entry key="org.olat.course.assessment.EfficiencyStatementController">
 					<bean class="org.olat.user.propertyhandlers.UserPropertyUsageContext">
 					<property name="description" value="Efficiency-Statements" />
@@ -760,11 +1040,27 @@
 							<list>
 								<ref bean="userPropertyFirstName" />
 								<ref bean="userPropertyLastName" />
-								<ref bean="userPropertyEmail" />	
+								<ref bean="userPropertyEmail" />
+								<ref bean="userPropertyInstitutionalName" />
+								<ref bean="userPropertyInstitutionalUserIdentifier" />
+								<ref bean="userPropertyInstitutionalEmail" />
+							</list>
+						</property>
+					</bean>
+				</entry>
+				
+				<entry key="org.olat.user.ui.identity.UserRelationsController">
+					<bean class="org.olat.user.propertyhandlers.UserPropertyUsageContext">
+					<property name="description" value="Relations user to user" />
+						<property name="propertyHandlers">
+							<list>
+								<ref bean="userPropertyFirstName" />
+								<ref bean="userPropertyLastName" />
+								<ref bean="userPropertyEmail" />
 								<ref bean="userPropertyInstitutionalName" />
 								<ref bean="userPropertyInstitutionalEmployeeNumber" />
 								<ref bean="userPropertyInstitutionalMatriculationNumber" />
-								<ref bean="userPropertyInstitutionalEmail" />						
+								<ref bean="userPropertyInstitutionalEmail" />
 							</list>
 						</property>
 					</bean>
@@ -778,8 +1074,6 @@
 								<ref bean="userPropertyLastName" />
 								<ref bean="userPropertyEmail" />
 								<ref bean="userPropertyInstitutionalName" />
-								<ref bean="userPropertyInstitutionalEmployeeNumber" />
-								<ref bean="userPropertyInstitutionalMatriculationNumber" />
 								<ref bean="userPropertyInstitutionalEmail" />
 								<ref bean="userPropertyOrgUnit" />
 								<ref bean="userPropertyStudySubject" />
@@ -787,37 +1081,7 @@
 						</property>
 					</bean>
 				</entry>
-				
-				<entry key="org.olat.group.ui.wizard.MemberListWizardController">
-					<bean class="org.olat.user.propertyhandlers.UserPropertyUsageContext">
-						<property name="propertyHandlers">
-							<list>
-								<ref bean="userPropertyFirstName" />
-								<ref bean="userPropertyLastName" />
-								<ref bean="userPropertyEmail" />
-								<ref bean="userPropertyBirthDay" />
-								<ref bean="userPropertyGender" />
-								<ref bean="userPropertyTelPrivate" />
-								<ref bean="userPropertyTelMobile" />
-								<ref bean="userPropertyTelOffice" />
-								<ref bean="userPropertySkype" />
-								<ref bean="userPropertyHomepage" />
-								<ref bean="userPropertyStreet" />
-								<ref bean="userPropertyExtendedAddress" />
-								<ref bean="userPropertyPoBox" />
-								<ref bean="userPropertyZipCode" />
-								<ref bean="userPropertyRegion" />
-								<ref bean="userPropertyCity" />
-								<ref bean="userPropertyCountry" />
-								<ref bean="userPropertyInstitutionalName" />
-								<ref bean="userPropertyInstitutionalEmail" />
-								<ref bean="userPropertyOrgUnit" />
-								<ref bean="userPropertyStudySubject" />
-							</list>
-						</property>						
-					</bean>
-				</entry>
-				
+
 				<entry key="de.bps.olat.modules.cl.ChecklistManageCheckpointsController">
 					<bean class="org.olat.user.propertyhandlers.UserPropertyUsageContext">
 						<property name="description" value="List of users in the check list course building block" />
@@ -828,7 +1092,7 @@
 								<ref bean="userPropertyInstitutionalEmployeeNumber" />
                                                                 <ref bean="userPropertyInstitutionalMatriculationNumber" />
 							</list>
-						</property>	
+						</property>
 						<property name="userViewReadOnlyProperties">
 							<set>
 								<ref bean="userPropertyFirstName" />
@@ -848,20 +1112,24 @@
 								<ref bean="userPropertyInstitutionalEmployeeNumber" />
                                                                 <ref bean="userPropertyInstitutionalMatriculationNumber" />
 							</set>
-						</property>					
+						</property>
 					</bean>
 				</entry>
-				
+
 				<entry key="org.olat.admin.user.UserShortDescription">
 					<bean class="org.olat.user.propertyhandlers.UserPropertyUsageContext">
 						<property name="description" value="Short description of a user" />
 						<property name="propertyHandlers">
 							<list>
-								<ref bean="userPropertyFirstName" />
-								<ref bean="userPropertyLastName" />
-								<ref bean="userPropertyEmail" />								
+								<ref bean="userPropertyUserDisplayName" />
+								<ref bean="userPropertyEmail" />
 							</list>
-						</property>						
+						</property>
+						<property name="adminViewOnlyProperties">
+							<set>
+								<ref bean="userPropertyEmail" />
+							</set>
+						</property>
 					</bean>
 				</entry>
 
@@ -875,9 +1143,8 @@
 								<ref bean="userPropertyLastName" />
 								<ref bean="userPropertyEmail" />
 								<ref bean="userPropertyInstitutionalName" />
-								<ref bean="userPropertyInstitutionalEmployeeNumber" />
-								<ref bean="userPropertyInstitutionalMatriculationNumber" />
-								<ref bean="userPropertyInstitutionalEmail" />								
+								<ref bean="userPropertyInstitutionalUserIdentifier" />
+								<ref bean="userPropertyInstitutionalEmail" />
 							</list>
 						</property>
 						<property name="mandatoryProperties">
@@ -888,8 +1155,26 @@
 							</set>
 						</property>
 					</bean>
-				</entry>				
+				</entry>
 				
+				<entry key="org.olat.course.nodes.dialog.ui.DialogElementsTableModel">
+					<bean class="org.olat.user.propertyhandlers.UserPropertyUsageContext">
+						<property name="description" value="File dialog" />
+						<property name="propertyHandlers">
+							<list>
+								<ref bean="userPropertyLastName" />
+								<ref bean="userPropertyFirstName" />
+							</list>
+						</property>
+						<property name="mandatoryProperties">
+							<set>
+								<ref bean="userPropertyLastName" />
+								<ref bean="userPropertyFirstName" />
+							</set>
+						</property>
+					</bean>
+				</entry>
+
 				<entry key="org.olat.course.assessment.AssessedIdentitiesTableDataModel">
 					<bean class="org.olat.user.propertyhandlers.UserPropertyUsageContext">
 						<property name="description" value="Assessment tool" />
@@ -934,16 +1219,16 @@
 								<ref bean="userPropertyLastName" />
 								<ref bean="userPropertyFirstName" />
 							</list>
-						</property>		
+						</property>
 						<property name="mandatoryProperties">
 							<set>
 								<ref bean="userPropertyFirstName" />
 								<ref bean="userPropertyLastName" />
 							</set>
-						</property>				
+						</property>
 					</bean>
 				</entry>
-				
+
 				<entry key="org.olat.admin.user.bulkChange.UserBulkChangeStep00">
 					<bean class="org.olat.user.propertyhandlers.UserPropertyUsageContext">
 						<property name="propertyHandlers">
@@ -959,9 +1244,9 @@
 								<ref bean="userPropertyInstitutionalMatriculationNumber" />
 								<ref bean="userPropertyInstitutionalEmail" />
 								<ref bean="userPropertyOrgUnit" />
-								<ref bean="userPropertyStudySubject" />												
+								<ref bean="userPropertyStudySubject" />
 							</list>
-						</property>						
+						</property>
 						<property name="mandatoryProperties">
 							<set>
 								<ref bean="userPropertyFirstName" />
@@ -970,32 +1255,30 @@
 							</set>
 						</property>
 					</bean>
-				</entry>				
-				
+				</entry>
+
 				<!-- the property handler list is limited to 12 entries -->
 				<!-- in this case the key doesn't represent a class  -->
 				<entry key="userPropertyLogConfiguration">
 					<bean class="org.olat.user.propertyhandlers.UserPropertyUsageContext">
 						<property name="propertyHandlers">
 							<list>
-								<!-- the shibb attribs for usertracking -->
-								<ref bean="usertrackingAttrEduPersonAffiliation" />
-								<ref bean="usertrackingAttrSwissEduHomeOrganisation" />
-								<ref bean="usertrackingAttrSwissEduPersonStudyLevel" />
-								<ref bean="usertrackingAttrSwissEduPersonHomeOrganisationType" />
-								<ref bean="usertrackingAttrMatriculationNumber" />
-								<ref bean="usertrackingAttrSwissEduPersonStaffCategory" />
-								<ref bean="usertrackingAttrOrganizationalUnit" />
-								<ref bean="usertrackingAttrSwissEduPersonStudyBranch1" />
-								<ref bean="usertrackingAttrSwissEduPersonStudyBranch2" />
-								<ref bean="usertrackingAttrSwissEduPersonStudyBranch3" />
-								<ref bean="usertrackingLanguage" />
-								<ref bean="usertrackingWebDAV" />
+								<ref bean="userPropertyFirstName" />
+								<ref bean="userPropertyLastName" />
+								<ref bean="userPropertyEmail" />
+								<!-- <ref bean="userPropertyBirthDay" />
+								<ref bean="userPropertyGender" /> -->
+								<!--
+								Example IdentityAttributes matching to the usertracking LoggingObject
+
+								<ref bean="userPropertyAttrSwissEduPersonStudyLevel" />
+								<ref bean="userPropertyAttrEduPersonAffiliation" />
+								-->
 							</list>
-						</property>						
+						</property>
 					</bean>
 				</entry>
-				
+
 				<entry key="org.olat.user.restapi.UserWebService">
 					<bean class="org.olat.user.propertyhandlers.UserPropertyUsageContext">
 						<property name="propertyHandlers">
@@ -1010,6 +1293,8 @@
 								<ref bean="userPropertyTelMobile" />
 								<ref bean="userPropertyTelOffice" />
 								<ref bean="userPropertySkype" />
+								<ref bean="userPropertyXing" />
+								<ref bean="userPropertyICQ" />
 								<ref bean="userPropertyHomepage" />
 								<ref bean="userPropertyStreet" />
 								<ref bean="userPropertyExtendedAddress" />
@@ -1058,35 +1343,36 @@
 						</property>
 					</bean>
 				</entry>
-				
+
 				<entry key="org.olat.ims.lti.LTIManager">
 					<bean class="org.olat.user.propertyhandlers.UserPropertyUsageContext">
 						<property name="description" value="Can be used for LTI" />
 						<property name="propertyHandlers">
 							<list>
 								<ref bean="userPropertyInstitutionalName" />
-								<ref bean="userPropertyInstitutionalEmail" />						
+								<ref bean="userPropertyInstitutionalUserIdentifier" />
+								<ref bean="userPropertyInstitutionalEmail" />
 								<ref bean="userPropertyOrgUnit" />
 								<ref bean="userPropertyStudySubject" />
 							</list>
 						</property>
 					</bean>
 				</entry>
-				
+
 				<!-- User properties used for group-mail-function -->
 				<entry key="org.olat.group.ui.run.BusinessGroupSendToChooserForm">
 					<bean class="org.olat.user.propertyhandlers.UserPropertyUsageContext">
 						<property name="description" value=" " />
 						<property name="propertyHandlers">
 							<list>
-								<ref bean="userPropertyLastName" />														
+								<ref bean="userPropertyLastName" />
 								<ref bean="userPropertyFirstName" />
 							</list>
-						</property>						
+						</property>
 					</bean>
-				</entry>	
-				
-				
+				</entry>
+
+
 				<!-- User properties used in Businesscards (mitgleidersite) -->
 				<entry key="com.frentix.olat.user.UserBusinessCardController">
 					<bean class="org.olat.user.propertyhandlers.UserPropertyUsageContext">
@@ -1094,15 +1380,15 @@
 						<property name="propertyHandlers">
 							<list>
 								<ref bean="userPropertyFirstName" />
-								<ref bean="userPropertyLastName" />	
+								<ref bean="userPropertyLastName" />
 								<ref bean="userPropertyOrgUnit" />
 								<ref bean="userPropertyTelOffice" />
-								<ref bean="userPropertyEmail" />										
+								<ref bean="userPropertyEmail" />
 							</list>
-						</property>						
+						</property>
 					</bean>
-				</entry>	
-				
+				</entry>
+
 				<!-- User properties used for the mail-footer line together with i18nkey: "footer.with.userdata" -->
 				<entry key="org.olat.core.util.mail.MailHelper">
 					<bean class="org.olat.user.propertyhandlers.UserPropertyUsageContext">
@@ -1110,12 +1396,12 @@
 						<property name="propertyHandlers">
 							<list>
 								<ref bean="userPropertyFirstName" />
-								<ref bean="userPropertyLastName" />	
+								<ref bean="userPropertyLastName" />
 								<ref bean="userPropertyInstitutionalName" />
 							</list>
-						</property>						
+						</property>
 					</bean>
-				</entry>			
+				</entry>
 
 				<!-- User properties used for the mail-notifications line together with i18nkey: "user.formatted" -->
 				<entry key="org.olat.core.commons.services.notifications.NotificationHelper">
@@ -1124,12 +1410,12 @@
 						<property name="propertyHandlers">
 							<list>
 								<ref bean="userPropertyFirstName" />
-								<ref bean="userPropertyLastName" />	
+								<ref bean="userPropertyLastName" />
 							</list>
-						</property>						
+						</property>
 					</bean>
 				</entry>
-				
+
 				<entry key="org.olat.admin.landingpages.LandingPagesModule">
 					<bean class="org.olat.user.propertyhandlers.UserPropertyUsageContext">
 						<property name="description" value="Properties used in the administration of landing pages. " />
@@ -1150,17 +1436,17 @@
 								<ref bean="userPropertyOrgUnit" />
 								<ref bean="userPropertyStudySubject" />
 							</list>
-						</property>						
+						</property>
 					</bean>
 				</entry>
-				
+
 				<entry key="org.olat.modules.coach.ui.UserSearchForm">
 					<bean class="org.olat.user.propertyhandlers.UserPropertyUsageContext">
 						<property name="description" value="Properties used in the user search of the coaching tool." />
 						<property name="propertyHandlers">
 							<list>
 								<ref bean="userPropertyFirstName" />
-								<ref bean="userPropertyLastName" />	
+								<ref bean="userPropertyLastName" />
 								<ref bean="userPropertyEmail" />
 								<ref bean="userPropertyZipCode" />
 								<ref bean="userPropertyRegion" />
@@ -1173,7 +1459,30 @@
 								<ref bean="userPropertyOrgUnit" />
 								<ref bean="userPropertyStudySubject" />
 							</list>
-						</property>						
+						</property>
+					</bean>
+				</entry>
+
+				<entry key="org.olat.modules.lecture.ui.coach.LecturesSearchFormController">
+					<bean class="org.olat.user.propertyhandlers.UserPropertyUsageContext">
+						<property name="description" value="Properties used in the user search for lectures of the coaching tool." />
+						<property name="propertyHandlers">
+							<list>
+								<ref bean="userPropertyFirstName" />
+								<ref bean="userPropertyLastName" />
+								<ref bean="userPropertyEmail" />
+								<ref bean="userPropertyInstitutionalName" />
+								<ref bean="userPropertyInstitutionalUserIdentifier" />
+								<ref bean="userPropertyInstitutionalEmail" />
+								<ref bean="userPropertyOrgUnit" />
+							</list>
+						</property>
+						<property name="mandatoryProperties">
+							<set>
+								<ref bean="userPropertyFirstName" />
+								<ref bean="userPropertyLastName" />
+							</set>
+						</property>
 					</bean>
 				</entry>
 
@@ -1190,6 +1499,29 @@
 							<set>
 								<ref bean="userPropertyFirstName" />
 								<ref bean="userPropertyLastName" />
+							</set>
+						</property>
+						<property name="adminViewOnlyProperties">
+							<set></set>
+						</property>
+					</bean>
+				</entry>
+				
+				<entry key="org.olat.modules.quality.ui.QualityMainController">
+					<bean class="org.olat.user.propertyhandlers.UserPropertyUsageContext">
+						<property name="description" value="Properties used in the quality management" />
+						<property name="propertyHandlers">
+							<list>
+								<ref bean="userPropertyFirstName" />
+								<ref bean="userPropertyLastName" />
+								<ref bean="userPropertyEmail" />
+							</list>
+						</property>
+						<property name="mandatoryProperties">
+							<set>
+								<ref bean="userPropertyFirstName" />
+								<ref bean="userPropertyLastName" />
+								<ref bean="userPropertyEmail" />
 							</set>
 						</property>
 						<property name="adminViewOnlyProperties">
@@ -1214,10 +1546,10 @@
 								<ref bean="userPropertyOrgUnit" />
 								<ref bean="userPropertyStudySubject" />
 							</list>
-						</property>						
+						</property>
 					</bean>
 				</entry>
-				
+
 				<entry key="org.olat.course.reminder.ui.CourseSendReminderListController">
 					<bean class="org.olat.user.propertyhandlers.UserPropertyUsageContext">
 						<property name="description" value="Properties used in the send reminder list" />
@@ -1235,13 +1567,71 @@
 						</property>
 						<property name="adminViewOnlyProperties">
 							<set>
+								<ref bean="userPropertyInstitutionalUserIdentifier" />
 							</set>
 						</property>
 					</bean>
 				</entry>
+				
+				<entry key="org.olat.course.statistic.export.LogLineConverter">
+					<bean class="org.olat.user.propertyhandlers.UserPropertyUsageContext">
+						<property name="description" value="Properties used in the course log archive" />
+						<property name="propertyHandlers">
+							<list>
+								<ref bean="userPropertyFirstName" />
+								<ref bean="userPropertyLastName" />
+								<ref bean="userPropertyInstitutionalUserIdentifier" />
+							</list>
+						</property>
+						<property name="adminViewOnlyProperties">
+							<set>
+								<ref bean="userPropertyInstitutionalUserIdentifier" />
+							</set>
+						</property>
+					</bean>
+				</entry>
+				
+				<!-- User properties added to o_info JS variable -->
+				<entry key="org.olat.core.commons.fullWebApp.BaseFullWebappController">
+					<bean class="org.olat.user.propertyhandlers.UserPropertyUsageContext">
+						<property name="description" value="Properties added to the o_info JavaScript variable" />
+						<property name="propertyHandlers">
+							<list>
+								<ref bean="userPropertyLastName" />
+								<ref bean="userPropertyFirstName" />
+							</list>
+						</property>
+					</bean>
+				</entry>
+				
 
+				<!--
+					Default configuration in case nothing else matches.
+				-->
+<!--
+				<entry key="default">
+					<bean class="org.olat.user.propertyhandlers.UserPropertyUsageContext">
+						<property name="propertyHandlers">
+							<list>
+								<ref bean="userPropertyFirstName" />
+								<ref bean="userPropertyLastName" />
+								<ref bean="userPropertyEmail" />
+								<ref bean="userPropertyInstitutionalName" />
+								<ref bean="userPropertyInstitutionalUserIdentifier" />
+								<ref bean="userPropertyOrgUnit" />
+								<ref bean="userPropertyStudySubject" />
+							</list>
+						</property>
+						<property name="adminViewOnlyProperties">
+							<set>
+								<ref bean="userPropertyInstitutionalUserIdentifier" />
+							</set>
+						</property>
+					</bean>
+				</entry>
+-->
 			</map>
 		</property>
-		
+
 	</bean>
 </beans>

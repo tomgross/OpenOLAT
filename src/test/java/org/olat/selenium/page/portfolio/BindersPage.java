@@ -41,11 +41,8 @@ public class BindersPage {
 	public BinderPage createBinder(String title, String summary) {
 		By newBinderBy = By.cssSelector("li.o_tool a.o_sel_pf_new_binder");
 		browser.findElement(newBinderBy).click();
-		OOGraphene.waitBusy(browser);
 		OOGraphene.waitModalDialog(browser);
 		
-		OOGraphene.waitBusy(browser);
-		OOGraphene.waitModalDialog(browser);
 		By popupBy = By.cssSelector("div.modal-content fieldset.o_sel_pf_edit_binder_form");
 		OOGraphene.waitElement(popupBy, 5, browser);
 		
@@ -73,13 +70,13 @@ public class BindersPage {
 		return new BinderPage(browser);
 	}
 	
-	public BindersPage switchTableView() {
-		By tableViewBy = By.xpath("//a[i[contains(@class,'o_icon o_icon_table o_icon-lg')]]");
+	public BindersPage switchDeletedBindersTableView() {
+		By tableViewBy = By.xpath("//div[contains(@class,'o_table_tools')]/div/a[contains(@class,'o_sel_table')]");
 		browser.findElement(tableViewBy).click();
 		OOGraphene.waitBusy(browser);
 		
-		By classicViewBy = By.cssSelector(".o_rendertype_classic");
-		OOGraphene.waitElement(classicViewBy, 5, browser);
+		By classicViewBy = By.cssSelector(".o_portfolio_deleted_listing.o_rendertype_classic");
+		OOGraphene.waitElement(classicViewBy, browser);
 		return this;
 	}
 	

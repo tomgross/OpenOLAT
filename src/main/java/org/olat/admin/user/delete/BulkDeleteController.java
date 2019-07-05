@@ -24,10 +24,9 @@ import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 
-import org.olat.admin.securitygroup.gui.UserControllerFactory;
+import org.olat.admin.user.UserTableDataModel;
 import org.olat.basesecurity.BaseSecurity;
-import org.olat.basesecurity.BaseSecurityManager;
-import org.olat.core.CoreSpringFactory;
+import org.olat.basesecurity.BaseSecurityModule;
 import org.olat.core.gui.UserRequest;
 import org.olat.core.gui.components.Component;
 import org.olat.core.gui.components.link.Link;
@@ -41,56 +40,70 @@ import org.olat.core.gui.components.velocity.VelocityContainer;
 import org.olat.core.gui.control.Event;
 import org.olat.core.gui.control.WindowControl;
 import org.olat.core.gui.control.controller.BasicController;
+import org.olat.core.gui.translator.Translator;
 import org.olat.core.id.Identity;
 import org.olat.core.util.WebappHelper;
 import org.olat.core.util.mail.ContactList;
 import org.olat.core.util.mail.MailBundle;
 import org.olat.core.util.mail.MailManager;
+import org.olat.user.UserManager;
+import org.springframework.beans.factory.annotation.Autowired;
 
 public class BulkDeleteController extends BasicController {
 	
-	private VelocityContainer vc;
-	private BaseSecurity securityManager;
+	private final VelocityContainer vc;
 	
-	private String userlist, reason;
+	private String userlist;
+	private String reason;
 	private List<Identity> toDelete;
 	private List<String> lstLoginsFound;
 	private List<String> lstLoginsNotfound;
 	
-	private TableController tblCtrFound, tblCtrNotfound;
+	private TableController tblCtrFound;
+	private TableController tblCtrNotfound;
 	private Link btnNext;
 	
-	private final MailManager mailService;
+	private final boolean isAdministrativeUser;
+	
+	@Autowired
+	private MailManager mailService;
+	@Autowired
+	private UserManager userManager;
+	@Autowired
+	private BaseSecurity securityManager;
+	@Autowired
+	private BaseSecurityModule securityModule;
 
 	public BulkDeleteController(UserRequest ureq, WindowControl wControl, String userlist, String reason) {
 		super(ureq, wControl);
-		
 		this.userlist = userlist;
 		this.reason = reason;
-		mailService = CoreSpringFactory.getImpl(MailManager.class);
+		isAdministrativeUser = securityModule.isUserAllowedAdminProps(ureq.getUserSession().getRoles());
 		
 		vc = createVelocityContainer("bulkdelete");
 		processUserList(this.userlist);
 		
-		if(toDelete != null && toDelete.size() > 0) {
-			tblCtrFound = UserControllerFactory.createTableControllerFor(new TableGuiConfiguration(), toDelete, ureq, getWindowControl(), null);
+		if(toDelete != null && !toDelete.isEmpty()) {
+			Translator trans = userManager.getPropertyHandlerTranslator(getTranslator());
+			tblCtrFound = new TableController(new TableGuiConfiguration(), ureq, wControl, trans);
+			UserTableDataModel userDataModel = new UserTableDataModel(toDelete, getLocale(), isAdministrativeUser);
+			userDataModel.addColumnDescriptors(tblCtrFound, null);
+			tblCtrFound.setTableDataModel(userDataModel);
 			listenTo(tblCtrFound);
 			btnNext = LinkFactory.createButton("next", vc, this);
 			vc.put("table.users.found", tblCtrFound.getInitialComponent());
 		}
 		
-		if(lstLoginsNotfound.size() > 0) {
+		if(!lstLoginsNotfound.isEmpty()) {
 			tblCtrNotfound = new TableController(null, ureq, wControl, getTranslator());
 			listenTo(tblCtrNotfound);
 			tblCtrNotfound.addColumnDescriptor(new DefaultColumnDescriptor("table.col.login", 0, null, ureq.getLocale()));
 			TableDataModel<String> tblData = new LoginTableDataModel(lstLoginsNotfound);
 			tblCtrNotfound.setTableDataModel(tblData);
-			
 			vc.put("table.users.notfound", tblCtrNotfound.getInitialComponent());
 		}
 		
-		vc.contextPut("reason", this.reason);
-		
+		vc.contextPut("reason", reason);
 		putInitialPanel(vc);
 	}
 
@@ -106,10 +119,9 @@ public class BulkDeleteController extends BasicController {
 	 * @param loginsString
 	 */
 	private void processUserList(String loginsString) {
-		securityManager = BaseSecurityManager.getInstance();
-		toDelete = new ArrayList<Identity>();
-		lstLoginsFound = new ArrayList<String>();
-		lstLoginsNotfound = new ArrayList<String>();
+		toDelete = new ArrayList<>();
+		lstLoginsFound = new ArrayList<>();
+		lstLoginsNotfound = new ArrayList<>();
 		String[] logins = loginsString.split("\r?\n");
 		for( String login : logins) {
 			if(login.equals(""))
@@ -139,22 +151,24 @@ public class BulkDeleteController extends BasicController {
 	 * Send the mail with informations: who deletes, when, list of deleted users
 	 * list of not deleted users, reason for deletion
 	 */
-	public void sendMail(UserRequest ureq) {
-		
+	public void sendMail() {
 		String recipient = WebappHelper.getMailConfig("mailDeleteUser");
-		
 		if (recipient.equals("disabled")) {
 			return;
 		}
 		
-		StringBuffer loginsFound = new StringBuffer();
-		for(String login : lstLoginsFound) loginsFound.append(login + "\n");
-		StringBuffer loginsNotfound = new StringBuffer();
-		for(String login : lstLoginsNotfound) loginsNotfound.append(login + "\n");
-		DateFormat df = DateFormat.getDateInstance(DateFormat.FULL, ureq.getLocale());
+		StringBuilder loginsFound = new StringBuilder();
+		for(String login : lstLoginsFound) {
+			loginsFound.append(login + "\n");
+		}
+		StringBuilder loginsNotfound = new StringBuilder();
+		for(String login : lstLoginsNotfound) {
+			loginsNotfound.append(login + "\n");
+		}
+		DateFormat df = DateFormat.getDateInstance(DateFormat.FULL, getLocale());
 		
 		String[] bodyArgs = new String[] {
-				ureq.getIdentity().getName(),
+				getIdentity().getName(),
 				loginsFound.toString(),
 				loginsNotfound.toString(),
 				reason,
@@ -163,7 +177,7 @@ public class BulkDeleteController extends BasicController {
 
 		ContactList cl = new ContactList(recipient);
 		cl.add(recipient);
-		cl.add(ureq.getIdentity());
+		cl.add(getIdentity());
 
 		try {
 			MailBundle bundle = new MailBundle();

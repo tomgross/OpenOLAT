@@ -21,8 +21,6 @@ package org.olat.selenium.page.course;
 
 import java.util.List;
 
-import org.jboss.arquillian.drone.api.annotation.Drone;
-import org.junit.Assert;
 import org.olat.selenium.page.graphene.OOGraphene;
 import org.openqa.selenium.By;
 import org.openqa.selenium.WebDriver;
@@ -37,12 +35,7 @@ import org.openqa.selenium.WebElement;
  */
 public class EnrollmentConfigurationPage {
 	
-	@Drone
-	private WebDriver browser;
-	
-	public EnrollmentConfigurationPage() {
-		//
-	}
+	private final WebDriver browser;
 	
 	public EnrollmentConfigurationPage(WebDriver browser) {
 		this.browser = browser;
@@ -56,7 +49,7 @@ public class EnrollmentConfigurationPage {
 	public EnrollmentConfigurationPage selectBusinessGroups() {
 		By createGroupBy = By.cssSelector("a.o_form_groupchooser");
 		browser.findElement(createGroupBy).click();
-		OOGraphene.waitBusy(browser);
+		OOGraphene.waitModalDialog(browser);
 		
 		By checkGroupsBy = By.cssSelector("div.modal-body input[type='checkbox'][name='entries']");
 		List<WebElement> checkGroupEls = browser.findElements(checkGroupsBy);
@@ -83,7 +76,6 @@ public class EnrollmentConfigurationPage {
 		
 		By createGroupBy = By.cssSelector("div.o_button_group_right a");
 		browser.findElement(createGroupBy).click();
-		OOGraphene.waitBusy(browser);
 		OOGraphene.waitModalDialog(browser);
 		
 		//fill the form
@@ -134,21 +126,7 @@ public class EnrollmentConfigurationPage {
 	}
 	
 	private EnrollmentConfigurationPage selectTab(By tabBy) {
-		List<WebElement> tabLinks = browser.findElements(CourseEditorPageFragment.navBarNodeConfiguration);
-
-		boolean found = false;
-		a_a:
-		for(WebElement tabLink:tabLinks) {
-			tabLink.click();
-			OOGraphene.waitBusy(browser);
-			List<WebElement> chooseRepoEntry = browser.findElements(tabBy);
-			if(chooseRepoEntry.size() > 0) {
-				found = true;
-				break a_a;
-			}
-		}
-
-		Assert.assertTrue("Found the tab", found);
+		OOGraphene.selectTab("o_node_config", tabBy, browser);
 		return this;
 	}
 

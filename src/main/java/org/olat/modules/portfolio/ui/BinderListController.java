@@ -22,15 +22,11 @@ package org.olat.modules.portfolio.ui;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
-import javax.servlet.http.HttpServletRequest;
-
-import org.olat.core.commons.modules.bc.meta.MetaInfo;
-import org.olat.core.commons.modules.bc.meta.tagged.MetaTagged;
 import org.olat.core.commons.persistence.DBFactory;
-import org.olat.core.commons.services.image.Size;
-import org.olat.core.dispatcher.mapper.Mapper;
 import org.olat.core.gui.UserRequest;
 import org.olat.core.gui.components.Component;
 import org.olat.core.gui.components.form.flexible.FormItem;
@@ -39,6 +35,7 @@ import org.olat.core.gui.components.form.flexible.elements.FlexiTableElement;
 import org.olat.core.gui.components.form.flexible.elements.FormLink;
 import org.olat.core.gui.components.form.flexible.impl.FormBasicController;
 import org.olat.core.gui.components.form.flexible.impl.FormEvent;
+import org.olat.core.gui.components.form.flexible.impl.FormLayoutContainer;
 import org.olat.core.gui.components.form.flexible.impl.elements.table.DefaultFlexiColumnModel;
 import org.olat.core.gui.components.form.flexible.impl.elements.table.DefaultFlexiTableCssDelegate;
 import org.olat.core.gui.components.form.flexible.impl.elements.table.FlexiTableColumnModel;
@@ -46,6 +43,7 @@ import org.olat.core.gui.components.form.flexible.impl.elements.table.FlexiTable
 import org.olat.core.gui.components.form.flexible.impl.elements.table.FlexiTableDataModelFactory;
 import org.olat.core.gui.components.form.flexible.impl.elements.table.FlexiTableRendererType;
 import org.olat.core.gui.components.form.flexible.impl.elements.table.SelectionEvent;
+import org.olat.core.gui.components.htmlheader.jscss.JSAndCSSFormItem;
 import org.olat.core.gui.components.link.Link;
 import org.olat.core.gui.components.link.LinkFactory;
 import org.olat.core.gui.components.stack.TooledController;
@@ -55,25 +53,29 @@ import org.olat.core.gui.components.velocity.VelocityContainer;
 import org.olat.core.gui.control.Controller;
 import org.olat.core.gui.control.Event;
 import org.olat.core.gui.control.WindowControl;
+import org.olat.core.gui.control.controller.BasicController;
 import org.olat.core.gui.control.generic.closablewrapper.CalloutSettings;
 import org.olat.core.gui.control.generic.closablewrapper.CloseableCalloutWindowController;
 import org.olat.core.gui.control.generic.closablewrapper.CloseableModalController;
 import org.olat.core.gui.control.generic.dtabs.Activateable2;
+import org.olat.core.gui.control.generic.modal.DialogBoxController;
+import org.olat.core.gui.control.generic.modal.DialogBoxUIFactory;
 import org.olat.core.gui.media.MediaResource;
 import org.olat.core.id.OLATResourceable;
 import org.olat.core.id.context.ContextEntry;
 import org.olat.core.id.context.StateEntry;
 import org.olat.core.logging.activity.ThreadLocalUserActivityLogger;
 import org.olat.core.util.StringHelper;
+import org.olat.core.util.prefs.Preferences;
 import org.olat.core.util.resource.OresHelper;
 import org.olat.core.util.vfs.VFSLeaf;
-import org.olat.core.util.vfs.VFSMediaResource;
 import org.olat.course.nodes.PortfolioCourseNode;
 import org.olat.modules.portfolio.Binder;
 import org.olat.modules.portfolio.BinderConfiguration;
 import org.olat.modules.portfolio.BinderRef;
 import org.olat.modules.portfolio.BinderSecurityCallback;
 import org.olat.modules.portfolio.BinderSecurityCallbackFactory;
+import org.olat.modules.portfolio.BinderStatus;
 import org.olat.modules.portfolio.PortfolioLoggingAction;
 import org.olat.modules.portfolio.PortfolioService;
 import org.olat.modules.portfolio.PortfolioV2Module;
@@ -84,6 +86,9 @@ import org.olat.modules.portfolio.model.SynchedBinder;
 import org.olat.modules.portfolio.ui.BindersDataModel.PortfolioCols;
 import org.olat.modules.portfolio.ui.event.DeleteBinderEvent;
 import org.olat.modules.portfolio.ui.event.NewBinderEvent;
+import org.olat.modules.portfolio.ui.event.RestoreBinderEvent;
+import org.olat.modules.portfolio.ui.export.ExportBinderAsCPResource;
+import org.olat.modules.portfolio.ui.model.BinderListSettings;
 import org.olat.modules.portfolio.ui.model.BinderRow;
 import org.olat.modules.portfolio.ui.model.CourseTemplateRow;
 import org.olat.repository.RepositoryEntry;
@@ -104,25 +109,29 @@ import org.springframework.beans.factory.annotation.Autowired;
 public class BinderListController extends FormBasicController
 	implements Activateable2, TooledController, FlexiTableComponentDelegate {
 	
-	private static final Size BACKGROUND_SIZE = new Size(400, 230, false);
 	
 	private int counter = 1;
 	private Link newBinderLink;
-	private String mapperThumbnailUrl;
 	
 	protected FlexiTableElement tableEl;
 	protected BindersDataModel model;
 	protected final TooledStackedPanel stackPanel;
-	private FormLink newBinderDropdown, newBinderFromCourseButton;
+	private FormLink newBinderDropdown;
+	private FormLink newBinderFromCourseButton;
 	
-	protected CloseableModalController cmc;
+	private ToolsController toolsCtrl;
 	protected BinderController binderCtrl;
+	protected CloseableModalController cmc;
 	private BinderMetadataEditController newBinderCtrl;
 	private RepositorySearchController searchTemplateCtrl;
+	private CloseableCalloutWindowController toolsCalloutCtrl;
 	private CourseTemplateSearchController searchCourseTemplateCtrl;
-	
 	private NewBinderCalloutController chooseNewBinderTypeCtrl;
 	private CloseableCalloutWindowController newBinderCalloutCtrl;
+	private BinderMetadataEditController binderMetadataCtrl;
+	private ConfirmDeleteBinderController deleteBinderCtrl;
+	private ConfirmMoveBinderToTrashController moveBinderToTrashCtrl;
+	private DialogBoxController confirmRestoreBinderCtrl;
 	
 	@Autowired
 	private PortfolioV2Module portfolioModule;
@@ -133,7 +142,8 @@ public class BinderListController extends FormBasicController
 		super(ureq, wControl, "binder_list");
 		this.stackPanel = stackPanel;
 		initForm(ureq);
-		loadModel();
+		loadModel(ureq, true);
+		initSettings(ureq);//fix the order
 	}
 	
 	public int getNumOfBinders() {
@@ -147,8 +157,12 @@ public class BinderListController extends FormBasicController
 	}
 	
 	public BinderRow getFirstBinder() {
-		if(model.getRowCount() > 0) {
-			return model.getObject(0);
+		int numOfRows = model.getRowCount();
+		for(int i=0; i<numOfRows; i++) {
+			BinderRow row = model.getObject(i);
+			if(row.getKey() != null) {
+				return row;
+			}
 		}
 		return null;
 	}
@@ -179,7 +193,7 @@ public class BinderListController extends FormBasicController
 		tableEl.setCssDelegate(new BinderCssDelegate());
 		tableEl.setAndLoadPersistedPreferences(ureq, getTableId());
 		
-		mapperThumbnailUrl = registerCacheableMapper(ureq, "binder-list", new ImageMapper(model));
+		String mapperThumbnailUrl = registerCacheableMapper(ureq, "binder-list", new ImageMapper(model));
 		row.contextPut("mapperThumbnailUrl", mapperThumbnailUrl);
 		
 		if(!portfolioModule.isLearnerCanCreateBinders() && !portfolioModule.isCanCreateBindersFromTemplate() && portfolioModule.isCanCreateBindersFromCourse()) {
@@ -198,14 +212,21 @@ public class BinderListController extends FormBasicController
 			}
 			row.put("createDropdown", newBinderDropdown.getComponent());
 		}
+		
+		JSAndCSSFormItem js = new JSAndCSSFormItem("js", new String[] { "js/dragula/dragula.js" });
+		formLayout.add(js);
+		((FormLayoutContainer)formLayout).getFormItemComponent().addListener(this);
 	}
 
 	@Override
 	public Iterable<Component> getComponents(int row, Object rowObject) {
 		BinderRow elRow = model.getObject(row);
-		List<Component> components = new ArrayList<>(2);
+		List<Component> components = new ArrayList<>(3);
 		if(elRow.getOpenLink() != null) {
 			components.add(elRow.getOpenLink().getComponent());
+		}
+		if(elRow.getToolsLink() != null) {
+			components.add(elRow.getToolsLink().getComponent());
 		}
 		return components;
 	}
@@ -227,7 +248,7 @@ public class BinderListController extends FormBasicController
 		//
 	}
 	
-	protected void loadModel() {
+	protected void loadModel(UserRequest ureq, boolean reset) {
 		List<BinderStatistics> binderRows = portfolioService.searchOwnedBinders(getIdentity());
 		List<BinderRow> rows = new ArrayList<>(binderRows.size());
 		for(BinderStatistics binderRow:binderRows) {
@@ -238,18 +259,50 @@ public class BinderListController extends FormBasicController
 				|| portfolioModule.isCanCreateBindersFromCourse()) {
 			rows.add(new BinderRow());
 		}
+		rows = reorderRowsBysettings(ureq, rows);
 		model.setObjects(rows);
-		tableEl.reset();
+		if(reset) {
+			tableEl.reset();
+		}
 		tableEl.reloadData();
+	}
+	
+	private List<BinderRow> reorderRowsBysettings(UserRequest ureq, List<BinderRow> rows) {
+		BinderListSettings settings = getSettings(ureq);
+		if(settings.getOrderedBinderKeys() != null && !settings.getOrderedBinderKeys().isEmpty()) {
+			Map<Long,BinderRow> rowMap = rows.stream().collect(Collectors.toMap(BinderRow::getKey, r -> r, (u,v) -> u));
+			
+			List<BinderRow> orderRows = new ArrayList<>(rows.size());
+			for(Long orderKey:settings.getOrderedBinderKeys()) {
+				BinderRow row = rowMap.get(orderKey);
+				if(row != null) {
+					orderRows.add(row);
+					rows.remove(row);
+				}
+			}
+			
+			for(BinderRow row:rows) {
+				orderRows.add(row);
+			}
+			return orderRows;
+		}
+		return rows;
 	}
 	
 	protected BinderRow forgePortfolioRow(BinderStatistics binderRow) {
 		String openLinkId = "open_" + (++counter);
 		FormLink openLink = uifactory.addFormLink(openLinkId, "open", "open", null, flc, Link.LINK);
 		openLink.setIconRightCSS("o_icon o_icon_start");
+		
+		String toolsLinkId = "tools_" + (++counter);
+		FormLink toolsLink = uifactory.addFormLink(toolsLinkId, "tools", null, null, flc, Link.LINK | Link.NONTRANSLATED);
+		toolsLink.getComponent().setCustomDisplayText("");
+		toolsLink.setIconRightCSS("o_icon o_icon_actions");
+		
 		VFSLeaf image = portfolioService.getPosterImageLeaf(binderRow);
-		BinderRow row = new BinderRow(binderRow, image, openLink);
+		BinderRow row = new BinderRow(binderRow, image, openLink, toolsLink);
 		openLink.setUserObject(row);
+		toolsLink.setUserObject(row);
 		return row;
 	}
 	
@@ -276,6 +329,10 @@ public class BinderListController extends FormBasicController
 					|| portfolioModule.isCanCreateBindersFromCourse()) {
 				doNewBinder(ureq);
 			}
+		} else if("drop-binder".equals(event.getCommand())) {
+			String binderKey = ureq.getParameter("dragged");
+			String siblingKey = ureq.getParameter("sibling");
+			doDragAndDrop(ureq, binderKey, siblingKey);
 		}
 		super.event(ureq, source, event);
 	}
@@ -284,7 +341,7 @@ public class BinderListController extends FormBasicController
 	protected void event(UserRequest ureq, Controller source, Event event) {
 		if(newBinderCtrl == source) {
 			if(event == Event.DONE_EVENT) {
-				loadModel();
+				loadModel(ureq, true);
 				doOpenBinder(ureq, newBinderCtrl.getBinder()).activate(ureq, null, null);
 			}
 			cmc.deactivate();
@@ -318,10 +375,43 @@ public class BinderListController extends FormBasicController
 			cleanUp();
 		} else if(newBinderCalloutCtrl == source) {
 			cleanUp();
+		} else if(binderMetadataCtrl == source) {
+			if(event == Event.CHANGED_EVENT || event == Event.DONE_EVENT) {
+				loadModel(ureq, false);
+			}
+			cmc.deactivate();
+			cleanUp();
+		} else if(moveBinderToTrashCtrl == source) {
+			if(event == Event.DONE_EVENT) {
+				doMoveBinderToTrash(moveBinderToTrashCtrl.getUserObject());
+				loadModel(ureq, true);
+				fireEvent(ureq, new DeleteBinderEvent());
+			}
+			cmc.deactivate();
+			cleanUp();
+		} else if(deleteBinderCtrl == source) {
+			if(event == Event.DONE_EVENT) {
+				doDeleteBinder(deleteBinderCtrl.getUserObject());
+				loadModel(ureq, true);
+				fireEvent(ureq, new DeleteBinderEvent());
+			}
+			cmc.deactivate();
+			cleanUp();
+		} else if(confirmRestoreBinderCtrl == source) {
+			if(DialogBoxUIFactory.isYesEvent(event)) {
+				doRestore((BinderRef)confirmRestoreBinderCtrl.getUserObject());
+				loadModel(ureq, true);
+				fireEvent(ureq, new RestoreBinderEvent());
+			}	
 		} else if(binderCtrl == source) {
 			if(event instanceof DeleteBinderEvent) {
 				stackPanel.popUpToController(this);
-				loadModel();
+				loadModel(ureq, true);
+			}
+		} else if(toolsCtrl == source) {
+			if(event == Event.DONE_EVENT) {
+				toolsCalloutCtrl.deactivate();
+				cleanUp();
 			}
 		} else if(cmc == source) {
 			cleanUp();
@@ -333,13 +423,19 @@ public class BinderListController extends FormBasicController
 		removeAsListenerAndDispose(searchCourseTemplateCtrl);
 		removeAsListenerAndDispose(chooseNewBinderTypeCtrl);
 		removeAsListenerAndDispose(newBinderCalloutCtrl);
+		removeAsListenerAndDispose(moveBinderToTrashCtrl);
 		removeAsListenerAndDispose(searchTemplateCtrl);
+		removeAsListenerAndDispose(binderMetadataCtrl);
+		removeAsListenerAndDispose(deleteBinderCtrl);
 		removeAsListenerAndDispose(newBinderCtrl);
 		removeAsListenerAndDispose(cmc);
 		searchCourseTemplateCtrl = null;
 		chooseNewBinderTypeCtrl = null;
+		moveBinderToTrashCtrl = null;
 		newBinderCalloutCtrl = null;
+		binderMetadataCtrl = null;
 		searchTemplateCtrl = null;
+		deleteBinderCtrl = null;
 		newBinderCtrl = null;
 		cmc = null;
 	}
@@ -371,6 +467,9 @@ public class BinderListController extends FormBasicController
 				if(activateable != null) {
 					activateable.activate(ureq, null, null);
 				}
+			} else if("tools".equals(cmd)) {
+				BinderRow row = (BinderRow)link.getUserObject();
+				doOpenTools(ureq, link, row);
 			}
 		}
 		
@@ -397,12 +496,12 @@ public class BinderListController extends FormBasicController
 		if(binder.isChanged()) {
 			showInfo("warning.binder.synched");
 		}
-		BinderController binderCtrl = doOpenBinder(ureq, binder.getBinder());
+		BinderController selectedBinderCtrl = doOpenBinder(ureq, binder.getBinder());
 		if(row instanceof BinderRow) {
 			VFSLeaf image = portfolioService.getPosterImageLeaf(binder.getBinder());
 			((BinderRow)row).setBackgroundImage(image);
 		}
-		return binderCtrl;
+		return selectedBinderCtrl;
 	}
 	
 	protected BinderController doOpenBinder(UserRequest ureq, Binder binder) {
@@ -463,7 +562,7 @@ public class BinderListController extends FormBasicController
 		String commandLabel = translate("create.binder.selectTemplate");
 		removeAsListenerAndDispose(searchTemplateCtrl);
 		searchTemplateCtrl = new RepositorySearchController(commandLabel, ureq, getWindowControl(),
-				false, false, new String[]{ BinderTemplateResource.TYPE_NAME }, null);
+				false, false, new String[]{ BinderTemplateResource.TYPE_NAME }, false, null);
 		searchTemplateCtrl.enableSearchforAllXXAbleInSearchForm(Can.all);
 		searchTemplateCtrl.doSearchByTypeLimitAccess(new String[]{ BinderTemplateResource.TYPE_NAME }, ureq);
 		listenTo(searchTemplateCtrl);
@@ -517,49 +616,253 @@ public class BinderListController extends FormBasicController
 		}
 		doOpenBinder(ureq, copyBinder).activate(ureq, null, null);
 	}
-
-	public static class ImageMapper implements Mapper {
+	
+	private void doOpenTools(UserRequest ureq, FormLink link, BinderRow row) {
+		removeAsListenerAndDispose(toolsCtrl);
+		removeAsListenerAndDispose(toolsCalloutCtrl);
 		
-		private final BindersDataModel binderModel;
-		
-		public ImageMapper(BindersDataModel model) {
-			this.binderModel = model;
-		}
+		Binder binder = portfolioService.getBinderByKey(row.getKey());
+		BinderSecurityCallback secCallback = BinderSecurityCallbackFactory.getCallbackForOwnedBinder(binder);
+		toolsCtrl = new ToolsController(ureq, getWindowControl(), secCallback, binder, row);
+		listenTo(toolsCtrl);
 
-		@Override
-		public MediaResource handle(String relPath, HttpServletRequest request) {
-			String row = relPath;
-			if(row.startsWith("/")) {
-				row = row.substring(1, row.length());
-			}
-			int index = row.indexOf("/");
-			if(index > 0) {
-				row = row.substring(0, index);
-				Long key = new Long(row); 
-				List<BinderRow> rows = binderModel.getObjects();
-				for(BinderRow prow:rows) {
-					if(key.equals(prow.getKey())) {
-						VFSLeaf image = prow.getBackgroundImage();
-						if(image instanceof MetaTagged) {
-							MetaInfo info = ((MetaTagged)image).getMetaInfo();
-							VFSLeaf thumbnail = info.getThumbnail(BACKGROUND_SIZE.getWidth(), BACKGROUND_SIZE.getHeight(), true);
-							if(thumbnail != null) {
-								image = thumbnail;
-							}
-						}
-						return new VFSMediaResource(image);
-					}
-				}
-			}
+		toolsCalloutCtrl = new CloseableCalloutWindowController(ureq, getWindowControl(),
+				toolsCtrl.getInitialComponent(), link.getFormDispatchId(), "", true, "");
+		listenTo(toolsCalloutCtrl);
+		toolsCalloutCtrl.activate();
+	}
+	
+	private void doDragAndDrop(UserRequest ureq, String binderKeyStr, String siblingKeyStr) {
+		if(!StringHelper.isLong(binderKeyStr) || !StringHelper.isLong(siblingKeyStr)) return;
+		
+		BinderRow binder = model.getObjectByKey(Long.valueOf(binderKeyStr));
+		BinderRow sibling = model.getObjectByKey(Long.valueOf(siblingKeyStr));
+		if(binder != null && sibling != null && !binder.equals(sibling)) {
+			List<BinderRow> rows = model.getObjects();
+			rows.remove(binder);
 			
-			return null;
+			int index = rows.indexOf(sibling);
+			rows.add(index, binder);
+			
+			doSaveBinderListOrder(ureq, rows);
+			model.setObjects(rows);
+			tableEl.reset(false, false, true);
 		}
+	}
+	
+	private void doMoveUp(UserRequest ureq, BinderRow row) {
+		List<BinderRow> rows = model.getObjects();
+		int index = rows.indexOf(row);
+		if(index > 0 && index < rows.size()) {
+			rows.remove(index);
+			rows.add(index-1, row);
+			doSaveBinderListOrder(ureq, rows);
+			model.setObjects(rows);
+			tableEl.reset(false, false, true);
+		}
+	}
+	
+	private void doMoveDown(UserRequest ureq, BinderRow row) {
+		List<BinderRow> rows = model.getObjects();
+		int index = rows.indexOf(row);
+		if(index >= 0 && index + 1 < rows.size()) {
+			rows.remove(index);
+			rows.add(index+1, row);
+			doSaveBinderListOrder(ureq, rows);
+			model.setObjects(rows);
+			tableEl.reset(false, false, true);
+		}
+	}
+	
+	private void initSettings(UserRequest ureq) {
+		Preferences guiPrefs = ureq.getUserSession().getGuiPreferences();
+		BinderListSettings settings  = (BinderListSettings)guiPrefs.get(BinderListController.class, "binder-list-settings");
+		if(settings == null) {
+			List<BinderRow> rows = model.getObjects();
+			doSaveBinderListOrder(ureq, rows);
+		}
+	}
+	
+	private BinderListSettings getSettings(UserRequest ureq) {
+		Preferences guiPrefs = ureq.getUserSession().getGuiPreferences();
+		BinderListSettings settings  = (BinderListSettings)guiPrefs.get(BinderListController.class, "binder-list-settings");
+		if(settings == null) {
+			settings = new BinderListSettings();
+		}
+		return settings;
+	}
+
+	private void doSaveBinderListOrder(UserRequest ureq, List<BinderRow> orderRows) {
+		BinderListSettings settings = getSettings(ureq);
+		List<Long> keys = orderRows.stream().map(BinderRow::getKey).collect(Collectors.toList());
+		settings.setOrderedBinderKeys(keys);
+		doSaveSettings(ureq, settings);
+	}
+	
+	private void doSaveSettings(UserRequest ureq, BinderListSettings settings) {
+		Preferences guiPrefs = ureq.getUserSession().getGuiPreferences();
+		if (guiPrefs != null) {
+			guiPrefs.putAndSave(BinderListController.class, "binder-list-settings", settings);
+		}
+	}
+	
+	private void doEditBinderMetadata(UserRequest ureq, BinderRow row) {
+		if(binderMetadataCtrl != null) return;
+		
+		Binder reloadedBinder = portfolioService.getBinderByKey(row.getKey());
+		binderMetadataCtrl = new BinderMetadataEditController(ureq, getWindowControl(), reloadedBinder);
+		listenTo(binderMetadataCtrl);
+		
+		String title = translate("edit.binder.metadata");
+		cmc = new CloseableModalController(getWindowControl(), null, binderMetadataCtrl.getInitialComponent(), true, title, true);
+		listenTo(cmc);
+		cmc.activate();
+	}
+	
+	private void doConfirmMoveToTrashBinder(UserRequest ureq, BinderRow row) {
+		if(moveBinderToTrashCtrl != null) return;
+		
+		BinderStatistics stats = portfolioService.getBinderStatistics(row);
+		moveBinderToTrashCtrl = new ConfirmMoveBinderToTrashController(ureq, getWindowControl(), stats);
+		moveBinderToTrashCtrl.setUserObject(row);
+		listenTo(moveBinderToTrashCtrl);
+		
+		String title = translate("delete.binder");
+		cmc = new CloseableModalController(getWindowControl(), null, moveBinderToTrashCtrl.getInitialComponent(), true, title, true);
+		listenTo(cmc);
+		cmc.activate();
+	}
+	
+	private void doMoveBinderToTrash(BinderRow row) {
+		Binder binder = portfolioService.getBinderByKey(row.getKey());
+		binder.setBinderStatus(BinderStatus.deleted);
+		binder = portfolioService.updateBinder(binder);
+		showInfo("delete.binder.success");
+	}
+	
+	private void doConfirmDeleteBinder(UserRequest ureq, BinderRow row) {
+		if(moveBinderToTrashCtrl != null) return;
+		
+		BinderStatistics stats = portfolioService.getBinderStatistics(row);
+		deleteBinderCtrl = new ConfirmDeleteBinderController(ureq, getWindowControl(), stats);
+		deleteBinderCtrl.setUserObject(row);
+		listenTo(deleteBinderCtrl);
+		
+		String title = translate("delete.binder");
+		cmc = new CloseableModalController(getWindowControl(), null, deleteBinderCtrl.getInitialComponent(), true, title, true);
+		listenTo(cmc);
+		cmc.activate();
+	}
+	
+	private void doDeleteBinder(BinderRef binder) {
+		portfolioService.deleteBinder(binder);
+		showInfo("delete.binder.success");
+	}
+	
+	private void doConfirmRestore(UserRequest ureq, BinderRow row) {
+		String title = translate("restore.binder.confirm.title");
+		String text = translate("restore.binder.confirm.descr", new String[]{ StringHelper.escapeHtml(row.getTitle()) });
+		confirmRestoreBinderCtrl = activateYesNoDialog(ureq, title, text, confirmRestoreBinderCtrl);
+		confirmRestoreBinderCtrl.setUserObject(row);
+	}
+	
+	private void doRestore(BinderRef row) {
+		Binder binder = portfolioService.getBinderByKey(row.getKey());
+		binder.setBinderStatus(BinderStatus.open);
+		binder = portfolioService.updateBinder(binder);
+		showInfo("restore.binder.success");
+	}
+	
+	private void doExportBinderAsCP(UserRequest ureq, BinderRow row) {
+		MediaResource resource = new ExportBinderAsCPResource(row, ureq, getLocale());
+		ureq.getDispatchResult().setResultingMediaResource(resource);
 	}
 	
 	private static class BinderCssDelegate extends DefaultFlexiTableCssDelegate {
 		@Override
 		public String getRowCssClass(FlexiTableRendererType type, int pos) {
-			return "o_portfolio_entry";
+			return "o_portfolio_entry o_dragable";
+		}
+	}
+	
+	private class ToolsController extends BasicController {
+		
+		private final BinderRow row;
+		
+		private Link moveUpLink;
+		private Link moveDownLink;
+		private Link deleteBinderLink;
+		private Link restoreBinderLink;
+		private Link exportBinderAsCpLink;
+		private Link editBinderMetadataLink;
+		private Link moveToTrashBinderLink;
+		private final VelocityContainer mainVC;
+		
+		public ToolsController(UserRequest ureq, WindowControl wControl, BinderSecurityCallback secCallback, Binder binder, BinderRow row) {
+			super(ureq, wControl);
+			this.row = row;
+			
+			mainVC = createVelocityContainer("tools");
+			List<String> links = new ArrayList<>();
+			
+			
+			//metadata
+			if(secCallback.canEditMetadataBinder()) {
+				editBinderMetadataLink = addLink("edit.binder.metadata", "edit.metadata", "o_icon o_icon_new_portfolio", links);
+			}
+
+			moveUpLink = addLink("move.left", "move-up", "o_icon o_icon_left", links);
+			moveDownLink = addLink("move.right", "move-down", "o_icon o_icon_right", links);
+			
+			if(secCallback.canExportBinder()) {
+				exportBinderAsCpLink = addLink("export.binder.cp", "export-cp", "o_icon o_icon_download", links);
+			}
+			if(secCallback.canMoveToTrashBinder(binder)) {
+				moveToTrashBinderLink = addLink("delete.binder", "trash-binder", "o_icon o_icon_delete_item", links);
+			}
+			
+			if(secCallback.canDeleteBinder(binder)) {
+				deleteBinderLink = addLink("delete.binder", "delete.binder", "o_icon o_icon_delete_item", links);
+				restoreBinderLink = addLink("restore.binder", "restore.binder", "o_icon o_icon_restore", links);
+			}
+
+			mainVC.contextPut("links", links);
+			putInitialPanel(mainVC);
+		}
+		
+		private Link addLink(String name, String cmd, String iconCSS, List<String> links) {
+			Link link = LinkFactory.createLink(name, cmd, getTranslator(), mainVC, this, Link.LINK);
+			if(iconCSS != null) {
+				link.setIconLeftCSS(iconCSS);
+			}
+			mainVC.put(name, link);
+			links.add(name);
+			return link;
+		}
+
+		@Override
+		protected void doDispose() {
+			//
+		}
+
+		@Override
+		protected void event(UserRequest ureq, Component source, Event event) {
+			fireEvent(ureq, Event.DONE_EVENT);
+			if(moveUpLink == source) {
+				doMoveUp(ureq, row);
+			} else if(moveDownLink == source) {
+				doMoveDown(ureq, row);
+			} else if(editBinderMetadataLink == source) {
+				doEditBinderMetadata(ureq, row);
+			} else if(moveToTrashBinderLink == source) {
+				doConfirmMoveToTrashBinder(ureq, row);
+			} else if(exportBinderAsCpLink == source) {
+				doExportBinderAsCP(ureq, row);
+			} else if(deleteBinderLink == source) {
+				doConfirmDeleteBinder(ureq, row);
+			} else if(restoreBinderLink == source) {
+				doConfirmRestore(ureq, row);
+			}
 		}
 	}
 }

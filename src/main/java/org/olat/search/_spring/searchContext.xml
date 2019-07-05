@@ -11,9 +11,6 @@
 	<context:component-scan base-package="org.olat.search" />
 
 	<!-- Search components -->
-	<bean id="org.olat.admin.user.UserSearchUIService"
-		class="org.olat.admin.user.UserSearchUIServiceImpl" />
-	
 	<bean id="org.olat.search.ui.SearchServiceUIFactory"
 		class="org.olat.search.ui.SearchControllerFactory" />
 
@@ -80,6 +77,8 @@
 			<list>
 				<!-- list of files which will not be indexed -->
 				<value>ppt</value>
+				<value>doc</value>
+				<value>xls</value>
 			</list>
 		</constructor-arg>
 	</bean>
@@ -134,6 +133,8 @@
 				<ref bean="identityIndexer" />
 				<ref bean="epDefaultMapIndexer" />
 				<ref bean="epStructuredMapIndexer" />
+				<ref bean="documentPoolIndexer" />
+				<ref bean="libraryIndexer" />
 			</list>
 		</property>
 	</bean>
@@ -141,6 +142,7 @@
 	<!-- Repository -->
 	<bean id="repositoryIndexer" class="org.olat.search.service.indexer.repository.RepositoryIndexer">
 		<property name="repositoryManager" ref="repositoryManager" />
+		<property name="repositoryService" ref="repositoryService" />
 		<property name="searchModule" ref="searchModule" />
 		<property name="repositoryEntryDocumentFactory" ref="repositoryEntryDocumentFactory" />
 		<property name="dbInstance" ref="database" />
@@ -249,7 +251,8 @@
 	
 	<!--  Groups indexers -->
 	<bean id="groupIndexer"	class="org.olat.search.service.indexer.group.GroupIndexer">
-	  <property name="indexerList">
+		<property name="businessGroupService" ref="businessGroupService" />
+		<property name="indexerList">
 			<list>
 				<ref bean="groupForumIndexer" />
 				<ref bean="groupFolderIndexer" />
@@ -302,10 +305,6 @@
 		</property>				
 	</bean>
 	
-	
-	<!-- Question items -->
-	<bean id="questionItemIndexer" class="org.olat.search.service.indexer.QuestionItemIndexer"/>
-	
 	<!-- Inject security callback to IdentityIndexer which reduce the visibility of users 
 	     via the full text search to admin and user managers -->
 	<!--
@@ -331,7 +330,9 @@
 	<!-- OO-109: bypass the JMS server in no-cluster environment ==> use searchClientLocal if singleVM -->	
 	<alias alias="searchClient" name="searchClient${cluster.mode}"/>
 
-	<bean id="searchClientSingleVM" class="org.olat.search.service.searcher.SearchClientLocal"/>
+	<bean id="searchClientSingleVM" class="org.olat.search.service.searcher.SearchClientLocal">
+		<property name="dbInstance" ref="database" />
+	</bean>
 	
 	<bean id="searchClientCluster" class="org.olat.search.service.searcher.SearchClientProxy" init-method="springInit" destroy-method="stop" lazy-init="true">
 		<property name="connectionFactory" ref="searchConnectionFactory"/>

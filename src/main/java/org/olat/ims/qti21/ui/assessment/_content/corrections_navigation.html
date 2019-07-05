@@ -1,0 +1,18 @@
+#if($r.isNotEmpty($title))
+	<h3><i class="o_icon $titleCssClass"> </i> $r.escapeHtml($title)</h3>
+#end
+<div class="o_block o_correction_navigation clearfix">
+	$r.render("back")
+	$r.render("previous.item")
+	<div id="o_cocurrent_item_SELBOX">
+		<select class="form-control" onchange="var current = jQuery(this).val(); jQuery(this).val('$selectedValue'); $r.openJavaScriptCommand("sel", true, false), 'item', current);">
+			#foreach($itemRef in $itemRefKeys)
+				<option value="$itemRef.value" #if($selectedValue == $itemRef.value) selected #end>$itemRef.text</option>
+			#end
+		</select>
+	</div>
+	$r.render("next.item")
+	$r.render("back.overview")
+</div>
+$r.render("items")
+

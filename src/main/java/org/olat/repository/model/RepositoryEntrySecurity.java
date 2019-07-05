@@ -31,31 +31,66 @@ public class RepositoryEntrySecurity {
 	private final boolean canLaunch;
 	private final boolean entryAdmin;
 	private final boolean readOnly;
+	private final boolean author;
+	private final boolean principal;
+	private final boolean masterCoach;
 	
 	private final boolean courseParticipant;
 	private final boolean courseCoach;
 	private final boolean groupParticipant;
 	private final boolean groupCoach;
 	private final boolean groupWaiting;
+	private final boolean curriculumParticipant;
+	private final boolean curriculumCoach;
+	
 	
 	public RepositoryEntrySecurity(boolean entryAdmin, boolean owner,
 			boolean courseParticipant, boolean courseCoach,
-			boolean groupParticipant, boolean groupCoach,
-			boolean groupWaiting, boolean canLaunch, boolean readOnly) {
+			boolean groupParticipant, boolean groupCoach, boolean groupWaiting,
+			boolean curriculumParticipant, boolean curriculumCoach, boolean masterCoach,
+			boolean author, boolean principal,
+			boolean canLaunch, boolean readOnly) {
 		this.owner = owner;
 		this.canLaunch = canLaunch;
 		this.entryAdmin = entryAdmin;
+		this.author = author;
+		this.principal = principal;
+		this.masterCoach = masterCoach;
 		
 		this.courseParticipant = courseParticipant;
 		this.courseCoach = courseCoach;
 		this.groupParticipant = groupParticipant;
 		this.groupCoach = groupCoach;
 		this.groupWaiting = groupWaiting;
+		this.curriculumParticipant = curriculumParticipant;
+		this.curriculumCoach = curriculumCoach;
 		this.readOnly = readOnly;
 	}
 	
 	public boolean isOwner() {
 		return owner;
+	}
+	
+	/**
+	 * 
+	 * @return true if the user is coach of the repository entry, a group
+	 *   or a curriculum element linked to the repository entry.
+	 */
+	public boolean isCoach() {
+		return courseCoach || groupCoach || curriculumCoach;
+	}
+	
+	/**
+	 * 
+	 * @return true if the user is participant of the repository entry, a group
+	 *   or a curriculum element linked to the repository entry.
+	 */
+	public boolean isParticipant() {
+		return courseParticipant || groupParticipant || curriculumParticipant;
+	}
+	
+	public boolean isMasterCoach() {
+		return masterCoach;
 	}
 	
 	public boolean isEntryAdmin() {
@@ -89,8 +124,44 @@ public class RepositoryEntrySecurity {
 	public boolean isGroupWaiting() {
 		return groupWaiting;
 	}
-	
+
+	public boolean isCurriculumParticipant() {
+		return curriculumParticipant;
+	}
+
+	public boolean isCurriculumCoach() {
+		return curriculumCoach;
+	}
+
 	public boolean isMember() {
-		return owner || courseParticipant || courseCoach || groupParticipant || groupCoach;
+		return owner || courseParticipant || courseCoach || groupParticipant || groupCoach || curriculumParticipant || curriculumCoach;
+	}
+	
+	/**
+	 * @return true if the user has the role author in an organization
+	 * 		linked by the repository entry
+	 */
+	public boolean isAuthor() {
+		return author;
+	}
+	
+	/**
+	 * @return true if the user has the role principal
+	 */
+	public boolean isPrincipal() {
+		return principal;
+	}
+	
+	/**
+	 * @return true if the user has the role principal but
+	 * 		is not a member or an administrator of the repository
+	 * 		entry.
+	 */
+	public boolean isOnlyPrincipal() {
+		return principal && !isMember() && !isEntryAdmin();
+	}
+	
+	public boolean isOnlyMasterCoach() {
+		return masterCoach && !isMember() && !isEntryAdmin();
 	}
 }

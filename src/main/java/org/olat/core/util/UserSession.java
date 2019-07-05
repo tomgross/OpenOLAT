@@ -50,7 +50,7 @@ import org.olat.core.id.context.BusinessControl;
 import org.olat.core.id.context.ContextEntry;
 import org.olat.core.id.context.HistoryPoint;
 import org.olat.core.id.context.HistoryPointImpl;
-import org.olat.core.logging.OLog;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
 import org.olat.core.logging.activity.ThreadLocalUserActivityLoggerInstaller;
 import org.olat.core.util.coordinate.CoordinatorManager;
@@ -71,7 +71,7 @@ import org.olat.course.assessment.model.TransientAssessmentMode;
  */
 public class UserSession implements HttpSessionBindingListener, GenericEventListener, Serializable  {
 	
-	private static final OLog log = Tracing.createLoggerFor(UserSession.class);	
+	private static final Logger log = Tracing.createLoggerFor(UserSession.class);	
 	private static final long serialVersionUID = 1975177605776990868L;
 
 	// the environment (identity, locale, ..) of the identity
@@ -86,21 +86,21 @@ public class UserSession implements HttpSessionBindingListener, GenericEventList
 	/**
 	 * things to put into that should not be clear when signing on (e.g. remember url for a direct jump)
 	 */
-	private transient Map<String,Object> nonClearedStore = new HashMap<String,Object>();
+	private transient Map<String,Object> nonClearedStore = new HashMap<>();
 	private String lockStores = new String();
 	private boolean authenticated = false;
 	private boolean savedSession = false;
 	private transient Preferences guiPreferences;
 	private transient EventBus singleUserSystemBus;
 	private List<String> chats;
-	private Stack<HistoryPoint> history = new Stack<HistoryPoint>();
+	private Stack<HistoryPoint> history = new Stack<>();
 
 	public UserSession() {
 		init();
 	}
 
 	public void init() {
-		store = new HashMap<String,Object>(4);
+		store = new HashMap<>(4);
 		identityEnvironment = new IdentityEnvironment();
 		singleUserSystemBus = CoordinatorManager.getInstance().getCoordinator().createSingleUserInstance();
 		authenticated = false;
@@ -108,8 +108,8 @@ public class UserSession implements HttpSessionBindingListener, GenericEventList
 	}
 	
 	private Object readResolve() {
-		store = new HashMap<String,Object>(4);
-		nonClearedStore = new HashMap<String,Object>();
+		store = new HashMap<>(4);
+		nonClearedStore = new HashMap<>();
 		singleUserSystemBus = CoordinatorManager.getInstance().getCoordinator().createSingleUserInstance();
 		savedSession = true;
 		authenticated = false;//reset authentication
@@ -138,7 +138,7 @@ public class UserSession implements HttpSessionBindingListener, GenericEventList
 	public List<Object> getStoreValues() {
 		List<Object> values;
 		synchronized(lockStores) {
-			values = new ArrayList<Object>(store.values());
+			values = new ArrayList<>(store.values());
 		}
 		return values;
 	}
@@ -221,7 +221,7 @@ public class UserSession implements HttpSessionBindingListener, GenericEventList
 		if(chats == null) {
 			synchronized(lockStores) {
 				if(chats == null) {
-					chats = new ArrayList<String>(5);
+					chats = new ArrayList<>(5);
 				}
 			}
 		}
@@ -371,7 +371,7 @@ public class UserSession implements HttpSessionBindingListener, GenericEventList
 	}
 
 	public List<HistoryPoint> getHistoryStack() {
-		return new ArrayList<HistoryPoint>(history);
+		return new ArrayList<>(history);
 	}
 	
 	public HistoryPoint getLastHistoryPoint() {
@@ -402,7 +402,6 @@ public class UserSession implements HttpSessionBindingListener, GenericEventList
 	
 	public void addToHistory(UserRequest ureq, HistoryPoint point) {
 		if(point == null) return;
-		//System.out.println(ureq.getUuid() + " Add point to history: " + point.getBusinessPath());
 		history.add(new HistoryPointImpl(ureq.getUuid(), point.getBusinessPath(), point.getEntries()));
 	}
 	
@@ -422,7 +421,6 @@ public class UserSession implements HttpSessionBindingListener, GenericEventList
 					}
 				}
 			}
-			//System.out.println(ureq.getUuid() + " Add business path: " + businessPath);
 			history.push(new HistoryPointImpl(ureq.getUuid(), businessPath, entries));
 			if(history.size() > 20) {
 				history.remove(0);
@@ -442,12 +440,9 @@ public class UserSession implements HttpSessionBindingListener, GenericEventList
 		}
 	}
 
-	/**
-	 * @see javax.servlet.http.HttpSessionBindingListener#valueBound(javax.servlet.http.HttpSessionBindingEvent)
-	 */
 	@Override
 	public void valueBound(HttpSessionBindingEvent be) {
-		if (log.isDebug()) {
+		if (log.isDebugEnabled()) {
 			log.debug("Opened UserSession:" + toString());
 		}
 	}
@@ -464,8 +459,8 @@ public class UserSession implements HttpSessionBindingListener, GenericEventList
 			// (no user was authenticated yet but a tomcat session was created)
 			Identity ident = identityEnvironment.getIdentity();
 			CoreSpringFactory.getImpl(UserSessionManager.class).signOffAndClear(this);
-			if (log.isDebug()) {
-				log.debug("Closed UserSession: identity = " + (ident == null ? "n/a":ident.getName()));
+			if (log.isDebugEnabled()) {
+				log.debug("Closed UserSession: identity = " + (ident == null ? "n/a" : ident.getKey()));
 			}
 			//we do not have a request in the null case (app. server triggered) and user not yet logged in
 			//-> in this case we use the special empty activity logger

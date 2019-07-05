@@ -31,8 +31,8 @@ package org.olat.core.util.prefs.db;
 import java.util.Iterator;
 import java.util.List;
 
+import org.apache.logging.log4j.Logger;
 import org.olat.core.id.Identity;
-import org.olat.core.logging.OLog;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.prefs.Preferences;
 import org.olat.core.util.prefs.PreferencesStorage;
@@ -51,7 +51,7 @@ import com.thoughtworks.xstream.XStream;
  */
 public class DbStorage implements PreferencesStorage {
 	
-	private static final OLog log = Tracing.createLoggerFor(DbStorage.class);
+	private static final Logger log = Tracing.createLoggerFor(DbStorage.class);
 
 	static final String USER_PROPERTY_KEY = "v2guipreferences";
 	
@@ -112,7 +112,7 @@ public class DbStorage implements PreferencesStorage {
 			// OLAT-6429 detect and delete multiple prefs objects, keep the first one only 
 			List<Property> guiPropertyList = PropertyManager.getInstance().findProperties(identity, null, null, null, USER_PROPERTY_KEY); 
 			if (guiPropertyList != null && guiPropertyList.size() > 0) {
-				 log.warn("Found more than 1 entry for " + USER_PROPERTY_KEY + " in o_property table for user " + identity.getName() + ". Use first of them, deleting the others!", e); 
+				 log.warn("Found more than 1 entry for " + USER_PROPERTY_KEY + " in o_property table for identity " + identity.getKey() + ". Use first of them, deleting the others!", e); 
 				 Iterator<Property> iterator = guiPropertyList.iterator();
 				 guiProperty = iterator.next();
 				 while (iterator.hasNext()) { 

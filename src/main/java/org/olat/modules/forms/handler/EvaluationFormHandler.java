@@ -32,8 +32,9 @@ import java.nio.file.SimpleFileVisitor;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.util.Locale;
-import java.util.UUID;
+import java.util.Map;
 
+import org.olat.core.CoreSpringFactory;
 import org.olat.core.commons.persistence.DB;
 import org.olat.core.gui.UserRequest;
 import org.olat.core.gui.components.stack.TooledStackedPanel;
@@ -42,44 +43,47 @@ import org.olat.core.gui.control.WindowControl;
 import org.olat.core.gui.control.generic.layout.MainLayoutController;
 import org.olat.core.gui.control.generic.wizard.StepsMainRunController;
 import org.olat.core.gui.media.MediaResource;
+import org.olat.core.gui.media.ZippedDirectoryMediaResource;
 import org.olat.core.gui.translator.Translator;
 import org.olat.core.id.Identity;
 import org.olat.core.id.OLATResourceable;
+import org.olat.core.id.Organisation;
 import org.olat.core.id.Roles;
 import org.olat.core.logging.AssertException;
-import org.olat.core.logging.OLog;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.FileUtils;
+import org.olat.core.util.PathUtils;
 import org.olat.core.util.PathUtils.YesMatcher;
 import org.olat.core.util.Util;
 import org.olat.core.util.coordinate.CoordinatorManager;
 import org.olat.core.util.coordinate.LockResult;
+import org.olat.core.util.resource.OLATResourceableJustBeforeDeletedEvent;
 import org.olat.core.util.vfs.VFSContainer;
 import org.olat.core.util.xml.XStreamHelper;
-import org.olat.course.assessment.AssessmentMode;
 import org.olat.fileresource.FileResourceManager;
-import org.olat.fileresource.ZippedDirectoryMediaResource;
 import org.olat.fileresource.types.FileResource;
 import org.olat.fileresource.types.ResourceEvaluation;
+import org.olat.modules.ceditor.DataStorage;
 import org.olat.modules.forms.EvaluationFormManager;
+import org.olat.modules.forms.EvaluationFormReadyToDelete;
 import org.olat.modules.forms.EvaluationFormsModule;
 import org.olat.modules.forms.model.xml.Form;
 import org.olat.modules.forms.model.xml.FormXStream;
-import org.olat.modules.forms.model.xml.Title;
-import org.olat.modules.forms.ui.EvaluationFormController;
 import org.olat.modules.forms.ui.EvaluationFormEditorController;
+import org.olat.modules.forms.ui.EvaluationFormExecutionController;
 import org.olat.modules.forms.ui.EvaluationFormRuntimeController;
-import org.olat.modules.forms.ui.TitleEditorController;
 import org.olat.repository.ErrorList;
 import org.olat.repository.RepositoryEntry;
+import org.olat.repository.RepositoryEntryStatusEnum;
 import org.olat.repository.RepositoryManager;
 import org.olat.repository.RepositoryService;
 import org.olat.repository.handlers.EditionSupport;
 import org.olat.repository.handlers.RepositoryHandler;
 import org.olat.repository.model.RepositoryEntrySecurity;
-import org.olat.repository.ui.RepositoryEntryRuntimeController.RuntimeControllerCreator;
 import org.olat.resource.OLATResource;
 import org.olat.resource.OLATResourceManager;
+import org.olat.resource.references.ReferenceManager;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
@@ -92,10 +96,12 @@ import org.springframework.stereotype.Service;
 @Service
 public class EvaluationFormHandler implements RepositoryHandler {
 	
-	private static final OLog log = Tracing.createLoggerFor(EvaluationFormHandler.class);
+	private static final Logger log = Tracing.createLoggerFor(EvaluationFormHandler.class);
 
 	@Autowired
 	private DB dbInstance;
+	@Autowired
+	private ReferenceManager referenceManager;
 	@Autowired
 	private EvaluationFormsModule formsModule;
 	@Autowired
@@ -108,7 +114,7 @@ public class EvaluationFormHandler implements RepositoryHandler {
 	private EvaluationFormManager evaluationFormManager;
 
 	@Override
-	public boolean isCreate() {
+	public boolean supportCreate(Identity identity, Roles roles) {
 		return formsModule.isEnabled();
 	}
 	
@@ -118,10 +124,12 @@ public class EvaluationFormHandler implements RepositoryHandler {
 	}
 	
 	@Override
-	public RepositoryEntry createResource(Identity initialAuthor, String displayname, String description, Object createObject, Locale locale) {
+	public RepositoryEntry createResource(Identity initialAuthor, String displayname, String description,
+			Object createObject, Organisation organisation, Locale locale) {
 		EvaluationFormResource ores = new EvaluationFormResource();
 		OLATResource resource = olatResourceManager.findOrPersistResourceable(ores);
-		RepositoryEntry re = repositoryService.create(initialAuthor, null, "", displayname, description, resource, RepositoryEntry.ACC_OWNERS);
+		RepositoryEntry re = repositoryService.create(initialAuthor, null, "", displayname, description, resource,
+				RepositoryEntryStatusEnum.preparation, organisation);
 		dbInstance.commit();
 		
 		File repositoryDir = new File(FileResourceManager.getInstance().getFileResourceRoot(re.getOlatResource()), FileResourceManager.ZIPDIR);
@@ -129,15 +137,7 @@ public class EvaluationFormHandler implements RepositoryHandler {
 			repositoryDir.mkdirs();
 		}
 
-		// make a minimalistic form
 		Form form = new Form();
-		Translator translator = Util.createPackageTranslator(TitleEditorController.class, locale);
-		String content = translator.translate("title.example");
-		Title element = new Title();
-		element.setId(UUID.randomUUID().toString());
-		element.setContent(content);
-		form.addElement(element);
-
 		File formFile = new File(repositoryDir, FORM_XML_FILE);
 		XStreamHelper.writeObject(FormXStream.getXStream(), formFile, form);
 		return re;
@@ -149,13 +149,28 @@ public class EvaluationFormHandler implements RepositoryHandler {
 	}
 
 	@Override
+	public boolean supportImport() {
+		return true;
+	}
+
+	@Override
 	public ResourceEvaluation acceptImport(File file, String filename) {
 		return EvaluationFormResource.evaluate(file, filename);
+	}
+
+	@Override
+	public boolean supportImportUrl() {
+		return false;
+	}
+	
+	@Override
+	public ResourceEvaluation acceptImport(String url) {
+		return ResourceEvaluation.notValid();
 	}
 	
 	@Override
 	public RepositoryEntry importResource(Identity initialAuthor, String initialAuthorAlt, String displayname, String description,
-			boolean withReferences, Locale locale, File file, String filename) {
+			boolean withReferences, Organisation organisation, Locale locale, File file, String filename) {
 		
 		EvaluationFormResource ores = new EvaluationFormResource();
 		OLATResource resource = olatResourceManager.createAndPersistOLATResourceInstance(ores);
@@ -163,7 +178,8 @@ public class EvaluationFormHandler implements RepositoryHandler {
 		File zipDir = new File(fResourceFileroot, FileResourceManager.ZIPDIR);
 		copyResource(file, filename, zipDir);
 
-		RepositoryEntry re = repositoryService.create(initialAuthor, null, "", displayname, description, resource, RepositoryEntry.ACC_OWNERS);
+		RepositoryEntry re = repositoryService.create(initialAuthor, null, "", displayname, description, resource,
+				RepositoryEntryStatusEnum.preparation, organisation);
 		dbInstance.commit();
 		return re;
 	}
@@ -177,11 +193,19 @@ public class EvaluationFormHandler implements RepositoryHandler {
 			
 			Path destDir = targetDirectory.toPath();
 			Files.walkFileTree(path, new CopyVisitor(path, destDir, new YesMatcher()));
+			PathUtils.closeSubsequentFS(path);
 			return true;
 		} catch (IOException e) {
 			log.error("", e);
 			return false;
 		}
+	}
+	
+	@Override
+	public RepositoryEntry importResource(Identity initialAuthor, String initialAuthorAlt, String displayname,
+			String description, Organisation organisation, Locale locale, String url) {
+		//
+		return null;
 	}
 	
 	@Override
@@ -200,8 +224,8 @@ public class EvaluationFormHandler implements RepositoryHandler {
 	}
 
 	@Override
-	public EditionSupport supportsEdit(OLATResourceable resource) {
-		return EditionSupport.embedded;
+	public EditionSupport supportsEdit(OLATResourceable resource, Identity identity, Roles roles) {
+		return EditionSupport.yes;
 	}
 	
 	@Override
@@ -217,12 +241,27 @@ public class EvaluationFormHandler implements RepositoryHandler {
 
 	@Override
 	public boolean readyToDelete(RepositoryEntry entry, Identity identity, Roles roles, Locale locale, ErrorList errors) {
-		return false;
+		String referencesSummary = referenceManager.getReferencesToSummary(entry.getOlatResource(), locale);
+		if (referencesSummary != null) {
+			Translator translator = Util.createPackageTranslator(RepositoryManager.class, locale);
+			errors.setError(translator.translate("details.delete.error.references",
+					new String[] { referencesSummary, entry.getDisplayname() }));
+			return false;
+		}
+		
+		boolean delete = true;
+		Map<String,EvaluationFormReadyToDelete> deleteDelegates = CoreSpringFactory.getBeansOfType(EvaluationFormReadyToDelete.class);
+		for(EvaluationFormReadyToDelete delegate:deleteDelegates.values()) {
+			delete &= delegate.readyToDelete(entry, locale, errors);
+		}
+		return delete;
 	}
 
 	@Override
 	public boolean cleanupOnDelete(RepositoryEntry entry, OLATResourceable res) {
-		return false;
+		CoordinatorManager.getInstance().getCoordinator().getEventBus().fireEventToListenersOf(new OLATResourceableJustBeforeDeletedEvent(res), res);
+		FileResourceManager.getInstance().deleteFileResource(res);
+		return true;
 	}
 
 	/**
@@ -230,7 +269,7 @@ public class EvaluationFormHandler implements RepositoryHandler {
 	 * @see org.olat.repository.handlers.RepositoryHandler#getAsMediaResource(org.olat.core.id.OLATResourceable)
 	 */
 	@Override
-	public MediaResource getAsMediaResource(OLATResourceable res, boolean backwardsCompatible) {
+	public MediaResource getAsMediaResource(OLATResourceable res) {
 		File unzippedDir = FileResourceManager.getInstance().unzipFileResource(res);
 		String displayName = repositoryManager.lookupDisplayNameByOLATResourceableId(res.getResourceableId());
 		return new ZippedDirectoryMediaResource(displayName, unzippedDir);
@@ -240,6 +279,8 @@ public class EvaluationFormHandler implements RepositoryHandler {
 	public Controller createEditorController(RepositoryEntry re, UserRequest ureq, WindowControl control, TooledStackedPanel toolbar) {
 		File repositoryDir = new File(FileResourceManager.getInstance().getFileResourceRoot(re.getOlatResource()), FileResourceManager.ZIPDIR);
 		File formFile = new File(repositoryDir, FORM_XML_FILE);
+		DataStorage storage = evaluationFormManager.loadStorage(re);
+		
 		//if in use -> edition is restricted
 		boolean restrictedEdit = evaluationFormManager.isEvaluationFormActivelyUsed(re);
 		if(restrictedEdit) {
@@ -247,8 +288,7 @@ public class EvaluationFormHandler implements RepositoryHandler {
 			toolbar.setMessage(translator.translate("evaluation.form.in.use"));
 			toolbar.setMessageCssClass("o_warning");
 		}
-		EvaluationFormEditorController editorCtrl = new EvaluationFormEditorController(ureq, control, formFile, restrictedEdit);
-		return editorCtrl;
+		return new EvaluationFormEditorController(ureq, control, formFile, storage, restrictedEdit);
 	}
 	
 	public File getFormFile(RepositoryEntry re) {
@@ -259,14 +299,11 @@ public class EvaluationFormHandler implements RepositoryHandler {
 	@Override
 	public MainLayoutController createLaunchController(RepositoryEntry re, RepositoryEntrySecurity reSecurity, UserRequest ureq, WindowControl wControl) {
 		return new EvaluationFormRuntimeController(ureq, wControl, re, reSecurity,
-			new RuntimeControllerCreator() {
-				@Override
-				public Controller create(UserRequest uureq, WindowControl wwControl, TooledStackedPanel toolbarPanel,
-						RepositoryEntry entry, RepositoryEntrySecurity security, AssessmentMode assessmentMode) {
+			(uureq, wwControl, toolbarPanel, entry, security, assessmentMode) -> {
 					File repositoryDir = new File(FileResourceManager.getInstance().getFileResourceRoot(re.getOlatResource()), FileResourceManager.ZIPDIR);
 					File formFile = new File(repositoryDir, FORM_XML_FILE);
-					return new EvaluationFormController(uureq, wwControl, formFile);
-				}
+					DataStorage storage = evaluationFormManager.loadStorage(re);
+					return new EvaluationFormExecutionController(uureq, wwControl, formFile, storage);
 			});
 	}
 
@@ -321,7 +358,7 @@ public class EvaluationFormHandler implements RepositoryHandler {
 			Path relativeFile = source.relativize(file);
 	        final Path destFile = Paths.get(destDir.toString(), relativeFile.toString());
 	        if(filter.matches(file)) {
-	        	Files.copy(file, destFile, StandardCopyOption.REPLACE_EXISTING);
+	        		Files.copy(file, destFile, StandardCopyOption.REPLACE_EXISTING);
 	        }
 	        return FileVisitResult.CONTINUE;
 		}
@@ -332,7 +369,7 @@ public class EvaluationFormHandler implements RepositoryHandler {
 			Path relativeDir = source.relativize(dir);
 	        final Path dirToCreate = Paths.get(destDir.toString(), relativeDir.toString());
 	        if(Files.notExists(dirToCreate)){
-	        	Files.createDirectory(dirToCreate);
+	        		Files.createDirectory(dirToCreate);
 	        }
 	        return FileVisitResult.CONTINUE;
 		}

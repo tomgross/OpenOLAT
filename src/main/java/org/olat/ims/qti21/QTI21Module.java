@@ -26,7 +26,7 @@ import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 
 import org.olat.core.configuration.AbstractSpringModule;
-import org.olat.core.logging.OLog;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.FileUtils;
 import org.olat.core.util.StringHelper;
@@ -47,7 +47,7 @@ import org.springframework.stereotype.Service;
 @Service
 public class QTI21Module extends AbstractSpringModule {
 	
-	private static final OLog log = Tracing.createLoggerFor(QTI21Module.class);
+	private static final Logger log = Tracing.createLoggerFor(QTI21Module.class);
 	
 	@Autowired
 	private QTI21AssessmentTestHandler assessmentHandler;
@@ -60,17 +60,23 @@ public class QTI21Module extends AbstractSpringModule {
 	private String digitalSignatureCertificate;
 	@Value("${qti21.digital.signature.certificate.password:}")
 	private String digitalSignatureCertificatePassword;
+	@Value("${qti21.correction.workflow:anonymous}")
+	private String correctionWorkflow;
+	@Value("${qti21.import.encoding.fallback:}")
+	private String importEncodingFallback;
 	
 	@Autowired
 	public QTI21Module(CoordinatorManager coordinatorManager) {
 		super(coordinatorManager);
 	}
 
+	/**
+	 * Saxon is mandatory, JQTI need XSLT 2.0
+	 * XsltFactoryUtilities.SAXON_TRANSFORMER_FACTORY_CLASS_NAME;
+	 */
 	@Override
 	public void init() {
 		RepositoryHandlerFactory.registerHandler(assessmentHandler, 10);
-		//Saxon is mandatory, JQTI need XSLT 2.0
-		//XsltFactoryUtilities.SAXON_TRANSFORMER_FACTORY_CLASS_NAME;
 		initFromChangedProperties();
 	}
 
@@ -79,6 +85,11 @@ public class QTI21Module extends AbstractSpringModule {
 		String mathExtensionObj = getStringPropertyValue("math.extension", true);
 		if(StringHelper.containsNonWhitespace(mathExtensionObj)) {
 			mathAssessExtensionEnabled = "enabled".equals(mathExtensionObj);
+		}
+		
+		String correctionWorkflowObj = getStringPropertyValue("qti21.correction.workflow", true);
+		if(StringHelper.containsNonWhitespace(correctionWorkflowObj)) {
+			correctionWorkflow = CorrectionWorkflow.valueOf(correctionWorkflowObj).name();
 		}
 		
 		String digitalSignatureObj = getStringPropertyValue("digital.signature", true);
@@ -104,6 +115,16 @@ public class QTI21Module extends AbstractSpringModule {
 	public void setMathAssessExtensionEnabled(boolean enabled) {
 		mathAssessExtensionEnabled = enabled;
 		setStringProperty("math.extension", enabled ? "enabled" : "disabled", true);
+	}
+
+	public CorrectionWorkflow getCorrectionWorkflow() {
+		return StringHelper.containsNonWhitespace(correctionWorkflow)
+				? CorrectionWorkflow.valueOf(correctionWorkflow) : CorrectionWorkflow.anonymous;
+	}
+
+	public void setCorrectionWorkflow(CorrectionWorkflow correctionWorkflow) {
+		this.correctionWorkflow = correctionWorkflow.name();
+		setStringProperty("qti21.correction.workflow", correctionWorkflow.name(), true);
 	}
 
 	public boolean isDigitalSignatureEnabled() {
@@ -149,5 +170,14 @@ public class QTI21Module extends AbstractSpringModule {
 	public void setDigitalSignatureCertificatePassword(String digitalSignatureCertificatePassword) {
 		this.digitalSignatureCertificatePassword = digitalSignatureCertificatePassword;
 		setStringProperty("qti21.digital.signature.certificate.password", digitalSignatureCertificatePassword, true);
+	}
+	
+	public String getImportEncodingFallback() {
+		return importEncodingFallback;
+	}
+
+	public enum CorrectionWorkflow {
+		anonymous,
+		named
 	}
 }

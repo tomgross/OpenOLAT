@@ -19,13 +19,16 @@
  */
 package org.olat.core.util;
 
+import java.security.Security;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
+import org.bouncycastle.jce.provider.BouncyCastleProvider;
 import org.junit.Assert;
 import org.junit.Test;
+import org.olat.core.commons.services.webdav.manager.WebDAVManagerImpl;
 import org.olat.core.util.Encoder.Algorithm;
 
 /**
@@ -36,12 +39,16 @@ import org.olat.core.util.Encoder.Algorithm;
  */
 public class EncoderTest {
 	
+	static {
+		Security.insertProviderAt(new BouncyCastleProvider(), 1);
+	}
+	
 	@Test
 	public void testCompatibility() {
 		//the openolat password as saved on our database
 		String openolat = "c14c4d01c090a065eaa619ca92f8cbc0";
 
-		String hashedOpenolat_1 = Encoder.md5("openolat", null);
+		String hashedOpenolat_1 = Encoder.md5("openolat", null, null);
 		Assert.assertEquals(openolat, hashedOpenolat_1);
 		
 		String encryptedOpenolat_1 = Encoder.md5hash("openolat");
@@ -52,11 +59,34 @@ public class EncoderTest {
 	}
 	
 	/**
+	 * The test check the use of the UTF-8 or the ISO-8859-1
+	 * on the hashing algorithm used by the digest authentication.
+	 */
+	@Test
+	public void testDigestLikeCompatibility() {
+		// UTF-8 encoded of standard username
+		String rawDigest = digest("myUsername@openolat.org", "de#34KL");
+		String ha1_utf8 = Encoder.encrypt(rawDigest, null, Encoder.Algorithm.md5_noSalt);
+		String ha1_iso = Encoder.encrypt(rawDigest, null, Encoder.Algorithm.md5_iso_8859_1);
+		Assert.assertEquals(ha1_utf8, ha1_iso);
+		
+		// ISO-8859-1 difference with Umlaut
+		String rawUmlautDigest = digest("myUsern\u00E4me@openolat.org", "de#34KL");
+		String ha1_umlaut_utf8 = Encoder.encrypt(rawUmlautDigest, null, Encoder.Algorithm.md5_noSalt);
+		String ha1_umlaut_iso = Encoder.encrypt(rawUmlautDigest, null, Encoder.Algorithm.md5_iso_8859_1);
+		Assert.assertNotEquals(ha1_umlaut_utf8, ha1_umlaut_iso);		
+	}
+	
+	private String digest(String authUsername, String password) {
+		return authUsername + ":" + WebDAVManagerImpl.BASIC_AUTH_REALM + ":" + password;
+	}
+	
+	/**
 	 * Dummy test which check that the salts are not always equals.
 	 */
 	@Test
 	public void testSalt() {
-		Set<String> history = new HashSet<String>();
+		Set<String> history = new HashSet<>();
 		for(int i=0; i<100; i++) {
 			String salt = Encoder.getSalt();
 			Assert.assertFalse(history.contains(salt));
@@ -93,6 +123,30 @@ public class EncoderTest {
 		
 		String shaOutput = Encoder.encrypt(password, salt, Algorithm.sha512);
 		Assert.assertEquals(hash, shaOutput);
+	}
+	
+	@Test
+	public void testAes() {
+		String password = "openolat#19";
+		String key = "6afs6873l--q3ruiah";
+		String salt = "Y4nY4VFWaiSnM6qe88ZxbQ==";
+		int iteration = 2000;
+		
+		String aesOutput = Encoder.encodeAes(password, key, salt, iteration);
+		Assert.assertNotNull(aesOutput);
+		String decodedPassword = Encoder.decodeAes(aesOutput, key, salt, iteration);
+		Assert.assertEquals(password, decodedPassword);
+	}
+	
+	@Test
+	public void testAes_alt() {
+		String password = "openolat#19";
+		String salt = "Y4nY4VFWaiSnM6qe88ZxbQ==";
+		
+		String aesOutput = Encoder.encrypt(password, salt, Algorithm.aes);
+		Assert.assertNotNull(aesOutput);
+		String decodedPassword = Encoder.decrypt(aesOutput, salt, Algorithm.aes);
+		Assert.assertEquals(password, decodedPassword);
 	}
 	
 	@Test

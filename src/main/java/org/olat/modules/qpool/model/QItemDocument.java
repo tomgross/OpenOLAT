@@ -36,8 +36,8 @@ public class QItemDocument extends OlatDocument {
 	public static final String SHARE_FIELD = "share";
 	public static final String POOL_FIELD = "pool";
 	public static final String TAXONOMIC_FIELD = "taxonomyid";
-	public static final String TAXONOMIC_PATH_FIELD = "taxonomy";
-	
+	public static final String TAXONOMIC_PATH_FIELD = "taxonomy";       // used in advanced search (subjects)
+	public static final String TAXONOMIC_IDENTIFIER_FIELD = "taxonomy"; // used in full text search field
 
 	public static final String IDENTIFIER_FIELD = "identifier";
 	public static final String MASTER_IDENTIFIER_FIELD = "master";
@@ -50,8 +50,8 @@ public class QItemDocument extends OlatDocument {
 	public static final String ASSESSMENT_TYPE_FIELD = "assessmentType";
 	public static final String ITEM_VERSION_FIELD = "itemVersion";
 	public static final String ITEM_STATUS_FIELD = "itemStatus";
-	public static final String COPYRIGHT_FIELD = "copyright";
 	public static final String EDITOR_FIELD = "editor";
 	public static final String EDITOR_VERSION_FIELD = "editorVersion";
 	public static final String FORMAT_FIELD = "format";
+	public static final String TOPIC_FIELD = "topic";
 }

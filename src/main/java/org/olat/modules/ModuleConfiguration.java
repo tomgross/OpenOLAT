@@ -33,7 +33,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import org.olat.core.logging.OLog;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.Formatter;
 import org.olat.core.util.StringHelper;
@@ -45,7 +45,7 @@ import org.olat.core.util.StringHelper;
  */
 public class ModuleConfiguration implements Serializable {
 
-	private static final OLog log = Tracing.createLoggerFor(ModuleConfiguration.class);
+	private static final Logger log = Tracing.createLoggerFor(ModuleConfiguration.class);
 	private static final long serialVersionUID = 5997068149344924126L;
 
 	/**
@@ -238,7 +238,7 @@ public class ModuleConfiguration implements Serializable {
 		}
 	}
 	
-	public <U> List<U> getList(String config_key, Class<U> cl) {
+	public <U> List<U> getList(String config_key, @SuppressWarnings("unused") Class<U> cl) {
 		@SuppressWarnings("unchecked")
 		List<U> list = (List<U>)get(config_key);
 		if(list == null) {
@@ -254,6 +254,33 @@ public class ModuleConfiguration implements Serializable {
 			set(config_key, list);
 		}
 	}
+	
+	public boolean has(String configKey) {
+		return get(configKey) != null;
+	}
+	
+	public boolean anyTrue(String... keys) {
+		if(keys != null && keys.length > 0) {
+			for(int i=keys.length; i-->0; ) {
+				if(getBooleanSafe(keys[i])) {
+					return true;
+				}
+			}
+		}
+		return false;
+	}
+	
+	public boolean hasAnyOf(String... keys) {
+		if(keys != null && keys.length > 0) {
+			for(int i=keys.length; i-->0; ) {
+				if(get(keys[i]) != null) {
+					return true;
+				}
+			}
+		}
+		return false;
+	}
+	
 
 	/** 
 	 * Get the version of this module configuration. The version specifies which 

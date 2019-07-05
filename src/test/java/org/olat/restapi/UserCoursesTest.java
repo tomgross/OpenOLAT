@@ -29,37 +29,38 @@ import java.util.UUID;
 import javax.ws.rs.core.MediaType;
 import javax.ws.rs.core.UriBuilder;
 
+import org.apache.http.HttpEntity;
 import org.apache.http.HttpResponse;
 import org.apache.http.client.methods.HttpGet;
-import org.codehaus.jackson.map.ObjectMapper;
-import org.codehaus.jackson.type.TypeReference;
 import org.junit.Assert;
 import org.junit.Test;
 import org.olat.basesecurity.GroupRoles;
 import org.olat.core.commons.persistence.DB;
 import org.olat.core.commons.services.mark.MarkManager;
 import org.olat.core.id.Identity;
-import org.olat.core.logging.OLog;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
-import org.olat.course.ICourse;
 import org.olat.repository.RepositoryEntry;
+import org.olat.repository.RepositoryEntryStatusEnum;
 import org.olat.repository.RepositoryManager;
 import org.olat.repository.RepositoryService;
-import org.olat.restapi.repository.course.CoursesWebService;
 import org.olat.restapi.support.vo.CourseVO;
 import org.olat.restapi.support.vo.CourseVOes;
 import org.olat.test.JunitTestHelper;
-import org.olat.test.OlatJerseyTestCase;
+import org.olat.test.OlatRestTestCase;
 import org.springframework.beans.factory.annotation.Autowired;
+
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 /**
  * 
  * @author srosse, stephane.rosse@frentix.com, http://www.frentix.com
  *
  */
-public class UserCoursesTest extends OlatJerseyTestCase {
+public class UserCoursesTest extends OlatRestTestCase {
 	
-	private static final OLog log = Tracing.createLoggerFor(UserCoursesTest.class);
+	private static final Logger log = Tracing.createLoggerFor(UserCoursesTest.class);
 	
 	@Autowired
 	private DB dbInstance;
@@ -73,10 +74,10 @@ public class UserCoursesTest extends OlatJerseyTestCase {
 	@Test
 	public void testMyCourses() throws IOException, URISyntaxException {
 		//prepare a course with a participant
-		Identity user = JunitTestHelper.createAndPersistIdentityAsUser("My-course-" + UUID.randomUUID().toString());
-		ICourse course = CoursesWebService.createEmptyCourse(user, "My course 1", "My course", null);
-		RepositoryEntry courseRe = repositoryManager.lookupRepositoryEntry(course, true);
-		repositoryManager.setAccess(courseRe, RepositoryEntry.ACC_OWNERS, true);
+		Identity user = JunitTestHelper.createAndPersistIdentityAsRndUser("My-course-");
+		
+		RepositoryEntry courseRe = JunitTestHelper.deployBasicCourse(user);
+		repositoryManager.setAccess(courseRe, RepositoryEntryStatusEnum.published, false, false);
 		repositoryService.addRole(user, courseRe, GroupRoles.participant.name());
 		dbInstance.commitAndCloseSession();
 		
@@ -84,23 +85,21 @@ public class UserCoursesTest extends OlatJerseyTestCase {
 		Assert.assertTrue(conn.login(user.getName(), JunitTestHelper.PWD));
 		
 		//without paging
-		URI request = UriBuilder.fromUri(getContextURI()).path("/users").path(user.getKey().toString()).path("/courses/my").build();
+		URI request = UriBuilder.fromUri(getContextURI()).path("users").path(user.getKey().toString()).path("courses").path("my").build();
 		HttpGet method = conn.createGet(request, MediaType.APPLICATION_JSON, true);
 		HttpResponse response = conn.execute(method);
 		Assert.assertEquals(200, response.getStatusLine().getStatusCode());
-		InputStream body = response.getEntity().getContent();
-		List<CourseVO> courses = parseCourseArray(body);
+		List<CourseVO> courses = parseCourseArray(response.getEntity());
 		Assert.assertNotNull(courses);
 		Assert.assertEquals(1, courses.size());
 
 		//with paging
-		URI pagedRequest = UriBuilder.fromUri(getContextURI()).path("/users").path(user.getKey().toString()).path("/courses/my")
+		URI pagedRequest = UriBuilder.fromUri(getContextURI()).path("users").path(user.getKey().toString()).path("courses").path("my")
 				.queryParam("start", "0").queryParam("limit", "10").build();
 		HttpGet pagedMethod = conn.createGet(pagedRequest, MediaType.APPLICATION_JSON + ";pagingspec=1.0", true);
 		HttpResponse pagedResponse = conn.execute(pagedMethod);
 		Assert.assertEquals(200, pagedResponse.getStatusLine().getStatusCode());
-		InputStream pagedBody = pagedResponse.getEntity().getContent();
-		CourseVOes pagedCourses = conn.parse(pagedBody, CourseVOes.class);
+		CourseVOes pagedCourses = conn.parse(pagedResponse.getEntity(), CourseVOes.class);
 		Assert.assertNotNull(pagedCourses);
 		Assert.assertEquals(1, pagedCourses.getTotalCount());
 		Assert.assertNotNull(pagedCourses.getCourses());
@@ -112,10 +111,9 @@ public class UserCoursesTest extends OlatJerseyTestCase {
 	@Test
 	public void testTeachedCourses() throws IOException, URISyntaxException {
 		//prepare a course with a tutor
-		Identity teacher = JunitTestHelper.createAndPersistIdentityAsUser("Course-teacher-" + UUID.randomUUID().toString());
-		ICourse course = CoursesWebService.createEmptyCourse(teacher, "A course to teach", "A course to teach", null);
-		RepositoryEntry courseRe = repositoryManager.lookupRepositoryEntry(course, true);
-		repositoryManager.setAccess(courseRe, RepositoryEntry.ACC_OWNERS, true);
+		Identity teacher = JunitTestHelper.createAndPersistIdentityAsRndUser("Course-teacher-");
+		RepositoryEntry courseRe = JunitTestHelper.deployBasicCourse(teacher);
+		repositoryManager.setAccess(courseRe, RepositoryEntryStatusEnum.published, false, false);
 		repositoryService.addRole(teacher, courseRe, GroupRoles.coach.name());
 		dbInstance.commitAndCloseSession();
 		
@@ -127,8 +125,7 @@ public class UserCoursesTest extends OlatJerseyTestCase {
 		HttpGet method = conn.createGet(request, MediaType.APPLICATION_JSON, true);
 		HttpResponse response = conn.execute(method);
 		Assert.assertEquals(200, response.getStatusLine().getStatusCode());
-		InputStream body = response.getEntity().getContent();
-		List<CourseVO> courses = parseCourseArray(body);
+		List<CourseVO> courses = parseCourseArray(response.getEntity());
 		Assert.assertNotNull(courses);
 		Assert.assertEquals(1, courses.size());
 
@@ -138,8 +135,7 @@ public class UserCoursesTest extends OlatJerseyTestCase {
 		HttpGet pagedMethod = conn.createGet(pagedRequest, MediaType.APPLICATION_JSON + ";pagingspec=1.0", true);
 		HttpResponse pagedResponse = conn.execute(pagedMethod);
 		Assert.assertEquals(200, pagedResponse.getStatusLine().getStatusCode());
-		InputStream pagedBody = pagedResponse.getEntity().getContent();
-		CourseVOes pagedCourses = conn.parse(pagedBody, CourseVOes.class);
+		CourseVOes pagedCourses = conn.parse(pagedResponse.getEntity(), CourseVOes.class);
 		Assert.assertNotNull(pagedCourses);
 		Assert.assertEquals(1, pagedCourses.getTotalCount());
 		Assert.assertNotNull(pagedCourses.getCourses());
@@ -152,9 +148,8 @@ public class UserCoursesTest extends OlatJerseyTestCase {
 	public void testFavoritCourses() throws IOException, URISyntaxException {
 		//prepare a course with a tutor
 		Identity me = JunitTestHelper.createAndPersistIdentityAsUser("Course-teacher-" + UUID.randomUUID().toString());
-		ICourse course = CoursesWebService.createEmptyCourse(me, "A course to teach", "A course to teach", null);
-		RepositoryEntry courseRe = repositoryManager.lookupRepositoryEntry(course, true);
-		repositoryManager.setAccess(courseRe, RepositoryEntry.ACC_USERS, false);
+		RepositoryEntry courseRe = JunitTestHelper.deployBasicCourse(me);
+		repositoryManager.setAccess(courseRe, RepositoryEntryStatusEnum.published, true, false);
 		markManager.setMark(courseRe, me, null, "[RepositoryEntry:" + courseRe.getKey() + "]");	
 		dbInstance.commitAndCloseSession();
 
@@ -166,8 +161,7 @@ public class UserCoursesTest extends OlatJerseyTestCase {
 		HttpGet method = conn.createGet(request, MediaType.APPLICATION_JSON, true);
 		HttpResponse response = conn.execute(method);
 		Assert.assertEquals(200, response.getStatusLine().getStatusCode());
-		InputStream body = response.getEntity().getContent();
-		List<CourseVO> courses = parseCourseArray(body);
+		List<CourseVO> courses = parseCourseArray(response.getEntity());
 		Assert.assertNotNull(courses);
 		Assert.assertEquals(1, courses.size());
 		
@@ -177,8 +171,7 @@ public class UserCoursesTest extends OlatJerseyTestCase {
 		HttpGet pagedMethod = conn.createGet(pagedRequest, MediaType.APPLICATION_JSON + ";pagingspec=1.0", true);
 		HttpResponse pagedResponse = conn.execute(pagedMethod);
 		Assert.assertEquals(200, pagedResponse.getStatusLine().getStatusCode());
-		InputStream pagedBody = pagedResponse.getEntity().getContent();
-		CourseVOes pagedCourses = conn.parse(pagedBody, CourseVOes.class);
+		CourseVOes pagedCourses = conn.parse(pagedResponse.getEntity(), CourseVOes.class);
 		Assert.assertNotNull(pagedCourses);
 		Assert.assertEquals(1, pagedCourses.getTotalCount());
 		Assert.assertNotNull(pagedCourses.getCourses());
@@ -188,10 +181,10 @@ public class UserCoursesTest extends OlatJerseyTestCase {
 		conn.shutdown();
 	}
 	
-	protected List<CourseVO> parseCourseArray(InputStream body) {
-		try {
+	protected List<CourseVO> parseCourseArray(HttpEntity entity) {
+		try(InputStream in=entity.getContent()) {
 			ObjectMapper mapper = new ObjectMapper(jsonFactory); 
-			return mapper.readValue(body, new TypeReference<List<CourseVO>>(){/* */});
+			return mapper.readValue(in, new TypeReference<List<CourseVO>>(){/* */});
 		} catch (Exception e) {
 			log.error("", e);
 			return null;

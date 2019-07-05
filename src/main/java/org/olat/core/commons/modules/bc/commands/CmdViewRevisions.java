@@ -19,10 +19,9 @@
  */
 package org.olat.core.commons.modules.bc.commands;
 
-import org.olat.core.CoreSpringFactory;
 import org.olat.core.commons.modules.bc.components.FolderComponent;
 import org.olat.core.commons.modules.bc.components.ListRenderer;
-import org.olat.core.commons.modules.bc.version.RevisionListController;
+import org.olat.core.commons.services.vfs.ui.version.RevisionListController;
 import org.olat.core.gui.UserRequest;
 import org.olat.core.gui.components.Component;
 import org.olat.core.gui.control.Controller;
@@ -31,9 +30,11 @@ import org.olat.core.gui.control.WindowControl;
 import org.olat.core.gui.control.controller.BasicController;
 import org.olat.core.gui.translator.Translator;
 import org.olat.core.util.StringHelper;
+import org.olat.core.util.vfs.VFSConstants;
 import org.olat.core.util.vfs.VFSItem;
+import org.olat.core.util.vfs.VFSLockApplicationType;
 import org.olat.core.util.vfs.VFSLockManager;
-import org.olat.core.util.vfs.version.Versionable;
+import org.springframework.beans.factory.annotation.Autowired;
 
 /**
  * 
@@ -55,11 +56,11 @@ public class CmdViewRevisions extends BasicController implements FolderCommand {
 	private RevisionListController revisionListCtr;
 	private VFSItem currentItem;
 	
-	private final VFSLockManager vfsLockManager;
+	@Autowired
+	private VFSLockManager vfsLockManager;
 
 	public CmdViewRevisions(UserRequest ureq, WindowControl wControl) {
 		super(ureq, wControl);
-		vfsLockManager = CoreSpringFactory.getImpl(VFSLockManager.class);
 	}
 
 	public Controller execute(FolderComponent folderComponent, UserRequest ureq, WindowControl wControl, Translator translator) {
@@ -83,7 +84,7 @@ public class CmdViewRevisions extends BasicController implements FolderCommand {
 		if(status == FolderCommandStatus.STATUS_FAILED) {
 			return null;
 		}
-		if (!(currentItem instanceof Versionable)) {
+		if (currentItem.canVersion() != VFSConstants.YES) {
 			status = FolderCommandStatus.STATUS_FAILED;
 			getWindowControl().setError(translator.translate("failed"));
 			return null;
@@ -91,8 +92,8 @@ public class CmdViewRevisions extends BasicController implements FolderCommand {
 
 		setTranslator(translator);
 		
-		boolean locked = vfsLockManager.isLockedForMe(currentItem, ureq.getIdentity(), ureq.getUserSession().getRoles());
-		revisionListCtr = new RevisionListController(ureq, wControl, (Versionable)currentItem, locked);
+		boolean locked = vfsLockManager.isLockedForMe(currentItem, ureq.getIdentity(), VFSLockApplicationType.vfs, null);
+		revisionListCtr = new RevisionListController(ureq, wControl, currentItem, locked);
 		listenTo(revisionListCtr);
 		putInitialPanel(revisionListCtr.getInitialComponent());
 		return this;
@@ -110,6 +111,9 @@ public class CmdViewRevisions extends BasicController implements FolderCommand {
 	
 	@Override
 	public String getModalTitle() {
+		if(currentItem != null) {
+			return translate("versions.revisions.of", new String[] { currentItem.getName() });
+		}
 		return translate("versions.revisions");
 	}
 
@@ -123,10 +127,7 @@ public class CmdViewRevisions extends BasicController implements FolderCommand {
 	// nothing to do here
 	}
 
-	/**
-	 * @see org.olat.core.gui.control.DefaultController#event(org.olat.core.gui.UserRequest,
-	 *      org.olat.core.gui.control.Controller, org.olat.core.gui.control.Event)
-	 */
+	@Override
 	public void event(UserRequest ureq, Controller source, Event event) {
 		if (source == revisionListCtr) {
 			if (event == Event.DONE_EVENT) {

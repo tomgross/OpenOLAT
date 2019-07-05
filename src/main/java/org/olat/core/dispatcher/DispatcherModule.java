@@ -34,8 +34,8 @@ import java.util.Map;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 
+import org.apache.logging.log4j.Logger;
 import org.olat.core.commons.persistence.DBFactory;
-import org.olat.core.logging.OLog;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.WebappHelper;
 
@@ -46,7 +46,7 @@ import org.olat.core.util.WebappHelper;
  */
 public class DispatcherModule {
 	
-	private static final OLog log = Tracing.createLoggerFor(DispatcherModule.class);
+	private static final Logger log = Tracing.createLoggerFor(DispatcherModule.class);
 	
 	/** Identifies requests for the DMZ  */
 	private static String PATH_DEFAULT = "/dmz/";
@@ -136,10 +136,6 @@ public class DispatcherModule {
 	public static final void redirectToDefaultDispatcher(HttpServletResponse response) {
 		redirectTo(response, WebappHelper.getServletContextPath() + PATH_DEFAULT);
 	}
-	
-	public static final void redirectToMobile(HttpServletResponse response) {
-		redirectTo(response, WebappHelper.getServletContextPath() + WebappHelper.getMobileContext());
-	}
 
 	/**
 	 * Generic redirect method.
@@ -163,7 +159,7 @@ public class DispatcherModule {
 	 */
 	public static final void sendNotFound(String url, HttpServletResponse response) {
 		try {
-			response.sendError(HttpServletResponse.SC_NOT_FOUND, url);
+			response.sendError(HttpServletResponse.SC_NOT_FOUND);
 		} catch (IOException e) {
 			log.error("Send 404 failed: url=" + url, e);
 		}
@@ -177,7 +173,7 @@ public class DispatcherModule {
 	 */
 	public static final void sendForbidden(String url, HttpServletResponse response) {
 		try {
-			response.sendError(HttpServletResponse.SC_FORBIDDEN, url);
+			response.sendError(HttpServletResponse.SC_FORBIDDEN);
 		} catch (IOException e) {
 			log.error("Send 403 failed: url=" + url, e);
 		}
@@ -191,7 +187,7 @@ public class DispatcherModule {
 	 */
 	public static final void sendBadRequest(String url, HttpServletResponse response) {
 		try {
-			response.sendError(HttpServletResponse.SC_BAD_REQUEST, (url == null ? "n/a" : url));
+			response.sendError(HttpServletResponse.SC_BAD_REQUEST);
 		} catch (IOException e) {
 			log.error("Send 400 failed: url=" + url, e);
 		}
@@ -210,7 +206,7 @@ public class DispatcherModule {
 	}
 
 	public static void handleError() {
-		if (log.isDebug()) log.debug("handleError : do rollback");
+		if (log.isDebugEnabled()) log.debug("handleError : do rollback");
 		DBFactory.getInstance().rollbackAndCloseSession();
 	}
 	

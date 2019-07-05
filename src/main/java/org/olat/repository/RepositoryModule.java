@@ -23,7 +23,7 @@ import org.olat.NewControllerFactory;
 import org.olat.core.configuration.AbstractSpringModule;
 import org.olat.core.id.Roles;
 import org.olat.core.id.context.SiteContextEntryControllerCreator;
-import org.olat.core.logging.OLog;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.StringHelper;
 import org.olat.core.util.coordinate.CoordinatorManager;
@@ -49,7 +49,7 @@ import org.springframework.stereotype.Service;
 @Service("repositoryModule")
 public class RepositoryModule extends AbstractSpringModule {
 	
-	private static final OLog log = Tracing.createLoggerFor(RepositoryModule.class);
+	private static final Logger log = Tracing.createLoggerFor(RepositoryModule.class);
 
 	private static final String MANAGED_REPOENTRY_ENABLED = "managedRepositoryEntries";
 	private static final String CATALOG_SITE_ENABLED = "site.catalog.enable";
@@ -64,9 +64,11 @@ public class RepositoryModule extends AbstractSpringModule {
 	private static final String ALLOW_TO_LEAVE_DEFAULT_OPTION = "repo.allow.to.leave";
 	
 	private static final String LIFECYCLE_AUTO_CLOSE = "repo.lifecycle.auto.close";
-	private static final String LIFECYCLE_AUTO_UNPUBLISH = "repo.lifecycle.auto.unpublish";
 	private static final String LIFECYCLE_AUTO_DELETE = "repo.lifecycle.auto.delete";
+	private static final String LIFECYCLE_NOTIFICATION_CLOSE_DELETE = "rrepo.lifecylce.notification.close.delete";
 	
+	private static final String TAXONOMY_TREE_KEY = "taxonomy.tree.key";
+
 	@Value("${site.catalog.enable:true}")
 	private boolean catalogSiteEnabled;
 	@Value("${catalog.enable:true}")
@@ -87,13 +89,15 @@ public class RepositoryModule extends AbstractSpringModule {
 
 	@Value("${repo.lifecycle.auto.close:}")
 	private String lifecycleAutoClose;
-	@Value("${repo.lifecycle.auto.unpublish:}")
-	private String lifecycleAutoUnpublish;
 	@Value("${repo.lifecycle.auto.delete:}")
 	private String lifecycleAutoDelete;
+	@Value("${repo.lifecylce.notification.close.delete:}")
+	private String lifecycleNotificationByCloseDelete;
 	
 	@Value("${repo.allow.to.leave:atAnyTime}")
 	private String defaultAllowToLeaveOption;
+	
+	private String taxonomyTreeKey;
 	
 	@Autowired
 	private BusinessGroupModule groupModule;
@@ -190,14 +194,19 @@ public class RepositoryModule extends AbstractSpringModule {
 			lifecycleAutoClose = autoClose;
 		}
 		
-		String autoUnpublish = getStringPropertyValue(LIFECYCLE_AUTO_UNPUBLISH, true);
-		if(StringHelper.containsNonWhitespace(autoUnpublish)) {
-			lifecycleAutoUnpublish = autoUnpublish;
-		}
-		
 		String autoDelete = getStringPropertyValue(LIFECYCLE_AUTO_DELETE, true);
 		if(StringHelper.containsNonWhitespace(autoDelete)) {
 			lifecycleAutoDelete = autoDelete;
+		}
+		
+		String notificationCloseDelete = getStringPropertyValue(LIFECYCLE_NOTIFICATION_CLOSE_DELETE, true);
+		if(StringHelper.containsNonWhitespace(notificationCloseDelete)) {
+			lifecycleNotificationByCloseDelete = notificationCloseDelete;
+		}
+		
+		String taxonomyTreeKeyObj = getStringPropertyValue(TAXONOMY_TREE_KEY, true);
+		if(StringHelper.containsNonWhitespace(taxonomyTreeKeyObj)) {
+			taxonomyTreeKey = taxonomyTreeKeyObj;
 		}
 	}
 
@@ -324,19 +333,6 @@ public class RepositoryModule extends AbstractSpringModule {
 		setStringProperty(LIFECYCLE_AUTO_CLOSE, lifecycleAutoClose, true);
 	}
 
-	public String getLifecycleAutoUnpublish() {
-		return lifecycleAutoUnpublish;
-	}
-	
-	public RepositoryEntryLifeCycleValue getLifecycleAutoUnpublishValue() {
-		return RepositoryEntryLifeCycleValue.parse(lifecycleAutoUnpublish);
-	}
-
-	public void setLifecycleAutoUnpublish(String lifecycleAutoUnpublish) {
-		this.lifecycleAutoUnpublish = lifecycleAutoUnpublish;
-		setStringProperty(LIFECYCLE_AUTO_UNPUBLISH, lifecycleAutoUnpublish, true);
-	}
-
 	public String getLifecycleAutoDelete() {
 		return lifecycleAutoDelete;
 	}
@@ -350,6 +346,21 @@ public class RepositoryModule extends AbstractSpringModule {
 		setStringProperty(LIFECYCLE_AUTO_DELETE, lifecycleAutoDelete, true);
 	}
 	
-
+	public boolean isLifecycleNotificationByCloseDeleteEnabled() {
+		return "enabled".equals(lifecycleNotificationByCloseDelete);
+	}
 	
+	public void setLifecycleNotificationByCloseDeleteEnabled(boolean enable) {
+		lifecycleNotificationByCloseDelete = enable ? "enabled" : "disabled";
+		setStringProperty(LIFECYCLE_NOTIFICATION_CLOSE_DELETE, lifecycleNotificationByCloseDelete, true);
+	}
+
+	public String getTaxonomyTreeKey() {
+		return taxonomyTreeKey;
+	}
+
+	public void setTaxonomyTreeKey(String taxonomyTreeKey) {
+		this.taxonomyTreeKey = taxonomyTreeKey;
+		setStringProperty(TAXONOMY_TREE_KEY, taxonomyTreeKey, true);
+	}
 }

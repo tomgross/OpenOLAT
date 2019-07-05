@@ -27,18 +27,14 @@ package org.olat.modules.sharedfolder;
 
 import java.io.File;
 
-import org.olat.core.commons.modules.bc.vfs.OlatNamedContainerImpl;
-import org.olat.core.commons.modules.bc.vfs.OlatRootFolderImpl;
 import org.olat.core.commons.persistence.DBFactory;
 import org.olat.core.commons.services.webdav.servlets.RequestUtil;
-import org.olat.core.gui.media.CleanupAfterDeliveryFileMediaResource;
 import org.olat.core.gui.media.MediaResource;
+import org.olat.core.gui.media.ZippedContainerMediaResource;
 import org.olat.core.id.OLATResourceable;
-import org.olat.core.util.WebappHelper;
-import org.olat.core.util.ZipUtil;
-import org.olat.core.util.vfs.LocalFileImpl;
+import org.olat.core.util.vfs.LocalFolderImpl;
+import org.olat.core.util.vfs.NamedContainerImpl;
 import org.olat.core.util.vfs.VFSContainer;
-import org.olat.core.util.vfs.version.VersionsManager;
 import org.olat.fileresource.FileResourceManager;
 import org.olat.fileresource.types.SharedFolderFileResource;
 import org.olat.repository.RepositoryEntry;
@@ -80,12 +76,12 @@ public class SharedFolderManager {
 		if(urlCompliant) {
 			name = RequestUtil.normalizeFilename(name);
 		}
-		OlatRootFolderImpl folder = getSharedFolder(re.getOlatResource());
-		return folder == null ? null : new OlatNamedContainerImpl(name, folder);
+		VFSContainer folder = getSharedFolder(re.getOlatResource());
+		return folder == null ? null : new NamedContainerImpl(name, folder);
 	}
 
-	public OlatRootFolderImpl getSharedFolder(OLATResourceable res) {
-		OlatRootFolderImpl rootFolderImpl = (OlatRootFolderImpl)FileResourceManager.getInstance().getFileResourceRootImpl(res).resolve(SharedFolderManager.FOLDER_NAME);
+	public LocalFolderImpl getSharedFolder(OLATResourceable res) {
+		LocalFolderImpl rootFolderImpl = (LocalFolderImpl)FileResourceManager.getInstance().getFileResourceRootImpl(res).resolve(SharedFolderManager.FOLDER_NAME);
 		if (rootFolderImpl != null) {
 			rootFolderImpl.setLocalSecurityCallback(new SharedFolderSecurityCallback(rootFolderImpl.getRelPath()));
 		}
@@ -94,18 +90,10 @@ public class SharedFolderManager {
 
 	public MediaResource getAsMediaResource(OLATResourceable res) {
 		String exportFileName = res.getResourceableId() + ".zip";
-		File fExportZIP = new File(WebappHelper.getTmpDir() + "/" + exportFileName);
 		VFSContainer sharedFolder = getSharedFolder(res);
-		
-		//OLAT-5368: do intermediate commit to avoid transaction timeout
-		// discussion intermediatecommit vs increased transaction timeout:
-		//  pro intermediatecommit: not much
-		//  pro increased transaction timeout: would fix OLAT-5368 but only move the problem
-		//@TODO OLAT-2597: real solution is a long-running background-task concept...
+		// do intermediate commit to avoid transaction timeout
 		DBFactory.getInstance().intermediateCommit();
-
-		ZipUtil.zip(sharedFolder.getItems(), new LocalFileImpl(fExportZIP), false);
-		return new CleanupAfterDeliveryFileMediaResource(fExportZIP);
+		return new ZippedContainerMediaResource(exportFileName, sharedFolder);
 	}
 
 	public boolean exportSharedFolder(String sharedFolderSoftkey, File exportedDataDir) {
@@ -115,11 +103,7 @@ public class SharedFolderManager {
 		File fExportBaseDirectory = new File(exportedDataDir, "sharedfolder");
 		if (!fExportBaseDirectory.mkdir()) return false;
 
-		//OLAT-5368: do intermediate commit to avoid transaction timeout
-		// discussion intermediatecommit vs increased transaction timeout:
-		//  pro intermediatecommit: not much
-		//  pro increased transaction timeout: would fix OLAT-5368 but only move the problem
-		//@TODO OLAT-2597: real solution is a long-running background-task concept...
+		// do intermediate commit to avoid transaction timeout
 		DBFactory.getInstance().intermediateCommit();
 
 		// export properties
@@ -133,8 +117,6 @@ public class SharedFolderManager {
 	}
 
 	public void deleteSharedFolder(OLATResourceable res) {
-		VFSContainer rootContainer = FileResourceManager.getInstance().getFileResourceRootImpl(res);
-		VersionsManager.getInstance().delete(rootContainer,true);
 		FileResourceManager.getInstance().deleteFileResource(res);
 	}
 	
@@ -150,10 +132,6 @@ public class SharedFolderManager {
 
 	public boolean validate(File f) {
 		String name = f.getName();
-		if (name.equals(FOLDER_NAME) || name.equals(FOLDER_NAME + ".zip")) {
-			return true;
-		} else {
-			return false;
-		}
+		return name.equals(FOLDER_NAME) || name.equals(FOLDER_NAME + ".zip");
 	}
 }

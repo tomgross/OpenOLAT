@@ -23,17 +23,24 @@ import java.io.File;
 import java.util.List;
 import java.util.Locale;
 
+import org.olat.basesecurity.GroupRoles;
+import org.olat.basesecurity.OrganisationRoles;
+import org.olat.core.CoreSpringFactory;
+import org.olat.core.commons.services.notifications.SubscriptionContext;
 import org.olat.core.gui.UserRequest;
 import org.olat.core.gui.components.stack.BreadcrumbPanel;
 import org.olat.core.gui.control.Controller;
 import org.olat.core.gui.control.WindowControl;
 import org.olat.core.gui.control.generic.tabbable.TabbableController;
 import org.olat.core.id.Identity;
+import org.olat.core.id.Organisation;
+import org.olat.core.id.Roles;
 import org.olat.core.id.context.BusinessControlFactory;
 import org.olat.core.id.context.ContextEntry;
 import org.olat.core.logging.activity.ThreadLocalUserActivityLogger;
 import org.olat.core.util.Util;
 import org.olat.core.util.ValidationStatus;
+import org.olat.course.CourseModule;
 import org.olat.course.ICourse;
 import org.olat.course.editor.CourseEditorEnv;
 import org.olat.course.editor.NodeEditController;
@@ -48,12 +55,12 @@ import org.olat.course.run.userview.UserCourseEnvironment;
 import org.olat.fileresource.types.BlogFileResource;
 import org.olat.modules.webFeed.FeedReadOnlySecurityCallback;
 import org.olat.modules.webFeed.FeedSecurityCallback;
-import org.olat.modules.webFeed.managers.FeedManager;
+import org.olat.modules.webFeed.manager.FeedManager;
 import org.olat.modules.webFeed.ui.FeedMainController;
 import org.olat.modules.webFeed.ui.FeedUIFactory;
 import org.olat.modules.webFeed.ui.blog.BlogUIFactory;
 import org.olat.repository.RepositoryEntry;
-import org.olat.repository.RepositoryManager;
+import org.olat.repository.RepositoryService;
 import org.olat.repository.handlers.RepositoryHandler;
 import org.olat.repository.handlers.RepositoryHandlerFactory;
 import org.olat.util.logging.activity.LoggingResourceable;
@@ -77,78 +84,63 @@ public class BlogCourseNode extends AbstractFeedCourseNode {
 		updateModuleConfigDefaults(true);
 	}
 
-	/**
-	 * @see org.olat.course.nodes.AbstractAccessableCourseNode#createEditController(org.olat.core.gui.UserRequest,
-	 *      org.olat.core.gui.control.WindowControl, org.olat.course.ICourse,
-	 *      org.olat.course.run.userview.UserCourseEnvironment)
-	 */
 	@Override
 	public TabbableController createEditController(UserRequest ureq, WindowControl wControl,  BreadcrumbPanel stackPanel, ICourse course, UserCourseEnvironment euce) {
 		TabbableController blogChildController = new BlogNodeEditController(this, course, euce, ureq, wControl);
 		return new NodeEditController(ureq, wControl, course.getEditorTreeModel(), course, euce, blogChildController);
 	}
 
-	/**
-	 * @see org.olat.course.nodes.AbstractAccessableCourseNode#createNodeRunConstructionResult(org.olat.core.gui.UserRequest,
-	 *      org.olat.core.gui.control.WindowControl,
-	 *      org.olat.course.run.userview.UserCourseEnvironment,
-	 *      org.olat.course.run.userview.NodeEvaluation, java.lang.String)
-	 */
 	@Override
 	public NodeRunConstructionResult createNodeRunConstructionResult(UserRequest ureq, WindowControl wControl,
 			UserCourseEnvironment userCourseEnv, NodeEvaluation ne, String nodecmd) {
 		RepositoryEntry entry = getReferencedRepositoryEntry();
-		// create business path courseID:nodeID
-		// userCourseEnv.getCourseEnvironment().getCourseResourceableId();
-		// getIdent();
-		Long courseId = userCourseEnv.getCourseEnvironment().getCourseResourceableId();
-		String nodeId = this.getIdent();
-		boolean isAdmin = ureq.getUserSession().getRoles().isOLATAdmin();
-		boolean isGuest = ureq.getUserSession().getRoles().isGuestOnly();
-		boolean isOwner = RepositoryManager.getInstance().isOwnerOfRepositoryEntry(ureq.getIdentity(), entry);
-		FeedSecurityCallback callback;
-		if(userCourseEnv.isCourseReadOnly()) {
-			callback = new FeedReadOnlySecurityCallback();
-		} else {
-			callback = new FeedNodeSecurityCallback(ne, isAdmin, isOwner, isGuest);
-		}
+		FeedSecurityCallback callback = getFeedSecurityCallback(ureq, entry, userCourseEnv, ne);
+		
+		SubscriptionContext subsContext = CourseModule.createSubscriptionContext(userCourseEnv.getCourseEnvironment(), this); 
+		callback.setSubscriptionContext(subsContext);
 		ThreadLocalUserActivityLogger.addLoggingResourceInfo(LoggingResourceable.wrap(this));
-		FeedMainController blogCtr = BlogUIFactory.getInstance(ureq.getLocale()).createMainController(entry.getOlatResource(), ureq, wControl, callback,
-				courseId, nodeId);
+		Long courseId = userCourseEnv.getCourseEnvironment().getCourseResourceableId();
+		FeedMainController blogCtr = BlogUIFactory.getInstance(ureq.getLocale())
+				.createMainController(entry.getOlatResource(), ureq, wControl, callback, courseId, getIdent());
 		List<ContextEntry> entries = BusinessControlFactory.getInstance().createCEListFromResourceType(nodecmd);
 		blogCtr.activate(ureq, entries, null);
 		Controller wrapperCtrl = TitledWrapperHelper.getWrapper(ureq, wControl, blogCtr, this, "o_blog_icon");
-		NodeRunConstructionResult result = new NodeRunConstructionResult(wrapperCtrl);
-		return result;
-
+		return new NodeRunConstructionResult(wrapperCtrl);
 	}
 
-	/**
-	 * @see org.olat.course.nodes.GenericCourseNode#createPeekViewRunController(org.olat.core.gui.UserRequest,
-	 *      org.olat.core.gui.control.WindowControl,
-	 *      org.olat.course.run.userview.UserCourseEnvironment,
-	 *      org.olat.course.run.userview.NodeEvaluation)
-	 */
 	@Override
 	public Controller createPeekViewRunController(UserRequest ureq, WindowControl wControl, UserCourseEnvironment userCourseEnv,
 			NodeEvaluation ne) {
 		if (ne.isAtLeastOneAccessible()) {
 			// Create a feed peekview controller that shows the latest two entries
 			RepositoryEntry entry = getReferencedRepositoryEntry();
-			Long courseId = userCourseEnv.getCourseEnvironment().getCourseResourceableId();
-			String nodeId = this.getIdent();
-			boolean isAdmin = ureq.getUserSession().getRoles().isOLATAdmin();
-			boolean isGuest = ureq.getUserSession().getRoles().isGuestOnly();
-			//fxdiff BAKS-18
-			boolean isOwner = RepositoryManager.getInstance().isOwnerOfRepositoryEntry(ureq.getIdentity(), entry);
-			FeedSecurityCallback callback = new FeedNodeSecurityCallback(ne, isAdmin, isOwner, isGuest);
+			FeedSecurityCallback callback = getFeedSecurityCallback(ureq, entry, userCourseEnv, ne);
 			FeedUIFactory uiFactory = BlogUIFactory.getInstance(ureq.getLocale());
-			Controller peekViewController = new FeedPeekviewController(entry.getOlatResource(), ureq, wControl, callback, courseId, nodeId, uiFactory, 2, "o_blog_peekview");
-			return peekViewController;
+			Long courseId = userCourseEnv.getCourseEnvironment().getCourseResourceableId();
+			return new FeedPeekviewController(entry.getOlatResource(), ureq, wControl, callback, courseId, getIdent(), uiFactory, 2, "o_blog_peekview");
 		} else {
 			// use standard peekview
 			return super.createPeekViewRunController(ureq, wControl, userCourseEnv, ne);
 		}
+	}
+	
+	private FeedSecurityCallback getFeedSecurityCallback(UserRequest ureq, RepositoryEntry entry,
+			UserCourseEnvironment userCourseEnv, NodeEvaluation ne) {
+		FeedSecurityCallback callback;
+		if(userCourseEnv.isCourseReadOnly()) {
+			callback = new FeedReadOnlySecurityCallback();
+		} else {
+			Roles roles = ureq.getUserSession().getRoles();
+			RepositoryService repositoryService = CoreSpringFactory.getImpl(RepositoryService.class);
+
+			boolean isGuest = roles.isGuestOnly();
+			boolean isAdmin = (roles.isAdministrator() || roles.isLearnResourceManager())
+					&& repositoryService.hasRoleExpanded(ureq.getIdentity(), entry,
+							OrganisationRoles.administrator.name(), OrganisationRoles.learnresourcemanager.name());
+			boolean isOwner = !isGuest && repositoryService.hasRole(ureq.getIdentity(), entry, GroupRoles.owner.name());
+			callback = new FeedNodeSecurityCallback(ne, isAdmin, isOwner, isGuest);
+		}
+		return callback;
 	}
 
 	@Override
@@ -156,9 +148,6 @@ public class BlogCourseNode extends AbstractFeedCourseNode {
 		return CourseNode.DISPLAY_OPTS_CONTENT;
 	}
 
-	/**
-	 * @see org.olat.course.nodes.GenericCourseNode#isConfigValid(org.olat.course.editor.CourseEditorEnv)
-	 */
 	@Override
 	public StatusDescription[] isConfigValid(CourseEditorEnv cev) {
 		oneClickStatusCache = null;
@@ -188,10 +177,10 @@ public class BlogCourseNode extends AbstractFeedCourseNode {
 	}
 
 	@Override
-	public void importNode(File importDirectory, ICourse course, Identity owner, Locale locale, boolean withReferences) {
+	public void importNode(File importDirectory, ICourse course, Identity owner, Organisation organisation, Locale locale, boolean withReferences) {
 		if(withReferences) {
 			RepositoryHandler handler = RepositoryHandlerFactory.getInstance().getRepositoryHandler(BlogFileResource.TYPE_NAME);
-			importFeed(handler, importDirectory, owner, locale);
+			importFeed(handler, importDirectory, owner, organisation, locale);
 		} else {
 			FeedNodeEditController.removeReference(getModuleConfiguration());
 		}

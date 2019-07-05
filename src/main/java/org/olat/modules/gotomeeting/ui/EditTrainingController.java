@@ -67,7 +67,7 @@ public class EditTrainingController extends FormBasicController {
 	private final GoToMeeting meeting;
 	
 	private CloseableModalController cmc;
-	private EditOrganizerController addOrganizerController;
+	private LoginOrganizerController addOrganizerController;
 
 	@Autowired
 	private GoToMeetingManager meetingManager;
@@ -129,7 +129,7 @@ public class EditTrainingController extends FormBasicController {
 		nameEl = uifactory.addTextElement("training.name", "training.name", 128, name, formLayout);
 		nameEl.setMandatory(true);
 		String description = meeting == null ? "" : meeting.getDescription();
-		descriptionEl = uifactory.addTextAreaElement("training.description", "training.description", 2000, 8, 72, false, description, formLayout);
+		descriptionEl = uifactory.addTextAreaElement("training.description", "training.description", 2000, 8, 72, false, false, description, formLayout);
 
 		Date startDate = meeting == null ? null : meeting.getStartDate();
 		startDateEl = uifactory.addDateChooser("training.start", "training.start", startDate, formLayout);
@@ -153,7 +153,7 @@ public class EditTrainingController extends FormBasicController {
 
 	@Override
 	protected boolean validateFormLogic(UserRequest ureq) {
-		boolean allOk = true;
+		boolean allOk = super.validateFormLogic(ureq);
 		
 		if(meeting == null || meeting.getOrganizer() == null) {
 			organizersEl.clearError();
@@ -201,7 +201,7 @@ public class EditTrainingController extends FormBasicController {
 			}
 		}
 		
-		return allOk & super.validateFormLogic(ureq);
+		return allOk;
 	}
 
 	@Override
@@ -264,7 +264,7 @@ public class EditTrainingController extends FormBasicController {
 	private void doAddPersonalAccount(UserRequest ureq) {
 		if(addOrganizerController != null) return;
 		
-		addOrganizerController = new EditOrganizerController(ureq, getWindowControl(), getIdentity());
+		addOrganizerController = new LoginOrganizerController(ureq, getWindowControl(), getIdentity());
 		listenTo(addOrganizerController);
 		
 		cmc = new CloseableModalController(getWindowControl(), translate("close"), addOrganizerController.getInitialComponent(),

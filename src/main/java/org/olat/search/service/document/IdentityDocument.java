@@ -21,11 +21,12 @@ package org.olat.search.service.document;
 
 import java.util.List;
 
+import org.apache.logging.log4j.Logger;
 import org.apache.lucene.document.Document;
+import org.olat.core.CoreSpringFactory;
 import org.olat.core.gui.util.CSSHelper;
 import org.olat.core.id.Identity;
 import org.olat.core.id.User;
-import org.olat.core.logging.OLog;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.StringHelper;
 import org.olat.core.util.filter.FilterFactory;
@@ -34,7 +35,6 @@ import org.olat.search.model.OlatDocument;
 import org.olat.search.service.SearchResourceContext;
 import org.olat.user.HomePageConfig;
 import org.olat.user.HomePageConfigManager;
-import org.olat.user.HomePageConfigManagerImpl;
 import org.olat.user.UserManager;
 import org.olat.user.propertyhandlers.UserPropertyHandler;
 
@@ -50,7 +50,7 @@ import org.olat.user.propertyhandlers.UserPropertyHandler;
 public class IdentityDocument extends OlatDocument {
 
 	private static final long serialVersionUID = -7433744122379433733L;
-	private static final OLog log = Tracing.createLoggerFor(IdentityDocument.class);
+	private static final Logger log = Tracing.createLoggerFor(IdentityDocument.class);
 	
 	
 	/**
@@ -61,12 +61,11 @@ public class IdentityDocument extends OlatDocument {
 	 */
 	public static Document createDocument(SearchResourceContext searchResourceContext, Identity identity) {		
 
-		UserManager userMgr = UserManager.getInstance();
-		User user = identity.getUser();
-		
-		HomePageConfigManager homepageMgr = HomePageConfigManagerImpl.getInstance();
+		UserManager userMgr = CoreSpringFactory.getImpl(UserManager.class);
+		HomePageConfigManager homepageMgr = CoreSpringFactory.getImpl(HomePageConfigManager.class);
 		HomePageConfig publishConfig = homepageMgr.loadConfigFor(identity.getName());
 
+		User user = identity.getUser();
 		IdentityDocument identityDocument = new IdentityDocument();
 		identityDocument.setTitle(identity.getName());
 		identityDocument.setCreatedDate(user.getCreationDate());
@@ -99,7 +98,7 @@ public class IdentityDocument extends OlatDocument {
 		identityDocument.setDocumentType(searchResourceContext.getParentContextType());
 		identityDocument.setCssIcon(CSSHelper.CSS_CLASS_USER);
 		
-		if (log.isDebug()) log.debug(identityDocument.toString());
+		if (log.isDebugEnabled()) log.debug(identityDocument.toString());
 		return identityDocument.getLuceneDocument();
 	}	
 }

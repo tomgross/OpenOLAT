@@ -21,7 +21,7 @@ package org.olat.test;
 
 import java.util.Locale;
 
-import org.apache.log4j.Level;
+import org.apache.logging.log4j.Level;
 import org.olat.core.gui.translator.Translator;
 
 /**
@@ -49,6 +49,11 @@ public class KeyTranslator implements Translator {
 	public void setLocale(Locale locale) {
 		this.locale = locale;
 	}
+	
+	@Override
+	public String getPackageName() {
+		return "";
+	}
 
 	@Override
 	public String translate(String key) {
@@ -66,7 +71,7 @@ public class KeyTranslator implements Translator {
 	}
 
 	@Override
-	public String translate(String key, String[] args, boolean fallBackToDefaultLocale) {
+	public String translate(String key, String[] args, int recursionLevel, boolean fallBackToDefaultLocale) {
 		return key;
 	}
 }

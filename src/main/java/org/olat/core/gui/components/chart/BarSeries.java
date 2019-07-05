@@ -34,10 +34,14 @@ public class BarSeries {
 	private final String color;
 	private final String legend;
 	private final String cssClass;
-	private List<BarPoint> points = new ArrayList<BarPoint>();
+	private List<BarPoint> points = new ArrayList<>();
 	
 	public BarSeries() {
 		this(null, null, null);
+	}
+	
+	public BarSeries(String cssClass) {
+		this(cssClass, null, null);
 	}
 	
 	public BarSeries(String cssClass, String color, String legend) {
@@ -58,7 +62,7 @@ public class BarSeries {
 		return legend;
 	}
 
-	protected List<BarPoint> getPoints() {
+	public List<BarPoint> getPoints() {
 		return points;
 	}
 	
@@ -165,12 +169,12 @@ public class BarSeries {
 		}	
 	}
 
-	protected static class BarPoint {
+	public static class BarPoint {
 		private final Comparable<?> category;
 		private final double value;
 		private final String cssColor;
 		
-		public BarPoint(double value, Comparable<?> category, String cssColor) {
+		BarPoint(double value, Comparable<?> category, String cssColor) {
 			this.value = value;
 			this.category = category;
 			this.cssColor = cssColor;

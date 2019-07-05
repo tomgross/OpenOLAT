@@ -84,6 +84,7 @@ public class CalendarPersonalConfigurationController extends FormBasicController
 	private int counter;
 	private final boolean allowImport;
 	private List<KalendarRenderWrapper> calendars;
+	private final List<KalendarRenderWrapper> alwaysVisibleKalendars;
 	
 	@Autowired
 	private CalendarManager calendarManager;
@@ -91,10 +92,11 @@ public class CalendarPersonalConfigurationController extends FormBasicController
 	private ImportCalendarManager importCalendarManager;
 
 	public CalendarPersonalConfigurationController(UserRequest ureq, WindowControl wControl,
-			List<KalendarRenderWrapper> calendars, boolean allowImport) {
+			List<KalendarRenderWrapper> calendars, List<KalendarRenderWrapper> alwaysVisibleKalendars, boolean allowImport) {
 		super(ureq, wControl, "configuration");
 		this.calendars = calendars;
 		this.allowImport = allowImport;
+		this.alwaysVisibleKalendars = alwaysVisibleKalendars;
 		setTranslator(Util.createPackageTranslator(CalendarManager.class, getLocale(), getTranslator()));
 		
 		initForm(ureq);
@@ -111,16 +113,12 @@ public class CalendarPersonalConfigurationController extends FormBasicController
 		
 		//add the table
 		FlexiTableColumnModel columnsModel = FlexiTableDataModelFactory.createFlexiTableColumnModel();
-		columnsModel.addFlexiColumnModel(new DefaultFlexiColumnModel(ConfigCols.type.i18nKey(), ConfigCols.type.ordinal(),
-				true, ConfigCols.type.name(), new CalendarTypeClassRenderer()));
-		columnsModel.addFlexiColumnModel(new DefaultFlexiColumnModel(ConfigCols.cssClass.i18nKey(), ConfigCols.cssClass.ordinal(),
-				true, ConfigCols.cssClass.name()));
-		columnsModel.addFlexiColumnModel(new DefaultFlexiColumnModel(ConfigCols.name.i18nKey(), ConfigCols.name.ordinal(),
-				true, ConfigCols.name.name()));
-		columnsModel.addFlexiColumnModel(new DefaultFlexiColumnModel(ConfigCols.visible.i18nKey(), ConfigCols.visible.ordinal(),
-				true, ConfigCols.visible.name()));
-		columnsModel.addFlexiColumnModel(new DefaultFlexiColumnModel(ConfigCols.aggregated.i18nKey(), ConfigCols.aggregated.ordinal(),
-				true, ConfigCols.aggregated.name()));
+		columnsModel.addFlexiColumnModel(new DefaultFlexiColumnModel(ConfigCols.type, new CalendarTypeClassRenderer()));
+		columnsModel.addFlexiColumnModel(new DefaultFlexiColumnModel(ConfigCols.cssClass));
+		columnsModel.addFlexiColumnModel(new DefaultFlexiColumnModel(ConfigCols.name));
+		columnsModel.addFlexiColumnModel(new DefaultFlexiColumnModel(ConfigCols.identifier));
+		columnsModel.addFlexiColumnModel(new DefaultFlexiColumnModel(ConfigCols.visible));
+		columnsModel.addFlexiColumnModel(new DefaultFlexiColumnModel(ConfigCols.aggregated));
 		columnsModel.addFlexiColumnModel(new DefaultFlexiColumnModel(ConfigCols.feed.i18nKey(), ConfigCols.feed.ordinal()));
 		columnsModel.addFlexiColumnModel(new DefaultFlexiColumnModel(ConfigCols.tools.i18nKey(), ConfigCols.tools.ordinal()));
 		
@@ -147,7 +145,12 @@ public class CalendarPersonalConfigurationController extends FormBasicController
 		row.setColorLink(colorLink);
 		
 		FormLink visibleLink = uifactory.addFormLink("vis_" + (++counter), "visible", "", null, null, Link.NONTRANSLATED);
-		enableDisableIcons(visibleLink, row.isVisible());
+		if(isAlwaysVisible(row)) {
+			enableDisableIcons(visibleLink, true);
+			visibleLink.setEnabled(false);
+		} else {
+			enableDisableIcons(visibleLink, row.isVisible());
+		}
 		visibleLink.setUserObject(row);
 		row.setVisibleLink(visibleLink);
 
@@ -165,6 +168,20 @@ public class CalendarPersonalConfigurationController extends FormBasicController
 		toolsLink.setIconLeftCSS("o_icon o_icon-lg o_icon_actions");
 		toolsLink.setUserObject(row);
 		row.setToolsLink(toolsLink);
+	}
+	
+	private boolean isAlwaysVisible(CalendarPersonalConfigurationRow row) {
+		if(alwaysVisibleKalendars == null || alwaysVisibleKalendars.isEmpty()) return false;
+		
+		for(KalendarRenderWrapper alwaysVisibleKalendar:alwaysVisibleKalendars) {
+			if(alwaysVisibleKalendar.getKalendar().getCalendarID().equals(row.getCalendarId())
+					&& alwaysVisibleKalendar.getKalendar().getType().equals(row.getCalendarType())) {
+				return true;
+			}
+			
+		}
+		
+		return false;
 	}
 	
 	private void enableDisableIcons(FormLink link, boolean enabled) {

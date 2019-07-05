@@ -27,7 +27,6 @@ package org.olat.course.nodes;
 
 import java.io.File;
 import java.io.IOException;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.zip.ZipOutputStream;
@@ -35,7 +34,6 @@ import java.util.zip.ZipOutputStream;
 import org.olat.core.CoreSpringFactory;
 import org.olat.core.gui.UserRequest;
 import org.olat.core.gui.components.stack.BreadcrumbPanel;
-import org.olat.core.gui.components.stack.TooledStackedPanel;
 import org.olat.core.gui.control.Controller;
 import org.olat.core.gui.control.WindowControl;
 import org.olat.core.gui.control.generic.messages.MessageUIFactory;
@@ -44,8 +42,9 @@ import org.olat.core.gui.translator.PackageTranslator;
 import org.olat.core.gui.translator.Translator;
 import org.olat.core.id.Identity;
 import org.olat.core.id.OLATResourceable;
+import org.olat.core.id.Organisation;
 import org.olat.core.id.Roles;
-import org.olat.core.logging.OLog;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.Util;
 import org.olat.core.util.coordinate.CoordinatorManager;
@@ -58,13 +57,14 @@ import org.olat.course.editor.StatusDescription;
 import org.olat.course.nodes.iq.CourseIQSecurityCallback;
 import org.olat.course.nodes.iq.IQEditController;
 import org.olat.course.nodes.iq.IQRunController;
+import org.olat.course.nodes.iq.QTIResourceTypeModule;
 import org.olat.course.properties.CoursePropertyManager;
-import org.olat.course.run.environment.CourseEnvironment;
 import org.olat.course.run.navigation.NodeRunConstructionResult;
 import org.olat.course.run.userview.NodeEvaluation;
 import org.olat.course.run.userview.UserCourseEnvironment;
 import org.olat.course.statistic.StatisticResourceOption;
 import org.olat.course.statistic.StatisticResourceResult;
+import org.olat.course.statistic.StatisticType;
 import org.olat.fileresource.types.ImsQTI21Resource;
 import org.olat.ims.qti.QTIResultManager;
 import org.olat.ims.qti.export.QTIExportFormatter;
@@ -74,23 +74,19 @@ import org.olat.ims.qti.fileresource.SurveyFileResource;
 import org.olat.ims.qti.process.AssessmentInstance;
 import org.olat.ims.qti.statistics.QTIStatisticResourceResult;
 import org.olat.ims.qti.statistics.QTIStatisticSearchParams;
-import org.olat.ims.qti.statistics.QTIType;
-import org.olat.ims.qti.statistics.ui.QTI12StatisticsToolController;
 import org.olat.ims.qti21.QTI21DeliveryOptions;
 import org.olat.ims.qti21.QTI21Service;
 import org.olat.ims.qti21.model.QTI21StatisticSearchParams;
 import org.olat.ims.qti21.ui.statistics.QTI21StatisticResourceResult;
 import org.olat.ims.qti21.ui.statistics.QTI21StatisticsSecurityCallback;
 import org.olat.modules.ModuleConfiguration;
-import org.olat.modules.assessment.AssessmentToolOptions;
+import org.olat.modules.assessment.Role;
 import org.olat.modules.iq.IQSecurityCallback;
 import org.olat.repository.RepositoryEntry;
 import org.olat.repository.RepositoryEntryImportExport;
 import org.olat.repository.RepositoryManager;
 import org.olat.repository.handlers.RepositoryHandler;
 import org.olat.repository.handlers.RepositoryHandlerFactory;
-
-import de.bps.onyx.plugin.run.OnyxRunController;
 
 /**
  * Initial Date: Feb 9, 2004
@@ -100,7 +96,7 @@ import de.bps.onyx.plugin.run.OnyxRunController;
 public class IQSURVCourseNode extends AbstractAccessableCourseNode implements QTICourseNode {
 
 	private static final long serialVersionUID = 1672009454920536416L;
-	private static final OLog log = Tracing.createLoggerFor(IQSURVCourseNode.class);
+	private static final Logger log = Tracing.createLoggerFor(IQSURVCourseNode.class);
 
 	private static final String TYPE = "iqsurv";
 	/** category that is used to persist the node properties */
@@ -143,13 +139,12 @@ public class IQSURVCourseNode extends AbstractAccessableCourseNode implements QT
 			String message = trans.translate("guestnoaccess.message");
 			controller = MessageUIFactory.createInfoMessage(ureq, wControl, title, message);
 		} else {
-			ModuleConfiguration config = getModuleConfiguration();
-			boolean onyx = IQEditController.CONFIG_VALUE_QTI2.equals(config.get(IQEditController.CONFIG_KEY_TYPE_QTI));
-			if (onyx) {
-				controller = new OnyxRunController(userCourseEnv, config, ureq, wControl, this);
+			RepositoryEntry repositoryEntry = getReferencedRepositoryEntry();
+			OLATResourceable ores = repositoryEntry.getOlatResource();
+			if (QTIResourceTypeModule.isOnyxTest(ores)) {
+				Translator trans = Util.createPackageTranslator(IQEditController.class, ureq.getLocale());
+				controller = MessageUIFactory.createInfoMessage(ureq, wControl, "", trans.translate("error.onyx"));
 			} else {
-				RepositoryEntry repositoryEntry = getReferencedRepositoryEntry();
-				OLATResourceable ores = repositoryEntry.getOlatResource();
 				Long resId = ores.getResourceableId();
 				SurveyFileResource fr = new SurveyFileResource();
 				fr.overrideResourceableId(resId);
@@ -169,20 +164,11 @@ public class IQSURVCourseNode extends AbstractAccessableCourseNode implements QT
 		Controller ctrl = TitledWrapperHelper.getWrapper(ureq, wControl, controller, this, "o_iqsurv_icon");
 		return new NodeRunConstructionResult(ctrl);
 	}
-	
-	@Override
-	public List<Controller> createAssessmentTools(UserRequest ureq, WindowControl wControl, TooledStackedPanel stackPanel,
-			UserCourseEnvironment coachCourseEnv, AssessmentToolOptions options) {
-		List<Controller> tools = new ArrayList<>(2);
-		CourseEnvironment courseEnv = coachCourseEnv.getCourseEnvironment();
-		tools.add(new QTI12StatisticsToolController(ureq, wControl, stackPanel, courseEnv, options, this));
-		return tools;
-	}
 
 	@Override
 	public StatisticResourceResult createStatisticNodeResult(UserRequest ureq, WindowControl wControl,
-			UserCourseEnvironment userCourseEnv, StatisticResourceOption options, QTIType... types) {
-		if(!isQTITypeAllowed(types)) return null;
+			UserCourseEnvironment userCourseEnv, StatisticResourceOption options, StatisticType type) {
+		if(!isStatisticTypeAllowed(type)) return null;
 		
 		Long courseId = userCourseEnv.getCourseEnvironment().getCourseResourceableId();
 		OLATResourceable courseOres = OresHelper.createOLATResourceableInstance("CourseModule", courseId);
@@ -205,25 +191,17 @@ public class IQSURVCourseNode extends AbstractAccessableCourseNode implements QT
 	}
 	
 	@Override
-	public boolean isStatisticNodeResultAvailable(UserCourseEnvironment userCourseEnv, QTIType... types) {
-		return isQTITypeAllowed(types);
+	public boolean isStatisticNodeResultAvailable(UserCourseEnvironment userCourseEnv, StatisticType type) {
+		return isStatisticTypeAllowed(type);
 	}
 	
-	private boolean isQTITypeAllowed(QTIType... types) {
-		if(types == null) return true;
-		if(types.length == 0 || (types.length == 1 && types[0] == null)) return true;
-		
-		for(QTIType type:types) {
-			if(QTIType.survey.equals(type)) {
-				return true;
-			}
+	private boolean isStatisticTypeAllowed(StatisticType type) {
+		if(StatisticType.SURVEY.equals(type)) {
+			return true;
 		}
 		return false;
 	}
 
-	/**
-	 * @see org.olat.course.nodes.CourseNode#isConfigValid()
-	 */
 	@Override
 	public StatusDescription isConfigValid() {
 		/*
@@ -308,6 +286,8 @@ public class IQSURVCourseNode extends AbstractAccessableCourseNode implements QT
 	 */
 	@Override
 	public void cleanupOnDelete(ICourse course) {
+		super.cleanupOnDelete(course);
+		
 		CoursePropertyManager pm = course.getCourseEnvironment().getCoursePropertyManager();
 		// 1) Delete all properties: attempts
 		pm.deleteNodeProperties(this, null);
@@ -320,14 +300,15 @@ public class IQSURVCourseNode extends AbstractAccessableCourseNode implements QT
 	}
 
 	@Override
-	public boolean archiveNodeData(Locale locale, ICourse course, ArchiveOptions options, ZipOutputStream exportStream, String charset) {
+	public boolean archiveNodeData(Locale locale, ICourse course, ArchiveOptions options,
+			ZipOutputStream exportStream, String archivePath, String charset) {
 		QTIExportManager qem = QTIExportManager.getInstance();
 		String repositorySoftKey = (String) getModuleConfiguration().get(IQEditController.CONFIG_KEY_REPOSITORY_SOFTKEY);
 		RepositoryEntry re = RepositoryManager.getInstance().lookupRepositoryEntryBySoftkey(repositorySoftKey, true);
 
 		QTIExportFormatter qef = new QTIExportFormatterCSVType3(locale, null,"\t", "\"", "\r\n", false);
 		try {
-			return qem.selectAndExportResults(qef, course.getResourceableId(), getShortTitle(), getIdent(), re, exportStream, locale, ".xls");
+			return qem.selectAndExportResults(qef, course.getResourceableId(), getShortTitle(), getIdent(), re, exportStream, archivePath, locale, ".xls");
 		} catch (IOException e) {
 			log.error("", e);
 			return false;
@@ -352,12 +333,12 @@ public class IQSURVCourseNode extends AbstractAccessableCourseNode implements QT
 	}
 
 	@Override
-	public void importNode(File importDirectory, ICourse course, Identity owner, Locale locale, boolean withReferences) {
+	public void importNode(File importDirectory, ICourse course, Identity owner, Organisation organisation, Locale locale, boolean withReferences) {
 		RepositoryEntryImportExport rie = new RepositoryEntryImportExport(importDirectory, getIdent());
 		if(withReferences && rie.anyExportedPropertiesAvailable()) {
 			RepositoryHandler handler = RepositoryHandlerFactory.getInstance().getRepositoryHandler(SurveyFileResource.TYPE_NAME);
 			RepositoryEntry re = handler.importResource(owner, rie.getInitialAuthor(), rie.getDisplayName(),
-				rie.getDescription(), false, locale, rie.importGetExportedFile(), null);
+				rie.getDescription(), false, organisation, locale, rie.importGetExportedFile(), null);
 			IQEditController.setIQReference(re, getModuleConfiguration());
 		} else {
 			IQEditController.removeIQReference(getModuleConfiguration());
@@ -372,6 +353,7 @@ public class IQSURVCourseNode extends AbstractAccessableCourseNode implements QT
 	 *          from previous node configuration version, set default to maintain
 	 *          previous behaviour
 	 */
+	@Override
 	public void updateModuleConfigDefaults(boolean isNewNode) {
 		ModuleConfiguration config = getModuleConfiguration();
 		if (isNewNode) {
@@ -397,6 +379,7 @@ public class IQSURVCourseNode extends AbstractAccessableCourseNode implements QT
 	/**
 	 * @see org.olat.course.nodes.AssessableCourseNode#hasAttemptsConfigured()
 	 */
+	@Override
 	public boolean hasAttemptsConfigured() {
 		return true;
 	}
@@ -406,21 +389,21 @@ public class IQSURVCourseNode extends AbstractAccessableCourseNode implements QT
 	 *      org.olat.course.run.userview.UserCourseEnvironment,
 	 *      org.olat.core.id.Identity)
 	 */
-	public void updateUserAttempts(Integer userAttempts, UserCourseEnvironment userCourseEnvironment, Identity coachingIdentity) {
+	public void updateUserAttempts(Integer userAttempts, UserCourseEnvironment userCourseEnvironment, Identity coachingIdentity, Role by) {
 		if (userAttempts != null) {
 			AssessmentManager am = userCourseEnvironment.getCourseEnvironment().getAssessmentManager();
 			Identity mySelf = userCourseEnvironment.getIdentityEnvironment().getIdentity();
-			am.saveNodeAttempts(this, coachingIdentity, mySelf, userAttempts);
+			am.saveNodeAttempts(this, coachingIdentity, mySelf, userAttempts, by);
 		}
 	}
 
 	/**
 	 * @see org.olat.course.nodes.AssessableCourseNode#incrementUserAttempts(org.olat.course.run.userview.UserCourseEnvironment)
 	 */
-	public void incrementUserAttempts(UserCourseEnvironment userCourseEnvironment) {
+	public void incrementUserAttempts(UserCourseEnvironment userCourseEnvironment, Role by) {
 		AssessmentManager am = userCourseEnvironment.getCourseEnvironment().getAssessmentManager();
 		Identity mySelf = userCourseEnvironment.getIdentityEnvironment().getIdentity();
-		am.incrementNodeAttempts(this, mySelf, userCourseEnvironment);
+		am.incrementNodeAttempts(this, mySelf, userCourseEnvironment, by);
 	}
 
 }

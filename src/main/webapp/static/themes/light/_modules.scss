@@ -2,7 +2,7 @@
 
 /*
  * =================================================
- * Import of all submodules and includes, can be reused 
+ * Import of all submodules and includes, can be reused
  * by other themes. Normally you do not have to modify
  * this file.
  * =================================================
@@ -18,8 +18,10 @@
 @import "modules/mixins";
 @import "modules/helpers";
 @import "modules/type";
-@import "modules/content_embedded";  /* add all styles that are created by html editor but can also be rendered in 
+@import "modules/content_embedded";  /* add all styles that are created by html editor but can also be rendered in
    										main window, not in iframe (e.g. forum post, blog entry) */
+@import "modules/radial-progress";
+
 
 /* general layout */
 @import "modules/layout";
@@ -48,10 +50,12 @@
 
 /* sites specific styles */
 @import "modules/cal";
+@import "modules/pagecontenteditor";
 @import "modules/coursesite";
 @import "modules/repository";
 @import "modules/course";
 @import "modules/courseeditor";
+@import "modules/curriculum";
 @import "modules/qti";
 @import "modules/qti21";
 @import "modules/devel";
@@ -59,6 +63,7 @@
 @import "modules/portfolio";
 @import "modules/portfolio_v2";
 @import "modules/evaluation_form";
+@import "modules/quality";
 @import "modules/citation";
 @import "modules/video";
 @import "modules/admin";
@@ -71,6 +76,11 @@
 @import "modules/user";
 @import "modules/members";
 @import "modules/grouptask";
+@import "modules/lecture";
+@import "modules/edubase";
+@import "modules/edusharing";
+@import "modules/doceditor";
+@import "modules/taxonomy";
 
 @import "modules/thirdparty";
 

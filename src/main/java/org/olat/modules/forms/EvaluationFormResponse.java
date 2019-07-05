@@ -20,6 +20,7 @@
 package org.olat.modules.forms;
 
 import java.math.BigDecimal;
+import java.nio.file.Path;
 
 import org.olat.core.id.CreateInfo;
 import org.olat.core.id.ModifiedInfo;
@@ -34,11 +35,26 @@ public interface EvaluationFormResponse extends CreateInfo, ModifiedInfo {
 	
 	public Long getKey();
 	
+	/**
+	 * The identifier of the evaluation form part / element. Several responses may
+	 * have the same identifier.
+	 * 
+	 * @return
+	 */
 	public String getResponseIdentifier();
+	
+	/**
+	 * A response is present but the user did explicitly not answer the question.
+	 *
+	 * @return
+	 */
+	public boolean isNoResponse();
 	
 	public BigDecimal getNumericalResponse();
 	
 	public String getStringuifiedResponse();
+	
+	public Path getFileResponse();
 	
 	/**
 	 * The evaluation form session of this response.

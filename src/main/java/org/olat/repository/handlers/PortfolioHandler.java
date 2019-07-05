@@ -37,15 +37,15 @@ import org.olat.core.gui.media.StreamedMediaResource;
 import org.olat.core.gui.translator.Translator;
 import org.olat.core.id.Identity;
 import org.olat.core.id.OLATResourceable;
+import org.olat.core.id.Organisation;
 import org.olat.core.id.Roles;
 import org.olat.core.logging.AssertException;
-import org.olat.core.logging.OLog;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.Util;
 import org.olat.core.util.coordinate.CoordinatorManager;
 import org.olat.core.util.coordinate.LockResult;
 import org.olat.core.util.vfs.VFSContainer;
-import org.olat.course.assessment.AssessmentMode;
 import org.olat.course.assessment.manager.UserCourseInformationsManager;
 import org.olat.fileresource.FileResourceManager;
 import org.olat.fileresource.types.ResourceEvaluation;
@@ -63,10 +63,10 @@ import org.olat.portfolio.ui.structel.EPCreateMapController;
 import org.olat.portfolio.ui.structel.EPMapViewController;
 import org.olat.repository.ErrorList;
 import org.olat.repository.RepositoryEntry;
+import org.olat.repository.RepositoryEntryStatusEnum;
 import org.olat.repository.RepositoryManager;
 import org.olat.repository.RepositoryService;
 import org.olat.repository.model.RepositoryEntrySecurity;
-import org.olat.repository.ui.RepositoryEntryRuntimeController.RuntimeControllerCreator;
 import org.olat.resource.OLATResource;
 import org.olat.resource.references.ReferenceManager;
 
@@ -81,10 +81,10 @@ import org.olat.resource.references.ReferenceManager;
  */
 // Loads of parameters are unused
 public class PortfolioHandler implements RepositoryHandler {
-	private static final OLog log = Tracing.createLoggerFor(PortfolioHandler.class);
+	private static final Logger log = Tracing.createLoggerFor(PortfolioHandler.class);
 	
 	@Override
-	public boolean isCreate() {
+	public boolean supportCreate(Identity identity, Roles roles) {
 		return false;
 	}
 	
@@ -94,13 +94,15 @@ public class PortfolioHandler implements RepositoryHandler {
 	}
 	
 	@Override
-	public RepositoryEntry createResource(Identity initialAuthor, String displayname, String description, Object createObject, Locale locale) {
+	public RepositoryEntry createResource(Identity initialAuthor, String displayname, String description,
+			Object createObject, Organisation organisation, Locale locale) {
 		EPFrontendManager ePFMgr = CoreSpringFactory.getImpl(EPFrontendManager.class);
 		EPStructureManager eSTMgr = CoreSpringFactory.getImpl(EPStructureManager.class);
 		RepositoryService repositoryService = CoreSpringFactory.getImpl(RepositoryService.class);
 		
 		OLATResource resource = eSTMgr.createPortfolioMapTemplateResource();
-		RepositoryEntry re = repositoryService.create(initialAuthor, null, "", displayname, description, resource, RepositoryEntry.ACC_OWNERS);
+		RepositoryEntry re = repositoryService.create(initialAuthor, null, "", displayname, description,
+				resource, RepositoryEntryStatusEnum.preparation, organisation);
 
 		PortfolioStructureMap mapTemp = eSTMgr.createAndPersistPortfolioMapTemplateFromEntry(initialAuthor, re);
 		// add a page, as each map should have at least one per default!
@@ -120,13 +122,28 @@ public class PortfolioHandler implements RepositoryHandler {
 	}
 
 	@Override
+	public boolean supportImport() {
+		return false;
+	}
+
+	@Override
 	public ResourceEvaluation acceptImport(File file, String filename) {
-		return new ResourceEvaluation(false);
+		return ResourceEvaluation.notValid();
+	}
+
+	@Override
+	public boolean supportImportUrl() {
+		return false;
+	}
+	
+	@Override
+	public ResourceEvaluation acceptImport(String url) {
+		return ResourceEvaluation.notValid();
 	}
 	
 	@Override
 	public RepositoryEntry importResource(Identity initialAuthor, String initialAuthorAlt, String displayname, String description,
-			boolean withReferences, Locale locale, File file, String filename) {
+			boolean withReferences, Organisation organisation, Locale locale, File file, String filename) {
 		EPFrontendManager ePFMgr = CoreSpringFactory.getImpl(EPFrontendManager.class);
 		EPStructureManager eSTMgr = CoreSpringFactory.getImpl(EPStructureManager.class);
 		
@@ -134,11 +151,17 @@ public class PortfolioHandler implements RepositoryHandler {
 		PortfolioStructure structure = EPXStreamHandler.getAsObject(file, false);
 		if(structure != null) {
 			OLATResource resource = eSTMgr.createPortfolioMapTemplateResource();
-			re = CoreSpringFactory.getImpl(RepositoryService.class)
-					.create(initialAuthor, null, "", displayname, description, resource, RepositoryEntry.ACC_OWNERS);
+			re = CoreSpringFactory.getImpl(RepositoryService.class).create(initialAuthor, null, "", displayname, description,
+					resource, RepositoryEntryStatusEnum.preparation, organisation);
 			ePFMgr.importPortfolioMapTemplate(structure, resource);
 		}
 		return re;
+	}
+	
+	@Override
+	public RepositoryEntry importResource(Identity initialAuthor, String initialAuthorAlt, String displayname,
+			String description, Organisation organisation, Locale locale, String url) {
+		return null;
 	}
 	
 	@Override
@@ -159,7 +182,7 @@ public class PortfolioHandler implements RepositoryHandler {
 	}
 
 	@Override
-	public EditionSupport supportsEdit(OLATResourceable resource) {
+	public EditionSupport supportsEdit(OLATResourceable resource, Identity identity, Roles roles) {
 		return EditionSupport.embedded;
 	}
 	
@@ -207,7 +230,7 @@ public class PortfolioHandler implements RepositoryHandler {
 	 * @see org.olat.repository.handlers.RepositoryHandler#getAsMediaResource(org.olat.core.id.OLATResourceable)
 	 */
 	@Override
-	public MediaResource getAsMediaResource(OLATResourceable res, boolean backwardsCompatible) {
+	public MediaResource getAsMediaResource(OLATResourceable res) {
 		MediaResource mr = null;
 
 		EPFrontendManager ePFMgr = CoreSpringFactory.getImpl(EPFrontendManager.class);
@@ -229,19 +252,15 @@ public class PortfolioHandler implements RepositoryHandler {
 	@Override
 	public MainLayoutController createLaunchController(RepositoryEntry re, RepositoryEntrySecurity reSecurity, UserRequest ureq, WindowControl wControl) {
 		return new EPTemplateRuntimeController(ureq, wControl, re, reSecurity,
-			new RuntimeControllerCreator() {
-				@Override
-				public Controller create(UserRequest uureq, WindowControl wwControl, TooledStackedPanel toolbarPanel,
-						RepositoryEntry entry, RepositoryEntrySecurity security, AssessmentMode assessmentMode) {
-					EPFrontendManager ePFMgr = CoreSpringFactory.getImpl(EPFrontendManager.class);
-					PortfolioStructureMap map = (PortfolioStructureMap)ePFMgr
-						.loadPortfolioStructure(entry.getOlatResource());
-					CoreSpringFactory.getImpl(UserCourseInformationsManager.class)
-						.updateUserCourseInformations(entry.getOlatResource(), uureq.getIdentity());
-					EPSecurityCallback secCallback = EPSecurityCallbackFactory.getSecurityCallback(uureq, map, ePFMgr);
-					return new EPMapViewController(uureq, wwControl, map, false, false, secCallback);
-				}
-			});
+				(uureq, wwControl, toolbarPanel, entry, security, assessmentMode) -> {
+			EPFrontendManager ePFMgr = CoreSpringFactory.getImpl(EPFrontendManager.class);
+			PortfolioStructureMap map = (PortfolioStructureMap)ePFMgr
+				.loadPortfolioStructure(entry.getOlatResource());
+			CoreSpringFactory.getImpl(UserCourseInformationsManager.class)
+				.updateUserCourseInformations(entry.getOlatResource(), uureq.getIdentity());
+			EPSecurityCallback secCallback = EPSecurityCallbackFactory.getSecurityCallback(uureq, map, ePFMgr);
+			return new EPMapViewController(uureq, wwControl, map, false, false, secCallback);
+		});
 	}
 
 	@Override

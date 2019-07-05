@@ -29,7 +29,6 @@ import javax.persistence.GeneratedValue;
 import javax.persistence.Id;
 import javax.persistence.JoinColumn;
 import javax.persistence.ManyToOne;
-import javax.persistence.NamedQueries;
 import javax.persistence.NamedQuery;
 import javax.persistence.Table;
 import javax.persistence.Temporal;
@@ -39,10 +38,12 @@ import org.hibernate.annotations.GenericGenerator;
 import org.hibernate.annotations.Parameter;
 import org.olat.basesecurity.Group;
 import org.olat.basesecurity.GroupMembership;
+import org.olat.basesecurity.GroupMembershipInheritance;
 import org.olat.basesecurity.IdentityImpl;
 import org.olat.core.id.Identity;
 import org.olat.core.id.ModifiedInfo;
 import org.olat.core.id.Persistable;
+import org.olat.core.util.StringHelper;
 
 /**
  * 
@@ -52,17 +53,16 @@ import org.olat.core.id.Persistable;
  */
 @Entity(name="bgroupmember")
 @Table(name="o_bs_group_member")
-@NamedQueries({
-	@NamedQuery(name="membershipsByGroup", query="select membership from bgroupmember as membership where membership.group.key=:groupKey"),
-	@NamedQuery(name="membershipsByGroupAndRole", query="select membership from bgroupmember as membership where membership.group.key=:groupKey and membership.role=:role"),
-	@NamedQuery(name="deleteMembershipsByGroupAndRole", query="delete from bgroupmember as membership where membership.group.key=:groupKey and membership.role=:role"),
-	@NamedQuery(name="membershipsByGroupAndIdentity", query="select membership from bgroupmember as membership where membership.group.key=:groupKey and membership.identity.key=:identityKey"),
-	@NamedQuery(name="membershipsByGroupIdentityAndRole", query="select membership from bgroupmember as membership where membership.group.key=:groupKey and membership.identity.key=:identityKey and membership.role=:role"),
-	@NamedQuery(name="countMembersByGroup", query="select count(membership.key) from bgroupmember as membership where membership.group.key=:groupKey"),
-	@NamedQuery(name="countMembersByGroupAndRole", query="select count(membership.key) from bgroupmember as membership where membership.group.key=:groupKey and membership.role=:role"),
-	@NamedQuery(name="membersByGroupAndRole", query="select distinct membership.identity from bgroupmember as membership where membership.group.key=:groupKey and membership.role=:role"),
-	@NamedQuery(name="hasRoleByGroupIdentityAndRole", query="select count(membership.key) from bgroupmember as membership where membership.group.key=:groupKey and membership.identity.key=:identityKey and membership.role=:role")
-})
+@NamedQuery(name="membershipsByGroup", query="select membership from bgroupmember as membership where membership.group.key=:groupKey")
+@NamedQuery(name="membershipsByGroupAndRole", query="select membership from bgroupmember as membership where membership.group.key=:groupKey and membership.role=:role")
+@NamedQuery(name="membershipByGroupIdentityAndRole", query="select membership from bgroupmember as membership where membership.group.key=:groupKey and membership.identity.key=:identityKey and membership.role=:role")
+@NamedQuery(name="deleteMembershipsByGroupAndRole", query="delete from bgroupmember as membership where membership.group.key=:groupKey and membership.role=:role")
+@NamedQuery(name="membershipsByGroupAndIdentity", query="select membership from bgroupmember as membership where membership.group.key=:groupKey and membership.identity.key=:identityKey")
+@NamedQuery(name="membershipsByGroupIdentityAndRole", query="select membership from bgroupmember as membership where membership.group.key=:groupKey and membership.identity.key=:identityKey and membership.role=:role")
+@NamedQuery(name="countMembersByGroup", query="select count(membership.key) from bgroupmember as membership where membership.group.key=:groupKey")
+@NamedQuery(name="countMembersByGroupAndRole", query="select count(membership.key) from bgroupmember as membership where membership.group.key=:groupKey and membership.role=:role")
+@NamedQuery(name="membersByGroupAndRole", query="select distinct membership.identity from bgroupmember as membership where membership.group.key=:groupKey and membership.role=:role")
+@NamedQuery(name="hasRoleByGroupIdentityAndRole", query="select count(membership.key) from bgroupmember as membership where membership.group.key=:groupKey and membership.identity.key=:identityKey and membership.role=:role")
 public class GroupMembershipImpl implements GroupMembership, ModifiedInfo, Persistable {
 
 	private static final long serialVersionUID = -194666973136469187L;
@@ -85,11 +85,14 @@ public class GroupMembershipImpl implements GroupMembership, ModifiedInfo, Persi
 	private Date creationDate;
 	
 	@Temporal(TemporalType.TIMESTAMP)
-	@Column(name="lastmodified", nullable=false, insertable=true, updatable=false)
+	@Column(name="lastmodified", nullable=false, insertable=true, updatable=true)
 	private Date lastModified;
 	
 	@Column(name="g_role", nullable=false, insertable=true, updatable=false)
 	private String role;
+	
+	@Column(name="g_inheritance_mode", nullable=false, insertable=true, updatable=true)
+	private String inheritanceModeString;
 	
 	@ManyToOne(targetEntity=GroupImpl.class,fetch=FetchType.LAZY,optional=false)
 	@JoinColumn(name="fk_group_id", nullable=false, insertable=true, updatable=false)
@@ -107,7 +110,8 @@ public class GroupMembershipImpl implements GroupMembership, ModifiedInfo, Persi
 	public void setKey(Long key) {
 		this.key = key;
 	}
-	
+
+	@Override
 	public Date getCreationDate() {
 		return creationDate;
 	}
@@ -126,6 +130,7 @@ public class GroupMembershipImpl implements GroupMembership, ModifiedInfo, Persi
 		this.lastModified = lastModified;
 	}
 
+	@Override
 	public String getRole() {
 		return role;
 	}
@@ -134,6 +139,26 @@ public class GroupMembershipImpl implements GroupMembership, ModifiedInfo, Persi
 		this.role = role;
 	}
 
+	public String getInheritanceModeString() {
+		return inheritanceModeString;
+	}
+
+	public void setInheritanceModeString(String inheritanceModeString) {
+		this.inheritanceModeString = inheritanceModeString;
+	}
+
+	@Override
+	public GroupMembershipInheritance getInheritanceMode() {
+		return StringHelper.containsNonWhitespace(inheritanceModeString)
+				? GroupMembershipInheritance.valueOf(inheritanceModeString) : GroupMembershipInheritance.none;
+	}
+
+	@Override
+	public void setInheritanceMode(GroupMembershipInheritance mode) {
+		inheritanceModeString = mode == null ? GroupMembershipInheritance.none.name() : mode.name(); 
+	}
+
+	@Override
 	public Group getGroup() {
 		return group;
 	}
@@ -141,7 +166,8 @@ public class GroupMembershipImpl implements GroupMembership, ModifiedInfo, Persi
 	public void setGroup(Group group) {
 		this.group = group;
 	}
-	
+
+	@Override
 	public Identity getIdentity() {
 		return identity;
 	}

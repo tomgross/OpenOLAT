@@ -25,6 +25,7 @@ import java.util.List;
 
 import org.olat.basesecurity.BaseSecurity;
 import org.olat.basesecurity.BaseSecurityModule;
+import org.olat.core.commons.persistence.SortKey;
 import org.olat.core.commons.services.notifications.PublisherData;
 import org.olat.core.commons.services.notifications.SubscriptionContext;
 import org.olat.core.commons.services.notifications.ui.ContextualSubscriptionController;
@@ -33,6 +34,8 @@ import org.olat.core.gui.components.Component;
 import org.olat.core.gui.components.form.flexible.FormItem;
 import org.olat.core.gui.components.form.flexible.FormItemContainer;
 import org.olat.core.gui.components.form.flexible.elements.FlexiTableElement;
+import org.olat.core.gui.components.form.flexible.elements.FlexiTableFilter;
+import org.olat.core.gui.components.form.flexible.elements.FlexiTableSortOptions;
 import org.olat.core.gui.components.form.flexible.elements.FormLink;
 import org.olat.core.gui.components.form.flexible.impl.FormBasicController;
 import org.olat.core.gui.components.form.flexible.impl.FormEvent;
@@ -41,29 +44,36 @@ import org.olat.core.gui.components.form.flexible.impl.elements.table.DefaultFle
 import org.olat.core.gui.components.form.flexible.impl.elements.table.FlexiColumnModel;
 import org.olat.core.gui.components.form.flexible.impl.elements.table.FlexiTableColumnModel;
 import org.olat.core.gui.components.form.flexible.impl.elements.table.FlexiTableDataModelFactory;
+import org.olat.core.gui.components.form.flexible.impl.elements.table.FlexiTableSearchEvent;
 import org.olat.core.gui.components.form.flexible.impl.elements.table.SelectionEvent;
 import org.olat.core.gui.components.form.flexible.impl.elements.table.StaticFlexiCellRenderer;
 import org.olat.core.gui.components.form.flexible.impl.elements.table.TextFlexiCellRenderer;
 import org.olat.core.gui.components.link.Link;
 import org.olat.core.gui.components.link.LinkFactory;
-import org.olat.core.gui.components.velocity.VelocityContainer;
 import org.olat.core.gui.control.Controller;
 import org.olat.core.gui.control.ControllerEventListener;
 import org.olat.core.gui.control.Event;
 import org.olat.core.gui.control.WindowControl;
 import org.olat.core.gui.control.generic.closablewrapper.CloseableModalController;
+import org.olat.core.gui.media.MediaResource;
 import org.olat.core.id.Identity;
 import org.olat.core.id.Roles;
 import org.olat.core.id.UserConstants;
+import org.olat.core.util.StringHelper;
 import org.olat.core.util.resource.OresHelper;
 import org.olat.course.nodes.PFCourseNode;
-import org.olat.course.nodes.TitledWrapperHelper;
+import org.olat.course.nodes.pf.manager.FileSystemExport;
 import org.olat.course.nodes.pf.manager.PFManager;
 import org.olat.course.nodes.pf.manager.PFView;
 import org.olat.course.nodes.pf.ui.DropBoxTableModel.DropBoxCols;
 import org.olat.course.run.environment.CourseEnvironment;
-import org.olat.course.run.navigation.NodeRunConstructionResult;
 import org.olat.course.run.userview.UserCourseEnvironment;
+import org.olat.group.BusinessGroup;
+import org.olat.group.BusinessGroupRef;
+import org.olat.group.model.BusinessGroupRefImpl;
+import org.olat.modules.curriculum.CurriculumElement;
+import org.olat.modules.curriculum.CurriculumElementRef;
+import org.olat.modules.curriculum.model.CurriculumElementRefImpl;
 import org.olat.resource.OLATResource;
 import org.olat.user.HomePageConfig;
 import org.olat.user.HomePageDisplayController;
@@ -81,6 +91,8 @@ public class PFCoachController extends FormBasicController implements Controller
 	protected static final String USER_PROPS_ID = PFCoachController.class.getCanonicalName();
 
 	protected static final int USER_PROPS_OFFSET = 500;
+	private static final String CURRICULUM_EL_PREFIX = "curriculumelement-";
+	private static final String BUSINESS_GROUP_PREFIX = "businessgroup-";
 	
 	private PFCourseNode pfNode;
 	
@@ -88,7 +100,6 @@ public class PFCoachController extends FormBasicController implements Controller
 	private Link backLink;
 	private DropBoxTableModel tableModel;
 	private FlexiTableElement dropboxTable;
-	private VelocityContainer mainVC;
 	
 	private CloseableModalController cmc;
 	private PFFileUploadController pfFileUploadCtr;
@@ -101,16 +112,16 @@ public class PFCoachController extends FormBasicController implements Controller
 
 	private UserCourseEnvironment userCourseEnv;
 	private CourseEnvironment courseEnv;
-	private Identity identity;
+
 	private PFView pfView;
 	@Autowired
 	private PFManager pfManager; 
 	@Autowired
 	private UserManager userManager;
 	@Autowired
-	private BaseSecurityModule securityModule;
-	@Autowired
 	private BaseSecurity securityManager;
+	@Autowired
+	private BaseSecurityModule securityModule;
 	
 	public PFCoachController(UserRequest ureq, WindowControl wControl, PFCourseNode sfNode, 
 			UserCourseEnvironment userCourseEnv, PFView pfView) {
@@ -119,7 +130,6 @@ public class PFCoachController extends FormBasicController implements Controller
 		this.userCourseEnv = userCourseEnv;
 		this.courseEnv = userCourseEnv.getCourseEnvironment();
 		this.pfNode = sfNode;
-		this.identity = ureq.getIdentity();
 		this.pfView = pfView;
 		
 		Roles roles = ureq.getUserSession().getRoles();
@@ -128,6 +138,7 @@ public class PFCoachController extends FormBasicController implements Controller
 		setTranslator(userManager.getPropertyHandlerTranslator(getTranslator()));
 		
 		initForm(ureq);
+		loadModel(true);
 	}
 
 	@Override
@@ -148,7 +159,7 @@ public class PFCoachController extends FormBasicController implements Controller
 					fireEvent(ureq, Event.CHANGED_EVENT);
 				} else {
 					pfManager.uploadFileToDropBox(pfFileUploadCtr.getUpLoadFile(),
-							pfFileUploadCtr.getUploadFileName(), 4, courseEnv, pfNode, identity);
+							pfFileUploadCtr.getUploadFileName(), 4, courseEnv, pfNode, getIdentity());
 				}
 				cmc.deactivate();
 				cleanUpCMC();
@@ -157,19 +168,11 @@ public class PFCoachController extends FormBasicController implements Controller
 			cleanUpCMC();
 		}
 		super.event(ureq, source, event);
-		
 	}
 
 	@Override
 	protected void doDispose() {
 		// nothing to dispose
-
-	}
-	
-	public NodeRunConstructionResult createNodeRunConstructionResult(UserRequest ureq) {
-		// integrate it into the olat menu
-		Controller ctrl = TitledWrapperHelper.getWrapper(ureq, getWindowControl(), this, pfNode, "o_pf_icon");
-		return new NodeRunConstructionResult(ctrl);
 	}
 
 	@Override
@@ -191,7 +194,7 @@ public class PFCoachController extends FormBasicController implements Controller
 		} else if(source == dropboxTable) {
 			if(event instanceof SelectionEvent) {
 				SelectionEvent se = (SelectionEvent)event;
-				DropBoxRow currentObject = (DropBoxRow) tableModel.getObject(se.getIndex());
+				DropBoxRow currentObject = tableModel.getObject(se.getIndex());
 				if ("drop.box".equals(se.getCommand())){
 					doSelectParticipantFolder (ureq, currentObject.getIdentity(), PFView.displayDrop);
 				} else if ("return.box".equals(se.getCommand())){
@@ -201,38 +204,41 @@ public class PFCoachController extends FormBasicController implements Controller
 				} else if ("firstName".equals(se.getCommand()) || "lastName".equals(se.getCommand())) {
 					doOpenHomePage(ureq, currentObject.getIdentity());
 				} 
+			} else if(event instanceof FlexiTableSearchEvent) {
+				loadModel(true);
 			}
 		}
-
 	}
 	
-	private void doSelectParticipantFolder (UserRequest ureq, UserPropertiesRow row, PFView pfView) {
-		Identity identity = securityManager.loadIdentityByKey(row.getIdentityKey());
+	private void doSelectParticipantFolder (UserRequest ureq, UserPropertiesRow row, PFView view) {
+		Identity assessedIdentity = securityManager.loadIdentityByKey(row.getIdentityKey());
 		removeAsListenerAndDispose(pfParticipantController);
 		pfParticipantController = new PFParticipantController(ureq, getWindowControl(), pfNode,
-				userCourseEnv, identity, pfView, true, false);
+				userCourseEnv, assessedIdentity, view, true, false);
 		listenTo(pfParticipantController);
-		mainVC.put("single", pfParticipantController.getInitialComponent());
+		flc.put("single", pfParticipantController.getInitialComponent());
 	}
 	
 	@Override
 	protected void initForm(FormItemContainer formLayout, Controller listener, UserRequest ureq) {
-		mainVC = ((FormLayoutContainer) formLayout).getFormItemComponent();
+		if(formLayout instanceof FormLayoutContainer) {
+			FormLayoutContainer layoutCont = (FormLayoutContainer)formLayout;
+			OLATResource course = courseEnv.getCourseGroupManager().getCourseResource();
+			String businessPath = getWindowControl().getBusinessControl().getAsString();
+			SubscriptionContext subsContext = new SubscriptionContext(course, pfNode.getIdent());
+			PublisherData publisherData = new PublisherData(OresHelper.calculateTypeName(PFCourseNode.class),
+					String.valueOf(course.getResourceableId()), businessPath);
+			contextualSubscriptionCtr = new ContextualSubscriptionController(ureq, getWindowControl(), subsContext,
+					publisherData);
+			listenTo(contextualSubscriptionCtr);
+			layoutCont.put("contextualSubscription", contextualSubscriptionCtr.getInitialComponent());
+			backLink = LinkFactory.createLinkBack(layoutCont.getFormItemComponent(), this);
+		}
 		
-		OLATResource course = courseEnv.getCourseGroupManager().getCourseResource();
-		String businessPath = getWindowControl().getBusinessControl().getAsString();
-		SubscriptionContext subsContext = new SubscriptionContext(course, pfNode.getIdent());
-		PublisherData publisherData = new PublisherData(OresHelper.calculateTypeName(PFCourseNode.class),
-				String.valueOf(course.getResourceableId()), businessPath);
-		contextualSubscriptionCtr = new ContextualSubscriptionController(ureq, getWindowControl(), subsContext,
-				publisherData);
-		listenTo(contextualSubscriptionCtr);
-		mainVC.put("contextualSubscription", contextualSubscriptionCtr.getInitialComponent());	
-		
-		backLink = LinkFactory.createLinkBack(mainVC, this);
 		FlexiTableColumnModel columnsModel = FlexiTableDataModelFactory.createFlexiTableColumnModel();
 
 		int i = 0;
+		FlexiTableSortOptions options = new FlexiTableSortOptions();
 		for (UserPropertyHandler userPropertyHandler : userPropertyHandlers) {
 			int colIndex = USER_PROPS_OFFSET + i++;
 			if (userPropertyHandler == null) continue;
@@ -250,6 +256,12 @@ public class PFCoachController extends FormBasicController implements Controller
 				col = new DefaultFlexiColumnModel(visible, userPropertyHandler.i18nColumnDescriptorLabelKey(), colIndex, true, propName);
 			}
 			columnsModel.addFlexiColumnModel(col);
+			
+			if(!options.hasDefaultOrderBy()) {
+				options.setDefaultOrderBy(new SortKey(propName, true));
+			} else if(UserConstants.LASTNAME.equals(propName)) {
+				options.setDefaultOrderBy(new SortKey(propName, true));
+			}
 		}
 
 		if (pfNode.hasParticipantBoxConfigured()){
@@ -267,16 +279,14 @@ public class PFCoachController extends FormBasicController implements Controller
 		tableModel = new DropBoxTableModel(columnsModel, getTranslator());
 		
 		dropboxTable = uifactory.addTableElement(getWindowControl(), "table", tableModel, getTranslator(), formLayout);
-		
 		dropboxTable.setMultiSelect(true);
 		dropboxTable.setSelectAllEnable(true);
 		dropboxTable.setExportEnabled(true);
-		dropboxTable.setAndLoadPersistedPreferences(ureq, this.getClass().getName() + "_" + pfView.name());
+		dropboxTable.setSortSettings(options);
+		initFilters();
+		dropboxTable.setAndLoadPersistedPreferences(ureq, "participant-folder_coach_" + pfView.name());
 		dropboxTable.setEmtpyTableMessageKey("table.empty");
 		
-		tableModel.setObjects(pfManager.getParticipants(identity, pfNode, userPropertyHandlers, getLocale(), courseEnv, userCourseEnv.isAdmin()));
-		mainVC.contextPut("hasParticipants", tableModel.getRowCount() > 0);
-
 		
 		FormLayoutContainer buttonGroupLayout = FormLayoutContainer.createButtonLayout("buttons", getTranslator());
 		buttonGroupLayout.setElementCssClass("o_button_group");
@@ -286,6 +296,64 @@ public class PFCoachController extends FormBasicController implements Controller
 		uploadAllLink = uifactory.addFormLink("upload.link", buttonGroupLayout, Link.BUTTON);
 	}
 	
+	private void initFilters() {
+		List<FlexiTableFilter> filters = new ArrayList<>();
+		
+		List<BusinessGroup> coachedGroups = userCourseEnv.isAdmin()
+				? courseEnv.getCourseGroupManager().getAllBusinessGroups() : userCourseEnv.getCoachedGroups(); 
+		List<CurriculumElement> coachedElements = userCourseEnv.isAdmin()
+				? courseEnv.getCourseGroupManager().getAllCurriculumElements() : userCourseEnv.getCoachedCurriculumElements();
+		
+		if(coachedGroups != null) {
+			for(BusinessGroup coachedGroup:coachedGroups) {
+				String groupName = StringHelper.escapeHtml(coachedGroup.getName());
+				filters.add(new FlexiTableFilter(groupName, BUSINESS_GROUP_PREFIX.concat(coachedGroup.getKey().toString()), "o_icon o_icon_group"));
+			}
+		}
+		
+		if(!coachedElements.isEmpty()) {
+			if(!filters.isEmpty()) {
+				filters.add(FlexiTableFilter.SPACER);
+			}
+
+			for(CurriculumElement coachedElement: coachedElements) {
+				String groupName = StringHelper.escapeHtml(coachedElement.getDisplayName());
+				filters.add(new FlexiTableFilter(groupName, CURRICULUM_EL_PREFIX.concat(coachedElement.getKey().toString()), "o_icon o_icon_curriculum_element"));
+			}
+		}
+		
+		if(!filters.isEmpty()) {
+			filters.add(FlexiTableFilter.SPACER);
+			filters.add(new FlexiTableFilter(translate("show.all"), "", true));
+			dropboxTable.setExtendedFilterButton(translate("filter.groups"), filters);
+		}
+	}
+	
+	private void loadModel(boolean full) {
+		List<FlexiTableFilter> extendedFilters = dropboxTable.getSelectedExtendedFilters();
+		List<DropBoxRow> rows;
+		if(extendedFilters == null || extendedFilters.isEmpty() || extendedFilters.get(0).isShowAll()) {	
+			rows = pfManager.getParticipants(getIdentity(), pfNode, userPropertyHandlers, getLocale(), courseEnv, userCourseEnv.isAdmin());
+		} else {
+			List<BusinessGroupRef> businessGroups = new ArrayList<>(extendedFilters.size());
+			List<CurriculumElementRef> curriculumElements = new ArrayList<>(extendedFilters.size());
+			for(FlexiTableFilter extendedFilter:extendedFilters) {
+				String filter = extendedFilter.getFilter();
+				if(filter.startsWith(BUSINESS_GROUP_PREFIX)) {
+					String key = filter.substring(BUSINESS_GROUP_PREFIX.length(), filter.length());
+					businessGroups.add(new BusinessGroupRefImpl(Long.valueOf(key)));
+				} else if(filter.startsWith(CURRICULUM_EL_PREFIX)) {
+					String key = filter.substring(CURRICULUM_EL_PREFIX.length(), filter.length());
+					curriculumElements.add(new CurriculumElementRefImpl(Long.valueOf(key)));
+				}
+			}
+			rows = pfManager.getParticipants(businessGroups, curriculumElements, pfNode, userPropertyHandlers, getLocale(), courseEnv);
+		}
+		
+		tableModel.setObjects(rows);
+		dropboxTable.reset(full, full, true);
+		flc.contextPut("hasParticipants", tableModel.getRowCount() > 0);
+	}
 	
 	private void uploadToSelection (File uploadFile, String fileName) {
 		List<Long> identitykeys = new ArrayList<>();
@@ -299,39 +367,37 @@ public class PFCoachController extends FormBasicController implements Controller
 	
 	private void downloadFromSelection (UserRequest ureq) {
 		List<Long> identitykeys = new ArrayList<>();
-		for (int i : dropboxTable.getMultiSelectedIndex()) {			
+		for (Integer i : dropboxTable.getMultiSelectedIndex()) {			
 			identitykeys.add(tableModel.getObject(i).getIdentity().getIdentityKey());
 		}
 		List<Identity> identities = securityManager.loadIdentityByKeys(identitykeys);
-		
-		pfManager.exportMediaResource(ureq, identities, pfNode, courseEnv);
+		MediaResource resource = new FileSystemExport (identities, pfNode, courseEnv, getLocale());
+		ureq.getDispatchResult().setResultingMediaResource(resource);
 	}
-
 
 	@Override
 	protected void formOK(UserRequest ureq) {
-		
+		//
 	}
 	
 	private void doOpenUploadController (UserRequest ureq, boolean uploadToAll) {
 		pfFileUploadCtr = new PFFileUploadController(ureq, getWindowControl(), uploadToAll);
 		listenTo(pfFileUploadCtr);
+		
 		cmc = new CloseableModalController(getWindowControl(), translate("close"), 
 				pfFileUploadCtr.getInitialComponent(), true, translate("upload.link"));
 		listenTo(cmc);
-		
 		cmc.activate();
 	}
 	
 	private void doOpenHomePage (UserRequest ureq, UserPropertiesRow row) {		
-
-		Identity identity = securityManager.loadIdentityByKey(row.getIdentityKey());
-		homePageDisplayController = new HomePageDisplayController(ureq, getWindowControl(), identity, new HomePageConfig());
+		Identity assessedIdentity = securityManager.loadIdentityByKey(row.getIdentityKey());
+		homePageDisplayController = new HomePageDisplayController(ureq, getWindowControl(), assessedIdentity, new HomePageConfig());
 		listenTo(homePageDisplayController);
+		
 		cmc = new CloseableModalController(getWindowControl(), translate("close"), 
 				homePageDisplayController.getInitialComponent(), true, translate("upload.link"));
 		listenTo(cmc);
-		
 		cmc.activate();
 	}
 	
@@ -344,10 +410,10 @@ public class PFCoachController extends FormBasicController implements Controller
 	
 	private void back() {
 		if(pfParticipantController != null) {
-			mainVC.remove(pfParticipantController.getInitialComponent());
+			flc.remove(pfParticipantController.getInitialComponent());
 			removeAsListenerAndDispose(pfParticipantController);
 			pfParticipantController = null;
+			loadModel(false);
 		}
 	}
-
 }

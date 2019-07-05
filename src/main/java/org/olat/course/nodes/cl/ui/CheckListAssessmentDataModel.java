@@ -26,7 +26,7 @@ import java.util.Date;
 import java.util.List;
 import java.util.Locale;
 
-import org.apache.commons.lang.StringEscapeUtils;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.commons.persistence.SortKey;
 import org.olat.core.gui.components.form.flexible.elements.FlexiTableFilter;
 import org.olat.core.gui.components.form.flexible.elements.MultipleSelectionElement;
@@ -43,7 +43,6 @@ import org.olat.core.gui.render.StringOutput;
 import org.olat.core.gui.render.StringOutputPool;
 import org.olat.core.gui.render.URLBuilder;
 import org.olat.core.gui.translator.Translator;
-import org.olat.core.logging.OLog;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.Formatter;
 import org.olat.core.util.StringHelper;
@@ -65,7 +64,7 @@ public class CheckListAssessmentDataModel extends DefaultFlexiTableDataModel<Che
 	implements FilterableFlexiTableModel, SortableFlexiTableDataModel<CheckListAssessmentRow>,
 	    ExportableFlexiTableDataModel {
 	
-	private static final OLog log = Tracing.createLoggerFor(CheckListAssessmentDataModel.class);
+	private static final Logger log = Tracing.createLoggerFor(CheckListAssessmentDataModel.class);
 	
 	public static final int USER_PROPS_OFFSET = 500;
 	public static final int CHECKBOX_OFFSET = 5000;
@@ -129,16 +128,17 @@ public class CheckListAssessmentDataModel extends DefaultFlexiTableDataModel<Che
 	 * @param key
 	 */
 	@Override
-	public void filter(List<FlexiTableFilter> filters) {
+	public void filter(String searchString, List<FlexiTableFilter> filters) {
 		setObjects(backupRows);
 		
-		Long groupKey = extractGroupKey(filters);
-		if(groupKey != null) {
+		Long groupKey = extractKey(filters, "businessgroup-");
+		Long elementKey = extractKey(filters, "curriculumelement-");
+		if(groupKey != null || elementKey != null) {
 			List<CheckListAssessmentRow> filteredViews = new ArrayList<>();
 			int numOfRows = getRowCount();
 			for(int i=0; i<numOfRows; i++) {
 				CheckListAssessmentRow view = getObject(i);
-				if(accept(view, groupKey)) {
+				if(accept(view, groupKey, elementKey)) {
 					filteredViews.add(view);
 				}
 			}
@@ -146,13 +146,14 @@ public class CheckListAssessmentDataModel extends DefaultFlexiTableDataModel<Che
 		}
 	}
 	
-	private Long extractGroupKey(List<FlexiTableFilter> filters) {
+	private Long extractKey(List<FlexiTableFilter> filters, String marker) {
 		Long key = null;
-		if(filters != null && filters.size() > 0 && filters.get(0) != null) {
+		if(filters != null && !filters.isEmpty() && filters.get(0) != null) {
 			String filter = filters.get(0).getFilter();
-			if(StringHelper.isLong(filter)) {
+			if(filter.startsWith(marker)) {
 				try {
-					key = Long.parseLong(filter);
+					int index = filter.lastIndexOf('-') + 1;
+					key = Long.parseLong(filter.substring(index));
 				} catch (NumberFormatException e) {
 					//
 				}
@@ -161,12 +162,21 @@ public class CheckListAssessmentDataModel extends DefaultFlexiTableDataModel<Che
 		return key;
 	}
 	
-	private boolean accept(CheckListAssessmentRow view, Long groupKey) {
+	private boolean accept(CheckListAssessmentRow view, Long groupKey, Long elementKey) {
 		boolean accept = false;
-		Long[] groupKeys = view.getGroupKeys();
-		if(groupKeys != null) {
-			for(Long key:groupKeys) {
-				if(groupKey.equals(key)) {
+		
+		Long filterKey = null;
+		Long[] keyArray = null;
+		if(groupKey != null) {
+			filterKey = groupKey;
+			keyArray = view.getGroupKeys();
+		} else if(elementKey != null) {
+			filterKey = elementKey;
+			keyArray = view.getCurriculumElmentKeys();
+		}
+		if(filterKey != null && keyArray != null) {
+			for(Long key:keyArray) {
+				if(filterKey.equals(key)) {
 					accept = true;
 				}
 			}
@@ -311,6 +321,8 @@ public class CheckListAssessmentDataModel extends DefaultFlexiTableDataModel<Che
 							Float[] scores = assessmentRow.getScores();
 							if(checked && scores != null && scores.length > 0 && propIndex < scores.length) {
 								dataRow.addCell(pos++, scores[propIndex], null);
+							} else {
+								dataRow.addCell(pos++, null);
 							}
 						}
 					} else {
@@ -334,7 +346,7 @@ public class CheckListAssessmentDataModel extends DefaultFlexiTableDataModel<Che
 				cellValue = StringHelper.stripLineBreaks(cellValue);
 				cellValue = FilterFactory.getHtmlTagsFilter().filter(cellValue);
 				if(StringHelper.containsNonWhitespace(cellValue)) {
-					cellValue = StringEscapeUtils.unescapeHtml(cellValue);
+					cellValue = StringHelper.unescapeHtml(cellValue);
 				}
 				dataRow.addCell(sheetCol, cellValue, null);
 			}

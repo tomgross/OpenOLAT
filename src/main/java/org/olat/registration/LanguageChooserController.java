@@ -41,12 +41,10 @@ import org.olat.core.util.event.MultiUserEvent;
 import org.olat.core.util.i18n.I18nManager;
 import org.olat.core.util.resource.OresHelper;
 import org.olat.dispatcher.LocaleNegotiator;
+import org.springframework.beans.factory.annotation.Autowired;
 
 
 /**
- * Description:<br>
- * TODO: srosse Class Description for LanguageChooserController
- * 
  * <P>
  * Initial Date:  17 nov. 2009 <br>
  * @author srosse, stephane.rosse@frentix.com, www.frentix.com
@@ -59,6 +57,8 @@ public class LanguageChooserController extends FormBasicController {
 	
 	private boolean fireStandardEvent = true;
 	
+	@Autowired
+	private I18nManager i18nManager;
 	
 	/**
 	 * @param ureq
@@ -73,9 +73,6 @@ public class LanguageChooserController extends FormBasicController {
 		initForm(ureq);
 	}
 
-	/**
-	 * @see org.olat.core.gui.components.form.flexible.FormDefaultController#formOK(org.olat.core.gui.UserRequest)
-	 */
 	@Override
 	protected void formOK(UserRequest ureq) {
 		fireEvent(ureq, Event.DONE_EVENT);
@@ -86,15 +83,10 @@ public class LanguageChooserController extends FormBasicController {
 		fireEvent(ureq, Event.CANCELLED_EVENT);
 	}
 
-	/**
-	 * @see org.olat.core.gui.components.form.flexible.FormDefaultController#formInnerEvent(org.olat.core.gui.UserRequest,
-	 *      org.olat.core.gui.components.form.flexible.FormItem,
-	 *      org.olat.core.gui.components.form.flexible.FormEvent)
-	 */
 	@Override
 	protected void formInnerEvent(UserRequest ureq, FormItem source, FormEvent event) {
 		if(source == langs) {
-			Locale loc = I18nManager.getInstance().getLocaleOrDefault(getSelectedLanguage());
+			Locale loc = i18nManager.getLocaleOrDefault(getSelectedLanguage());
 			MultiUserEvent mue = new LanguageChangedEvent(loc, ureq);
 			setLocale(loc, true);
 			ureq.getUserSession().setLocale(loc);
@@ -118,13 +110,9 @@ public class LanguageChooserController extends FormBasicController {
 		return langs.getSelectedKey();
 	}
 
-	/**
-	 * @see org.olat.core.gui.components.form.flexible.FormDefaultController#initFormElements(org.olat.core.gui.components.form.flexible.FormItemContainer,
-	 *      org.olat.core.gui.control.Controller)
-	 */
 	@Override
 	protected void initForm(FormItemContainer formLayout, Controller listener, final UserRequest ureq) {
-		Map<String, String> languages = I18nManager.getInstance().getEnabledLanguagesTranslated();
+		Map<String, String> languages = i18nManager.getEnabledLanguagesTranslated();
 		String[] langKeys = StringHelper.getMapKeysAsStringArray(languages);
 		String[] langValues = StringHelper.getMapValuesAsStringArray(languages);
 		ArrayHelper.sort(langKeys, langValues, false, true, false);
@@ -135,13 +123,10 @@ public class LanguageChooserController extends FormBasicController {
 
 		final FormLayoutContainer buttonLayout = FormLayoutContainer.createButtonLayout("buttonLayout", getTranslator());
 		formLayout.add(buttonLayout);
-		nextButton = uifactory.addFormSubmitButton("submit.weiter", buttonLayout);
 		uifactory.addFormCancelButton("cancel", buttonLayout, ureq, getWindowControl());
+		nextButton = uifactory.addFormSubmitButton("submit.weiter", buttonLayout);
 	}
 
-	/**
-	 * @see org.olat.core.gui.control.DefaultController#doDispose(boolean)
-	 */
 	@Override
 	protected void doDispose() {
 		langs = null;

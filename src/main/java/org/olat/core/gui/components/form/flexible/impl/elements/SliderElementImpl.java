@@ -23,7 +23,7 @@ import org.olat.core.gui.UserRequest;
 import org.olat.core.gui.components.Component;
 import org.olat.core.gui.components.form.flexible.elements.SliderElement;
 import org.olat.core.gui.components.form.flexible.impl.FormItemImpl;
-import org.olat.core.logging.OLog;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.StringHelper;
 
@@ -35,7 +35,7 @@ import org.olat.core.util.StringHelper;
  */
 public class SliderElementImpl extends FormItemImpl implements SliderElement {
 	
-	private static final OLog log = Tracing.createLoggerFor(SliderElementImpl.class);
+	private static final Logger log = Tracing.createLoggerFor(SliderElementImpl.class);
 	
 	private final SliderElementComponent component;
 	
@@ -44,16 +44,6 @@ public class SliderElementImpl extends FormItemImpl implements SliderElement {
 	public SliderElementImpl(String name) {
 		super(name);
 		component = new SliderElementComponent(name, this);
-	}
-
-	@Override
-	public double getInitialValue() {
-		return component.getInitialValue();
-	}
-
-	@Override
-	public void setInitialValue(double value) {
-		component.setInitialValue(value);
 	}
 
 	@Override
@@ -91,8 +81,20 @@ public class SliderElementImpl extends FormItemImpl implements SliderElement {
 		return value;
 	}
 
+	@Override
 	public void setValue(double value) {
 		this.value = value;
+		component.setValue(value);
+	}
+
+	@Override
+	public boolean hasValue() {
+		return component.hasValue();
+	}
+
+	@Override
+	public void deleteValue() {
+		component.deleteValue();
 	}
 
 	@Override

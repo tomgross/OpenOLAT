@@ -36,7 +36,6 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 
-import org.apache.commons.lang.StringEscapeUtils;
 import org.olat.core.CoreSpringFactory;
 import org.olat.core.commons.services.help.HelpModule;
 import org.olat.core.gui.components.Component;
@@ -50,13 +49,13 @@ import org.olat.core.gui.render.StringOutputPool;
 import org.olat.core.gui.translator.PackageTranslator;
 import org.olat.core.gui.translator.Translator;
 import org.olat.core.gui.util.CSSHelper;
+import org.olat.core.helpers.GUISettings;
 import org.olat.core.helpers.Settings;
 import org.olat.core.util.ArrayHelper;
 import org.olat.core.util.CodeHelper;
 import org.olat.core.util.Formatter;
 import org.olat.core.util.StringHelper;
 import org.olat.core.util.WebappHelper;
-import org.olat.core.util.filter.Filter;
 import org.olat.core.util.filter.FilterFactory;
 import org.olat.core.util.filter.impl.OWASPAntiSamyXSSFilter;
 import org.olat.core.util.i18n.I18nManager;
@@ -71,7 +70,7 @@ public class VelocityRenderDecorator implements Closeable {
 	private Renderer renderer;
 	private final boolean isIframePostEnabled;
 	private StringOutput target;
-	private HelpModule helpModule;
+	private HelpModule cachedHelpModule;
 
 	/**
 	 * @param renderer
@@ -81,8 +80,14 @@ public class VelocityRenderDecorator implements Closeable {
 		this.renderer = renderer;
 		this.vc = vc;
 		this.target = target;
-		this.isIframePostEnabled = renderer.getGlobalSettings().getAjaxFlags().isIframePostEnabled();
-		this.helpModule = CoreSpringFactory.getImpl(HelpModule.class);
+		isIframePostEnabled = renderer.getGlobalSettings().getAjaxFlags().isIframePostEnabled();
+	}
+	
+	public HelpModule getHelpModule() {
+		if(cachedHelpModule == null) {
+			cachedHelpModule = CoreSpringFactory.getImpl(HelpModule.class);
+		}
+		return cachedHelpModule;
 	}
 
 	@Override
@@ -197,6 +202,14 @@ public class VelocityRenderDecorator implements Closeable {
 		return "";
 	}
 	
+	public String javaScriptCommand(String command, boolean dirtyCheck, boolean pushState, String key1, String value1, String key2, String value2) {
+		renderer.getUrlBuilder().buildXHREvent(target, null, dirtyCheck, pushState,
+				new NameValuePair(VelocityContainer.COMMAND_ID, command),
+				new NameValuePair(key1, value1),
+				new NameValuePair(key2, value2));
+		return "";
+	}
+	
 	/**
 	 * Creates the start of a java script fragment to execute a background request. It's
 	 * up to you to close the javascript call.
@@ -206,6 +219,12 @@ public class VelocityRenderDecorator implements Closeable {
 	 */
 	public String openJavaScriptCommand(String command) {
 		renderer.getUrlBuilder().openXHREvent(target, null, false, false,
+				new NameValuePair(VelocityContainer.COMMAND_ID, command));
+		return "";
+	}
+	
+	public String openJavaScriptCommand(String command, boolean dirtyCheck, boolean pushState) {
+		renderer.getUrlBuilder().openXHREvent(target, null, dirtyCheck, pushState,
 				new NameValuePair(VelocityContainer.COMMAND_ID, command));
 		return "";
 	}
@@ -318,9 +337,9 @@ public class VelocityRenderDecorator implements Closeable {
 	 * For static references (e.g. images which cannot be delivered using css):
 	 * use renderStaticURI instead!
 	 */
-	public StringOutput relLink(String URI) {
+	public StringOutput relLink(String uri) {
 		StringOutput sb = new StringOutput(100);
-		Renderer.renderNormalURI(sb, URI);
+		Renderer.renderNormalURI(sb, uri);
 		return sb;
 	}
 
@@ -329,12 +348,27 @@ public class VelocityRenderDecorator implements Closeable {
 	 * e.g. "images/somethingicannotdowithcss.jpg" -> /olat/raw/61x/images/somethingicannotdowithcss.jpg"
 	 * with /olat/raw/61x/ mounted to webapp/static directory of your webapp
 	 * 
-	 * @param URI
+	 * @param uri
 	 * @return
 	 */
-	public StringOutput staticLink(String URI) {
+	public StringOutput staticLink(String uri) {
 		StringOutput sb = new StringOutput(100);
-		Renderer.renderStaticURI(sb, URI);
+		Renderer.renderStaticURI(sb, uri);
+		return sb;
+	}
+	
+	public StringOutput staticFullLink(String uri) {
+		StringOutput sb = new StringOutput(100);
+		sb.append(Settings.createServerURI());
+		Renderer.renderStaticURI(sb, uri);
+		return sb;
+	}
+	
+	public StringOutput themeFullLink() {
+		StringOutput sb = new StringOutput(100);
+		sb.append(Settings.createServerURI());	
+		GUISettings settings = CoreSpringFactory.getImpl(GUISettings.class);
+		Renderer.renderStaticURI(sb, "themes/" + settings.getGuiThemeIdentifyer() + "/theme.css");
 		return sb;
 	}
 	
@@ -344,12 +378,31 @@ public class VelocityRenderDecorator implements Closeable {
 		return sb;
 	}
 	
+	public StringOutput mathJaxCdnFullUrl() {
+		StringOutput sb = new StringOutput(100);
+		if(WebappHelper.getMathJaxCdn().startsWith("http")) {
+			sb.append(WebappHelper.getMathJaxCdn());
+		} else {
+			sb.append("https:").append(WebappHelper.getMathJaxCdn());
+		}
+		return sb;
+	}
+
+	public StringOutput mathJaxConfig() {
+		StringOutput sb = new StringOutput(100);
+		sb.append(WebappHelper.getMathJaxConfig());
+		return sb;
+	}
+	
 	public StringOutput contextPath() {
 		StringOutput sb = new StringOutput(100);
 		sb.append(Settings.getServerContextPath());
 		return sb;
 	}
 
+	public String mathJax(String targetDomId) {
+		return Formatter.elementLatexFormattingScript(targetDomId);
+	}
 	
 	/**
 	 * e.g. "/olat/"
@@ -403,14 +456,14 @@ public class VelocityRenderDecorator implements Closeable {
 	 */
 	public StringOutput contextHelpWithWrapper(String page) {
 		StringOutput sb = new StringOutput(192);
-		if (helpModule.isHelpEnabled()) {
+		if (getHelpModule().isHelpEnabled()) {
 			Locale locale = renderer.getTranslator().getLocale();
-			String url = helpModule.getHelpProvider().getURL(locale, page);
+			String url = getHelpModule().getHelpProvider().getURL(locale, page);
 			if(url != null) {
-				String title = StringEscapeUtils.escapeHtml(renderer.getTranslator().translate("help.button"));
+				String title = StringHelper.escapeHtml(renderer.getTranslator().translate("help.button"));
 				sb.append("<span class=\"o_chelp_wrapper\">")
 				  .append("<a href=\"").append(url)
-				  .append("\" class=\"o_chelp\" target=\"_blank\" title=\"").append(title).append("\"><i class='o_icon o_icon_help'></i> ")
+				  .append("\" class=\"o_chelp\" target=\"_blank\" title=\"").append(title).append("\"><i class='o_icon o_icon_help'> </i> ")
 				  .append(renderer.getTranslator().translate("help"))
 				  .append("</a></span>");
 			}
@@ -426,9 +479,9 @@ public class VelocityRenderDecorator implements Closeable {
 	 */
 	public StringOutput contextHelpJSCommand(String page) {
 		StringOutput sb = new StringOutput(100);
-		if (helpModule.isHelpEnabled()) {
+		if (getHelpModule().isHelpEnabled()) {
 			Locale locale = renderer.getTranslator().getLocale();
-			String url = helpModule.getHelpProvider().getURL(locale, page);
+			String url = getHelpModule().getHelpProvider().getURL(locale, page);
 			sb.append("contextHelpWindow('").append(url).append("')");
 		}
 		return sb;
@@ -444,10 +497,34 @@ public class VelocityRenderDecorator implements Closeable {
 	
 	public StringOutput contextHelpLink(String page) {
 		StringOutput sb = new StringOutput(100);
-		if (helpModule.isHelpEnabled()) {
-			String url = helpModule.getHelpProvider().getURL(renderer.getTranslator().getLocale(), page);
+		if (getHelpModule().isHelpEnabled()) {
+			String url = getHelpModule().getHelpProvider().getURL(renderer.getTranslator().getLocale(), page);
 			sb.append(url);
 		}
+		return sb;
+	}
+
+	/**
+	 * Add some mouse-over help text to an element, ideally an icon
+	 * 
+	 * @param domElem The DOM id of the element that triggers the mouse-over 
+	 * @param i18nKey The text to be displayed (including HTML formatting)
+	 * @param position Optional param, values: top, bottom, left right. Default is "top"
+	 * @return
+	 */
+	public StringOutput mouseoverHelp(String... args) {
+		String domElem = args[0];
+		String i18nKey = args[1];
+		String position = "top"; // default
+		if (args.length > 2 && args[2] != null) {
+			position = args[2];
+		}
+		StringOutput sb = new StringOutput(100);
+		sb.append("<script>jQuery(function () {jQuery('#").append(domElem).append("').tooltip({placement:\"").append(position).append("\",container: \"body\",html:true,title:\"");
+		if (i18nKey != null) {
+			sb.append(StringHelper.escapeJavaScript(translate(i18nKey)));
+		}
+		sb.append("\"});})</script>");
 		return sb;
 	}
 
@@ -629,7 +706,7 @@ public class VelocityRenderDecorator implements Closeable {
 	 * @return
 	 */
 	public String translateInAttribute(String key) {
-		return StringEscapeUtils.escapeHtml(translate(key));
+		return StringHelper.escapeHtml(translate(key));
 	}
 
 	/** 
@@ -676,6 +753,26 @@ public class VelocityRenderDecorator implements Closeable {
 			renderer.render(source, target, args);
 		}
 		return sb;
+	}
+	
+	public boolean isTrue(Object obj) {
+		if("true".equals(obj)) {
+			return true;
+		}
+		if(obj instanceof Boolean) {
+			return ((Boolean)obj).booleanValue();
+		}
+		return false;
+	}
+	
+	public boolean isFalse(Object obj) {
+		if("falsse".equals(obj)) {
+			return true;
+		}
+		if(obj instanceof Boolean) {
+			return !((Boolean)obj).booleanValue();
+		}
+		return false;
 	}
 	
 	public boolean isNull(Object obj) {
@@ -768,14 +865,22 @@ public class VelocityRenderDecorator implements Closeable {
 		return (source != null && source.isVisible() && source.isEnabled());
 	}
 	
+	public boolean enabled(Component component) {
+		return component != null && component.isVisible() && component.isEnabled();
+	}
+	
+	public boolean enabled(FormItem item) {
+		if(item == null) return false;
+		return enabled(item.getComponent());
+	}
+	
 	/**
 	 * Return the component
 	 * @param componentName
 	 * @return
 	 */
 	public Component getComponent(String componentName) {
-		Component source = renderer.findComponent(componentName);
-		return source;
+		return renderer.findComponent(componentName);
 	}
 
 	/**
@@ -902,8 +1007,7 @@ public class VelocityRenderDecorator implements Closeable {
 	 * @return Source without HTML tags.
 	 */
 	public static String filterHTMLTags(String source) {
-		Filter htmlTagsFilter = FilterFactory.getHtmlTagsFilter();
-		return htmlTagsFilter.filter(source);
+		return FilterFactory.getHtmlTagsFilter().filter(source);
 	}
 	
 	/**
@@ -912,6 +1016,7 @@ public class VelocityRenderDecorator implements Closeable {
 	 * @return The css class for the file or a default css class
 	 */
 	public static String getFiletypeIconCss(String filename) {
+		if(filename == null) return "";
 		return CSSHelper.createFiletypeIconCssClassFor(filename);
 	}
 	
@@ -929,15 +1034,17 @@ public class VelocityRenderDecorator implements Closeable {
 	}
 	
 	public Languages getLanguages() {
-		I18nManager i18nMgr = I18nManager.getInstance();
-		Collection<String> enabledKeysSet = I18nModule.getEnabledLanguageKeys();
-		Map<String, String> langNames = new HashMap<String, String>();
-		Map<String, String> langTranslators = new HashMap<String, String>();
+		I18nManager i18nMgr = CoreSpringFactory.getImpl(I18nManager.class);
+		I18nModule i18nModule = CoreSpringFactory.getImpl(I18nModule.class);
+		
+		Collection<String> enabledKeysSet = i18nModule.getEnabledLanguageKeys();
+		Map<String, String> langNames = new HashMap<>();
+		Map<String, String> langTranslators = new HashMap<>();
 		String[] enabledKeys = ArrayHelper.toArray(enabledKeysSet);
 		String[] names = new String[enabledKeys.length];
 		for (int i = 0; i < enabledKeys.length; i++) {
 			String key = enabledKeys[i];
-			String langName = i18nMgr.getLanguageInEnglish(key, I18nModule.isOverlayEnabled());
+			String langName = i18nMgr.getLanguageInEnglish(key, i18nModule.isOverlayEnabled());
 			langNames.put(key, langName);
 			names[i] = langName;
 			String author = i18nMgr.getLanguageAuthor(key);

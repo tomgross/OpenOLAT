@@ -30,12 +30,13 @@ import java.util.Set;
 import javax.servlet.http.HttpServletRequest;
 
 import org.olat.basesecurity.BaseSecurityModule;
-import org.olat.core.commons.modules.bc.meta.MetaInfo;
-import org.olat.core.commons.modules.bc.meta.tagged.MetaTagged;
+import org.olat.core.commons.fullWebApp.popup.BaseFullWebappPopupLayoutFactory;
 import org.olat.core.commons.persistence.DBFactory;
 import org.olat.core.commons.services.mark.Mark;
 import org.olat.core.commons.services.mark.MarkResourceStat;
 import org.olat.core.commons.services.mark.MarkingService;
+import org.olat.core.commons.services.vfs.VFSMetadata;
+import org.olat.core.commons.services.vfs.VFSRepositoryService;
 import org.olat.core.dispatcher.mapper.Mapper;
 import org.olat.core.gui.UserRequest;
 import org.olat.core.gui.components.Component;
@@ -47,10 +48,12 @@ import org.olat.core.gui.control.Controller;
 import org.olat.core.gui.control.Event;
 import org.olat.core.gui.control.WindowControl;
 import org.olat.core.gui.control.controller.BasicController;
+import org.olat.core.gui.control.creator.ControllerCreator;
 import org.olat.core.gui.control.generic.closablewrapper.CloseableModalController;
 import org.olat.core.gui.control.generic.dtabs.Activateable2;
 import org.olat.core.gui.control.generic.modal.DialogBoxController;
 import org.olat.core.gui.control.generic.modal.DialogBoxUIFactory;
+import org.olat.core.gui.control.generic.popup.PopupBrowserWindow;
 import org.olat.core.gui.control.generic.wizard.Step;
 import org.olat.core.gui.control.generic.wizard.StepRunnerCallback;
 import org.olat.core.gui.control.generic.wizard.StepsMainRunController;
@@ -109,6 +112,7 @@ import org.olat.repository.RepositoryEntry;
 import org.olat.repository.RepositoryManager;
 import org.olat.resource.OLATResourceManager;
 import org.olat.user.DisplayPortraitController;
+import org.olat.user.UserInfoMainController;
 import org.olat.user.UserManager;
 import org.olat.user.propertyhandlers.UserPropertyHandler;
 import org.olat.util.logging.activity.LoggingResourceable;
@@ -180,6 +184,8 @@ public class MessageListController extends BasicController implements GenericEve
 	private PortfolioV2Module portfolioModule;
 	@Autowired
 	private ForumMediaHandler forumMediaHandler;
+	@Autowired
+	private VFSRepositoryService vfsRepositoryService;
 	
 	public MessageListController(UserRequest ureq, WindowControl wControl,
 			Forum forum, ForumCallback foCallback) {
@@ -307,10 +313,21 @@ public class MessageListController extends BasicController implements GenericEve
 			} else {
 				scrollTo(message);
 			}
-		} else if(message != null) {
+		} else if(message != null && message.getKey() != null) {
 			MessageView view = loadView(ureq, message);
-			backupViews.add(view);
-			
+			int index = 0;
+			for(int i=0; i<backupViews.size(); i++) {
+				if(backupViews.get(i).getKey().equals(message.getKey())) {
+					backupViews.remove(backupViews.get(i));
+					index = i;
+					break;
+				}
+			}
+			if(index >= 0) {
+				backupViews.add(index, view);
+			} else {
+				backupViews.add(view);
+			}
 			mainVC.contextPut("messages", backupViews);
 			messageTableCtrl.loadMessages(new ArrayList<>(0));
 
@@ -424,7 +441,7 @@ public class MessageListController extends BasicController implements GenericEve
 		}
 		
 		List<MarkResourceStat> statList = markingService.getMarkManager().getStats(forumOres, subPaths, getIdentity());
-		Map<String,MarkResourceStat> stats = new HashMap<String,MarkResourceStat>(statList.size() * 2 + 1);
+		Map<String,MarkResourceStat> stats = new HashMap<>(statList.size() * 2 + 1);
 		for(MarkResourceStat stat:statList) {
 			stats.put(stat.getSubPath(), stat);
 		}
@@ -634,9 +651,13 @@ public class MessageListController extends BasicController implements GenericEve
 			// Add link with username that is clickable
 			String creatorFullName = StringHelper.escapeHtml(UserManager.getInstance().getUserDisplayName(creator));
 			Link visitingCardLink = LinkFactory.createCustomLink("vc_".concat(keyString), "vc", creatorFullName, Link.LINK_CUSTOM_CSS + Link.NONTRANSLATED, mainVC, this);
-			visitingCardLink.setUserObject(messageView);
+			visitingCardLink.setUserObject(creator);
 			LinkPopupSettings settings = new LinkPopupSettings(800, 600, "_blank");
 			visitingCardLink.setPopup(settings);
+			if (creator.getStatus().equals(Identity.STATUS_DELETED)) {
+				// keep link to show something, but disable
+				visitingCardLink.setEnabled(false);
+			}
 		}
 
 		if(!isThreadClosed) {
@@ -766,7 +787,6 @@ public class MessageListController extends BasicController implements GenericEve
 			Link link = (Link)source;
 			String command = link.getCommand();
 			Object uobject = link.getUserObject();
-
 			if (command.startsWith("qt")) {
 				doReply(ureq, (MessageView)uobject, true);
 			} else if (command.startsWith("rp")) {
@@ -781,6 +801,8 @@ public class MessageListController extends BasicController implements GenericEve
 				doMoveMessage(ureq, (MessageView)uobject);
 			} else if (command.startsWith("exile")) {
 				doExportForumItem(ureq, (MessageView)uobject);
+			} else if(command.equals("vc")) {
+				doOpenVisitingCard(ureq, (Identity)uobject);
 			}
 		} else if(mainVC == source) {
 			String cmd = event.getCommand();
@@ -812,7 +834,7 @@ public class MessageListController extends BasicController implements GenericEve
 			logError("Cannot deliver message attachment", e);
 		}
 		if(res == null) {
-			res = new NotFoundMediaResource(cmd);
+			res = new NotFoundMediaResource();
 		}
 		ureq.getDispatchResult().setResultingMediaResource(res);
 	}
@@ -1058,7 +1080,7 @@ public class MessageListController extends BasicController implements GenericEve
 				listenTo(editMessageCtrl);
 				cmc.activate();
 			}
-		} else if ((userIsMsgCreator) && (children == true)) {
+		} else if (userIsMsgCreator && children) {
 			// user is author of the current message but it has already at least
 			// one child
 			showWarning("may.not.save.msg.as.author");
@@ -1134,7 +1156,7 @@ public class MessageListController extends BasicController implements GenericEve
 			DBFactory.getInstance().commit();// before sending async event
 			
 			closeThreadButton.setVisible(false);
-			openThreadButton.setVisible(true && !guestOnly);
+			openThreadButton.setVisible(!guestOnly);
 			mainVC.setDirty(true);
 			
 			ForumChangedEvent event = new ForumChangedEvent(ForumChangedEvent.CLOSE, thread.getKey(), null, getIdentity());
@@ -1152,7 +1174,7 @@ public class MessageListController extends BasicController implements GenericEve
 			thread = forumManager.updateMessage(thread, true);
 			DBFactory.getInstance().commit();// before sending async event
 			
-			closeThreadButton.setVisible(true && !guestOnly);
+			closeThreadButton.setVisible(!guestOnly);
 			openThreadButton.setVisible(false);
 			mainVC.setDirty(true);
 
@@ -1178,7 +1200,7 @@ public class MessageListController extends BasicController implements GenericEve
 			DBFactory.getInstance().commit();// before sending async event
 			
 			hideThreadButton.setVisible(false);
-			showThreadButton.setVisible(true && !guestOnly);
+			showThreadButton.setVisible(!guestOnly);
 			mainVC.setDirty(true);
 
 			ForumChangedEvent event = new ForumChangedEvent(ForumChangedEvent.HIDE, thread.getKey(), null, getIdentity());
@@ -1202,7 +1224,7 @@ public class MessageListController extends BasicController implements GenericEve
 			thread = forumManager.updateMessage(thread, true);
 			DBFactory.getInstance().commit();// before sending async event
 			
-			hideThreadButton.setVisible(true && !guestOnly);
+			hideThreadButton.setVisible(!guestOnly);
 			showThreadButton.setVisible(false);
 			mainVC.setDirty(true);
 
@@ -1290,7 +1312,11 @@ public class MessageListController extends BasicController implements GenericEve
 				}
 			}
 			mainVC.contextPut("messages", oneView);
-			messageTableCtrl.setSelectView(oneView.get(0));
+			if(oneView.size() > 0) {
+				messageTableCtrl.setSelectView(oneView.get(0));
+			} else {
+				showWarning("error.message.deleted");
+			}
 			messageTableCtrl.loadMessages(new ArrayList<>(backupViews));
 		}
 	}
@@ -1407,6 +1433,19 @@ public class MessageListController extends BasicController implements GenericEve
 		}
 	}
 	
+	private void doOpenVisitingCard(UserRequest ureq, Identity creator) {
+		ControllerCreator userInfoMainControllerCreator = new ControllerCreator() {
+			@Override
+			public Controller createController(UserRequest lureq, WindowControl lwControl) {
+				return new UserInfoMainController(lureq, lwControl, creator, true, false);
+			}					
+		};
+		//wrap the content controller into a full header layout
+		ControllerCreator layoutCtrlr = BaseFullWebappPopupLayoutFactory.createAuthMinimalPopupLayout(ureq, userInfoMainControllerCreator);
+		PopupBrowserWindow pbw = getWindowControl().getWindowBackOffice().getWindowManager().createNewPopupBrowserWindowFor(ureq, layoutCtrlr);
+		pbw.open(ureq);
+	}
+	
 	public enum LoadMode {
 		thread,
 		userMessages,
@@ -1455,14 +1494,12 @@ public class MessageListController extends BasicController implements GenericEve
 					if (view != null) {
 						List<VFSItem> attachments = view.getAttachments();
 						for (VFSItem vfsItem : attachments) {
-							MetaInfo meta = ((MetaTagged)vfsItem).getMetaInfo();
-							if (meta.getUUID().equals(query[2])) {
-								if (meta.isThumbnailAvailable()) {
-									VFSLeaf thumb = meta.getThumbnail(200, 200, false);
-									if(thumb != null) {
-										// Positive lookup, send as response
-										return new VFSMediaResource(thumb);
-									}
+							VFSMetadata meta = vfsItem.getMetaInfo();
+							if (meta instanceof VFSLeaf && meta.getUuid().equals(query[2])) {
+								VFSLeaf thumb = vfsRepositoryService.getThumbnail((VFSLeaf)vfsItem, meta, 200, 200, false);
+								if(thumb != null) {
+									// Positive lookup, send as response
+									return new VFSMediaResource(thumb);
 								}
 								break;
 							}
@@ -1473,7 +1510,7 @@ public class MessageListController extends BasicController implements GenericEve
 				}
 			}
 			// In any error case, send not found
-			return new NotFoundMediaResource(request.getRequestURI());
+			return new NotFoundMediaResource();
 		}
 	}
 }

@@ -24,14 +24,10 @@ import java.net.URISyntaxException;
 import java.net.URL;
 import java.util.UUID;
 
-import org.jboss.arquillian.container.test.api.Deployment;
 import org.jboss.arquillian.container.test.api.RunAsClient;
 import org.jboss.arquillian.drone.api.annotation.Drone;
-import org.jboss.arquillian.graphene.page.InitialPage;
 import org.jboss.arquillian.junit.Arquillian;
 import org.jboss.arquillian.test.api.ArquillianResource;
-import org.jboss.shrinkwrap.api.spec.WebArchive;
-import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.olat.selenium.page.LoginPage;
@@ -39,7 +35,6 @@ import org.olat.selenium.page.NavigationPage;
 import org.olat.selenium.page.Participant;
 import org.olat.selenium.page.Student;
 import org.olat.selenium.page.core.AdministrationMessagesPage;
-import org.olat.test.ArquillianDeployments;
 import org.olat.test.rest.UserRestClient;
 import org.olat.user.restapi.UserVO;
 import org.openqa.selenium.WebDriver;
@@ -50,14 +45,8 @@ import org.openqa.selenium.WebDriver;
  * @author srosse, stephane.rosse@frentix.com, http://www.frentix.com
  *
  */
-@Ignore
 @RunWith(Arquillian.class)
-public class LoginTest {
-
-	@Deployment(testable = false)
-	public static WebArchive createDeployment() {
-		return ArquillianDeployments.createDeployment();
-	}
+public class LoginTest extends Deployments {
 
 	@Drone
 	private WebDriver browser;
@@ -70,9 +59,10 @@ public class LoginTest {
 	 */
 	@Test
 	@RunAsClient
-	public void loadIndex(@InitialPage LoginPage loginPage) {
+	public void loadIndex(LoginPage loginPage) {
 		//check that the login page, or dmz is loaded
-		loginPage.assertOnLoginPage();
+		LoginPage.load(browser, deploymentUrl)
+			.assertOnLoginPage();
 	}
 	
 	/**
@@ -82,9 +72,11 @@ public class LoginTest {
 	 */
 	@Test
 	@RunAsClient
-	public void loginAsAdministrator(@InitialPage LoginPage loginPage) {
+	public void loginAsAdministrator() {
 		//load dmz
-		loginPage.assertOnLoginPage();
+		LoginPage loginPage = LoginPage
+				.load(browser, deploymentUrl)
+				.assertOnLoginPage();
 		//login as administrator
 		loginPage
 			.loginAs("administrator", "openolat")
@@ -101,14 +93,16 @@ public class LoginTest {
 	 */
 	@Test
 	@RunAsClient
-	public void loginAsNewUser(@InitialPage LoginPage loginPage)
+	public void loginAsNewUser()
 	throws IOException, URISyntaxException {
 		//create a random user
 		UserRestClient userClient = new UserRestClient(deploymentUrl);
 		UserVO user = userClient.createRandomUser();
 
 		//load dmz
-		loginPage.assertOnLoginPage();
+		LoginPage loginPage = LoginPage
+				.load(browser, deploymentUrl)
+				.assertOnLoginPage();
 		//login
 		loginPage.loginAs(user.getLogin(), user.getPassword());
 	}
@@ -128,7 +122,7 @@ public class LoginTest {
 	 */
 	@Test
 	@RunAsClient
-	public void maintenanceMessage(@InitialPage LoginPage loginPage, 
+	public void maintenanceMessage( 
 			@Drone @Participant WebDriver reiBrowser,
 			@Drone @Student WebDriver kanuBrowser)
 	throws IOException, URISyntaxException {
@@ -137,24 +131,24 @@ public class LoginTest {
 		UserVO kanu = new UserRestClient(deploymentUrl).createRandomUser("Kanu");
 		
 		//a first user log in
-		LoginPage kanuLogin = LoginPage.getLoginPage(kanuBrowser, deploymentUrl)
+		LoginPage kanuLogin = LoginPage.load(kanuBrowser, deploymentUrl)
 			.loginAs(kanu)
 			.resume();
 		
 		// administrator come in, and set a maintenance message
-		loginPage
+		LoginPage.load(browser, deploymentUrl)
 			.assertOnLoginPage()
 			.loginAs("administrator", "openolat")
 			.resume();
 		
 		String message = "Hello - " + UUID.randomUUID();
-		AdministrationMessagesPage messagesPage = new NavigationPage(browser)
+		AdministrationMessagesPage messagesPage = NavigationPage.load(browser)
 			.openAdministration()
 			.selectInfoMessages()
 			.newMaintenanceMessage(message);
 		
 		//A new user see the login page 	
-		LoginPage.getLoginPage(reiBrowser, deploymentUrl)
+		LoginPage.load(reiBrowser, deploymentUrl)
 			.waitOnMaintenanceMessage(message)
 			.loginAs(rei)
 			.resume()

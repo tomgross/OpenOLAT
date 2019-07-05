@@ -22,8 +22,10 @@ package org.olat.ldap.manager;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Hashtable;
 import java.util.Iterator;
 import java.util.List;
@@ -40,6 +42,7 @@ import javax.naming.directory.Attributes;
 import javax.naming.directory.BasicAttribute;
 import javax.naming.directory.DirContext;
 import javax.naming.directory.ModificationItem;
+import javax.naming.directory.SearchControls;
 import javax.naming.directory.SearchResult;
 import javax.naming.ldap.Control;
 import javax.naming.ldap.InitialLdapContext;
@@ -50,18 +53,24 @@ import org.olat.admin.user.delete.service.UserDeletionManager;
 import org.olat.basesecurity.Authentication;
 import org.olat.basesecurity.BaseSecurity;
 import org.olat.basesecurity.BaseSecurityModule;
-import org.olat.basesecurity.Constants;
 import org.olat.basesecurity.GroupRoles;
-import org.olat.basesecurity.SecurityGroup;
+import org.olat.basesecurity.IdentityRef;
+import org.olat.basesecurity.OrganisationRoles;
+import org.olat.basesecurity.OrganisationService;
+import org.olat.basesecurity.manager.AuthenticationDAO;
+import org.olat.basesecurity.manager.OrganisationDAO;
+import org.olat.basesecurity.model.IdentityRefImpl;
 import org.olat.core.CoreSpringFactory;
 import org.olat.core.commons.persistence.DB;
 import org.olat.core.commons.services.taskexecutor.TaskExecutorManager;
 import org.olat.core.gui.control.Event;
 import org.olat.core.id.Identity;
+import org.olat.core.id.Organisation;
 import org.olat.core.id.Roles;
+import org.olat.core.id.RolesByOrganisation;
 import org.olat.core.id.User;
 import org.olat.core.id.UserConstants;
-import org.olat.core.logging.OLog;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.StringHelper;
 import org.olat.core.util.WorkThreadInformations;
@@ -102,7 +111,7 @@ import org.springframework.stereotype.Service;
 @Service("org.olat.ldap.LDAPLoginManager")
 public class LDAPLoginManagerImpl implements LDAPLoginManager, GenericEventListener {
 	
-	private static final OLog log = Tracing.createLoggerFor(LDAPLoginManagerImpl.class);
+	private static final Logger log = Tracing.createLoggerFor(LDAPLoginManagerImpl.class);
 
 	private static final String TIMEOUT_KEY = "com.sun.jndi.ldap.connect.timeout";
 	private static boolean batchSyncIsRunning = false;
@@ -120,7 +129,13 @@ public class LDAPLoginManagerImpl implements LDAPLoginManager, GenericEventListe
 	@Autowired
 	private BaseSecurity securityManager;
 	@Autowired
+	private OrganisationDAO organisationDao;
+	@Autowired
+	private OrganisationService organisationService;
+	@Autowired
 	private LDAPLoginModule ldapLoginModule;
+	@Autowired
+	private AuthenticationDAO authenticationDao;
 	@Autowired
 	private LDAPSyncConfiguration syncConfiguration;
 	@Autowired
@@ -147,9 +162,7 @@ public class LDAPLoginManagerImpl implements LDAPLoginManager, GenericEventListe
 				batchSyncIsRunning = false;
 				lastSyncDate = ((LDAPEvent)event).getTimestamp();
 			} else if(LDAPEvent.DO_SYNCHING.equals(event.getCommand())) {
-				doHandleBatchSync(false);
-			} else if(LDAPEvent.DO_FULL_SYNCHING.equals(event.getCommand())) {
-				doHandleBatchSync(true);
+				doHandleBatchSync();
 			}
 		} else if(event instanceof FrameworkStartedEvent) {
 			try {
@@ -173,7 +186,7 @@ public class LDAPLoginManagerImpl implements LDAPLoginManager, GenericEventListe
 			// Start LDAP cron sync job
 			if (ldapLoginModule.isLdapSyncCronSync()) {
 				LDAPError errors = new LDAPError();
-				if (doBatchSync(errors, true)) {
+				if (doBatchSync(errors)) {
 					log.info("LDAP start sync: users synced");
 				} else {
 					log.warn("LDAP start sync error: " + errors.get());
@@ -184,15 +197,13 @@ public class LDAPLoginManagerImpl implements LDAPLoginManager, GenericEventListe
 		}
 	}
 	
-	private void doHandleBatchSync(final boolean full) {
+	private void doHandleBatchSync() {
 		//fxdiff: also run on nodes != 1 as nodeid = tomcat-id in fx-environment
-//		if(WebappHelper.getNodeId() != 1) return;
+		//if(WebappHelper.getNodeId() != 1) return;
 		
-		Runnable batchSyncTask = new Runnable() {
-			public void run() {
-				LDAPError errors = new LDAPError();
-				doBatchSync(errors, full);
-			}				
+		Runnable batchSyncTask = () -> {
+			LDAPError errors = new LDAPError();
+			doBatchSync(errors);
 		};
 		taskExecutorManager.execute(batchSyncTask);		
 	}
@@ -208,9 +219,10 @@ public class LDAPLoginManagerImpl implements LDAPLoginManager, GenericEventListe
 	 * 
 	 * @throws NamingException
 	 */
+	@Override
 	public LdapContext bindSystem() {
 		// set LDAP connection attributes
-		Hashtable<String, String> env = new Hashtable<String, String>();
+		Hashtable<String, String> env = new Hashtable<>();
 		env.put(Context.INITIAL_CONTEXT_FACTORY, "com.sun.jndi.ldap.LdapCtxFactory");
 		env.put(Context.PROVIDER_URL, ldapLoginModule.getLdapUrl());
 		env.put(Context.SECURITY_AUTHENTICATION, "simple");
@@ -264,7 +276,7 @@ public class LDAPLoginManagerImpl implements LDAPLoginManager, GenericEventListe
 		String[] userAttr = syncConfiguration.getUserAttributes();
 
 		if (login == null || pwd == null) {
-			if (log.isDebug()) log.debug("Error when trying to bind user, missing username or password. Username::" + login + " pwd::" + pwd);
+			if (log.isDebugEnabled()) log.debug("Error when trying to bind user, missing username or password. Username::" + login + " pwd::" + pwd);
 			errors.insert("Username and password must be selected");
 			return null;
 		}
@@ -284,7 +296,7 @@ public class LDAPLoginManagerImpl implements LDAPLoginManager, GenericEventListe
 		
 		// Ok, so far so good, user exists. Now try to fetch attributes using the
 		// users credentials
-		Hashtable<String, String> env = new Hashtable<String, String>();
+		Hashtable<String, String> env = new Hashtable<>();
 		env.put(Context.INITIAL_CONTEXT_FACTORY, "com.sun.jndi.ldap.LdapCtxFactory");
 		env.put(Context.PROVIDER_URL, ldapUrl);
 		env.put(Context.SECURITY_AUTHENTICATION, "simple");
@@ -425,13 +437,14 @@ public class LDAPLoginManagerImpl implements LDAPLoginManager, GenericEventListe
 	 * @param identityList List of Identities to delete
 	 */
 	@Override
-	public void deletIdentities(List<Identity> identityList) {
-		SecurityGroup secGroup = securityManager.findSecurityGroupByName(LDAPConstants.SECURITY_GROUP_LDAP);
-		
+	public void deleteIdentities(List<Identity> identityList, Identity doer) {
 		for (Identity identity:  identityList) {
-			securityManager.removeIdentityFromSecurityGroup(identity, secGroup);
-			userDeletionManager.deleteIdentity(identity);
-			dbInstance.intermediateCommit();
+			if(Identity.STATUS_PERMANENT.equals(identity.getStatus())) {
+				log.info(Tracing.M_AUDIT, identity.getKey() + " was not deleted because is status is permanent.");
+				continue;
+			}
+			
+			userDeletionManager.deleteIdentity(identity, doer);
 		}
 	}
 
@@ -443,11 +456,13 @@ public class LDAPLoginManagerImpl implements LDAPLoginManager, GenericEventListe
 	 * @param identity Identity to sync
 	 */
 	@Override
-	public void syncUser(Map<String, String> olatPropertyMap, Identity identity) {
-		if (identity == null) {
-			log.warn("Identiy is null - should not happen", null);
-			return;
+	public Identity syncUser(Map<String, String> olatPropertyMap, IdentityRef identityRef) {
+		if (identityRef == null) {
+			log.warn("Identiy is null - should not happen");
+			return null;
 		}
+		
+		Identity identity = securityManager.loadIdentityByKey(identityRef.getKey());
 		User user = identity.getUser();
 		// remove user identifyer - can not be changed later
 		olatPropertyMap.remove(LDAPConstants.LDAP_USER_IDENTIFYER);
@@ -480,6 +495,26 @@ public class LDAPLoginManagerImpl implements LDAPLoginManager, GenericEventListe
 			}
 		}
 		userManager.updateUser(user);
+		return identity;
+	}
+
+	@Override
+	public Identity createAndPersistUser(String uid) {
+		String ldapUserIDAttribute = syncConfiguration.getOlatPropertyToLdapAttribute(LDAPConstants.LDAP_USER_IDENTIFYER);
+		String filter = ldapDao.buildSearchUserFilter(ldapUserIDAttribute, uid);
+		LdapContext ctx = bindSystem();
+		String userDN = ldapDao.searchUserDNByUid(uid, ctx);
+		log.info("create and persist user identifier by userDN: " + userDN + " with filter: " + filter);
+		LDAPUserVisitor visitor = new LDAPUserVisitor(syncConfiguration);	
+		ldapDao.search(visitor, userDN, filter, syncConfiguration.getUserAttributes(), ctx);
+
+		Identity newIdentity = null;
+		List<LDAPUser> ldapUser = visitor.getLdapUserList();
+		if(ldapUser != null && ldapUser.size() > 0) {
+			Attributes userAttributes = ldapUser.get(0).getAttributes();
+			newIdentity = createAndPersistUser(userAttributes);
+		}
+		return newIdentity;
 	}
 
 	/**
@@ -493,7 +528,7 @@ public class LDAPLoginManagerImpl implements LDAPLoginManager, GenericEventListe
 		// Get and Check Config
 		String[] reqAttrs = syncConfiguration.checkRequestAttributes(userAttributes);
 		if (reqAttrs != null) {
-			log.warn("Can not create and persist user, the following attributes are missing::" + ArrayUtils.toString(reqAttrs), null);
+			log.warn("Can not create and persist user, the following attributes are missing::" + ArrayUtils.toString(reqAttrs));
 			return null;
 		}
 		
@@ -502,16 +537,16 @@ public class LDAPLoginManagerImpl implements LDAPLoginManager, GenericEventListe
 		String email = getAttributeValue(userAttributes.get(syncConfiguration.getOlatPropertyToLdapAttribute(UserConstants.EMAIL)));
 		// Lookup user
 		if (securityManager.findIdentityByNameCaseInsensitive(uid) != null) {
-			log.error("Can't create user with username='" + uid + "', this username does already exist in OLAT database", null);
+			log.error("Can't create user with username='" + uid + "', this username does already exist in OLAT database");
 			return null;
 		}
 		if (!MailHelper.isValidEmailAddress(email)) {
 			// needed to prevent possibly an AssertException in findIdentityByEmail breaking the sync!
-			log.error("Cannot try to lookup user " + uid + " by email with an invalid email::" + email, null);
+			log.error("Cannot try to lookup user " + uid + " by email with an invalid email::" + email);
 			return null;
 		}
-		if (userManager.userExist(email) ) {
-			log.error("Can't create user with email='" + email + "', a user with that email does already exist in OLAT database", null);
+		if (!userManager.isEmailAllowed(email)) {
+			log.error("Can't create user with email='" + email + "', a user with that email does already exist in OLAT database");
 			return null;
 		}
 		
@@ -548,12 +583,8 @@ public class LDAPLoginManagerImpl implements LDAPLoginManager, GenericEventListe
 
 		// Create Identity
 		Identity identity = securityManager.createAndPersistIdentityAndUser(uid, null, user, LDAPAuthenticationController.PROVIDER_LDAP, uid);
-		// Add to SecurityGroup LDAP
-		SecurityGroup secGroup = securityManager.findSecurityGroupByName(LDAPConstants.SECURITY_GROUP_LDAP);
-		securityManager.addIdentityToSecurityGroup(identity, secGroup);
-		// Add to SecurityGroup OLATUSERS
-		secGroup = securityManager.findSecurityGroupByName(Constants.GROUP_OLATUSERS);
-		securityManager.addIdentityToSecurityGroup(identity, secGroup);
+		// Add to the default organization as user
+		organisationService.addMember(identity, OrganisationRoles.user);
 		log.info("Created LDAP user username::" + uid);
 		return identity;
 	}
@@ -572,7 +603,7 @@ public class LDAPLoginManagerImpl implements LDAPLoginManager, GenericEventListe
 	 */
 	@SuppressWarnings("unchecked")
 	public Map<String, String> prepareUserPropertyForSync(Attributes attributes, Identity identity) {
-		Map<String, String> olatPropertyMap = new HashMap<String, String>();
+		Map<String, String> olatPropertyMap = new HashMap<>();
 		User user = identity.getUser();
 		NamingEnumeration<Attribute> neAttrs = (NamingEnumeration<Attribute>) attributes.getAll();
 		try {
@@ -594,10 +625,10 @@ public class LDAPLoginManagerImpl implements LDAPLoginManager, GenericEventListe
 				}
 			}
 			if (olatPropertyMap.size() == 1 && olatPropertyMap.get(LDAPConstants.LDAP_USER_IDENTIFYER) != null) {
-				log.debug("propertymap for identity " + identity.getName() + " contains only userID, NOTHING TO SYNC!");
+				log.debug("propertymap for identity " + identity.getKey() + " contains only userID, NOTHING TO SYNC!");
 				return null;
 			} else {
-				log.debug("propertymap for identity " + identity.getName() + " contains " + olatPropertyMap.size() + " items (" + olatPropertyMap.keySet() + ") to be synced later on");
+				log.debug("propertymap for identity " + identity.getKey() + " contains " + olatPropertyMap.size() + " items (" + olatPropertyMap.keySet() + ") to be synced later on");
 				return olatPropertyMap;
 			}
 
@@ -617,8 +648,7 @@ public class LDAPLoginManagerImpl implements LDAPLoginManager, GenericEventListe
 	 */
 	private String mapLdapAttributeToOlatProperty(String attrID) {
 		Map<String, String> userAttrMapper = syncConfiguration.getUserAttributeMap();
-		String olatProperty = userAttrMapper.get(attrID);
-		return olatProperty;
+		return userAttrMapper.get(attrID);
 	}
 	
 	/**
@@ -632,11 +662,93 @@ public class LDAPLoginManagerImpl implements LDAPLoginManager, GenericEventListe
 	 */
 	private String getAttributeValue(Attribute attribute) {
 		try {
-			String attrValue = (String)attribute.get();
-			return attrValue;
+			return (String)attribute.get();
 		} catch (NamingException e) {
 			log.error("NamingException when trying to get attribute value for attribute::" + attribute, e);
 			return null;
+		}
+	}
+
+	/**
+	 * The method search in LDAP the user, search the groups
+	 * of which it is member of, and sync the groups.
+	 * 
+	 * @param identity The identity to sync
+	 */
+	@Override
+	public void syncUserGroups(Identity identity) {	
+		LdapContext ctx = bindSystem();
+		if (ctx == null) {
+			log.error("could not bind to ldap");
+		}
+			
+		String ldapUserIDAttribute = syncConfiguration.getOlatPropertyToLdapAttribute(LDAPConstants.LDAP_USER_IDENTIFYER);
+		String filter = ldapDao.buildSearchUserFilter(ldapUserIDAttribute, identity.getName());
+
+		boolean withCoacheOfGroups = StringHelper.containsNonWhitespace(syncConfiguration.getCoachedGroupAttribute());
+		List<String> ldapBases = syncConfiguration.getLdapBases();
+		String[] searchAttr;
+		if(withCoacheOfGroups) {
+			searchAttr = new String[]{ "dn", syncConfiguration.getCoachedGroupAttribute() };
+		} else {
+			searchAttr = new String[]{ "dn" };
+		}
+
+		SearchControls ctls = new SearchControls();
+		ctls.setSearchScope(SearchControls.SUBTREE_SCOPE);
+		ctls.setReturningAttributes(searchAttr);
+
+		String userDN = null;
+		List<String> groupList = null;
+		for (String ldapBase : ldapBases) {
+			try {
+				NamingEnumeration<SearchResult> enm = ctx.search(ldapBase, filter, ctls);
+				while (enm.hasMore()) {
+					SearchResult result = enm.next();
+					userDN = result.getNameInNamespace();
+					
+					if(withCoacheOfGroups) {
+						Attributes resAttributes = result.getAttributes();
+						Attribute coachOfGroupsAttr = resAttributes.get(syncConfiguration.getCoachedGroupAttribute());
+						if(coachOfGroupsAttr != null && coachOfGroupsAttr.get() instanceof String) {
+							String groupString = (String)coachOfGroupsAttr.get();
+							if(!"-".equals(groupString)) {
+								String[] groupArr = groupString.split(syncConfiguration.getCoachedGroupAttributeSeparator());
+								groupList = new ArrayList<>(groupArr.length);
+								for(String group:groupArr) {
+									groupList.add(group);
+								}
+							}
+						}
+					}
+				}
+				if (userDN != null) {
+					break;
+				}
+			} catch (NamingException e) {
+				log.error("NamingException when trying to bind user with username::" + identity.getKey() + " on ldapBase::" + ldapBase, e);
+			}
+		}
+
+		// get the potential groups
+		if(userDN != null) {
+			List<String> groupDNs = syncConfiguration.getLdapGroupBases();
+			String groupFilter = "(&(objectClass=groupOfNames)(member=" + userDN + "))";
+			List<LDAPGroup> groups = ldapDao.searchGroups(ctx, groupDNs, groupFilter);
+			for(LDAPGroup group:groups) {
+				BusinessGroup managedGroup = getManagerBusinessGroup(group.getCommonName());
+				if(managedGroup != null) {
+					List<String> roles = businessGroupRelationDao.getRoles(identity, managedGroup);
+					if(roles.isEmpty()) {
+						boolean coach = groupList != null && groupList.contains(group.getCommonName());
+						if(coach) {
+							businessGroupRelationDao.addRole(identity, managedGroup, GroupRoles.coach.name());
+						} else {
+							businessGroupRelationDao.addRole(identity, managedGroup, GroupRoles.participant.name());
+						}
+					}
+				}
+			}
 		}
 	}
 
@@ -661,38 +773,33 @@ public class LDAPLoginManagerImpl implements LDAPLoginManager, GenericEventListe
 		String uid = getAttributeValue(attrs.get(syncConfiguration
 				.getOlatPropertyToLdapAttribute(LDAPConstants.LDAP_USER_IDENTIFYER)));
 		String token = getAttributeValue(attrs.get(syncConfiguration.getLdapUserLoginAttribute()));
-		
+
 		Identity identity = securityManager.findIdentityByNameCaseInsensitive(uid);
 		if (identity == null) {
 			return null;
-		} else {
-			SecurityGroup ldapGroup = securityManager.findSecurityGroupByName(LDAPConstants.SECURITY_GROUP_LDAP);
-			if (ldapGroup == null) {
-				log.error("Error getting user from OLAT security group '" + LDAPConstants.SECURITY_GROUP_LDAP + "' : group does not exist", null);
-				return null;
-			}
-			if (securityManager.isIdentityInSecurityGroup(identity, ldapGroup)) {
-				Authentication ldapAuth = securityManager.findAuthentication(identity, LDAPAuthenticationController.PROVIDER_LDAP);
-				if(ldapAuth == null) {
-					//BUG Fixe: update the user and test if it has a ldap provider
-					securityManager.createAndPersistAuthentication(identity, LDAPAuthenticationController.PROVIDER_LDAP, token, null, null);
-				} else if(StringHelper.containsNonWhitespace(token) && !token.equals(ldapAuth.getAuthusername())) {
-					ldapAuth.setAuthusername(token);
-					ldapAuth = securityManager.updateAuthentication(ldapAuth);
-				}
-				return identity;
-			} else if (ldapLoginModule.isConvertExistingLocalUsersToLDAPUsers()) {
-				// Add user to LDAP security group and add the ldap provider
-				securityManager.createAndPersistAuthentication(identity, LDAPAuthenticationController.PROVIDER_LDAP, token, null, null);
-				securityManager.addIdentityToSecurityGroup(identity, ldapGroup);
-				log.info("Found identity by LDAP username that was not yet in LDAP security group. Converted user::" + uid
-						+ " to be an LDAP managed user");
-				return identity;
-			} else {
-				errors.insert("findIdentyByLdapAuthentication: User with username::" + uid + " exist but not Managed by LDAP");
-				return null;
-			}
 		}
+
+		boolean hasLdapAuthentication = authenticationDao.hasAuthentication(identity, LDAPAuthenticationController.PROVIDER_LDAP);
+		if (hasLdapAuthentication) {
+			Authentication ldapAuth = securityManager.findAuthentication(identity, LDAPAuthenticationController.PROVIDER_LDAP);
+			if(ldapAuth == null) {
+				//BUG Fixe: update the user and test if it has a ldap provider
+				securityManager.createAndPersistAuthentication(identity, LDAPAuthenticationController.PROVIDER_LDAP, token, null, null);
+			} else if(StringHelper.containsNonWhitespace(token) && !token.equals(ldapAuth.getAuthusername())) {
+				ldapAuth.setAuthusername(token);
+				securityManager.updateAuthentication(ldapAuth);
+			}
+			return identity;
+		}
+		if (ldapLoginModule.isConvertExistingLocalUsersToLDAPUsers()) {
+			// Add user to LDAP security group and add the ldap provider
+			securityManager.createAndPersistAuthentication(identity, LDAPAuthenticationController.PROVIDER_LDAP, token, null, null);
+			log.info("Found identity by LDAP username that was not yet in LDAP security group. Converted user::" + uid
+					+ " to be an LDAP managed user");
+			return identity;
+		}
+		errors.insert("findIdentyByLdapAuthentication: User with username::" + uid + " exist but not Managed by LDAP");
+		return null;
 	}
 
 	/**
@@ -713,12 +820,15 @@ public class LDAPLoginManagerImpl implements LDAPLoginManager, GenericEventListe
 	 * 
 	 * @throws NamingException
 	 */
+	@Override
 	public List<Identity> getIdentitysDeletedInLdap(LdapContext ctx) {
-		if (ctx == null) return null;
+		if (ctx == null) {
+			return null;
+		}
 		// Find all LDAP Users
 		String userID = syncConfiguration.getOlatPropertyToLdapAttribute(LDAPConstants.LDAP_USER_IDENTIFYER);
 		String userFilter = syncConfiguration.getLdapUserFilter();
-		final List<String> ldapList = new ArrayList<String>();
+		final List<String> ldapList = new ArrayList<>();
 		
 		ldapDao.searchInLdap(new LDAPVisitor() {
 			@Override
@@ -734,19 +844,12 @@ public class LDAPLoginManagerImpl implements LDAPLoginManager, GenericEventListe
 		}, (userFilter == null ? "" : userFilter), new String[] { userID }, ctx);
 
 		if (ldapList.isEmpty()) {
-			log.warn("No users in LDAP found, can't create deletionList!!", null);
-			return null;
+			log.warn("No users in LDAP found, can't create deletionList!!");
+			return Collections.emptyList();
 		}
 
-		// Find all User in OLAT, members of LDAPSecurityGroup
-		SecurityGroup ldapGroup = securityManager.findSecurityGroupByName(LDAPConstants.SECURITY_GROUP_LDAP);
-		if (ldapGroup == null) {
-			log.error("Error getting users from OLAT security group '" + LDAPConstants.SECURITY_GROUP_LDAP + "' : group does not exist", null);
-			return null;
-		}
-
-		List<Identity> identityListToDelete = new ArrayList<Identity>();
-		List<Identity> olatListIdentity = securityManager.getIdentitiesOfSecurityGroup(ldapGroup);
+		List<Identity> identityListToDelete = new ArrayList<>();
+		List<Identity> olatListIdentity = authenticationDao.getIdentitiesWithAuthentication(LDAPAuthenticationController.PROVIDER_LDAP);
 		for (Identity ida:olatListIdentity) {
 			// compare usernames with lowercase
 			if (!ldapList.contains(ida.getName().toLowerCase())) {
@@ -764,7 +867,7 @@ public class LDAPLoginManagerImpl implements LDAPLoginManager, GenericEventListe
 	 * 
 	 */
 	@Override
-	public boolean doBatchSync(LDAPError errors, boolean full) {
+	public boolean doBatchSync(LDAPError errors) {
 		//fxdiff: also run on nodes != 1 as nodeid = tomcat-id in fx-environment
 //		if(WebappHelper.getNodeId() != 1) {
 //			log.warn("Sync happens only on node 1", null);
@@ -792,27 +895,25 @@ public class LDAPLoginManagerImpl implements LDAPLoginManager, GenericEventListe
 		
 		coordinator.getEventBus().fireEventToListenersOf(new LDAPEvent(LDAPEvent.SYNCHING), ldapSyncLockOres);
 		
-		if(full) {
-			lastSyncDate = null;
-		}
+		lastSyncDate = null;
 		
 		LdapContext ctx = null;
 		boolean success = false;
 		try {
 			acquireSyncLock();
+			long startTime = System.currentTimeMillis();
 			ctx = bindSystem();
 			if (ctx == null) {
 				errors.insert("LDAP connection ERROR");
-				log.error("Error in LDAP batch sync: LDAP connection empty", null);
+				log.error("LDAP batch sync: LDAP connection empty");
 				freeSyncLock();
-				success = false;
 				return success;
 			}
 			Date timeBeforeSync = new Date();
 
 			//check server capabilities
 			// Get time before sync to have a save sync time when sync is successful
-			String sinceSentence = (lastSyncDate == null ? " (full sync)" : " since last sync from " + lastSyncDate);
+			String sinceSentence = (lastSyncDate == null ? "" : " since last sync from " + lastSyncDate);
 			doBatchSyncDeletedUsers(ctx, sinceSentence);
 			// bind again to use an initial unmodified context. lookup of server-properties might fail otherwise!
 			ctx.close();
@@ -831,11 +932,12 @@ public class LDAPLoginManagerImpl implements LDAPLoginManager, GenericEventListe
 			
 			ctx.close();
 			success = true;
+			log.info(Tracing.M_AUDIT, "LDAP batch sync done: " + success + " in " + ((System.currentTimeMillis() - startTime) / 1000) + "s");
 			return success;
 		} catch (Exception e) {
 
 			errors.insert("Unknown error");
-			log.error("Error in LDAP batch sync, unknown reason", e);
+			log.error("LDAP batch sync, unknown reason", e);
 			success = false;
 			return success;
 		} finally {
@@ -861,33 +963,40 @@ public class LDAPLoginManagerImpl implements LDAPLoginManager, GenericEventListe
 		ctx.close();
 		ctx = bindSystem();
 		
+		List<Organisation> organisations = organisationDao.loadDefaultOrganisation();
+		Organisation organisation = organisations.get(0);
+		
 		//authors
-		if(syncConfiguration.getAuthorsGroupBase() != null && syncConfiguration.getAuthorsGroupBase().size() > 0) {
+		if(syncConfiguration.getAuthorsGroupBase() != null && !syncConfiguration.getAuthorsGroupBase().isEmpty()) {
 			List<LDAPGroup> authorGroups = ldapDao.searchGroups(ctx, syncConfiguration.getAuthorsGroupBase());
-			syncRole(ctx, authorGroups, Constants.GROUP_AUTHORS, dnToIdentityKeyMap, errors);
+			syncRole(ctx, authorGroups, organisation, OrganisationRoles.author, dnToIdentityKeyMap, errors);
 		}
 		//user managers
-		if(syncConfiguration.getUserManagersGroupBase() != null && syncConfiguration.getUserManagersGroupBase().size() > 0) {
+		if(syncConfiguration.getUserManagersGroupBase() != null && !syncConfiguration.getUserManagersGroupBase().isEmpty()) {
 			List<LDAPGroup> userManagerGroups = ldapDao.searchGroups(ctx, syncConfiguration.getUserManagersGroupBase());
-			syncRole(ctx, userManagerGroups, Constants.GROUP_USERMANAGERS, dnToIdentityKeyMap, errors);
+			syncRole(ctx, userManagerGroups, organisation, OrganisationRoles.usermanager, dnToIdentityKeyMap, errors);
 		}
 		//group managers
-		if(syncConfiguration.getGroupManagersGroupBase() != null && syncConfiguration.getGroupManagersGroupBase().size() > 0) {
+		if(syncConfiguration.getGroupManagersGroupBase() != null && !syncConfiguration.getGroupManagersGroupBase().isEmpty()) {
 			List<LDAPGroup> groupManagerGroups = ldapDao.searchGroups(ctx, syncConfiguration.getGroupManagersGroupBase());
-			syncRole(ctx, groupManagerGroups, Constants.GROUP_GROUPMANAGERS, dnToIdentityKeyMap, errors);
+			syncRole(ctx, groupManagerGroups, organisation, OrganisationRoles.groupmanager, dnToIdentityKeyMap, errors);
 		}
 		//question pool managers
-		if(syncConfiguration.getQpoolManagersGroupBase() != null && syncConfiguration.getQpoolManagersGroupBase().size() > 0) {
+		if(syncConfiguration.getQpoolManagersGroupBase() != null && !syncConfiguration.getQpoolManagersGroupBase().isEmpty()) {
 			List<LDAPGroup> qpoolManagerGroups = ldapDao.searchGroups(ctx, syncConfiguration.getQpoolManagersGroupBase());
-			syncRole(ctx, qpoolManagerGroups, Constants.GROUP_POOL_MANAGER, dnToIdentityKeyMap, errors);
+			syncRole(ctx, qpoolManagerGroups, organisation, OrganisationRoles.poolmanager, dnToIdentityKeyMap, errors);
+		}
+		//curriculum managers
+		if(syncConfiguration.getCurriculumManagersGroupBase() != null && !syncConfiguration.getCurriculumManagersGroupBase().isEmpty()) {
+			List<LDAPGroup> curriculumManagerGroups = ldapDao.searchGroups(ctx, syncConfiguration.getCurriculumManagersGroupBase());
+			syncRole(ctx, curriculumManagerGroups, organisation, OrganisationRoles.curriculummanager, dnToIdentityKeyMap, errors);
 		}
 		//learning resource manager
-		if(syncConfiguration.getLearningResourceManagersGroupBase() != null && syncConfiguration.getLearningResourceManagersGroupBase().size() > 0) {
+		if(syncConfiguration.getLearningResourceManagersGroupBase() != null && !syncConfiguration.getLearningResourceManagersGroupBase().isEmpty()) {
 			List<LDAPGroup> resourceManagerGroups = ldapDao.searchGroups(ctx, syncConfiguration.getLearningResourceManagersGroupBase());
-			syncRole(ctx, resourceManagerGroups, Constants.GROUP_INST_ORES_MANAGER, dnToIdentityKeyMap, errors);
+			syncRole(ctx, resourceManagerGroups, organisation, OrganisationRoles.learnresourcemanager, dnToIdentityKeyMap, errors);
 		}
-		
-		
+
 		int count = 0;
 		boolean syncAuthor = StringHelper.containsNonWhitespace(syncConfiguration.getAuthorRoleAttribute())
 				&& StringHelper.containsNonWhitespace(syncConfiguration.getAuthorRoleValue());
@@ -897,30 +1006,37 @@ public class LDAPLoginManagerImpl implements LDAPLoginManager, GenericEventListe
 				&& StringHelper.containsNonWhitespace(syncConfiguration.getGroupManagerRoleValue());
 		boolean syncQpoolManager = StringHelper.containsNonWhitespace(syncConfiguration.getQpoolManagerRoleAttribute())
 				&& StringHelper.containsNonWhitespace(syncConfiguration.getQpoolManagerRoleValue());
+		boolean syncCurriculumManager = StringHelper.containsNonWhitespace(syncConfiguration.getCurriculumManagerRoleAttribute())
+				&& StringHelper.containsNonWhitespace(syncConfiguration.getCurriculumManagerRoleValue());
 		boolean syncLearningResourceManager = StringHelper.containsNonWhitespace(syncConfiguration.getLearningResourceManagerRoleAttribute())
 				&& StringHelper.containsNonWhitespace(syncConfiguration.getLearningResourceManagerRoleValue());
-		
+
 		for(LDAPUser ldapUser:ldapUsers) {
 			if(syncAuthor && ldapUser.isAuthor()) {
-				syncRole(ldapUser, Constants.GROUP_AUTHORS);
+				syncRole(ldapUser, organisation, OrganisationRoles.author);
 				count++;
 			}
 			if(syncUserManager && ldapUser.isUserManager()) {
-				syncRole(ldapUser, Constants.GROUP_USERMANAGERS);
+				syncRole(ldapUser, organisation, OrganisationRoles.usermanager);
 				count++;
 			}
 			if(syncGroupManager && ldapUser.isGroupManager()) {
-				syncRole(ldapUser, Constants.GROUP_GROUPMANAGERS);
+				syncRole(ldapUser, organisation, OrganisationRoles.groupmanager);
 				count++;
 			}
 			if(syncQpoolManager && ldapUser.isQpoolManager()) {
-				syncRole(ldapUser, Constants.GROUP_POOL_MANAGER);
+				syncRole(ldapUser,organisation,  OrganisationRoles.poolmanager);
+				count++;
+			}
+			if(syncCurriculumManager && ldapUser.isCurriculumManager()) {
+				syncRole(ldapUser, organisation, OrganisationRoles.curriculummanager);
 				count++;
 			}
 			if(syncLearningResourceManager && ldapUser.isLearningResourceManager()) {
-				syncRole(ldapUser, Constants.GROUP_INST_ORES_MANAGER);
+				syncRole(ldapUser, organisation, OrganisationRoles.learnresourcemanager);
 				count++;
 			}
+
 			if(count > 20) {
 				dbInstance.commitAndCloseSession();
 				count = 0;
@@ -930,17 +1046,17 @@ public class LDAPLoginManagerImpl implements LDAPLoginManager, GenericEventListe
 		dbInstance.commitAndCloseSession();
 	}
 	
-	private void syncRole(LdapContext ctx, List<LDAPGroup> groups, String role,
+	private void syncRole(LdapContext ctx, List<LDAPGroup> groups, Organisation organisation, OrganisationRoles role,
 			Map<String,LDAPUser> dnToIdentityKeyMap, LDAPError errors) {
 		if(groups == null || groups.isEmpty()) return;
 		
 		for(LDAPGroup group:groups) {
 			List<String> members = group.getMembers();
-			if(members != null && members.size() > 0) {
+			if(members != null && !members.isEmpty()) {
 				for(String member:members) {
 					LDAPUser ldapUser = getLDAPUser(ctx, member, dnToIdentityKeyMap, errors);
 					if(ldapUser != null && ldapUser.getCachedIdentity() != null) {
-						syncRole(ldapUser, role);
+						syncRole(ldapUser, organisation, role);
 					}
 				}
 			}
@@ -948,37 +1064,58 @@ public class LDAPLoginManagerImpl implements LDAPLoginManager, GenericEventListe
 		}	
 	}
 
-	private void syncRole(LDAPUser ldapUser, String role) {
-		Identity identity = ldapUser.getCachedIdentity();
-		List<String> roleList = securityManager.getRolesAsString(identity);
-		if(!roleList.contains(role)) {
+	private void syncRole(LDAPUser ldapUser, Organisation organisation, OrganisationRoles role) {
+		IdentityRef identityRef = ldapUser.getCachedIdentity();
+		List<String> roleList = securityManager.getRolesAsString(identityRef);
+		if(!roleList.contains(role.name())) {
+			Identity identity = securityManager.loadIdentityByKey(identityRef.getKey());
 			Roles roles = securityManager.getRoles(identity);
 			switch(role) {
-				case Constants.GROUP_AUTHORS:
-					roles = new Roles(roles.isOLATAdmin(), roles.isUserManager(), roles.isGroupManager(), true,
-									false, roles.isInstitutionalResourceManager(), roles.isPoolAdmin(), false);
-					securityManager.updateRoles(null, identity, roles);
+				case author: {
+					RolesByOrganisation modifiedRoles = RolesByOrganisation.roles(organisation, false, false, true,
+							true, roles.isGroupManager(), roles.isPoolManager(), roles.isCurriculumManager(),
+							roles.isUserManager(), roles.isLearnResourceManager(), roles.isAdministrator());
+					securityManager.updateRoles(null, identity, modifiedRoles);
 					break;
-				case Constants.GROUP_USERMANAGERS:
-					roles = new Roles(roles.isOLATAdmin(), true, roles.isGroupManager(), roles.isAuthor(),
-							false, roles.isInstitutionalResourceManager(), roles.isPoolAdmin(), false);
-					securityManager.updateRoles(null, identity, roles);
+				}
+				case usermanager: {
+					RolesByOrganisation modifiedRoles = RolesByOrganisation.roles(organisation, false, false, true,
+							roles.isAuthor(), roles.isGroupManager(), roles.isPoolManager(), roles.isCurriculumManager(),
+							true, roles.isLearnResourceManager(), roles.isAdministrator());
+					securityManager.updateRoles(null, identity, modifiedRoles);
 					break;
-				case Constants.GROUP_GROUPMANAGERS:
-					roles = new Roles(roles.isOLATAdmin(), roles.isUserManager(), true, roles.isAuthor(),
-							false, roles.isInstitutionalResourceManager(), roles.isPoolAdmin(), false);
-					securityManager.updateRoles(null, identity, roles);
+				}
+				case groupmanager: {
+					RolesByOrganisation modifiedRoles = RolesByOrganisation.roles(organisation, false, false, true,
+							roles.isAuthor(), true, roles.isPoolManager(), roles.isCurriculumManager(),
+							roles.isUserManager(), roles.isLearnResourceManager(), roles.isAdministrator());
+					securityManager.updateRoles(null, identity, modifiedRoles);
 					break;
-				case Constants.GROUP_POOL_MANAGER:
-					roles = new Roles(roles.isOLATAdmin(), roles.isUserManager(), roles.isGroupManager(), roles.isAuthor(),
-							false, roles.isInstitutionalResourceManager(), true, false);
-					securityManager.updateRoles(null, identity, roles);
+				}
+				case poolmanager: {
+					RolesByOrganisation modifiedRoles = RolesByOrganisation.roles(organisation, false, false, true,
+							roles.isAuthor(), roles.isGroupManager(), true, roles.isCurriculumManager(),
+							roles.isUserManager(), roles.isLearnResourceManager(), roles.isAdministrator());
+					securityManager.updateRoles(null, identity, modifiedRoles);
 					break;
-				case Constants.GROUP_INST_ORES_MANAGER:
-					roles = new Roles(roles.isOLATAdmin(), roles.isUserManager(), roles.isGroupManager(), roles.isAuthor(),
-							false, true, roles.isPoolAdmin(), false);
-					securityManager.updateRoles(null, identity, roles);
+				}
+				case curriculummanager: {
+					RolesByOrganisation modifiedRoles = RolesByOrganisation.roles(organisation, false, false, true,
+							roles.isAuthor(), roles.isGroupManager(), roles.isPoolManager(), true,
+							roles.isUserManager(), roles.isLearnResourceManager(), roles.isAdministrator());
+					securityManager.updateRoles(null, identity, modifiedRoles);
 					break;
+				}
+				case learnresourcemanager: {
+					RolesByOrganisation modifiedRoles = RolesByOrganisation.roles(organisation, false, false, true,
+							roles.isAuthor(), roles.isGroupManager(), roles.isPoolManager(), roles.isCurriculumManager(),
+							roles.isUserManager(), true, roles.isAdministrator());
+					securityManager.updateRoles(null, identity, modifiedRoles);
+					break;
+				}
+				default: {
+					log.error("LDAP Role synchronization not supported for: " + role);
+				}
 			}
 		}
 	}
@@ -987,7 +1124,7 @@ public class LDAPLoginManagerImpl implements LDAPLoginManager, GenericEventListe
 		// create User to Delete List
 		List<Identity> deletedUserList = getIdentitysDeletedInLdap(ctx);
 		// delete old users
-		if (deletedUserList == null || deletedUserList.size() == 0) {
+		if (deletedUserList == null || deletedUserList.isEmpty()) {
 			log.info("LDAP batch sync: no users to delete" + sinceSentence);
 		} else {
 			if (ldapLoginModule.isDeleteRemovedLDAPUsersOnSync()) {
@@ -995,8 +1132,7 @@ public class LDAPLoginManagerImpl implements LDAPLoginManager, GenericEventListe
 				// users managed in LDAP should be deleted
 				// if they are over the percentage, they will not be deleted
 				// by the sync job
-				SecurityGroup ldapGroup = securityManager.findSecurityGroupByName(LDAPConstants.SECURITY_GROUP_LDAP);
-				List<Identity> olatListIdentity = securityManager.getIdentitiesOfSecurityGroup(ldapGroup);
+				List<Identity> olatListIdentity = authenticationDao.getIdentitiesWithAuthentication(LDAPAuthenticationController.PROVIDER_LDAP);
 				if (olatListIdentity.isEmpty())
 					log.info("No users managed by LDAP, can't delete users");
 				else {
@@ -1009,10 +1145,8 @@ public class LDAPLoginManagerImpl implements LDAPLoginManager, GenericEventListe
 										+ "% tried to delete.");
 					} else {
 						// delete users
-						deletIdentities(deletedUserList);
-						log.info("LDAP batch sync: "
-								+ deletedUserList.size() + " users deleted"
-								+ sinceSentence);
+						deleteIdentities(deletedUserList, null);
+						log.info("LDAP batch sync: " + deletedUserList.size() + " users deleted" + sinceSentence);
 					}
 				}
 			} else {
@@ -1029,6 +1163,7 @@ public class LDAPLoginManagerImpl implements LDAPLoginManager, GenericEventListe
 					+ users.toString() + "]");
 			}
 		}
+		dbInstance.commitAndCloseSession();
 	}
 	
 	private List<LDAPUser> doBatchSyncNewAndModifiedUsers(LdapContext ctx, String sinceSentence, Map<String,LDAPUser> dnToIdentityKeyMap, LDAPError errors) {
@@ -1037,8 +1172,8 @@ public class LDAPLoginManagerImpl implements LDAPLoginManager, GenericEventListe
 		List<LDAPUser> ldapUserList = ldapDao.getUserAttributesModifiedSince(lastSyncDate, ctx);
 		
 		// Check for new and modified users
-		List<LDAPUser> newLdapUserList = new ArrayList<LDAPUser>();
-		Map<Identity, Map<String, String>> changedMapIdentityMap = new HashMap<Identity, Map<String, String>>();
+		List<LDAPUser> newLdapUserList = new ArrayList<>();
+		Map<IdentityRef, Map<String, String>> changedMapIdentityMap = new HashMap<>();
 		for (LDAPUser ldapUser: ldapUserList) {
 			String user = null;
 			try {
@@ -1053,39 +1188,55 @@ public class LDAPLoginManagerImpl implements LDAPLoginManager, GenericEventListe
 					}
 					if(StringHelper.containsNonWhitespace(ldapUser.getDn())) {
 						dnToIdentityKeyMap.put(ldapUser.getDn(), ldapUser);
-						ldapUser.setCachedIdentity(identity);
+						ldapUser.setCachedIdentity(new IdentityRefImpl(identity.getKey()));
 					}
 				} else if (errors.isEmpty()) {
 					String[] reqAttrs = syncConfiguration.checkRequestAttributes(userAttrs);
 					if (reqAttrs == null) {
 						newLdapUserList.add(ldapUser);
 					} else {
-						log.warn("Error in LDAP batch sync: can't create user with username::" + user + " : missing required attributes::"
-							+ ArrayUtils.toString(reqAttrs), null);
+						log.warn("LDAP batch sync: can't create user with username::" + user + " : missing required attributes::"
+							+ ArrayUtils.toString(reqAttrs));
 					}
 				} else {
-					log.warn(errors.get(), null);
-				}
-				
-				if(++count % 20 == 0) {
-					dbInstance.intermediateCommit();
+					log.warn(errors.get());
 				}
 			} catch (Exception e) {
 				// catch here to go on with other users on exeptions!
 				log.error("some error occured in looping over set of changed user-attributes, actual user " + user + ". Will still continue with others.", e);
+				errors.insert("Cannot sync user: " + user);
+			} finally {
+				dbInstance.commit();
+				if(count % 10 == 0) {
+					dbInstance.closeSession();
+				}
 			}
+			if(count % 1000 == 0) {
+				log.info("Retrieve " + count + "/" + ldapUserList.size() + " users in LDAP server");
+			}
+			count++;
 		}
 		
 		// sync existing users
 		if (changedMapIdentityMap == null || changedMapIdentityMap.isEmpty()) {
 			log.info("LDAP batch sync: no users to sync" + sinceSentence);
 		} else {
-			for (Identity ident : changedMapIdentityMap.keySet()) {
+			int syncCount = 0;
+			for (IdentityRef ident : changedMapIdentityMap.keySet()) {
 				// sync user is exception save, no try/catch needed
-				syncUser(changedMapIdentityMap.get(ident), ident);
-				//REVIEW Identity are not saved???
-				if(++count % 20 == 0) {
-					dbInstance.intermediateCommit();
+				try {
+					syncCount++;
+					syncUser(changedMapIdentityMap.get(ident), ident);
+				} catch (Exception e) {
+					errors.insert("Cannot sync user: " + ident);
+				} finally {
+					dbInstance.commit();
+					if(syncCount % 20 == 0) {
+						dbInstance.closeSession();
+					}
+				}
+				if(syncCount % 1000 == 0) {
+					log.info("Update " + syncCount + "/" + changedMapIdentityMap.size() + " LDAP users");
 				}
 			}
 			log.info("LDAP batch sync: " + changedMapIdentityMap.size() + " users synced" + sinceSentence);
@@ -1095,27 +1246,34 @@ public class LDAPLoginManagerImpl implements LDAPLoginManager, GenericEventListe
 		if (newLdapUserList.isEmpty()) {
 			log.info("LDAP batch sync: no users to create" + sinceSentence);
 		} else {			
+			int newCount = 0;
 			for (LDAPUser ldapUser: newLdapUserList) {
 				Attributes userAttrs = ldapUser.getAttributes();
 				try {
+					newCount++;
 					Identity identity = createAndPersistUser(userAttrs);
-					if(++count % 20 == 0) {
-						dbInstance.intermediateCommit();
-					}
-					
-					if(StringHelper.containsNonWhitespace(ldapUser.getDn())) {
+					if(identity != null && StringHelper.containsNonWhitespace(ldapUser.getDn())) {
 						dnToIdentityKeyMap.put(ldapUser.getDn(), ldapUser);
-						ldapUser.setCachedIdentity(identity);
+						ldapUser.setCachedIdentity(new IdentityRefImpl(identity.getKey()));
 					}
 				} catch (Exception e) {
 					// catch here to go on with other users on exeptions!
 					log.error("some error occured while creating new users, actual userAttribs " + userAttrs + ". Will still continue with others.", e);
+				} finally {
+					dbInstance.commit();
+					if(newCount % 20 == 0) {
+						dbInstance.closeSession();
+					}
+				}
+				
+				if(newCount % 1000 == 0) {
+					log.info("Create " + count + "/" + newLdapUserList.size() + " LDAP users");
 				}
 			}
 			log.info("LDAP batch sync: " + newLdapUserList.size() + " users created" + sinceSentence);
 		}
-		
-		dbInstance.intermediateCommit();
+
+		dbInstance.commitAndCloseSession();
 		return ldapUserList;
 	}
 	
@@ -1141,12 +1299,17 @@ public class LDAPLoginManagerImpl implements LDAPLoginManager, GenericEventListe
 			doSyncGroupByAttribute(ldapUsers, cnToGroupMap);
 		}
 		
+		int syncGroupCount = 0;
 		for(LDAPGroup group:cnToGroupMap.values()) {
 			BusinessGroup managedGroup = getManagerBusinessGroup(group.getCommonName());
 			if(managedGroup != null) {
 				syncBusinessGroup(ctx, managedGroup, group, dnToIdentityKeyMap, errors);
 			}
 			dbInstance.commitAndCloseSession();
+			if(syncGroupCount % 100 == 0) {
+				log.info("Synched " + syncGroupCount + "/" + cnToGroupMap.size() + " LDAP groups");
+			}
+			syncGroupCount++;
 		}
 	}
 	
@@ -1155,7 +1318,7 @@ public class LDAPLoginManagerImpl implements LDAPLoginManager, GenericEventListe
 			List<String> groupIds = ldapUser.getGroupIds();
 			List<String> coachedGroupIds = ldapUser.getCoachedGroupIds();
 			if((groupIds != null && groupIds.size() > 0) || (coachedGroupIds != null && coachedGroupIds.size() > 0)) {
-				Identity identity = ldapUser.getCachedIdentity();
+				IdentityRef identity = ldapUser.getCachedIdentity();
 				if(identity == null) {
 					log.error("Identity with dn=" + ldapUser.getDn() + " not found");
 				} else {
@@ -1184,14 +1347,22 @@ public class LDAPLoginManagerImpl implements LDAPLoginManager, GenericEventListe
 	private void syncBusinessGroup(LdapContext ctx, BusinessGroup businessGroup, LDAPGroup ldapGroup, Map<String,LDAPUser> dnToIdentityKeyMap, LDAPError errors) {
 		List<Identity> currentMembers = businessGroupRelationDao
 				.getMembers(businessGroup, GroupRoles.coach.name(), GroupRoles.participant.name());
+		Set<Long> currentMemberKeys = new HashSet<>();
+		for(Identity currentMember:currentMembers) {
+			currentMemberKeys.add(currentMember.getKey());
+		}
 
 		List<LDAPUser> coaches = new ArrayList<>(ldapGroup.getCoaches());
 		List<LDAPUser> participants = new ArrayList<>(ldapGroup.getParticipants());
 		// transfer member cn's to the participants list
 		for(String member:ldapGroup.getMembers()) {
-			LDAPUser ldapUser = getLDAPUser(ctx, member, dnToIdentityKeyMap, errors); dnToIdentityKeyMap.get(member);
-			if(ldapUser != null && !participants.contains(ldapUser)) {
-				participants.add(ldapUser);
+			try {
+				LDAPUser ldapUser = getLDAPUser(ctx, member, dnToIdentityKeyMap, errors); dnToIdentityKeyMap.get(member);
+				if(ldapUser != null && !participants.contains(ldapUser)) {
+					participants.add(ldapUser);
+				}
+			} catch (Exception e) {
+				log.error("Cannot retrieve this LDAP group member: " + member, e);
 			}
 		}
 		// transfer to ldap user flagged as coach to the coach list
@@ -1205,30 +1376,52 @@ public class LDAPLoginManagerImpl implements LDAPLoginManager, GenericEventListe
 			}
 		}
 		
+		int count = 0;
 		for(LDAPUser participant:participants) {
-			Identity memberIdentity = participant.getCachedIdentity();
-			syncMembership(businessGroup, memberIdentity, false);
-			currentMembers.remove(memberIdentity);
+			IdentityRef memberIdentity = participant.getCachedIdentity();
+			if(memberIdentity != null && memberIdentity.getKey() != null) {
+				syncMembership(businessGroup, memberIdentity, false);
+				currentMemberKeys.remove(memberIdentity.getKey());
+			}
+			if(count % 20 == 0) {
+				dbInstance.commitAndCloseSession();
+			}
+			count++;
 		}
 		
 		for(LDAPUser coach:coaches) {
-			Identity memberIdentity = coach.getCachedIdentity();
-			syncMembership(businessGroup, memberIdentity, true);
-			currentMembers.remove(memberIdentity);
+			IdentityRef memberIdentity = coach.getCachedIdentity();
+			if(memberIdentity != null && memberIdentity.getKey() != null) {
+				syncMembership(businessGroup, memberIdentity, true);
+				currentMemberKeys.remove(memberIdentity.getKey());
+			}
+			
+			if(count % 20 == 0) {
+				dbInstance.commitAndCloseSession();
+			}
+			count++;
 		}
 		
-		for(Identity currentMember:currentMembers) {
+		for(Long currentMemberKey:currentMemberKeys) {
+			Identity currentMember = securityManager.loadIdentityByKey(currentMemberKey);
 			List<String> roles = businessGroupRelationDao.getRoles(currentMember, businessGroup);
 			for(String role:roles) {
 				businessGroupRelationDao.removeRole(currentMember, businessGroup, role);
 			}
+			
+			if(count % 20 == 0) {
+				dbInstance.commitAndCloseSession();
+			}
+			count++;
 		}
+		dbInstance.commitAndCloseSession();
 	}
 	
-	private void syncMembership(BusinessGroup businessGroup, Identity identity, boolean coach) {
-		if(identity != null) {
-			List<String> roles = businessGroupRelationDao.getRoles(identity, businessGroup);
+	private void syncMembership(BusinessGroup businessGroup, IdentityRef identityRef, boolean coach) {
+		if(identityRef != null) {
+			List<String> roles = businessGroupRelationDao.getRoles(identityRef, businessGroup);
 			if(roles.isEmpty()) {
+				Identity identity = securityManager.loadIdentityByKey(identityRef.getKey());
 				if(coach) {
 					businessGroupRelationDao.addRole(identity, businessGroup, GroupRoles.coach.name());
 				} else {
@@ -1240,6 +1433,7 @@ public class LDAPLoginManagerImpl implements LDAPLoginManager, GenericEventListe
 				//participant and only participant, do nothing
 			} else {
 				boolean already = false;
+				Identity identity = securityManager.loadIdentityByKey(identityRef.getKey());
 				String mainRole = coach ? GroupRoles.coach.name() : GroupRoles.participant.name();
 				for(String role:roles) {
 					if(mainRole.equals(role)) {
@@ -1279,7 +1473,7 @@ public class LDAPLoginManagerImpl implements LDAPLoginManager, GenericEventListe
 	private LDAPUser getLDAPUser(LdapContext ctx, String member, Map<String,LDAPUser> dnToIdentityKeyMap, LDAPError errors) {
 		LDAPUser ldapUser = dnToIdentityKeyMap.get(member);
 
-		Identity identity = ldapUser == null ? null : ldapUser.getCachedIdentity();
+		IdentityRef identity = ldapUser == null ? null : ldapUser.getCachedIdentity();
 		if(identity == null) {
 			String userFilter = syncConfiguration.getLdapUserFilter();
 			
@@ -1304,11 +1498,11 @@ public class LDAPLoginManagerImpl implements LDAPLoginManager, GenericEventListe
 	public void doSyncSingleUser(Identity ident){
 		LdapContext ctx = bindSystem();
 		if (ctx == null) {
-			log.error("could not bind to ldap", null);
+			log.error("could not bind to ldap");
 		}		
 		String userDN = ldapDao.searchUserDNByUid(ident.getName(), ctx);
 
-		final List<Attributes> ldapUserList = new ArrayList<Attributes>();
+		final List<Attributes> ldapUserList = new ArrayList<>();
 		// TODO: use userDN instead of filter to get users attribs
 		ldapDao.searchInLdap(new LDAPVisitor() {
 			@Override
@@ -1323,6 +1517,35 @@ public class LDAPLoginManagerImpl implements LDAPLoginManager, GenericEventListe
 		Map<String, String> olatProToSync = prepareUserPropertyForSync(attrs, ident);
 		if (olatProToSync != null) {
 			syncUser(olatProToSync, ident);
+		}
+	}
+	
+	@Override
+	public void doSyncSingleUserWithLoginAttribute(Identity ident) {
+		LdapContext ctx = bindSystem();
+		if (ctx == null) {
+			log.error("could not bind to ldap");
+		}
+		
+		String ldapUserIDAttribute = syncConfiguration.getLdapUserLoginAttribute();
+		String filter = ldapDao.buildSearchUserFilter(ldapUserIDAttribute, ident.getName());
+		
+		List<Attributes> ldapUserAttrs = new ArrayList<>();
+		ldapDao.searchInLdap(new LDAPVisitor() {
+			@Override
+			public void visit(SearchResult result) {
+				ldapUserAttrs.add(result.getAttributes());
+			}
+		}, filter, syncConfiguration.getUserAttributes(), ctx);
+		
+		if(ldapUserAttrs.size() == 1) {
+			Attributes attrs = ldapUserAttrs.get(0);
+			Map<String, String> olatProToSync = prepareUserPropertyForSync(attrs, ident);
+			if (olatProToSync != null) {
+				syncUser(olatProToSync, ident);
+			}
+		} else {
+			log.error("Cannot sync the user because it was not found on LDAP server: " + ident);
 		}
 	}
 
@@ -1371,16 +1594,11 @@ public class LDAPLoginManagerImpl implements LDAPLoginManager, GenericEventListe
 	/**
 	 * remove all cached authentications for fallback-login. useful if users logged in first with a default pw and changed it outside in AD/LDAP, but OLAT doesn't know about.
 	 * removing fallback-auths means login is only possible by AD/LDAP and if server is reachable!
-	 * see FXOLAT-284
 	 */
 	@Override
 	public void removeFallBackAuthentications() {
 		if (ldapLoginModule.isCacheLDAPPwdAsOLATPwdOnLogin()){
-			SecurityGroup ldapGroup = securityManager.findSecurityGroupByName(LDAPConstants.SECURITY_GROUP_LDAP);
-			if (ldapGroup == null) {
-				log.error("Error getting user from OLAT security group '" + LDAPConstants.SECURITY_GROUP_LDAP + "' : group does not exist", null);
-			}
-			List<Identity> ldapIdents = securityManager.getIdentitiesOfSecurityGroup(ldapGroup);
+			List<Identity> ldapIdents = authenticationDao.getIdentitiesWithAuthentication(LDAPAuthenticationController.PROVIDER_LDAP);
 			log.info("found " + ldapIdents.size() + " identies in ldap security group");
 			int count=0;
 			for (Identity identity : ldapIdents) {
@@ -1399,7 +1617,6 @@ public class LDAPLoginManagerImpl implements LDAPLoginManager, GenericEventListe
 
 	@Override
 	public boolean isIdentityInLDAPSecGroup(Identity ident) {
-		SecurityGroup ldapSecurityGroup = securityManager.findSecurityGroupByName(LDAPConstants.SECURITY_GROUP_LDAP);
-		return ldapSecurityGroup != null && securityManager.isIdentityInSecurityGroup(ident, ldapSecurityGroup);
+		return authenticationDao.hasAuthentication(ident, LDAPAuthenticationController.PROVIDER_LDAP);
 	}
 }

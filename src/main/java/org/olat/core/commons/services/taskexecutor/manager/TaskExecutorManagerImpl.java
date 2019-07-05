@@ -25,13 +25,16 @@
 */ 
 package org.olat.core.commons.services.taskexecutor.manager;
 
+import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.RejectedExecutionException;
 
 import org.olat.core.commons.persistence.DB;
 import org.olat.core.commons.services.taskexecutor.LongRunnable;
+import org.olat.core.commons.services.taskexecutor.LowPriorityRunnable;
 import org.olat.core.commons.services.taskexecutor.Sequential;
 import org.olat.core.commons.services.taskexecutor.Task;
 import org.olat.core.commons.services.taskexecutor.TaskAwareRunnable;
@@ -42,9 +45,8 @@ import org.olat.core.commons.services.taskexecutor.model.PersistentTask;
 import org.olat.core.commons.services.taskexecutor.model.PersistentTaskRunnable;
 import org.olat.core.id.Identity;
 import org.olat.core.logging.AssertException;
-import org.olat.core.logging.OLog;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
-import org.olat.core.manager.BasicManager;
 import org.olat.resource.OLATResource;
 import org.quartz.JobKey;
 import org.quartz.Scheduler;
@@ -64,23 +66,38 @@ import org.springframework.beans.factory.annotation.Qualifier;
  * @author guido
  * @author srosse, stephane.rosse@frentix.com, http://www.frnetix.com
  */
-public class TaskExecutorManagerImpl extends BasicManager implements TaskExecutorManager {
-	private static final OLog log = Tracing.createLoggerFor(TaskExecutorManagerImpl.class);
-
+public class TaskExecutorManagerImpl implements TaskExecutorManager {
+	private static final Logger log = Tracing.createLoggerFor(TaskExecutorManagerImpl.class);
 	private final ExecutorService taskExecutor;
 	private final ExecutorService sequentialTaskExecutor;
-	private final DB dbInstance;
-	private final PersistentTaskDAO persistentTaskDao;
-	private final Scheduler scheduler;
+	private final ExecutorService lowPriorityTaskExecutor;
+	
+	private DB dbInstance;
+	private Scheduler scheduler;
+	private PersistentTaskDAO persistentTaskDao;
 
-	@Autowired
-	private TaskExecutorManagerImpl(@Qualifier("mpTaskExecutorService") ExecutorService mpTaskExecutor,
-									@Qualifier("searchExecutor") ExecutorService sequentialTaskExecutor,
-									DB dbInstance,
-									PersistentTaskDAO persistentTaskDao,
-									Scheduler scheduler) {
+	/**
+	 * [used by spring]
+	 */
+	private TaskExecutorManagerImpl(ExecutorService mpTaskExecutor, ExecutorService sequentialTaskExecutor, ExecutorService lowPriorityTaskExecutor) {
 		this.taskExecutor = mpTaskExecutor;
 		this.sequentialTaskExecutor = sequentialTaskExecutor;
+		this.lowPriorityTaskExecutor = lowPriorityTaskExecutor;
+	}
+	
+	/**
+	 * [used by Spring]
+	 * @param scheduler
+	 */
+	public void setScheduler(Scheduler scheduler) {
+		this.scheduler = scheduler;
+	}
+	
+	/**
+	 * [used by Spring]
+	 * @param dbInstance
+	 */
+	public void setDbInstance(DB dbInstance) {
 		this.dbInstance = dbInstance;
 		this.persistentTaskDao = persistentTaskDao;
 		this.scheduler = scheduler;
@@ -100,7 +117,7 @@ public class TaskExecutorManagerImpl extends BasicManager implements TaskExecuto
 			persistentTask = persistentTaskDao.createTask(UUID.randomUUID().toString(), (LongRunnable)task);
 			dbInstance.commit();
 		} else {
-			execute(task, persistentTask, (task instanceof Sequential));
+			execute(task, persistentTask, Queue.valueOf(task));
 		}
 	}
 
@@ -112,20 +129,22 @@ public class TaskExecutorManagerImpl extends BasicManager implements TaskExecuto
 		dbInstance.commit();
 	}
 	
-	private void execute(Runnable task, Task persistentTask, boolean sequential) {
+	private void execute(Runnable task, Task persistentTask, Queue queue) {
 		if (taskExecutor != null) {
 			if(task instanceof TaskAwareRunnable) {
 				((TaskAwareRunnable)task).setTask(persistentTask);
 			}
+			
 			DBSecureRunnable safetask = new DBSecureRunnable(task);
-			if(sequential) {
+			if(queue == Queue.sequential) {
 				sequentialTaskExecutor.submit(safetask);
+			} else if(queue == Queue.lowPriority) {
+				lowPriorityTaskExecutor.submit(task);
 			} else {
 				taskExecutor.submit(safetask);
 			}
-			
 		} else {
-			logError("taskExecutor is not initialized (taskExecutor=null). Do not call 'runTask' before TaskExecutorModule is initialized.", null);
+			log.error("taskExecutor is not initialized (taskExecutor=null). Do not call 'runTask' before TaskExecutorModule is initialized.");
 			throw new AssertException("taskExecutor is not initialized");
 		}
 	}
@@ -140,13 +159,24 @@ public class TaskExecutorManagerImpl extends BasicManager implements TaskExecuto
 	}
 
 	protected void processTaskToDo() {
+		List<Queue> filled = new ArrayList<>(3);
+		
 		try {
 			List<Long> todos = persistentTaskDao.tasksToDo();
 			for(Long todo:todos) {
 				PersistentTask task = persistentTaskDao.loadTaskById(todo);
 				Runnable runnable = persistentTaskDao.deserializeTask(task);
-				PersistentTaskRunnable command = new PersistentTaskRunnable(todo);
-				execute(command, null, (runnable instanceof Sequential));
+				Queue queue = Queue.valueOf(runnable);
+				if(!filled.contains(queue)) {
+					PersistentTaskRunnable command = new PersistentTaskRunnable(todo);
+					try {
+						execute(command, null, queue);
+					} catch(RejectedExecutionException e) {
+						log.info("Queue is currently filled");
+						dbInstance.rollbackAndCloseSession();
+						filled.add(queue);
+					}
+				}
 			}
 		} catch (Exception e) {
 			// ups, something went completely wrong! We log this but continue next time
@@ -203,5 +233,22 @@ public class TaskExecutorManagerImpl extends BasicManager implements TaskExecuto
 	@Override
 	public void delete(OLATResource resource, String resSubPath) {
 		persistentTaskDao.delete(resource, resSubPath);
+	}
+	
+	public enum Queue {
+		sequential,
+		lowPriority,
+		standard;
+		
+		public static Queue valueOf(Runnable runnable) {
+			if(runnable instanceof Sequential) {
+				return sequential;
+			}
+			if(runnable instanceof LowPriorityRunnable) {
+				return lowPriority;
+			}
+			return standard;
+		}
+		
 	}
 }

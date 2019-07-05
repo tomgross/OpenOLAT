@@ -31,20 +31,30 @@ import org.olat.core.gui.control.Event;
 import org.olat.core.gui.control.WindowControl;
 import org.olat.core.gui.control.controller.BasicController;
 import org.olat.core.util.xml.XStreamHelper;
+import org.olat.modules.ceditor.DataStorage;
+import org.olat.modules.ceditor.PageEditorProvider;
+import org.olat.modules.ceditor.PageEditorSecurityCallback;
+import org.olat.modules.ceditor.PageElement;
+import org.olat.modules.ceditor.PageElementHandler;
+import org.olat.modules.ceditor.ui.FullEditorSecurityCallback;
+import org.olat.modules.ceditor.ui.PageEditorController;
+import org.olat.modules.forms.handler.ContainerHandler;
+import org.olat.modules.forms.handler.DisclaimerHandler;
+import org.olat.modules.forms.handler.FileUploadHandler;
+import org.olat.modules.forms.handler.HTMLParagraphHandler;
 import org.olat.modules.forms.handler.HTMLRawHandler;
+import org.olat.modules.forms.handler.ImageHandler;
+import org.olat.modules.forms.handler.MultipleChoiceHandler;
 import org.olat.modules.forms.handler.RubricHandler;
+import org.olat.modules.forms.handler.SessionInformationsHandler;
+import org.olat.modules.forms.handler.SingleChoiceHandler;
 import org.olat.modules.forms.handler.SpacerHandler;
+import org.olat.modules.forms.handler.TableHandler;
 import org.olat.modules.forms.handler.TextInputHandler;
 import org.olat.modules.forms.handler.TitleHandler;
 import org.olat.modules.forms.model.xml.AbstractElement;
 import org.olat.modules.forms.model.xml.Form;
 import org.olat.modules.forms.model.xml.FormXStream;
-import org.olat.modules.portfolio.ui.editor.FullEditorSecurityCallback;
-import org.olat.modules.portfolio.ui.editor.PageEditorController;
-import org.olat.modules.portfolio.ui.editor.PageEditorProvider;
-import org.olat.modules.portfolio.ui.editor.PageEditorSecurityCallback;
-import org.olat.modules.portfolio.ui.editor.PageElement;
-import org.olat.modules.portfolio.ui.editor.PageElementHandler;
 
 /**
  * 
@@ -58,14 +68,16 @@ public class EvaluationFormEditorController extends BasicController {
 	
 	private final Form form;
 	private final File formFile;
+	private final DataStorage storage;
 	private boolean changes = false;
 	private final boolean restrictedEdit;
 	
 	private PageEditorController pageEditCtrl;
 	
-	public EvaluationFormEditorController(UserRequest ureq, WindowControl wControl, File formFile, boolean restrictedEdit) {
+	public EvaluationFormEditorController(UserRequest ureq, WindowControl wControl, File formFile, DataStorage storage, boolean restrictedEdit) {
 		super(ureq, wControl);
 		this.formFile = formFile;
+		this.storage = storage;
 		this.restrictedEdit = restrictedEdit;
 		if(formFile.exists()) {
 			form = (Form)XStreamHelper.readObject(FormXStream.getXStream(), formFile);
@@ -123,21 +135,53 @@ public class EvaluationFormEditorController extends BasicController {
 			SpacerHandler hrHandler = new SpacerHandler();
 			handlers.add(hrHandler);
 			// handler for HTML code
+			HTMLParagraphHandler htmlParagraphHandler = new HTMLParagraphHandler();
+			handlers.add(htmlParagraphHandler);
+			// handler for HTML code
 			HTMLRawHandler htmlHandler = new HTMLRawHandler();
 			handlers.add(htmlHandler);
+			TableHandler tableHandler = new TableHandler();
+			handlers.add(tableHandler);
+			// handler media
+			ImageHandler imageHandler = new ImageHandler(storage);
+			handlers.add(imageHandler);
 			// handler for rubric
 			RubricHandler rubricHandler = new RubricHandler(restrictedEdit);
 			handlers.add(rubricHandler);
 			// handler for text input
-			TextInputHandler textInputHandler = new TextInputHandler();
+			TextInputHandler textInputHandler = new TextInputHandler(restrictedEdit);
 			handlers.add(textInputHandler);
-			
+			// handler for file upload
+			FileUploadHandler fileUploadhandler = new FileUploadHandler(restrictedEdit);
+			handlers.add(fileUploadhandler);
+			// handler for single choice
+			SingleChoiceHandler singleChoiceHandler = new SingleChoiceHandler(restrictedEdit);
+			handlers.add(singleChoiceHandler);
+			// handler for multiple choice
+			MultipleChoiceHandler multipleChoiceHandler = new MultipleChoiceHandler(restrictedEdit);
+			handlers.add(multipleChoiceHandler);
+			DisclaimerHandler disclaimerHandler = new DisclaimerHandler(restrictedEdit);
+			handlers.add(disclaimerHandler);
+			SessionInformationsHandler sessionInformationsHandler = new SessionInformationsHandler(restrictedEdit);
+			handlers.add(sessionInformationsHandler);
+			ContainerHandler containerHandler = new ContainerHandler();
+			handlers.add(containerHandler);
+
 			if(!restrictedEdit) {
 				creationHandlers.add(titleRawHandler);
-				creationHandlers.add(hrHandler);
-				creationHandlers.add(htmlHandler);
+				creationHandlers.add(htmlParagraphHandler);
+				creationHandlers.add(tableHandler);
+				creationHandlers.add(imageHandler);
 				creationHandlers.add(rubricHandler);
+				creationHandlers.add(singleChoiceHandler);
+				creationHandlers.add(multipleChoiceHandler);
 				creationHandlers.add(textInputHandler);
+				creationHandlers.add(fileUploadhandler);
+				creationHandlers.add(sessionInformationsHandler);
+				creationHandlers.add(disclaimerHandler);
+				creationHandlers.add(containerHandler);
+				creationHandlers.add(hrHandler);
+				creationHandlers.add(htmlHandler); // legacy
 			}
 		}
 
@@ -194,6 +238,14 @@ public class EvaluationFormEditorController extends BasicController {
 		public void moveDownPageElement(PageElement element) {
 			if(element instanceof AbstractElement) {
 				form.moveDownElement((AbstractElement)element);
+				persistForm();
+			}
+		}
+
+		@Override
+		public void movePageElement(PageElement elementToMove, PageElement sibling, boolean after) {
+			if(elementToMove instanceof AbstractElement && (sibling == null || sibling instanceof AbstractElement)) {
+				form.moveElement((AbstractElement)elementToMove, (AbstractElement)sibling, after);
 				persistForm();
 			}
 		}

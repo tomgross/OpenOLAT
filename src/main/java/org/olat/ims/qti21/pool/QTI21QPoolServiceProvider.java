@@ -1,4 +1,5 @@
 /**
+
  * <a href="http://www.openolat.org">
  * OpenOLAT - Online Learning and Training</a><br>
  * <p>
@@ -40,14 +41,12 @@ import org.olat.core.gui.UserRequest;
 import org.olat.core.gui.control.Controller;
 import org.olat.core.gui.control.WindowControl;
 import org.olat.core.gui.media.MediaResource;
-import org.olat.core.gui.translator.Translator;
 import org.olat.core.helpers.Settings;
 import org.olat.core.id.Identity;
-import org.olat.core.logging.OLog;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.FileUtils;
 import org.olat.core.util.StringHelper;
-import org.olat.core.util.Util;
 import org.olat.core.util.i18n.I18nModule;
 import org.olat.core.util.vfs.LocalImpl;
 import org.olat.core.util.vfs.VFSContainer;
@@ -61,25 +60,15 @@ import org.olat.ims.qti.editor.QTIEditHelper;
 import org.olat.ims.qti.editor.QTIEditorPackage;
 import org.olat.ims.qti.editor.beecom.objects.Item;
 import org.olat.ims.qti21.QTI21Constants;
+import org.olat.ims.qti21.QTI21DeliveryOptions;
 import org.olat.ims.qti21.QTI21Service;
 import org.olat.ims.qti21.model.QTI21QuestionType;
 import org.olat.ims.qti21.model.xml.AssessmentItemBuilder;
+import org.olat.ims.qti21.model.xml.AssessmentItemBuilderFactory;
 import org.olat.ims.qti21.model.xml.AssessmentItemMetadata;
 import org.olat.ims.qti21.model.xml.ManifestBuilder;
 import org.olat.ims.qti21.model.xml.ManifestMetadataBuilder;
-import org.olat.ims.qti21.model.xml.interactions.DrawingAssessmentItemBuilder;
-import org.olat.ims.qti21.model.xml.interactions.EssayAssessmentItemBuilder;
-import org.olat.ims.qti21.model.xml.interactions.FIBAssessmentItemBuilder;
-import org.olat.ims.qti21.model.xml.interactions.FIBAssessmentItemBuilder.EntryType;
-import org.olat.ims.qti21.model.xml.interactions.HotspotAssessmentItemBuilder;
-import org.olat.ims.qti21.model.xml.interactions.HottextAssessmentItemBuilder;
-import org.olat.ims.qti21.model.xml.interactions.KPrimAssessmentItemBuilder;
-import org.olat.ims.qti21.model.xml.interactions.MatchAssessmentItemBuilder;
-import org.olat.ims.qti21.model.xml.interactions.MultipleChoiceAssessmentItemBuilder;
-import org.olat.ims.qti21.model.xml.interactions.SingleChoiceAssessmentItemBuilder;
-import org.olat.ims.qti21.model.xml.interactions.UploadAssessmentItemBuilder;
 import org.olat.ims.qti21.questionimport.AssessmentItemAndMetadata;
-import org.olat.ims.qti21.ui.editor.AssessmentTestComposerController;
 import org.olat.ims.resources.IMSEntityResolver;
 import org.olat.imscp.xml.manifest.ResourceType;
 import org.olat.modules.qpool.ExportFormatOptions;
@@ -90,12 +79,8 @@ import org.olat.modules.qpool.QPoolService;
 import org.olat.modules.qpool.QuestionItem;
 import org.olat.modules.qpool.QuestionItemFull;
 import org.olat.modules.qpool.QuestionItemShort;
-import org.olat.modules.qpool.manager.QEducationalContextDAO;
-import org.olat.modules.qpool.manager.QItemTypeDAO;
-import org.olat.modules.qpool.manager.QLicenseDAO;
 import org.olat.modules.qpool.manager.QPoolFileStorage;
 import org.olat.modules.qpool.manager.QuestionItemDAO;
-import org.olat.modules.qpool.manager.TaxonomyLevelDAO;
 import org.olat.modules.qpool.model.DefaultExportFormat;
 import org.olat.modules.qpool.model.QuestionItemImpl;
 import org.olat.repository.RepositoryEntry;
@@ -120,7 +105,7 @@ import uk.ac.ed.ph.jqtiplus.resolution.RootNodeLookup;
 @Service("qti21PoolServiceProvider")
 public class QTI21QPoolServiceProvider implements QPoolSPI {
 	
-	private static final OLog log = Tracing.createLoggerFor(QTI21QPoolServiceProvider.class);
+	private static final Logger log = Tracing.createLoggerFor(QTI21QPoolServiceProvider.class);
 	
 	public static final String QTI_12_OO_TEST = "OpenOLAT Test";
 
@@ -132,17 +117,9 @@ public class QTI21QPoolServiceProvider implements QPoolSPI {
 	@Autowired
 	private QPoolFileStorage qpoolFileStorage;
 	@Autowired
-	private QLicenseDAO qLicenseDao;
-	@Autowired
-	private QItemTypeDAO qItemTypeDao;
-	@Autowired
 	private QuestionItemDAO questionItemDao;
-	@Autowired
-	private QEducationalContextDAO qEduContextDao;
-	@Autowired
-	private TaxonomyLevelDAO taxonomyLevelDao;
 	
-	private static final List<ExportFormatOptions> formats = new ArrayList<ExportFormatOptions>(4);
+	private static final List<ExportFormatOptions> formats = new ArrayList<>(4);
 	static {
 		formats.add(DefaultExportFormat.ZIP_EXPORT_FORMAT);
 		formats.add(DefaultExportFormat.DOCX_EXPORT_FORMAT);
@@ -157,7 +134,7 @@ public class QTI21QPoolServiceProvider implements QPoolSPI {
 
 	@Override
 	public int getPriority() {
-		return 10;
+		return 20;
 	}
 
 	@Override
@@ -172,11 +149,6 @@ public class QTI21QPoolServiceProvider implements QPoolSPI {
 
 	@Override
 	public boolean isCompatible(String filename, File file) {
-		boolean ok = new AssessmentItemFileResourceValidator().validate(filename, file);
-		return ok;
-	}
-	@Override
-	public boolean isCompatible(String filename, VFSLeaf file) {
 		boolean ok = new AssessmentItemFileResourceValidator().validate(filename, file);
 		return ok;
 	}
@@ -197,7 +169,7 @@ public class QTI21QPoolServiceProvider implements QPoolSPI {
 
 	@Override
 	public List<QItemFactory> getItemfactories() {
-		List<QItemFactory> factories = new ArrayList<QItemFactory>();
+		List<QItemFactory> factories = new ArrayList<>();
 		for(QTI21QuestionType type:QTI21QuestionType.values()) {
 			if(type.hasEditor()) {
 				factories.add(new QTI21AssessmentItemFactory(type));
@@ -215,6 +187,10 @@ public class QTI21QPoolServiceProvider implements QPoolSPI {
 			VFSItem file = container.resolve(item.getRootFilename());
 			if(file instanceof VFSLeaf) {
 				VFSLeaf leaf = (VFSLeaf)file;
+				if(leaf.getSize() <= 0l) {
+					return "";
+				}
+				
 				QTI21SAXHandler handler = new QTI21SAXHandler();
 				try(InputStream is = leaf.getInputStream()) {
 					XMLReader parser = XMLReaderFactory.createXMLReader();
@@ -223,7 +199,7 @@ public class QTI21QPoolServiceProvider implements QPoolSPI {
 					parser.setFeature("http://xml.org/sax/features/validation", false);
 					parser.parse(new InputSource(is));
 				} catch (Exception e) {
-					log.error("", e);
+					log.error("Cannot read the XML file of the question item: " + leaf, e);
 				}
 				return handler.toString();
 			}
@@ -233,8 +209,7 @@ public class QTI21QPoolServiceProvider implements QPoolSPI {
 
 	@Override
 	public List<QuestionItem> importItems(Identity owner, Locale defaultLocale, String filename, File file) {
-		QTI21ImportProcessor processor = new QTI21ImportProcessor(owner, defaultLocale,
-				questionItemDao, qItemTypeDao, qEduContextDao, taxonomyLevelDao, qLicenseDao, qpoolFileStorage, qtiService);
+		QTI21ImportProcessor processor = new QTI21ImportProcessor(owner, defaultLocale);
 		return processor.process(file);
 	}
 	
@@ -289,6 +264,18 @@ public class QTI21QPoolServiceProvider implements QPoolSPI {
 		VFSContainer originalDir = qpoolFileStorage.getContainer(original.getDirectory());
 		VFSContainer copyDir = qpoolFileStorage.getContainer(copy.getDirectory());
 		VFSManager.copyContent(originalDir, copyDir);
+		
+		File file = qpoolService.getRootFile(copy);
+		File resourceDirectory = qpoolService.getRootDirectory(copy);
+		URI assessmentItemUri = file.toURI();
+		File itemFile = qpoolService.getRootFile(copy);
+		
+		ResolvedAssessmentItem resolvedAssessmentItem = qtiService
+				.loadAndResolveAssessmentItem(assessmentItemUri, resourceDirectory);
+		AssessmentItem assessmentItem = resolvedAssessmentItem.getRootNodeLookup().extractIfSuccessful();
+		assessmentItem.setTitle(copy.getTitle());
+		
+		qtiService.persistAssessmentObject(itemFile, assessmentItem);
 	}
 
 	@Override
@@ -332,27 +319,17 @@ public class QTI21QPoolServiceProvider implements QPoolSPI {
 
 	@Override
 	public Controller getEditableController(UserRequest ureq, WindowControl wControl, QuestionItem qitem) {
-		Controller editorCtrl = new QTI21EditorController(ureq, wControl, qitem);
-		return editorCtrl;
+		return new QTI21EditorController(ureq, wControl, qitem, false);
 	}
 
+	@Override
+	public Controller getReadOnlyController(UserRequest ureq, WindowControl wControl, QuestionItem item) {
+		return new QTI21EditorController(ureq, wControl, item, true);
+	}
+	
+
 	public QuestionItem createItem(Identity identity, QTI21QuestionType type, String title, Locale locale) {
-		AssessmentItemBuilder itemBuilder = null;
-		Translator translator = Util.createPackageTranslator(AssessmentTestComposerController.class, locale);
-		switch(type) {
-			case sc: itemBuilder = new SingleChoiceAssessmentItemBuilder(translator.translate("new.sc"), translator.translate("new.answer"), qtiService.qtiSerializer()); break;
-			case mc: itemBuilder = new MultipleChoiceAssessmentItemBuilder(translator.translate("new.mc"), translator.translate("new.answer"), qtiService.qtiSerializer()); break;
-			case kprim: itemBuilder = new KPrimAssessmentItemBuilder(translator.translate("new.kprim"), translator.translate("new.answer"), qtiService.qtiSerializer()); break;
-			case match: itemBuilder = new MatchAssessmentItemBuilder(translator.translate("new.match"), qtiService.qtiSerializer()); break;
-			case fib: itemBuilder = new FIBAssessmentItemBuilder(translator.translate("new.fib"), EntryType.text, qtiService.qtiSerializer()); break;
-			case numerical: itemBuilder = new FIBAssessmentItemBuilder(translator.translate("new.fib.numerical"), EntryType.numerical, qtiService.qtiSerializer()); break;
-			case essay: itemBuilder = new EssayAssessmentItemBuilder(translator.translate("new.essay"), qtiService.qtiSerializer()); break;
-			case upload: itemBuilder = new UploadAssessmentItemBuilder(translator.translate("new.upload"), qtiService.qtiSerializer()); break;
-			case drawing: itemBuilder = new DrawingAssessmentItemBuilder(translator.translate("new.drawing"), qtiService.qtiSerializer()); break;
-			case hotspot: itemBuilder = new HotspotAssessmentItemBuilder(translator.translate("new.hotspot"), qtiService.qtiSerializer()); break;
-			case hottext: itemBuilder = new HottextAssessmentItemBuilder(translator.translate("new.hottext"), translator.translate("new.hottext.start"), translator.translate("new.hottext.text"), qtiService.qtiSerializer()); break;
-			default: return null;
-		}
+		AssessmentItemBuilder itemBuilder = AssessmentItemBuilderFactory.get(type, locale);
 
 		AssessmentItem assessmentItem = itemBuilder.getAssessmentItem();
 		assessmentItem.setLabel(title);
@@ -361,8 +338,7 @@ public class QTI21QPoolServiceProvider implements QPoolSPI {
 		AssessmentItemMetadata itemMetadata = new AssessmentItemMetadata();
 		itemMetadata.setQuestionType(type);
 		
-		QTI21ImportProcessor processor = new QTI21ImportProcessor(identity, locale, 
-				questionItemDao, qItemTypeDao, qEduContextDao, taxonomyLevelDao, qLicenseDao, qpoolFileStorage, qtiService);
+		QTI21ImportProcessor processor = new QTI21ImportProcessor(identity, locale);
 		QuestionItemImpl qitem = processor.processItem(assessmentItem, "", null, "OpenOLAT", Settings.getVersion(), itemMetadata);
 
 		VFSContainer baseDir = qpoolFileStorage.getContainer(qitem.getDirectory());
@@ -378,8 +354,7 @@ public class QTI21QPoolServiceProvider implements QPoolSPI {
 	}
 	
 	public QuestionItemImpl importExcelItem(Identity owner, AssessmentItemAndMetadata itemAndMetadata, Locale defaultLocale) {
-		QTI21ImportProcessor processor =  new QTI21ImportProcessor(owner, defaultLocale,
-				questionItemDao, qItemTypeDao, qEduContextDao, taxonomyLevelDao, qLicenseDao, qpoolFileStorage, qtiService);
+		QTI21ImportProcessor processor =  new QTI21ImportProcessor(owner, defaultLocale);
 		
 		String editor = itemAndMetadata.getEditor();
 		String editorVersion = itemAndMetadata.getEditorVersion();
@@ -417,8 +392,7 @@ public class QTI21QPoolServiceProvider implements QPoolSPI {
 	 */
 	public QuestionItem importAssessmentItemRef(Identity owner, AssessmentItem assessmentItem,
 			File itemFile, ManifestMetadataBuilder clonedMetadataBuilder, Locale defaultLocale) {
-		QTI21ImportProcessor processor =  new QTI21ImportProcessor(owner, defaultLocale,
-				questionItemDao, qItemTypeDao, qEduContextDao, taxonomyLevelDao, qLicenseDao, qpoolFileStorage, qtiService);
+		QTI21ImportProcessor processor =  new QTI21ImportProcessor(owner, defaultLocale);
 		
 		AssessmentItemMetadata metadata = new AssessmentItemMetadata(clonedMetadataBuilder);
 
@@ -470,6 +444,10 @@ public class QTI21QPoolServiceProvider implements QPoolSPI {
 		return qitem;
 	}
 	
+	public QuestionItemFull getFullQuestionItem(QuestionItemShort qitem) {
+		return questionItemDao.loadById(qitem.getKey());
+	}
+	
 	/**
 	 * Export to QTI editor an item from the pool. The ident of the item
 	 * is always regenerated as an UUID.
@@ -477,13 +455,15 @@ public class QTI21QPoolServiceProvider implements QPoolSPI {
 	 * @param editorContainer
 	 * @return
 	 */
-	public AssessmentItem exportToQTIEditor(QuestionItemShort qitem, Locale locale, File editorContainer) throws IOException {
+	public AssessmentItem exportToQTIEditor(QuestionItemFull qitem, Locale locale, File editorContainer) throws IOException {
 		QTI21ExportProcessor processor = new QTI21ExportProcessor(qtiService, qpoolFileStorage, locale);
-		QuestionItemFull fullItem = questionItemDao.loadById(qitem.getKey());
-		ResolvedAssessmentItem resolvedAssessmentItem = processor.exportToQTIEditor(fullItem, editorContainer);
-		AssessmentItem assessmentItem = resolvedAssessmentItem.getItemLookup().extractAssumingSuccessful();
-		assessmentItem.setIdentifier(QTI21QuestionType.generateNewIdentifier(assessmentItem.getIdentifier()));
-		return assessmentItem;
+		ResolvedAssessmentItem resolvedAssessmentItem = processor.exportToQTIEditor(qitem, editorContainer);
+		if(resolvedAssessmentItem != null) {
+			AssessmentItem assessmentItem = resolvedAssessmentItem.getItemLookup().extractAssumingSuccessful();
+			assessmentItem.setIdentifier(QTI21QuestionType.generateNewIdentifier(assessmentItem.getIdentifier()));
+			return assessmentItem;
+		}
+		return null;
 	}
 	
 	public void assembleTest(List<QuestionItemShort> items, Locale locale, ZipOutputStream zout) {
@@ -522,10 +502,10 @@ public class QTI21QPoolServiceProvider implements QPoolSPI {
 	 * 
 	 * @param qtiEditorPackage
 	 */
-	public boolean convertFromEditorPackage(QTIEditorPackage qtiEditorPackage, File unzippedDirRoot, Locale locale) {
+	public boolean convertFromEditorPackage(QTIEditorPackage qtiEditorPackage, File unzippedDirRoot, Locale locale, QTI21DeliveryOptions qti21Options) {
 		try {
 			QTI12To21Converter converter = new QTI12To21Converter(unzippedDirRoot, locale);
-			converter.convert(qtiEditorPackage);
+			converter.convert(qtiEditorPackage, qti21Options);
 			return true;
 		} catch (URISyntaxException e) {
 			log.error("", e);
@@ -534,12 +514,11 @@ public class QTI21QPoolServiceProvider implements QPoolSPI {
 	}
 	
 	private List<Long> toKeys(List<? extends QuestionItemShort> items) {
-		List<Long> keys = new ArrayList<Long>(items.size());
+		List<Long> keys = new ArrayList<>(items.size());
 		for(QuestionItemShort item:items) {
 			keys.add(item.getKey());
 		}
 		return keys;
 	}
-	
 
 }

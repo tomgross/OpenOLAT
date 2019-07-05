@@ -32,14 +32,17 @@ import java.util.concurrent.TimeUnit;
 
 import org.junit.Assert;
 import org.junit.Test;
+import org.olat.basesecurity.OrganisationService;
 import org.olat.core.commons.persistence.DB;
 import org.olat.core.commons.services.commentAndRating.manager.UserCommentsDAO;
 import org.olat.core.commons.services.commentAndRating.manager.UserRatingsDAO;
 import org.olat.core.id.Identity;
 import org.olat.core.id.OLATResourceable;
-import org.olat.core.logging.OLog;
+import org.olat.core.id.Organisation;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
 import org.olat.repository.RepositoryEntry;
+import org.olat.repository.RepositoryEntryStatusEnum;
 import org.olat.repository.RepositoryManager;
 import org.olat.repository.RepositoryService;
 import org.olat.repository.model.RepositoryEntryStatistics;
@@ -55,7 +58,7 @@ import org.springframework.beans.factory.annotation.Autowired;
  */
 public class RepositoryEntryStatisticsDAOTest extends OlatTestCase {
 	
-	private static final OLog log = Tracing.createLoggerFor(RepositoryEntryStatisticsDAOTest.class);
+	private static final Logger log = Tracing.createLoggerFor(RepositoryEntryStatisticsDAOTest.class);
 	
 	@Autowired
 	private DB dbInstance;
@@ -68,11 +71,15 @@ public class RepositoryEntryStatisticsDAOTest extends OlatTestCase {
 	@Autowired
 	private RepositoryService repositoryService;
 	@Autowired
+	private OrganisationService organisationService;
+	@Autowired
 	private RepositoryEntryStatisticsDAO reStatisticsDao;
 	
 	@Test
 	public void createRepositoryEntry() {
-		RepositoryEntry re = repositoryService.create("Rei Ayanami", "-", "Statistics", "", null);
+		Organisation defOrganisation = organisationService.getDefaultOrganisation();
+		RepositoryEntry re = repositoryService.create(null, "Rei Ayanami", "-", "Statistics", "", null,
+				RepositoryEntryStatusEnum.trash, defOrganisation);
 		dbInstance.commitAndCloseSession();
 		Assert.assertNotNull(re);
 		Assert.assertNotNull(re.getStatistics());
@@ -91,7 +98,8 @@ public class RepositoryEntryStatisticsDAOTest extends OlatTestCase {
 	public void updateRatingStatistics() {
 		//create an entry
 		Identity id = JunitTestHelper.createAndPersistIdentityAsAuthor("update-mark-");
-		RepositoryEntry re = repositoryService.create(id, null, "-", "Statistics", "", null, 0);
+		RepositoryEntry re = repositoryService.create(id, null, "-", "Statistics", "", null,
+				RepositoryEntryStatusEnum.trash, null);
 		dbInstance.commitAndCloseSession();
 		Assert.assertNotNull(re);
 		Assert.assertNotNull(re.getStatistics());
@@ -109,7 +117,9 @@ public class RepositoryEntryStatisticsDAOTest extends OlatTestCase {
 	public void updateCommentsStatistics() {
 		//create an entry
 		Identity id = JunitTestHelper.createAndPersistIdentityAsAuthor("update-comment-");
-		RepositoryEntry re = repositoryService.create(id, null, "-", "Statistics", "", null, 0);
+		Organisation defOrganisation = organisationService.getDefaultOrganisation();
+		RepositoryEntry re = repositoryService.create(id, null, "-", "Statistics", "", null,
+				RepositoryEntryStatusEnum.trash, defOrganisation);
 		dbInstance.commitAndCloseSession();
 		Assert.assertNotNull(re);
 		Assert.assertNotNull(re.getStatistics());
@@ -125,7 +135,9 @@ public class RepositoryEntryStatisticsDAOTest extends OlatTestCase {
 	
 	@Test
 	public void incrementLaunchCounter() {
-		RepositoryEntry repositoryEntry = repositoryService.create("Rei Ayanami", "-", "T1_perf1", "T1_perf1", null);
+		Organisation defOrganisation = organisationService.getDefaultOrganisation();
+		RepositoryEntry repositoryEntry = repositoryService.create(null, "Rei Ayanami", "-", "T1_perf1", "T1_perf1", null,
+				RepositoryEntryStatusEnum.trash, defOrganisation);
 		
 		final Long keyRepo = repositoryEntry.getKey();
 		final OLATResourceable resourceable = repositoryEntry.getOlatResource();
@@ -156,7 +168,9 @@ public class RepositoryEntryStatisticsDAOTest extends OlatTestCase {
 	 */
 	@Test
 	public void incrementLaunchCounter_setDescription() {
-		RepositoryEntry repositoryEntry = repositoryService.create("Rei Ayanami", "-", "T1_perf1b", "T1_perf1b", null);
+		Organisation defOrganisation = organisationService.getDefaultOrganisation();
+		RepositoryEntry repositoryEntry = repositoryService.create(null, "Rei Ayanami", "-", "T1_perf1b", "T1_perf1b", null,
+				RepositoryEntryStatusEnum.trash, defOrganisation);
 		dbInstance.closeSession();
 		
 		final Long keyRepo = repositoryEntry.getKey();
@@ -184,7 +198,9 @@ public class RepositoryEntryStatisticsDAOTest extends OlatTestCase {
 	
 	@Test
 	public void incrementDownloadCounter() {
-		RepositoryEntry repositoryEntry = repositoryService.create("Rei Ayanami", "-", "T1_perf2", "T1_perf2", null);	
+		Organisation defOrganisation = organisationService.getDefaultOrganisation();
+		RepositoryEntry repositoryEntry = repositoryService.create(null, "Rei Ayanami", "-", "T1_perf2", "T1_perf2", null,
+				RepositoryEntryStatusEnum.trash, defOrganisation);	
 		final Long keyRepo = repositoryEntry.getKey();
 		final OLATResourceable resourceable = repositoryEntry.getOlatResource();
 		assertNotNull(resourceable);
@@ -218,7 +234,10 @@ public class RepositoryEntryStatisticsDAOTest extends OlatTestCase {
 
 		final int loop = 100;
 		final int numberOfThreads = 3;
-		final RepositoryEntry repositoryEntry = repositoryService.create("Rei Ayanami", "-", "T1_concurrent1", "T1_concurrent1", null);	
+
+		Organisation defOrganisation = organisationService.getDefaultOrganisation();
+		final RepositoryEntry repositoryEntry = repositoryService.create(null, "Rei Ayanami", "-", "T1_concurrent1", "T1_concurrent1", null,
+				RepositoryEntryStatusEnum.trash, defOrganisation);	
 		final Long keyRepo = repositoryEntry.getKey();
 		assertNotNull(repositoryEntry.getOlatResource());
 		dbInstance.commitAndCloseSession();
@@ -237,11 +256,15 @@ public class RepositoryEntryStatisticsDAOTest extends OlatTestCase {
 						RepositoryEntry re = repositoryManager.lookupRepositoryEntry(keyRepo);
 						repositoryService.incrementLaunchCounter(re);
 						if (i % 20 == 0 ) {
-							re = repositoryManager.setAccess(re, 4, false);
-							assertEquals("Wrong access value", 4, re.getAccess());
+							re = repositoryManager.setAccess(re, RepositoryEntryStatusEnum.published, true, true);
+							Assert.assertEquals("Wrong access value", RepositoryEntryStatusEnum.published, re.getEntryStatus());
+							Assert.assertEquals("Wrong access value", true, re.isAllUsers());
+							Assert.assertEquals("Wrong access value", true, re.isGuests());
 						} else if (i % 10 == 0 ) {
-							re = repositoryManager.setAccess(re, 1, false);
-							assertEquals("Wrong access value", 1,re.getAccess());
+							re = repositoryManager.setAccess(re, RepositoryEntryStatusEnum.preparation, false, false);
+							Assert.assertEquals("Wrong access value", RepositoryEntryStatusEnum.preparation, re.getEntryStatus());
+							Assert.assertEquals("Wrong access value", false, re.isAllUsers());
+							Assert.assertEquals("Wrong access value", false, re.isGuests());
 						}
 						dbInstance.commitAndCloseSession();
 					}
@@ -301,17 +324,21 @@ public class RepositoryEntryStatisticsDAOTest extends OlatTestCase {
 						RepositoryEntry re = repositoryManager.lookupRepositoryEntry(keyRepo);
 						repositoryService.incrementLaunchCounter(re);
 						if (i % 30 == 0 ) {
-							re = repositoryManager.setAccessAndProperties(re, 3, false, true, false, false);	
-							assertEquals("Wrong access value", 3, re.getAccess());
-							assertEquals("Wrong canCopy value", true, re.getCanCopy());
-							assertEquals("Wrong getCanReference value",false, re.getCanReference());
-							assertEquals("Wrong getCanDownload value", false, re.getCanDownload());
+							re = repositoryManager.setAccessAndProperties(re, RepositoryEntryStatusEnum.published, true, false, true, false, false);	
+							Assert.assertEquals("Wrong access value", RepositoryEntryStatusEnum.published, re.getEntryStatus());
+							Assert.assertEquals("Wrong access value", true, re.isAllUsers());
+							Assert.assertEquals("Wrong access value", false, re.isGuests());
+							Assert.assertEquals("Wrong canCopy value", true, re.getCanCopy());
+							Assert.assertEquals("Wrong getCanReference value",false, re.getCanReference());
+							Assert.assertEquals("Wrong getCanDownload value", false, re.getCanDownload());
 						} else 	if (i % 15 == 0 ) {
-							re = repositoryManager.setAccessAndProperties(re, 2,false, false, true, true);	
-							assertEquals("Wrong access value", 2, re.getAccess());
-							assertEquals("Wrong canCopy value", false, re.getCanCopy());
-							assertEquals("Wrong getCanReference value", true, re.getCanReference());
-							assertEquals("Wrong getCanDownload value", true, re.getCanDownload());
+							re = repositoryManager.setAccessAndProperties(re, RepositoryEntryStatusEnum.review, false, false, false, true, true);	
+							Assert.assertEquals("Wrong access value", RepositoryEntryStatusEnum.review, re.getEntryStatus());
+							Assert.assertEquals("Wrong access value", false, re.isAllUsers());
+							Assert.assertEquals("Wrong access value", false, re.isGuests());
+							Assert.assertEquals("Wrong canCopy value", false, re.getCanCopy());
+							Assert.assertEquals("Wrong getCanReference value", true, re.getCanReference());
+							Assert.assertEquals("Wrong getCanDownload value", true, re.getCanDownload());
 						}
 						dbInstance.commitAndCloseSession();
 					}
@@ -364,11 +391,12 @@ public class RepositoryEntryStatisticsDAOTest extends OlatTestCase {
 	public void concurrentIncrementDownloadCounter() {
 		final List<Exception> exceptionHolder = Collections.synchronizedList(new ArrayList<Exception>(1));
 
-		RepositoryEntry repositoryEntry = repositoryService.create("Rei Ayanami", "-", "T1_concurrent3", "T1_concurrent3", null);	
+		Organisation defOrganisation = organisationService.getDefaultOrganisation();
+		RepositoryEntry repositoryEntry = repositoryService.create(null, "Rei Ayanami", "-", "T1_concurrent3", "T1_concurrent3", null,
+				RepositoryEntryStatusEnum.trash, defOrganisation);	
 		final Long keyRepo = repositoryEntry.getKey();
 		final OLATResourceable resourceable = repositoryEntry.getOlatResource();
 		assertNotNull(resourceable);
-		final int access = 4;
 		dbInstance.closeSession();
 		assertEquals("Launch counter was not 0", 0, repositoryEntry.getStatistics().getLaunchCounter() );
 
@@ -392,6 +420,7 @@ public class RepositoryEntryStatisticsDAOTest extends OlatTestCase {
 		
 		// thread 2
 		Thread thread2 = new Thread() {
+			@Override
 			public void run() {
 				try {
 					Thread.sleep(300);
@@ -408,11 +437,12 @@ public class RepositoryEntryStatisticsDAOTest extends OlatTestCase {
 
 		// thread 3
 		Thread thread3 = new Thread() {
+			@Override
 			public void run() {
 				try {
 					Thread.sleep(200);
 					RepositoryEntry repositoryEntryT3 = repositoryManager.lookupRepositoryEntry(keyRepo);
-					repositoryEntryT3 = repositoryManager.setAccess(repositoryEntryT3, access, false);
+					repositoryEntryT3 = repositoryManager.setAccess(repositoryEntryT3, RepositoryEntryStatusEnum.published, true, true);
 					dbInstance.closeSession();
 					log.info("testConcurrentIncrementLaunchCounterWithCodePoints: Thread3 setAccess DONE");
 				} catch (Exception ex) {
@@ -436,7 +466,9 @@ public class RepositoryEntryStatisticsDAOTest extends OlatTestCase {
 
 		RepositoryEntry repositoryEntry2 = repositoryManager.lookupRepositoryEntry(keyRepo);
 		assertEquals("Wrong value of incrementLaunch counter",2,repositoryEntry2.getStatistics().getDownloadCounter());
-		assertEquals("Wrong access value",access,repositoryEntry2.getAccess());
+		assertEquals("Wrong access value", RepositoryEntryStatusEnum.published, repositoryEntry2.getEntryStatus());
+		assertEquals("Wrong access value", true, repositoryEntry2.isAllUsers());
+		assertEquals("Wrong access value", true, repositoryEntry2.isGuests());
 		log.info("testConcurrentIncrementLaunchCounterWithCodePoints finish successful");		
 	}
 	

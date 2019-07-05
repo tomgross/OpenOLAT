@@ -51,12 +51,14 @@ import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-import org.apache.commons.io.IOUtils;
 import org.olat.core.logging.AssertException;
 import org.olat.core.logging.OLATRuntimeException;
-import org.olat.core.logging.OLog;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
-import org.springframework.core.io.Resource;
+import org.olat.core.util.vfs.VFSContainer;
+import org.olat.core.util.vfs.VFSItem;
+import org.olat.core.util.vfs.VFSLeaf;
+import org.olat.core.util.vfs.filters.VFSSystemItemFilter;
 
 
 /**
@@ -64,36 +66,26 @@ import org.springframework.core.io.Resource;
  */
 public class FileUtils {
 
-	private static final OLog log = Tracing.createLoggerFor(FileUtils.class);
+	private static final Logger log = Tracing.createLoggerFor(FileUtils.class);
 	
-	private static int buffSize = 32 * 1024;
 	// the following is for cleaning up file I/O stuff ... so it works fine on NFS
 	public static final int BSIZE = 8*1024;
 
 	// matches files and folders of type:
 	// bla, bla1, bla12, bla.html, bla1.html, bla12.html
-	private static final Pattern fileNamePattern = Pattern.compile("(.+?)\\p{Digit}*(\\.\\w{2,4})?");
+	private static final Pattern fileNamePattern = Pattern.compile("(.+?)\\p{Digit}*(\\.\\w{2,7})?");
+	
+	//windows: invalid characters for filenames: \ / : * ? " < > | 
+	//linux: invalid characters for file/folder names: /, but you have to escape certain chars, like ";$%&*"
+	//zip: may cause errors: =
+	//OLAT reserved char: ":"	
+	private static final char[] FILE_NAME_FORBIDDEN_CHARS = { '/', '\n', '\r', '\t', '\f', '`', '?', '*', '\\', '<', '>', '|', '\"', ':', ',', '=' };
 
-	/**
-	 * For security reasons Servlet containers deny requests with an encoded
-	 * slash (/) or backslash (\) in the request URL (they return a 400 code).
-	 * As a result, a file or directory that contains such character in its
-	 * name cannot be accessed (or created by WebDAV). To prevent the creation
-	 * of such named objects in the OLAT GUI, the two characters are
-	 * blacklisted. However, with the help of a ZIP archive, that contains
-	 * e.g. files with such malicious names, such objects can be created (but
-	 * never accessed). The good thing is, that such objects can be deleted
-	 * via the OLAT GUI.
-	 *
-	 * URL: invalid characters for a request: / \ (denied by the Servlet container, see above)
-	 * Windows: invalid characters for a file name: \ / : * ? " < > | (true but such can be created via WebDAV or with the help of a ZIP archive)
-	 * Linux: invalid characters for a file or directory name: / (but you have to escape certain chars like ";$%&*")
-	 */
-	private static final int[] FILE_NAME_FORBIDDEN_CHARS = { '/', '\\', '\n', '\r', '\t', '\f' };
-	private static final int[] FILE_NAME_ACCEPTED_CHARS = { ' ' };
-    private static final List<String> META_FILENAMES = Collections.emptyList();
-
-    static {
+	private static final char[] FILE_NAME_ACCEPTED_CHARS = { '\u0228', '\u0196', '\u0252', '\u0220', '\u0246', '\u0214', ' '};
+	// known metadata files
+	private static final List<String> META_FILENAMES = Arrays.asList(".DS_Store",".CVS",".nfs",".sass-cache",".hg", ".git");
+	
+	static {
 		Arrays.sort(FILE_NAME_FORBIDDEN_CHARS);
 		Arrays.sort(FILE_NAME_ACCEPTED_CHARS);
 	}
@@ -150,6 +142,35 @@ public class FileUtils {
 	 */
 	public static boolean copyFileToDir(File sourceFile, File targetDir, String wt) {
 		return copyFileToDir(sourceFile, targetDir, false, null, wt);
+	}
+	
+	/**
+	 * 
+	 * @param source The source
+	 * @param targetDirectory The directory to copy the source in
+	 * @param wt A message
+	 * @return True if ok
+	 */
+	public static boolean copyItemToDir(VFSItem source, File targetDirectory, String wt) {
+		targetDirectory.mkdirs();
+
+		File target = new File(targetDirectory, source.getName());
+		if(source instanceof VFSLeaf) {
+			try(InputStream inStream = ((VFSLeaf)source).getInputStream();
+					OutputStream outStream = new FileOutputStream(target)) {
+				cpio(inStream, outStream, wt);
+			} catch(IOException ex) {
+				log.error("", ex);
+				return false;
+			}
+		} else if(source instanceof VFSContainer) {
+			target.mkdir();
+			List<VFSItem> items = ((VFSContainer)source).getItems(new VFSSystemItemFilter());
+			for(VFSItem item:items) {
+				copyItemToDir(item, target, wt);
+			}
+		}
+		return true;
 	}
 
 	/**
@@ -366,7 +387,7 @@ public class FileUtils {
 		
 		// in case of a move accross different filesystems, clean up now
 		if (move) {
-			sourceDir.delete();
+			deleteFile(sourceDir);
 		}
 		return success;
 	}
@@ -409,7 +430,7 @@ public class FileUtils {
 			
 			if (move) {
 				// to finish the move accross different filesystems we need to delete the source file
-				sourceFile.delete();
+				deleteFile(sourceFile);
 			}
 		} catch (IOException e) {
 			log.error("Could not copy file::" + sourceFile.getAbsolutePath() + " to dir::" + targetDir.getAbsolutePath(), e);
@@ -418,23 +439,20 @@ public class FileUtils {
 		return true;
 	} // end copy
 	
-	public static boolean copyToFile(InputStream in, File targetFile, String wt) {
+	public static boolean copyToFile(InputStream in, File targetFile, String wt) throws IOException {
 		if (targetFile.isDirectory()) return false;
 
 		// create target directories
 		targetFile.getParentFile().mkdirs(); // don't check for success... would return false on
 
-		BufferedInputStream  bis = new BufferedInputStream(in);
-		try (OutputStream dst = new FileOutputStream(targetFile);
+		try(BufferedInputStream  bis = new BufferedInputStream(in);
+				OutputStream dst = new FileOutputStream(targetFile);
 				BufferedOutputStream bos = getBos (dst)) {
 			cpio (bis, bos, wt);
 			bos.flush();
 			return true;
 		} catch (IOException e) {
-			throw new RuntimeException("I/O error in cpio "+wt);
-		} finally {
-			IOUtils.closeQuietly(bis);
-			IOUtils.closeQuietly(in);
+			throw e;
 		}
 	}
 
@@ -464,7 +482,7 @@ public class FileUtils {
 			
 			if (move) {
 				// to finish the move accross different filesystems we need to delete the source file
-				sourceFile.delete();
+				deleteFile(sourceFile);
 			}
 		} catch (IOException e) {
 			log.error("Could not copy file::" + sourceFile.getAbsolutePath() + " to file::" + targetFile.getAbsolutePath(), e);
@@ -485,44 +503,7 @@ public class FileUtils {
 	public static boolean copyFileToDir(File sourceFile, File targetDir, boolean move, String wt) {
 			return copyFileToDir(sourceFile, targetDir, move, null, wt);
 	}
-	
-	/**
-	 * Copy an InputStream to an OutputStream.
-	 * 
-	 * @param source InputStream, left open.
-	 * @param target OutputStream, left open.
-	 * @param length how many bytes to copy.
-	 * @return true if the copy was successful.
-	 */
-	public static boolean copy(InputStream source, OutputStream target, long length) {
-		if (length == 0) return true;
-		try {
-			int chunkSize = (int) Math.min(buffSize, length);
-			long chunks = length / chunkSize;
-			int lastChunkSize = (int) (length % chunkSize);
-			// code will work even when chunkSize = 0 or chunks = 0;
-			byte[] ba = new byte[chunkSize];
 
-			for (long i = 0; i < chunks; i++) {
-				int bytesRead = readBlocking(source, ba, 0, chunkSize);
-				if (bytesRead != chunkSize) { throw new IOException(); }
-				target.write(ba);
-			} // end for
-			// R E A D / W R I T E last chunk, if any
-			if (lastChunkSize > 0) {
-				int bytesRead = readBlocking(source, ba, 0, lastChunkSize);
-				if (bytesRead != lastChunkSize) { throw new IOException(); }
-				target.write(ba, 0, lastChunkSize);
-			} // end if
-		} catch (IOException e) {
-			// don't log as error - happens all the time (ClientAbortException)
-			if (log.isDebug()) log.debug("Could not copy stream::" + e.getMessage() + " with length::" + length);
-			return false;
-		}
-		return true;
-	} // end copy
-	
-	
 	/**
 	 * Copy an InputStream to an OutputStream, until EOF. Use only when you don't
 	 * know the length.
@@ -533,58 +514,13 @@ public class FileUtils {
 	 */
 	public static boolean copy(InputStream source, OutputStream target) {
 		try {
-
-			int chunkSize = buffSize;
-			// code will work even when chunkSize = 0 or chunks = 0;
-			// Even for small files, we allocate a big buffer, since we
-			// don't know the size ahead of time.
-			byte[] ba = new byte[chunkSize];
-
-			while (true) {
-				int bytesRead = readBlocking(source, ba, 0, chunkSize);
-				if (bytesRead > 0) {
-					target.write(ba, 0, bytesRead);
-				} else {
-					break;
-				} // hit eof
-			} // end while
+			cpio(source, target, "");
+			return true;
 		} catch (IOException e) {
-			// don't log as error - happens all the time (ClientAbortException)
-			if (log.isDebug()) log.debug("Could not copy stream::" + e.getMessage());
+			log.error("Could not copy stream", e);
 			return false;
 		}
-		return true;
 	}
-
-	/**
-	 * Reads exactly <code>len</code> bytes from the input stream into the byte
-	 * array. This method reads repeatedly from the underlying stream until all
-	 * the bytes are read. InputStream.read is often documented to block like
-	 * this, but in actuality it does not always do so, and returns early with
-	 * just a few bytes. readBlockiyng blocks until all the bytes are read, the
-	 * end of the stream is detected, or an exception is thrown. You will always
-	 * get as many bytes as you asked for unless you get an eof or other
-	 * exception. Unlike readFully, you find out how many bytes you did get.
-	 * 
-	 * @param in
-	 * @param b the buffer into which the data is read.
-	 * @param off the start offset of the data.
-	 * @param len the number of bytes to read.
-	 * @return number of bytes actually read.
-	 * @exception IOException if an I/O error occurs.
-	 */
-	public static final int readBlocking(InputStream in, byte b[], int off, int len) throws IOException {
-		int totalBytesRead = 0;
-
-		while (totalBytesRead < len) {
-			int bytesRead = in.read(b, off + totalBytesRead, len - totalBytesRead);
-			if (bytesRead < 0) {
-				break;
-			}
-			totalBytesRead += bytesRead;
-		}
-		return totalBytesRead;
-	} // end readBlocking
 	
 	public static void deleteDirsAndFiles(Path path) throws IOException {
 		Files.walkFileTree(path, new SimpleFileVisitor<Path>() {
@@ -603,6 +539,22 @@ public class FileUtils {
 				return FileVisitResult.CONTINUE;
 			}
 		});
+	}
+	
+	/**
+	 * Delete a file (not a filled directory)
+	 * @param file The file
+	 * @return true if successfully deleted
+	 */
+	public static boolean deleteFile(File file) {
+		boolean deleted = false;
+		try {
+			deleted = Files.deleteIfExists(file.toPath());
+		} catch (IOException e) {
+			log.error("", e);
+			deleted = false;
+		}
+		return deleted;
 	}
 
 	/**
@@ -636,13 +588,13 @@ public class FileUtils {
 		if (allFiles != null) {
 			for (int i = 0; i < allFiles.length; i++) {
 				File deleteFile = new File(dir, allFiles[i]);
-				success &= deleteFile.delete();
+				success &= deleteFile(deleteFile);
 			}
 		}
 
 		// delete passed dir
 		if (deleteDir) {
-			success &= dir.delete();
+			success &= deleteFile(dir);
 		}
 		return success;
 	} // end deleteDirContents
@@ -689,20 +641,19 @@ public class FileUtils {
 	 * @param encoding
 	 */
 	public static void save(File target, String data, String encoding) {
-		try {
-			save(new FileOutputStream(target), data, StringHelper.check4xMacRoman(encoding));
+		try(OutputStream out=new FileOutputStream(target)) {
+			save(out, data, StringHelper.check4xMacRoman(encoding));
 		} catch (IOException e) {
 			throw new OLATRuntimeException(FileUtils.class, "could not save file", e);
 		}
 	}
 	
-	public static InputStream getInputStream(String data, String encoding) {
+	public static InputStream getInputStream(String data, String encoding) throws IOException {
 		try {
 			byte[] ba = data.getBytes(StringHelper.check4xMacRoman(encoding));
-			ByteArrayInputStream bis = new ByteArrayInputStream(ba);
-			return bis;
+			return new ByteArrayInputStream(ba);
 		} catch (IOException e) {
-			throw new OLATRuntimeException(FileUtils.class, "could not save to output stream", e);
+			throw new IOException("could not save to output stream", e);
 		}
 	}
 
@@ -712,11 +663,9 @@ public class FileUtils {
 	 * @param encoding
 	 */
 	public static void save(OutputStream target, String data, String encoding) {
-		try {
-			byte[] ba = data.getBytes(StringHelper.check4xMacRoman(encoding));
-			ByteArrayInputStream bis = new ByteArrayInputStream(ba);
-			bcopy (bis, target, "saveDataToFile");
-		} catch (IOException e) {
+		try(InputStream bis=getInputStream(data, encoding)) {
+			cpio(bis, target, "saveDataToFile");
+		} catch (Exception e) {
 			throw new OLATRuntimeException(FileUtils.class, "could not save to output stream", e);
 		}
 	}
@@ -727,36 +676,14 @@ public class FileUtils {
 	 * @param target the file
 	 */
 	public static void save(InputStream source, File target) {
-		try {
-			BufferedInputStream bis = new BufferedInputStream(source);
-			BufferedOutputStream bos = getBos(target);
-			
+		try(BufferedInputStream bis = new BufferedInputStream(source);
+				BufferedOutputStream bos = getBos(target)) {
 			cpio (bis, bos, "fileSave");
-			
 			bos.flush();
-			bos.close();
-			
-			bis.close();
 		} catch (IOException e) {
 			throw new OLATRuntimeException(FileUtils.class, "could not save stream to file::" + target.getAbsolutePath(), e);
 		}		
 	}
-
-	public static void saveToDir(InputStream inputStream, File directory, String newFileName) {
-		save(inputStream, new File(directory, newFileName));
-	}
-
-	public static String load(Resource source, String encoding) {
-    		try {
-    			return load(source.getInputStream(), encoding);
-    		} catch (FileNotFoundException e) {
-    			throw new RuntimeException("File not found: " + source.getFilename());
-    		} catch (IOException e) {
-    			throw new RuntimeException("File not found: " + source.getFilename());
-    		}
-    	}
-
-
 
 	/**
 	 * @param source
@@ -764,9 +691,10 @@ public class FileUtils {
 	 * @return the file in form of a string
 	 */
 	public static String load(File source, String encoding) {
-		try {
-			return load(new FileInputStream(source), encoding);
-		} catch (FileNotFoundException e) {
+		try(InputStream in=new FileInputStream(source);
+				BufferedInputStream bis = new BufferedInputStream(in, FileUtils.BSIZE)) {
+			return load(bis, encoding);
+		} catch (IOException e) {
 			throw new RuntimeException("could not copy file to ram: " + source.getAbsolutePath());
 		}
 	}
@@ -778,15 +706,14 @@ public class FileUtils {
 	 */
 	public static String load(InputStream source, String encoding) {
 		String htmltext = null;
-		try {
-			ByteArrayOutputStream bas = new ByteArrayOutputStream();
-			boolean success = FileUtils.copy(source, bas);
-			source.close();
-			bas.close();
+		try(ByteArrayOutputStream bas = new ByteArrayOutputStream()) {
+			boolean success = copy(source, bas);
 			if (!success) throw new RuntimeException("could not copy inputstream to ram");
 			htmltext = bas.toString(StringHelper.check4xMacRoman(encoding));
 		} catch (IOException e) {
 			throw new OLATRuntimeException(FileUtils.class, "could not load from inputstream", e);
+		} finally {
+			closeSafely(source);
 		}
 		return htmltext;
 	}
@@ -801,6 +728,22 @@ public class FileUtils {
 		String[] content = directory.list();
 		if(content == null) return false;
 		return (content.length > 0); 
+	}
+	
+	/**
+	 * 
+	 * @param dir
+	 * @param file
+	 * @return
+	 */
+	public static boolean isInSubDirectory(File dir, File file) {
+	    if (file == null) {
+	        return false;
+	    }
+	    if (file.equals(dir)) {
+	        return true;
+	    }
+	    return isInSubDirectory(dir, file.getParentFile());
 	}
 	
 	/**
@@ -858,17 +801,16 @@ public class FileUtils {
 	 * @return true if filename valid
 	 */
 	public static boolean validateFilename(String filename) {
-		if (filename == null) {
+		if(!StringHelper.containsNonWhitespace(filename)) {
 			return false;
 		}
-		
-		int length = filename.codePointCount(0, filename.length());
-		for (int i = 0; i < length; i++) {
-			int character = filename.codePointAt(i);
-			if (Arrays.binarySearch(FILE_NAME_ACCEPTED_CHARS, character) < 0) {
-				if (character < 33 || Arrays.binarySearch(FILE_NAME_FORBIDDEN_CHARS, character) >= 0) {
-					return false;
-				}
+
+		for(int i=0; i<filename.length(); i++) {
+			char character = filename.charAt(i);
+			if(Arrays.binarySearch(FILE_NAME_ACCEPTED_CHARS, character)>=0) {
+				continue;
+			} else if(character<33 || character>255 || Arrays.binarySearch(FILE_NAME_FORBIDDEN_CHARS, character)>=0) {
+				return false;
 			}
 		}
 		//check if there are any unwanted path denominators in the name
@@ -893,8 +835,41 @@ public class FileUtils {
 				.replace("\u00E6", "ae");
 		String nameNormalized = Normalizer.normalize(nameFirstPass, Normalizer.Form.NFKD)
 				.replaceAll("\\p{InCombiningDiacriticalMarks}+","");
-		String nameSanitized = nameNormalized.replaceAll("\\W+", "");
-		return nameSanitized;
+		return nameNormalized.replaceAll("\\W+", "");
+	}
+	
+	/**
+	 * Cleans the filename from invalid character to make a filename compatible for
+	 * the usual operating systems and browsers.. Suffixes are preserved. This
+	 * method is not as strict as {@link #normalizeFilename(String)}.
+	 * 
+	 * @param filename
+	 * @return the cleaned filename
+	 */
+	public static String cleanFilename(String filename) {
+		boolean hasExtension = false;
+		String name = filename;
+		String extension = getFileSuffix(filename);
+		if (extension != null && extension.length() > 0) {
+			hasExtension = true;
+			name = filename.substring(0, filename.length() - extension.length() - 1);
+		}
+		StringBuilder normalizedFilename = new StringBuilder();
+		normalizedFilename.append(cleanFilenamePart(name));
+		if (hasExtension) {
+			normalizedFilename.append(".");
+			normalizedFilename.append(cleanFilenamePart(extension));
+		}
+		return normalizedFilename.toString();
+	}
+	
+	private static String cleanFilenamePart(String filename) {
+		String cleaned = Normalizer.normalize(filename, Normalizer.Form.NFKD);
+		cleaned = cleaned.replaceAll("\\p{InCombiningDiacriticalMarks}+","");
+		for (char character: FILE_NAME_FORBIDDEN_CHARS) {
+			cleaned = cleaned.replace(character, '_');
+		}
+		return cleaned;
 	}
 	
 	
@@ -912,7 +887,7 @@ public class FileUtils {
 		try {
 			File tmpFile = File.createTempFile(prefix, suffix, directory);
 			if(tmpFile.exists()) {
-				tmpFile.delete();
+				deleteFile(tmpFile);
 			}
 			boolean tmpDirCreated = tmpFile.mkdir();
 			if(tmpDirCreated) {
@@ -924,11 +899,21 @@ public class FileUtils {
 		return tmpDir;
 	}
 	
-	public static void bcopy (File src, File dst, String wt) throws FileNotFoundException, IOException {
-		bcopy (new FileInputStream(src), new FileOutputStream(dst), wt);
+	public static void bcopy (File src, File dst, String wt) throws IOException {
+		try(InputStream in=new FileInputStream(src);
+				BufferedInputStream bis = new BufferedInputStream(in, FileUtils.BSIZE);
+				OutputStream out=new FileOutputStream(dst)) {
+			cpio(bis, out, wt);
+		} catch(IOException e) {
+			log.error("", e);
+		}
 	}	
-	public static void bcopy (InputStream src, File dst, String wt) throws FileNotFoundException, IOException {
-		bcopy (src, new FileOutputStream(dst), "copyStreamToFile:"+wt);
+	public static void bcopy(InputStream src, File dst, String wt) throws IOException {
+		try(OutputStream out=new FileOutputStream(dst)) {
+			cpio(src, out, "copyStreamToFile:".concat(wt));
+		} catch(IOException e) {
+			log.error("", e);
+		}
 	}
 	public static BufferedOutputStream getBos (FileOutputStream of) {
 		return new BufferedOutputStream (of, BSIZE);
@@ -941,31 +926,6 @@ public class FileUtils {
 	}
 	public static BufferedOutputStream getBos (String fname) throws FileNotFoundException {
 		return getBos (new File (fname));
-	}
-	
-	/**
-	 * Buffered copy streams (closes both streams when done)  
-	 * 
-	 * @param src InputStream
-	 * @param dst OutputStream
-	 * @throws IOException 
-	 */
-	public static void bcopy (InputStream src, OutputStream dst, String wt) throws IOException {
-
-		BufferedInputStream  bis = new BufferedInputStream(src);
-		BufferedOutputStream bos = getBos (dst);
-
-		try {
-			cpio (bis, bos, wt);
-			bos.flush();
-		} catch (IOException e) {
-			throw new RuntimeException("I/O error in cpio "+wt);
-		} finally {
-			bos.close();
-			dst.close();
-			bis.close(); // no effect
-			src.close(); // no effect
-		}
 	}
 	
 	/**
@@ -985,7 +945,7 @@ public class FileUtils {
 		int c;
 		long tot = 0;
 		long s = 0;
-		boolean debug = log.isDebug();
+		boolean debug = log.isDebugEnabled();
 		if(debug) {
 			s = System.nanoTime();
 		}
