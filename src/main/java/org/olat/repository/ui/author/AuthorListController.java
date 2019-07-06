@@ -89,7 +89,9 @@ import org.olat.core.logging.activity.ThreadLocalUserActivityLogger;
 import org.olat.core.util.StringHelper;
 import org.olat.core.util.Util;
 import org.olat.core.util.coordinate.LockResult;
+import org.olat.core.util.event.GenericEventListener;
 import org.olat.core.util.resource.OresHelper;
+import org.olat.core.util.resource.Resourceable;
 import org.olat.course.CorruptedCourseException;
 import org.olat.course.CourseModule;
 import org.olat.login.LoginModule;
@@ -116,7 +118,6 @@ import org.olat.resource.references.Reference;
 import org.olat.resource.references.ReferenceManager;
 import org.olat.user.UserManager;
 import org.olat.util.logging.activity.LoggingResourceable;
-import org.springframework.beans.factory.annotation.Autowired;
 
 /**
  * 
@@ -132,6 +133,8 @@ public class AuthorListController extends FormBasicController implements Activat
 	protected FlexiTableElement tableEl;
 	private final TooledStackedPanel stackPanel;
 	
+	private boolean withSearch;
+
 	private final String i18nName;
 	private final boolean withSearch;
 	private final boolean withClosedfilter;
@@ -195,9 +198,40 @@ public class AuthorListController extends FormBasicController implements Activat
 		super(ureq, wControl, "entries");
 		setTranslator(Util.createPackageTranslator(RepositoryService.class, getLocale(), getTranslator()));
 
+	private final DB dbInstance;
+	private final UserManager userManager;
+	private final MarkManager markManager;
+	protected final RepositoryModule repositoryModule;
+	protected final RepositoryService repositoryService;
+	protected final RepositoryManager repositoryManager;
+	protected final RepositoryHandlerFactory repositoryHandlerFactory;
+
+	public AuthorListController(UserRequest ureq,
+								WindowControl wControl,
+								String i18nName,
+								SearchAuthorRepositoryEntryViewParams searchParams,
+								boolean withSearch,
+								DB dbInstance,
+								UserManager userManager,
+								MarkManager markManager,
+								RepositoryModule repositoryModule,
+								RepositoryService repositoryService,
+								RepositoryManager repositoryManager,
+								RepositoryHandlerFactory repositoryHandlerFactory,
+								AuthoringEntryRowFactory authoringEntryRowFactory) {
+		super(ureq, wControl, "entries");
 		this.i18nName = i18nName;
 		this.withSearch = withSearch;
 		this.searchParams = searchParams;
+		this.dbInstance = dbInstance;
+		this.userManager = userManager;
+		this.markManager = markManager;
+		this.repositoryModule = repositoryModule;
+		this.repositoryService = repositoryService;
+		this.repositoryManager = repositoryManager;
+		this.repositoryHandlerFactory = repositoryHandlerFactory;
+
+		setTranslator(Util.createPackageTranslator(RepositoryService.class, getLocale(), getTranslator()));
 		this.withClosedfilter = withClosedfilter;
 
 		OLATResourceable ores = OresHelper.createOLATResourceableType("RepositorySite");
@@ -207,8 +241,20 @@ public class AuthorListController extends FormBasicController implements Activat
 		hasAdministratorRight = roles.isAdministrator() || roles.isLearnResourceManager();
 		hasAuthorRight =  hasAdministratorRight || roles.isAuthor();
 
-		dataSource = new AuthoringEntryDataSource(searchParams, this, !withSearch);
+		dataSource = new AuthoringEntryDataSource(searchParams, authoringEntryRowFactory, this, !withSearch);
 		initForm(ureq);
+
+		/**
+		 * TODO sev26
+		 * Verify if this is the best way to inform the controller about list
+		 * entry changes.
+		 */
+		ureq.getUserSession().getSingleUserEventCenter().registerFor(new GenericEventListener() {
+			@Override
+			public void event(Event event) {
+				reloadRows();
+			}
+		}, ureq.getIdentity(), new Resourceable("CourseModule", null));
 
 		stackPanel = new TooledStackedPanel(i18nName, getTranslator(), this);
 		stackPanel.pushController(translate(i18nName), this);
@@ -250,7 +296,7 @@ public class AuthorListController extends FormBasicController implements Activat
 			stackPanel.addTool(createDropdown, Align.left);
 		}
 	}
-	
+
 	public String getI18nName() {
 		return i18nName;
 	}
@@ -351,7 +397,7 @@ public class AuthorListController extends FormBasicController implements Activat
 		initActionsColumns(columnsModel);
 		
 		model = new AuthoringEntryDataModel(dataSource, columnsModel, getIdentity(), ureq.getUserSession().getRoles());
-		tableEl = uifactory.addTableElement(getWindowControl(), "table", model, 20, false, getTranslator(), formLayout);
+		tableEl = uifactory.addTableElement(getWindowControl(), "table", model, 20, false, getTranslator(), formLayout, AuthorSearchController.MINIMAL_CHAR_LENGTH_SEARCH_FIELD);
 		tableEl.setSearchEnabled(withSearch);
 		tableEl.setCssDelegate(this);
 		tableEl.setExportEnabled(true);
@@ -362,8 +408,9 @@ public class AuthorListController extends FormBasicController implements Activat
 		tableEl.setMultiSelect(true);
 		tableEl.setSelectAllEnable(true);
 		tableEl.setEmtpyTableMessageKey("table.sEmptyTable");
-		tableEl.setSortSettings(new FlexiTableSortOptions(true, new SortKey(OrderBy.displayname.name(), true)));
+		tableEl.setSortSettings(new FlexiTableSortOptions(true, new SortKey(OrderBy.creationDate.name(), false)));
 		tableEl.setAndLoadPersistedPreferences(ureq, "authors-list-" + i18nName);
+
 		if(!withSearch) {
 			tableEl.reloadData();
 			tableEl.setFilters(null, getFilters(), false);
@@ -371,7 +418,7 @@ public class AuthorListController extends FormBasicController implements Activat
 		
 		initBatchButtons(formLayout);
 	}
-	
+
 	protected void initActionsColumns(FlexiTableColumnModel columnsModel) {
 		DefaultFlexiColumnModel detailsColumn = new DefaultFlexiColumnModel(Cols.detailsSupported.i18nKey(), Cols.detailsSupported.ordinal(), "details",
 				new StaticFlexiCellRenderer("", "details", "o_icon o_icon-lg o_icon_details", translate("details")));
@@ -387,7 +434,7 @@ public class AuthorListController extends FormBasicController implements Activat
 			columnsModel.addFlexiColumnModel(toolsColumn);
 		}
 	}
-	
+
 	protected void initBatchButtons(FormItemContainer formLayout) {
 		if(hasAuthorRight) {
 			sendMailButton = uifactory.addFormLink("tools.send.mail", formLayout, Link.BUTTON);
@@ -402,15 +449,21 @@ public class AuthorListController extends FormBasicController implements Activat
 		List<FlexiTableFilter> resources = new ArrayList<>(supportedHandlers.size() + 1);
 		int lastGroup = 0;
 		for(OrderedRepositoryHandler handler:supportedHandlers) {
-			// for each 10-group, crate a separator
-			int group = handler.getOrder() / 10;
-			if (group > lastGroup) {
-				resources.add(FlexiTableFilter.SPACER);
-				lastGroup = group;
+			if (!handler.getHandler().getSupportedType().startsWith("FileResource.IMSQTI21") &&
+				!handler.getHandler().getSupportedType().startsWith("FileResource.FORM") &&
+				!handler.getHandler().getSupportedType().startsWith("FileResource.VIDEO") &&
+				!handler.getHandler().getSupportedType().startsWith("BinderTemplate") &&
+				!handler.getHandler().getSupportedType().startsWith("EPStructuredMapTemplate")) {
+				// for each 10-group, crate a separator
+				int group = handler.getOrder() / 10;
+				if (group > lastGroup) {
+					resources.add(FlexiTableFilter.SPACER);
+					lastGroup = group;
+				}
+				String type = handler.getHandler().getSupportedType();
+				String inconLeftCss = RepositoyUIFactory.getIconCssClass(type);
+				resources.add(new FlexiTableFilter(translate(type), type, inconLeftCss));
 			}
-			String type = handler.getHandler().getSupportedType();
-			String inconLeftCss = RepositoyUIFactory.getIconCssClass(type);
-			resources.add(new FlexiTableFilter(translate(type), type, inconLeftCss));
 		}
 		return resources;
 	}
@@ -582,7 +635,7 @@ public class AuthorListController extends FormBasicController implements Activat
 			if (DialogBoxUIFactory.isYesEvent(event)) {
 				@SuppressWarnings("unchecked")
 				List<AuthoringEntryRow> rows = (List<AuthoringEntryRow>)copyDialogCtrl.getUserObject();
-				doCompleteCopy(rows);
+				doCompleteCopy(ureq, rows);
 				reloadRows();
 			}
 		}
@@ -718,7 +771,7 @@ public class AuthorListController extends FormBasicController implements Activat
 			tableEl.reloadData();
 			showWarning("repositoryentry.not.existing");
 		} else {
-			toolsCtrl = new ToolsController(ureq, getWindowControl(), row, entry);
+			toolsCtrl = createToolsController(ureq, row, entry);
 			listenTo(toolsCtrl);
 	
 			toolsCalloutCtrl = new CloseableCalloutWindowController(ureq, getWindowControl(),
@@ -726,6 +779,10 @@ public class AuthorListController extends FormBasicController implements Activat
 			listenTo(toolsCalloutCtrl);
 			toolsCalloutCtrl.activate();
 		}
+	}
+
+	protected ToolsController createToolsController(UserRequest ureq, AuthoringEntryRow row, RepositoryEntry entry) {
+		return new ToolsController(ureq, getWindowControl(), row, entry);
 	}
 	
 	private void doOpenReferences(UserRequest ureq, AuthoringEntryRow row, FormLink link) {
@@ -960,28 +1017,41 @@ public class AuthorListController extends FormBasicController implements Activat
 		}
 	}
 	
-	private void doCompleteCopy(List<AuthoringEntryRow> rows) {
+	private void doCompleteCopy(UserRequest ureq, List<AuthoringEntryRow> rows) {
+		Roles roles = ureq.getUserSession().getRoles();
+		boolean isAdmin = roles.isOLATAdmin();
+
+		int skippedRows = 0;
 		for(AuthoringEntryRow row:rows) {
 			RepositoryEntry sourceEntry = repositoryService.loadByKey(row.getKey());
-			String displayname = "Copy of " + sourceEntry.getDisplayname();
-			if(displayname.length() > 99) {
-				displayname = displayname.substring(0, 99);
+			if (!isAdmin && sourceEntry.exceedsSizeLimit()) {
+				logWarn("Course " + sourceEntry.getDisplayname() + " is not copied because it exceeds the size limit", null);
+				skippedRows++;
+			} else {
+				String displayname = "Copy of " + sourceEntry.getDisplayname();
+				if (displayname.length() > 255) {
+					displayname = displayname.substring(0, 255);
+				}
+				repositoryService.copy(sourceEntry, getIdentity(), displayname);
 			}
-			repositoryService.copy(sourceEntry, getIdentity(), displayname);
 		}
-		
-		showInfo("details.copy.success", new String[]{ Integer.toString(rows.size()) });
+
+		if (skippedRows > 0) {
+			showError("details.copy.success.with.some.skipped", new String[]{ Integer.toString(rows.size() - skippedRows), Integer.toString(skippedRows) });
+		} else {
+			showInfo("details.copy.success", Integer.toString(rows.size()));
+		}
 	}
 	
 	private void doCloseResource(UserRequest ureq, AuthoringEntryRow row) {
 		removeAsListenerAndDispose(closeCtrl);
 		
 		RepositoryEntry entry = repositoryService.loadByKey(row.getKey());
-		
+
 		List<RepositoryEntry> entryToClose = Collections.singletonList(entry);
 		closeCtrl = new ConfirmCloseController(ureq, getWindowControl(), entryToClose);
 		listenTo(closeCtrl);
-		
+
 		String title = translate("read.only.header", entry.getDisplayname());
 		cmc = new CloseableModalController(getWindowControl(), "close", closeCtrl.getInitialComponent(), true, title);
 		listenTo(cmc);
@@ -1003,7 +1073,7 @@ public class AuthorListController extends FormBasicController implements Activat
 			showError("cif.error.corrupted");
 		}
 	}
-	
+
 	protected void doCopy(UserRequest ureq, AuthoringEntryRow row) {
 		removeAsListenerAndDispose(cmc);
 		removeAsListenerAndDispose(copyCtrl);
@@ -1021,8 +1091,7 @@ public class AuthorListController extends FormBasicController implements Activat
 	private void doDelete(UserRequest ureq, List<AuthoringEntryRow> rows) {
 		List<Long> deleteableRowKeys = new ArrayList<>(rows.size());
 		for(AuthoringEntryRow row:rows) {
-			boolean managed = RepositoryEntryManagedFlag.isManaged(row.getManagedFlags(), RepositoryEntryManagedFlag.delete);
-			if(!managed && canManage(row)) {
+			if (isDeletable(row, ureq, roles)) {
 				deleteableRowKeys.add(row.getKey());
 			}
 		}
@@ -1043,8 +1112,18 @@ public class AuthorListController extends FormBasicController implements Activat
 			cmc.activate();
 		}
 	}
-	
+
+	protected boolean isDeletable(AuthoringEntryRow row, UserRequest ureq, Roles roles) {
+		boolean managed = RepositoryEntryManagedFlag.isManaged(row.getManagedFlags(), RepositoryEntryManagedFlag.delete);
+		boolean canDelete = roles.isOLATAdmin() || repositoryService.hasRole(ureq.getIdentity(), row, GroupRoles.owner.name())
+				|| repositoryManager.isInstitutionalRessourceManagerFor(getIdentity(), roles, row);
+		return canDelete && !managed;
+	}
+
 	protected void doDownload(UserRequest ureq, AuthoringEntryRow row) {
+		Roles roles = ureq.getUserSession().getRoles();
+		boolean isAdmin = roles.isOLATAdmin();
+
 		RepositoryHandler typeToDownload = repositoryHandlerFactory.getRepositoryHandler(row.getResourceType());
 		if (typeToDownload == null) {
 			StringBuilder sb = new StringBuilder(translate("error.download"));
@@ -1060,7 +1139,13 @@ public class AuthorListController extends FormBasicController implements Activat
 			showError("error.download");
 			return;
 		}
-		
+
+		if (!isAdmin && entry.exceedsSizeLimit()) {
+			logError("Course " + entry.getDisplayname() + " is not exported because it exceeds the size limit", null);
+			showError("error.export.size.exceeded", new String[] { entry.getDisplayname() });
+			return;
+		}
+
 		boolean isAlreadyLocked = typeToDownload.isLocked(ores);
 		try {			
 		  lockResult = typeToDownload.acquireLock(ores, ureq.getIdentity());
@@ -1262,6 +1347,7 @@ public class AuthorListController extends FormBasicController implements Activat
 			super(ureq, wControl);
 			setTranslator(AuthorListController.this.getTranslator());
 			this.row = row;
+			this.entry = entry;
 			
 			boolean isManager = repositoryService.hasRoleExpanded(getIdentity(), entry,
 					OrganisationRoles.administrator.name(), OrganisationRoles.learnresourcemanager.name());
@@ -1313,23 +1399,27 @@ public class AuthorListController extends FormBasicController implements Activat
 				if(canClose || !deleteManaged) {
 					links.add("-");
 				}
-				
-				boolean closed = entry.getEntryStatus() == RepositoryEntryStatusEnum.closed;
+
+				boolean closed = entry.getRepositoryEntryStatus().isClosed();
 				if(closed && "CourseModule".equals(entry.getOlatResource().getResourceableTypeName())) {
 					addLink("details.override.close", "override-close", "o_icon o_icon-fw o_icon_close_resource", links);
 				} else if(canClose) {
 					addLink("details.close.ressoure", "close", "o_icon o_icon-fw o_icon_close_resource", links);
 				}
 				if(!deleteManaged) {
-					addLink("details.delete", "delete", "o_icon o_icon-fw o_icon_delete_item", links);
+					addDeleteLink(links);
 				}
 			}
 
 			mainVC.contextPut("links", links);
 			putInitialPanel(mainVC);
 		}
+
+		protected void addDeleteLink(List<String> links) {
+			addLink("details.delete", "delete", "o_icon o_icon-fw o_icon_delete_item", links);
+		}
 		
-		private void addLink(String name, String cmd, String iconCSS, List<String> links) {
+		protected void addLink(String name, String cmd, String iconCSS, List<String> links) {
 			Link link = LinkFactory.createLink(name, cmd, getTranslator(), mainVC, this, Link.LINK);
 			if(iconCSS != null) {
 				link.setIconLeftCSS(iconCSS);
