@@ -118,6 +118,7 @@ public abstract class AbstractMemberListController extends FormBasicController i
 	protected static final String USER_PROPS_ID = MemberListController.class.getCanonicalName();
 	
 	public static final int USER_PROPS_OFFSET = 500;
+	public static final int BUSINESS_COLUMNS_OFFSET = 1000;  // Must be larger than USER_PROPS_OFFSET
 	
 	public static final String TABLE_ACTION_EDIT = "tbl_edit";
 	public static final String TABLE_ACTION_MAIL = "tbl_mail";
@@ -131,7 +132,9 @@ public abstract class AbstractMemberListController extends FormBasicController i
 	protected FlexiTableElement membersTable;
 	protected MemberListTableModel memberListModel;
 	protected final TooledStackedPanel toolbarPanel;
-	private FormLink editButton, mailButton, removeButton;
+	protected FormLink editButton;
+	private FormLink mailButton;
+	protected FormLink removeButton;
 	
 	private ToolsController toolsCtrl;
 	protected CloseableModalController cmc;
@@ -143,10 +146,11 @@ public abstract class AbstractMemberListController extends FormBasicController i
 	private CloseableCalloutWindowController toolsCalloutCtrl;
 	private EditSingleMembershipController editSingleMemberCtrl;
 	private final List<UserPropertyHandler> userPropertyHandlers;
+	private List<BusinessGroup> businessGroupColumnHeaders = new ArrayList<>();
 
 	private final AtomicInteger counter = new AtomicInteger();
 	protected final RepositoryEntry repoEntry;
-	private final BusinessGroup businessGroup;
+	protected final BusinessGroup businessGroup;
 	private final boolean isLastVisitVisible;
 	private final boolean isAdministrativeUser;
 	private final boolean chatEnabled;
@@ -208,6 +212,10 @@ public abstract class AbstractMemberListController extends FormBasicController i
 		isAdministrativeUser = securityModule.isUserAllowedAdminProps(roles);
 		isLastVisitVisible = securityModule.isUserLastVisitVisible(roles);
 		userPropertyHandlers = userManager.getUserPropertyHandlersFor(USER_PROPS_ID, isAdministrativeUser);
+		if (repoEntry != null) {
+			// Ascending sorted
+			businessGroupColumnHeaders = businessGroupService.findBusinessGroups(null, repoEntry, 0, -1, BusinessGroupOrder.nameAsc);
+		}
 		
 		initForm(ureq);
 	}
@@ -235,13 +243,13 @@ public abstract class AbstractMemberListController extends FormBasicController i
 		FlexiTableColumnModel columnsModel = FlexiTableDataModelFactory.createFlexiTableColumnModel();
 		SortKey defaultSortKey = initColumns(columnsModel);
 		
-		memberListModel = new MemberListTableModel(columnsModel, imModule.isOnlineStatusEnabled());
+		memberListModel = new MemberListTableModel(columnsModel, imModule.isOnlineStatusEnabled(), businessGroupColumnHeaders);
 		membersTable = uifactory.addTableElement(getWindowControl(), "memberList", memberListModel, 20, false, getTranslator(), formLayout);
 		membersTable.setMultiSelect(true);
 		membersTable.setEmtpyTableMessageKey("nomembers");
 		membersTable.setAndLoadPersistedPreferences(ureq, this.getClass().getSimpleName());
 		membersTable.setSearchEnabled(true);
-		
+
 		membersTable.setExportEnabled(true);
 		membersTable.setSelectAllEnable(true);
 		membersTable.setElementCssClass("o_sel_member_list");
@@ -334,13 +342,21 @@ public abstract class AbstractMemberListController extends FormBasicController i
 		columnsModel.addFlexiColumnModel(new DefaultFlexiColumnModel(Cols.role.i18n(), Cols.role.ordinal(), true, Cols.role.name(), roleRenderer));
 		if(repoEntry != null) {
 			GroupCellRenderer groupRenderer = new GroupCellRenderer();
-			columnsModel.addFlexiColumnModel(new DefaultFlexiColumnModel(Cols.groups.i18n(), Cols.groups.ordinal(), true, Cols.groups.name(), groupRenderer));
+			columnsModel.addFlexiColumnModel(new DefaultFlexiColumnModel(true, false, false, Cols.groups.i18n(), Cols.groups.ordinal(), true, Cols.groups.name(), FlexiColumnModel.ALIGNMENT_LEFT, groupRenderer));
 		}
 		
 		DefaultFlexiColumnModel toolsCol = new DefaultFlexiColumnModel(Cols.tools.i18n(), Cols.tools.ordinal());
 		toolsCol.setExportable(false);
 		toolsCol.setAlwaysVisible(true);
 		columnsModel.addFlexiColumnModel(toolsCol);
+
+		// Column per group (for export only)
+		if (repoEntry != null) {
+			for (int i = 0; i < businessGroupColumnHeaders.size(); i++) {
+				columnsModel.addFlexiColumnModel(new DefaultFlexiColumnModel(false, true, true, businessGroupColumnHeaders.get(i).getName(), businessGroupColumnHeaders.get(i).getName(), i + BUSINESS_COLUMNS_OFFSET, false, null, FlexiColumnModel.ALIGNMENT_LEFT, new TextFlexiCellRenderer()));
+			}
+		}
+
 		return defaultSortKey;
 	}
 
@@ -495,7 +511,8 @@ public abstract class AbstractMemberListController extends FormBasicController i
 			List<Long> identityKeys = new ArrayList<>();
 			for(MemberRow member:members) {
 				identityKeys.add(member.getIdentityKey());
-				if(member.getMembership().isOwner()) {
+				if ((repoEntry != null && member.getMembership().isOwner())
+						|| (repoEntry == null && member.getMembership().isGroupTutor())) {
 					numOfRemovedOwner++;
 				}
 			}
@@ -819,10 +836,16 @@ public abstract class AbstractMemberListController extends FormBasicController i
 			Map<Long,Date> lastLaunchDates = userInfosMgr.getRecentLaunchDates(repoEntry.getOlatResource());
 			for(MemberRow memberView:keyToMemberMap.values()) {
 				Long identityKey = memberView.getView().getIdentityKey();
-				Date date = lastLaunchDates.get(identityKey);
-				memberView.setLastTime(date);
+				if (lastLaunchDates.containsKey(identityKey)) {
+					Date date = lastLaunchDates.get(identityKey);
+					memberView.setLastTime(date);
+				}
 			}
 		}
+	
+		//the order of the filter is important
+		filterByRoles(memberList, params);
+		filterByOrigin(memberList, params);
 
 		memberListModel.setObjects(memberList);
 		membersTable.reset(true, true, true);
