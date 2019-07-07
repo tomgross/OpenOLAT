@@ -39,6 +39,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import javax.annotation.Nullable;
 import javax.persistence.EntityNotFoundException;
 import javax.persistence.LockModeType;
 import javax.persistence.TemporalType;
@@ -355,7 +356,7 @@ public class BaseSecurityManager implements BaseSecurity, UserDataDeletable {
 	 * @return Identity
 	 */
 	@Override
-	public Identity createAndPersistIdentityAndUser(String username, String externalId, User user, String provider, String authusername, String credential) {
+	public Identity createAndPersistIdentityAndUser(String username, @Nullable String externalId, User user, String provider, String authusername, String credential) {
 		IdentityImpl iimpl = new IdentityImpl();
 		iimpl.setUser(user);
 		iimpl.setName(username);
