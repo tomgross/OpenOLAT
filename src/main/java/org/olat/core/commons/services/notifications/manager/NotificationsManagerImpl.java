@@ -53,15 +53,7 @@ import org.olat.basesecurity.IdentityRef;
 import org.olat.core.CoreSpringFactory;
 import org.olat.core.commons.persistence.DB;
 import org.olat.core.commons.persistence.PersistenceHelper;
-import org.olat.core.commons.services.notifications.NotificationHelper;
-import org.olat.core.commons.services.notifications.NotificationsHandler;
-import org.olat.core.commons.services.notifications.NotificationsManager;
-import org.olat.core.commons.services.notifications.Publisher;
-import org.olat.core.commons.services.notifications.PublisherData;
-import org.olat.core.commons.services.notifications.Subscriber;
-import org.olat.core.commons.services.notifications.SubscriptionContext;
-import org.olat.core.commons.services.notifications.SubscriptionInfo;
-import org.olat.core.commons.services.notifications.SubscriptionItem;
+import org.olat.core.commons.services.notifications.*;
 import org.olat.core.commons.services.notifications.model.NoSubscriptionInfo;
 import org.olat.core.commons.services.notifications.model.PublisherImpl;
 import org.olat.core.commons.services.notifications.model.SubscriberImpl;
@@ -94,6 +86,12 @@ import org.olat.core.util.resource.OresHelper;
 import org.olat.properties.Property;
 import org.olat.properties.PropertyManager;
 import org.olat.user.UserDataDeletable;
+import org.springframework.beans.factory.annotation.Autowired;
+
+import javax.persistence.EntityManager;
+import javax.persistence.LockModeType;
+import javax.persistence.TypedQuery;
+import java.util.*;
 import org.olat.user.UserDataExportable;
 import org.olat.user.manager.ManifestBuilder;
 import org.springframework.beans.factory.InitializingBean;
@@ -123,11 +121,13 @@ implements UserDataDeletable, UserDataExportable, GenericEventListener, Initiali
 	private List<String> notificationIntervals;
 	private String defaultNotificationInterval;
 	private static final Map<String, Integer> INTERVAL_DEF_MAP = buildIntervalMap();
-	private Object lockObject = new Object();
+	private final Object notificationHandlersLock = new Object();
+	private final Object subscriberTableLock = new Object();
+	private final Object publisherTableLock = new Object();
 	
-	private DB dbInstance;
-	private BaseSecurity securityManager;
-	private PropertyManager propertyManager;
+	private final DB dbInstance;
+	private final BaseSecurity securityManager;
+	private final PropertyManager propertyManager;
 	private CoordinatorManager coordinatorManager;
 	
 	/**
@@ -139,28 +139,13 @@ implements UserDataDeletable, UserDataExportable, GenericEventListener, Initiali
 		INSTANCE = this;
 	}
 
-	/**
-	 * [used by Spring]
-	 * @param dbInstance
-	 */
-	public void setDbInstance(DB dbInstance) {
+	@Autowired
+	private NotificationsManagerImpl(DB dbInstance, BaseSecurity securityManager, PropertyManager propertyManager) {
 		this.dbInstance = dbInstance;
-	}
-	
-	/**
-	 * [user by Spring]
-	 * @param securityManager
-	 */
-	public void setSecurityManager(BaseSecurity securityManager) {
 		this.securityManager = securityManager;
-	}
-	
-	/**
-	 * [used by Spring]
-	 * @param propertyManager
-	 */
-	public void setPropertyManager(PropertyManager propertyManager) {
 		this.propertyManager = propertyManager;
+		// private since singleton
+		INSTANCE = this;
 	}
 	
 	/**
@@ -211,7 +196,6 @@ implements UserDataDeletable, UserDataExportable, GenericEventListener, Initiali
 	/**
 	 * @param persistedPublisher
 	 * @param listener
-	 * @param subscriptionContext the context of the object we subscribe to
 	 * @return a subscriber with a db key
 	 */
 	protected Subscriber doCreateAndPersistSubscriber(Publisher persistedPublisher, Identity listener) {
@@ -826,7 +810,7 @@ implements UserDataDeletable, UserDataExportable, GenericEventListener, Initiali
 	}
 	
 	/**
-	 * @see org.olat.core.commons.services.notifications.NotificationsManager#getSubscriber(org.olat.core.commons.services.notifications.Publisher)
+	 * @see org.olat.core.commons.services.notifications.NotificationsManager#getSubscribers(org.olat.core.commons.services.notifications.Publisher)
 	 */
 	@Override
 	public List<Subscriber> getSubscribers(Publisher publisher) {
@@ -851,7 +835,7 @@ implements UserDataDeletable, UserDataExportable, GenericEventListener, Initiali
 	public NotificationsHandler getNotificationsHandler(Publisher publisher) {
 		String type = publisher.getType();
 		if (notificationHandlers == null) {
-			synchronized(lockObject) {
+			synchronized(notificationHandlersLock) {
 				if (notificationHandlers == null) { // check again in synchronized-block, only one may create list
 					notificationHandlers = new HashMap<>();
 					Map<String, NotificationsHandler> notificationsHandlerMap = CoreSpringFactory.getBeansOfType(NotificationsHandler.class);
@@ -908,33 +892,22 @@ implements UserDataDeletable, UserDataExportable, GenericEventListener, Initiali
 		return sub;
 	}
 
-	/**
-	 * @param identity
-	 * @param subscriptionContext
-	 * @param publisherData
-	 */
 	@Override
 	public void subscribe(Identity identity, SubscriptionContext subscriptionContext, PublisherData publisherData) {
-		//need to sync as opt-in is sometimes implemented
-		Publisher toUpdate = getPublisherForUpdate(subscriptionContext);
-		if(toUpdate == null) {
-			//create the publisher
-			findOrCreatePublisher(subscriptionContext, publisherData);
-			//lock the publisher
-			toUpdate = getPublisherForUpdate(subscriptionContext);
-		}
-
-		Subscriber s = getSubscriber(identity, toUpdate);
-		if (s == null) {
-			// no subscriber -> create.
-			// s.latestReadDate >= p.latestNewsDate == no news for subscriber when no
-			// news after subscription time
-			doCreateAndPersistSubscriber(toUpdate, identity);
-		}
-		dbInstance.commit();
+		Publisher publisher = findOrInsertPublisher(subscriptionContext, publisherData);
+		findOrInsertSubscriber(identity, publisher);
 	}
 	
 	@Override
+	public void subscribe(List<Identity> identities, SubscriptionContext subscriptionContext, PublisherData publisherData) {
+		if (identities == null || identities.isEmpty()) return;
+
+		Publisher publisher = findOrInsertPublisher(subscriptionContext, publisherData);
+		for (Identity identity : identities) {
+			findOrInsertSubscriber(identity, publisher);
+		}
+	}
+
 	public void asyncSubscribe(Identity identity, SubscriptionContext subscriptionContext, PublisherData publisherData) {
 		if(coordinatorManager != null) {
 			AsyncSubscriptionEvent event = new AsyncSubscriptionEvent(identity.getKey(), subscriptionContext, publisherData);
@@ -968,17 +941,44 @@ implements UserDataDeletable, UserDataExportable, GenericEventListener, Initiali
 			//lock the publisher
 			toUpdate = getPublisherForUpdate(subscriptionContext);
 		}
+	}
 
-		for(Identity identity:identities) {
-			Subscriber s = getSubscriber(identity, toUpdate);
-			if (s == null) {
-				// no subscriber -> create.
-				// s.latestReadDate >= p.latestNewsDate == no news for subscriber when no
-				// news after subscription time
-				doCreateAndPersistSubscriber(toUpdate, identity);
+	private Publisher findOrInsertPublisher(SubscriptionContext subscriptionContext, PublisherData publisherData) {
+		Publisher publisher = getPublisher(subscriptionContext);
+		if (publisher == null) {
+			// Synchronized block to avoid phantom reads
+			synchronized (publisherTableLock) {
+				// In the synchronized block we have to check again the existence of the publisher to be inserted
+				publisher = getPublisher(subscriptionContext);
+				if (publisher == null) {
+					publisher = createAndPersistPublisher(
+							subscriptionContext.getResName(),
+							subscriptionContext.getResId(),
+							subscriptionContext.getSubidentifier(),
+							publisherData.getType(),
+							publisherData.getData(),
+							publisherData.getBusinessPath());
+					dbInstance.commit();
+				}
 			}
 		}
-		dbInstance.commit();	
+		return publisher;
+	}
+
+	private void findOrInsertSubscriber(Identity identity, Publisher publisher) {
+		if (getSubscriber(identity, publisher) == null) {
+			// no subscriber -> create.
+			// s.latestReadDate >= p.latestNewsDate == no news for subscriber when no
+			// news after subscription time
+			// Synchronized block to avoid phantom reads
+			synchronized (subscriberTableLock) {
+				// In the synchronized block we have to check again the existence of the subscriber to be inserted
+				if (getSubscriber(identity, publisher) == null) {
+					doCreateAndPersistSubscriber(publisher, identity);
+					dbInstance.commit();
+				}
+			}
+		}
 	}
 
 	/**
@@ -1227,7 +1227,7 @@ implements UserDataDeletable, UserDataExportable, GenericEventListener, Initiali
 	/**
 	 * @param subscriber
 	 * @param locale
-	 * @param mimeType text/html or text/plain
+	 * @param mimeTypeContent text/html or text/plain
 	 * @return the item or null if there is currently no news for this subscription
 	 */
 	@Override
@@ -1254,7 +1254,7 @@ implements UserDataDeletable, UserDataExportable, GenericEventListener, Initiali
 	 * 
 	 * @param subscriber
 	 * @param locale
-	 * @param mimeType
+	 * @param mimeTypeTitle
 	 * @param latestEmailed needs to be given! SubscriptionInfo is collected from then until latestNews of publisher
 	 * @return null if the publisher is not valid anymore (deleted), or if there are no news
 	 */
@@ -1338,7 +1338,8 @@ implements UserDataDeletable, UserDataExportable, GenericEventListener, Initiali
 	 * @param identity
 	 */
 	@Override
-	public void deleteUserData(Identity identity, String newDeletedUserName) {
+	// ?public void deleteUserData(Identity identity, String newDeletedUserName) {
+	public void deleteUserData(Identity identity, String newDeletedUserName, File archivePath) {
 		List<Subscriber> subscribers = getSubscribers(identity);
 		for (Subscriber subscriber:subscribers) {
 			deleteSubscriber(subscriber);
@@ -1396,7 +1397,7 @@ implements UserDataDeletable, UserDataExportable, GenericEventListener, Initiali
 	/**
 	 * Spring setter method
 	 * 
-	 * @param notificationIntervals
+	 * @param intervals
 	 */
 	public void setNotificationIntervals(Map<String, Boolean> intervals) {
 		notificationIntervals = new ArrayList<>();
