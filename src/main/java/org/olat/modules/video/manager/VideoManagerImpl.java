@@ -99,6 +99,7 @@ import org.quartz.JobKey;
 import org.quartz.Scheduler;
 import org.quartz.SchedulerException;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 
 /**
@@ -296,7 +297,7 @@ public class VideoManagerImpl implements VideoManager {
 			return false;
 		} 
 	}
-	
+
 	@Override
 	public boolean getFrameWithFilter(VFSLeaf video, int frameNumber, long duration, VFSLeaf frame) {
 		File videoFile = ((LocalFileImpl)video).getBasefile();
@@ -305,7 +306,7 @@ public class VideoManagerImpl implements VideoManager {
 		int countBlack = 0;
 		try (RandomAccessFile randomAccessFile = new RandomAccessFile(videoFile, "r")) {
 			OutputStream frameOutputStream = frame.getOutputStream(false);
-			
+
 			FileChannel ch = randomAccessFile.getChannel();
 			FileChannelWrapper in = new FileChannelWrapper(ch);
 			FrameGrab frameGrab = new FrameGrab(in).seekToFrameSloppy(frameNumber);
@@ -339,7 +340,7 @@ public class VideoManagerImpl implements VideoManager {
 			// avoid endless loop
 			if (frameNumber > duration) {
 				imgBlack = false;
-			} 
+			}
 			// close everything to prevent resource leaks
 			frameOutputStream.close();
 			in.close();
@@ -1154,12 +1155,10 @@ public class VideoManagerImpl implements VideoManager {
 	public List<VideoMetaImpl> getAllVideoResourcesMetadata() {
 		return videoMetadataDao.getAllVideoResourcesMetadata();
 	}
-	
 	@Override
 	public boolean hasVideoMetadata(OLATResource videoResource) {
 		return videoMetadataDao.getVideoMetadata(videoResource) != null;
 	}
-	
 	@Override
 	public VideoMetaImpl getVideoMetadata(OLATResource videoResource) {
 		VideoMetaImpl meta = videoMetadataDao.getVideoMetadata(videoResource);
@@ -1188,7 +1187,7 @@ public class VideoManagerImpl implements VideoManager {
 	@Override
 	public boolean hasVideoFile(OLATResource videoResource) {
 		VFSContainer masterContainer = getMasterContainer(videoResource);
-		LocalFileImpl videoFile = (LocalFileImpl) masterContainer.resolve(FILENAME_VIDEO_MP4);	
+		LocalFileImpl videoFile = (LocalFileImpl) masterContainer.resolve(FILENAME_VIDEO_MP4);
 		return videoFile != null && videoFile.exists();
 	}
 	

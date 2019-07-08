@@ -199,7 +199,7 @@ public class StaticServlet extends HttpServlet {
 					}
 				}
 				// log as error, file exists but wrongly mapped
-				log.warn("File exists but not mapped using version - use StaticMediaDispatch methods to create URL of static files! invalid request URI " + request.getRequestURI() + " initiated by " + request.getHeader("referer"), null);
+				log.warn("File exists but not mapped using version - use StaticMediaDispatch methods to create URL of static files! invalid request URI " + request.getRequestURI() + " initiated by " + request.getHeader("referer"));
 			}
 		}
 
