@@ -22,12 +22,12 @@ package org.olat.selenium.page;
 import java.util.List;
 
 import org.jboss.arquillian.drone.api.annotation.Drone;
-import org.jboss.arquillian.graphene.Graphene;
 import org.junit.Assert;
 import org.olat.selenium.page.core.AdministrationPage;
 import org.olat.selenium.page.course.MyCoursesPage;
 import org.olat.selenium.page.graphene.OOGraphene;
 import org.olat.selenium.page.group.GroupsPage;
+import org.olat.selenium.page.qpool.QuestionPoolPage;
 import org.olat.selenium.page.repository.AuthoringEnvPage;
 import org.olat.selenium.page.repository.CatalogAdminPage;
 import org.olat.selenium.page.repository.CatalogPage;
@@ -46,23 +46,23 @@ import org.openqa.selenium.WebElement;
  */
 public class NavigationPage {
 	
-	public static final By toolbarBackBy = By.cssSelector("li.o_breadcrumb_back>a");
-
-	@Drone
-	private WebDriver browser;
-	
-	private By navigationSitesBy = By.cssSelector("ul.o_navbar_sites");
-	private By authoringEnvTabBy = By.cssSelector("li.o_site_author_env > a");
-	private By portalBy = By.cssSelector("li.o_site_portal > a");
-	private By myCoursesBy = By.cssSelector("li.o_site_repository > a");
-	private By userManagementBy = By.cssSelector("li.o_site_useradmin > a");
-	private By administrationBy = By.cssSelector("li.o_site_admin > a");
-	private By catalogBy = By.cssSelector("li.o_site_catalog > a");
-	private By catalogAdministrationBy = By.cssSelector("li.o_site_catalog_admin > a");
-	private	By groupsBy = By.cssSelector("li.o_site_groups > a");
+	private static final By navigationSitesBy = By.cssSelector("ul.o_navbar_sites");
+	private static final By authoringEnvTabBy = By.cssSelector("li.o_site_author_env > a");
+	private static final By questionPoolTabBy = By.cssSelector("li.o_site_qpool > a");
+	private static final By portalBy = By.cssSelector("li.o_site_portal > a");
+	private static final By myCoursesBy = By.cssSelector("li.o_site_repository > a");
+	private static final By userManagementBy = By.cssSelector("li.o_site_useradmin > a");
+	private static final By administrationBy = By.cssSelector("li.o_site_admin > a");
+	private static final By catalogBy = By.cssSelector("li.o_site_catalog > a");
+	private static final By catalogAdministrationBy = By.cssSelector("li.o_site_catalog_admin > a");
+	private	static final By groupsBy = By.cssSelector("li.o_site_groups > a");
 	
 	public static final By myCoursesAssertBy = By.xpath("//div[contains(@class,'o_segments')]//a[contains(@onclick,'search.mycourses.student')]");
 	public static final By portalAssertBy = By.className("o_portal");
+	public static final By toolbarBackBy = By.cssSelector("li.o_breadcrumb_back>a");
+	
+	@Drone
+	private WebDriver browser;
 	
 	public NavigationPage() {
 		//
@@ -85,10 +85,15 @@ public class NavigationPage {
 		return new AuthoringEnvPage(browser);
 	}
 	
+	public QuestionPoolPage openQuestionPool() {
+		navigate(questionPoolTabBy);
+		return new QuestionPoolPage(browser)
+				.assertOnQuestionPool();
+	}
+	
 	public PortalPage openPortal() {
 		navigate(portalBy);
-		WebElement main = browser.findElement(By.id("o_main"));
-		return Graphene.createPageFragment(PortalPage.class, main);
+		return new PortalPage(browser);
 	}
 	
 	public MyCoursesPage openMyCourses() {
@@ -128,14 +133,10 @@ public class NavigationPage {
 		if(links.isEmpty() || !links.get(0).isDisplayed()) {
 			//try to open the more menu
 			openMoreMenu();
-			links = browser.findElements(linkBy);
 		}
-		Assert.assertFalse(links.isEmpty());
 
-		links = browser.findElements(linkBy);
-		Assert.assertFalse(links.isEmpty());
-		OOGraphene.waitElement(links.get(0), browser);
-		links.get(0).click();
+		OOGraphene.waitElement(linkBy, browser);
+		browser.findElement(linkBy).click();
 		OOGraphene.waitBusy(browser);
 		OOGraphene.waitingTransition(browser);
 	}

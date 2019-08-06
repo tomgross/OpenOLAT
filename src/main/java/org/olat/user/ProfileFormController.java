@@ -53,6 +53,7 @@ import org.olat.core.helpers.Settings;
 import org.olat.core.id.Identity;
 import org.olat.core.id.OLATResourceable;
 import org.olat.core.id.User;
+import org.olat.core.util.StringHelper;
 import org.olat.core.util.WebappHelper;
 import org.olat.core.util.coordinate.CoordinatorManager;
 import org.olat.core.util.coordinate.SyncerExecutor;
@@ -97,6 +98,8 @@ public class ProfileFormController extends FormBasicController {
 	private final boolean isAdministrativeUser;
 	private final List<UserPropertyHandler> userPropertyHandlers;
 	
+	private boolean portraitDeleted = false;
+	private boolean logoDeleted = false;
 	private boolean emailChanged = false;
 	private String changedEmail;
 	private String currentEmail;
@@ -105,6 +108,8 @@ public class ProfileFormController extends FormBasicController {
 	private UserModule userModule;
 	@Autowired
 	private UserManager userManager;
+	@Autowired
+	private BaseSecurityManager securityManager;
 	@Autowired
 	private RegistrationManager rm;
 	@Autowired
@@ -130,7 +135,9 @@ public class ProfileFormController extends FormBasicController {
 	 * 
 	 * @param ureq The user request.
 	 * @param wControl The window control.
-	 * @param identityToModify The identity of the user.
+	 * @param conf The homepage configuration (decides which user profile fields
+	 *          are visible for everyone).
+	 * @param identity The identity of the user.
 	 * @param isAdministrativeUser true: user is editing another users profile as
 	 *          user manager; false: use is editing his own profile
 	 */
@@ -152,9 +159,6 @@ public class ProfileFormController extends FormBasicController {
 		return identityToModify;
 	}
 
-	/**
-	 * @see org.olat.core.gui.components.form.flexible.impl.FormBasicController#doDispose()
-	 */
 	@Override
 	protected void doDispose() {
 		// nothing to dispose.
@@ -218,6 +222,9 @@ public class ProfileFormController extends FormBasicController {
 					HashMap<String, String> mails = (HashMap<String, String>) xml.fromXML(tempKey.getEmailAddress());
 					formItem.setExampleKey("email.change.form.info", new String[] {mails.get("changedEMail")});
 				}
+				if (!userModule.isEmailMandatory()) {
+					formItem.setMandatory(false);
+				}
 			}
 		}
 		
@@ -240,7 +247,7 @@ public class ProfileFormController extends FormBasicController {
 
 		File portraitFile = dps.getLargestPortrait(identityToModify.getName());
 		// Init upload controller
-		Set<String> mimeTypes = new HashSet<String>();
+		Set<String> mimeTypes = new HashSet<>();
 		mimeTypes.add("image/gif");
 		mimeTypes.add("image/jpg");
 		mimeTypes.add("image/jpeg");
@@ -288,6 +295,10 @@ public class ProfileFormController extends FormBasicController {
 	/**
 	 * Stores the data from the form into a) the user's home page configuration
 	 * and b) the user's properties.
+	 * 
+	 * @param config The user's home page configuration (i.e. flags for publicly
+	 *          visible fields).
+	 * @param identity The user's identity
 	 */
 	public void updateFromFormData() {
 		User user = identityToModify.getUser();
@@ -377,19 +388,12 @@ public class ProfileFormController extends FormBasicController {
 		 if (source == portraitUpload) {
 			if(event instanceof FileElementEvent) {
 				if(FileElementEvent.DELETE.equals(event.getCommand())) {
-					File img = dps.getLargestPortrait(identityToModify.getName());
+					portraitDeleted = true;
+					portraitUpload.setInitialFile(null);
 					if(portraitUpload.getUploadFile() != null) {
 						portraitUpload.reset();
-						if(img != null) {
-							portraitUpload.setInitialFile(img);
-						}
-					} else if(img != null) {
-						dps.deletePortrait(identityToModify);
-						portraitUpload.setInitialFile(null);
-						notifyPortraitChanged();
 					}
 					flc.setDirty(true);
-					
 				}
 			} else if (portraitUpload.isUploadSuccess()) {
 				flc.setDirty(true);
@@ -397,19 +401,12 @@ public class ProfileFormController extends FormBasicController {
 		} else if (source == logoUpload) {
 			if(event instanceof FileElementEvent) {
 				if(FileElementEvent.DELETE.equals(event.getCommand())) {
-					File img = dps.getLargestLogo(identityToModify.getName());
+					logoDeleted = true;
+					logoUpload.setInitialFile(null);
 					if(logoUpload.getUploadFile() != null) {
 						logoUpload.reset();
-						if(img != null) {
-							logoUpload.setInitialFile(img);
-						}
-					} else if(img != null) {
-						dps.deleteLogo(identityToModify);
-						logoUpload.setInitialFile(null);
-						notifyPortraitChanged();
 					}
 					flc.setDirty(true);
-					
 				}
 			} else if (logoUpload.isUploadSuccess()) {
 				flc.setDirty(true);
@@ -436,11 +433,27 @@ public class ProfileFormController extends FormBasicController {
 			}
 		}
 		
+		if (portraitDeleted) {
+			File img = dps.getLargestPortrait(identityToModify.getName());
+			if(img != null) {
+				dps.deletePortrait(identityToModify);
+				notifyPortraitChanged();
+			}
+		}
+		
 		File uploadedImage = portraitUpload.getUploadFile();
 		String uploadedFilename = portraitUpload.getUploadFileName();
 		if(uploadedImage != null) {
 			dps.setPortrait(uploadedImage, uploadedFilename, identityToModify.getName());
 			notifyPortraitChanged();
+		}
+		
+		if (logoDeleted) {
+			File img = dps.getLargestLogo(identityToModify.getName());
+			if(img != null) {
+				dps.deleteLogo(identityToModify);
+				notifyPortraitChanged();
+			}
 		}
 		
 		if(logoUpload != null) {
@@ -467,25 +480,24 @@ public class ProfileFormController extends FormBasicController {
 			public void execute() {
 				UserManager um = UserManager.getInstance();
 				identityToModify = (Identity) DBFactory.getInstance().loadObject(identityToModify);
-				currentEmail = identityToModify.getUser().getProperty("email", null).toLowerCase();
+				currentEmail = identityToModify.getUser().getProperty("email", null);
 
 				identityToModify = updateIdentityFromFormData(identityToModify);
-				changedEmail = identityToModify.getUser().getProperty("email", null).toLowerCase();
-				//if ((currentEmail == null && StringHelper.containsNonWhitespace(changedEmail))
-				//		|| (currentEmail != null && !currentEmail.equals(changedEmail))) {
-				if (!currentEmail.equals(changedEmail)) {
-					// allow an admin to change email without verification workflow. usermanager is only permitted to do so, if set by config.
-					if ( !(ureq.getUserSession().getRoles().isOLATAdmin()
-							|| (BaseSecurityModule.USERMANAGER_CAN_BYPASS_EMAILVERIFICATION && ureq.getUserSession().getRoles().isUserManager() ))) {
-						emailChanged = true;
-						// change email address to old address until it is verified
-						identityToModify.getUser().setProperty("email", currentEmail);
-					} else {
+				changedEmail = identityToModify.getUser().getProperty("email", null);
+				emailChanged = false;
+				if ((currentEmail == null && StringHelper.containsNonWhitespace(changedEmail))
+						|| (currentEmail != null && !currentEmail.equals(changedEmail))) {
+					if (isAllowedToChangeEmailWithoutVerification(ureq) || !StringHelper.containsNonWhitespace(changedEmail)) {
 						String key = identityToModify.getUser().getProperty("emchangeKey", null);
 						TemporaryKey tempKey = rm.loadTemporaryKeyByRegistrationKey(key);
 						if (tempKey != null) {
 							rm.deleteTemporaryKey(tempKey);
-						}		
+						}
+						securityManager.deleteInvalidAuthenticationsByEmail(currentEmail);
+					} else {
+						emailChanged = true;
+						// change email address to old address until it is verified
+						identityToModify.getUser().setProperty("email", currentEmail);
 					}
 				}
 				if (!um.updateUserFromIdentity(identityToModify)) {
@@ -533,20 +545,14 @@ public class ProfileFormController extends FormBasicController {
 
 		logDebug("this servername is " + servername + " and serverpath is " + serverpath, null);
 		// load or create temporary key
-		Map<String, String> mailMap = new HashMap<String, String>();
+		Map<String, String> mailMap = new HashMap<>();
 		mailMap.put("currentEMail", currentEmail);
 		mailMap.put("changedEMail", changedEmail);
 		
-		XStream xml = new XStream();
+		XStream xml = XStreamHelper.createXStreamInstance();
 		String serMailMap = xml.toXML(mailMap);
 		
-		TemporaryKey tk = loadCleanTemporaryKey(serMailMap);				
-		if (tk == null) {
-			tk = rm.createTemporaryKeyByEmail(serMailMap, ip, RegistrationManager.EMAIL_CHANGE);
-		} else {
-			rm.deleteTemporaryKeyWithId(tk.getRegistrationKey());
-			tk = rm.createTemporaryKeyByEmail(serMailMap, ip, RegistrationManager.EMAIL_CHANGE);
-		}
+		TemporaryKey tk = rm.createAndDeleteOldTemporaryKey(identityToModify.getKey(), serMailMap, ip, RegistrationManager.EMAIL_CHANGE);
 		
 		// create date, time string
 		Calendar cal = Calendar.getInstance();
@@ -558,7 +564,9 @@ public class ProfileFormController extends FormBasicController {
 		if(Settings.isDebuging()) {
 			logInfo(link, null);
 		}
-		body = translate("email.change.body", new String[] { link, time, currentEmail, changedEmail })
+		String currentEmailDisplay = userManager.getUserDisplayEmail(currentEmail, getLocale());
+		String changedEmaildisplay = userManager.getUserDisplayEmail(changedEmail, getLocale());
+		body = translate("email.change.body", new String[] { link, time, currentEmailDisplay, changedEmaildisplay })
 				+ SEPARATOR + translate("email.change.wherefrom", new String[] { serverpath, today, ip });
 		subject = translate("email.change.subject");
 		// send email
@@ -590,50 +598,18 @@ public class ProfileFormController extends FormBasicController {
 	}
 
 	/**
-	 * Load and clean temporary keys with action "EMAIL_CHANGE".
-	 * @param serMailMap
-	 * @return
-	 */
-	private TemporaryKey loadCleanTemporaryKey(String serMailMap) {
-		TemporaryKey tk = rm.loadTemporaryKeyByEmail(serMailMap);
-		if (tk == null) {
-			XStream xml = new XStream();
-			@SuppressWarnings("unchecked")
-			Map<String, String> mails = (Map<String, String>) xml.fromXML(serMailMap);
-			String currentEMail = mails.get("currentEMail");
-			List<TemporaryKey> tks = rm.loadTemporaryKeyByAction(RegistrationManager.EMAIL_CHANGE);
-			if (tks != null) {
-				synchronized (tks) {
-					tks = rm.loadTemporaryKeyByAction(RegistrationManager.EMAIL_CHANGE);
-					int countCurrentEMail = 0;
-					for (TemporaryKey temporaryKey : tks) {
-						@SuppressWarnings("unchecked")
-						Map<String, String> tkMails = (Map<String, String>) xml.fromXML(temporaryKey.getEmailAddress());
-						// In OLAT 7.x "currentemail" instead of "currentEMail" was used in o_temporarykey table,
-						// so we have to look also for that string
-						if (currentEMail.equals(tkMails.get("currentEMail")) || currentEMail.equals(tkMails.get("currentemail"))) {
-							if (countCurrentEMail > 0) {
-								// clean
-								rm.deleteTemporaryKeyWithId(temporaryKey.getRegistrationKey());
-							} else {
-								// load
-								tk = temporaryKey;
-							}
-							countCurrentEMail++;
-						}
-					}
-				}
-			}
-		}
-		return tk;
-	}
-
-	/**
 	 * Sets the dirty mark for this form.
 	 * 
 	 * @param isDirtyMarking <code>true</code> sets this form dirty.
 	 */
 	public void setDirtyMarking(boolean isDirtyMarking) {
 		mainForm.setDirtyMarking(isDirtyMarking);
+	}
+
+	private boolean isAllowedToChangeEmailWithoutVerification(final UserRequest ureq) {
+		boolean isOLATAdmin = ureq.getUserSession().getRoles().isOLATAdmin();
+		boolean isUserManagerAndBypassVerification = BaseSecurityModule.USERMANAGER_CAN_BYPASS_EMAILVERIFICATION
+				&& ureq.getUserSession().getRoles().isUserManager();
+		return isOLATAdmin || isUserManagerAndBypassVerification;
 	}
 }

@@ -35,9 +35,7 @@ import org.olat.core.gui.Windows;
 import org.olat.core.gui.components.Component;
 import org.olat.core.gui.components.form.flexible.FormItem;
 import org.olat.core.gui.components.form.flexible.FormItemContainer;
-import org.olat.core.gui.components.form.flexible.elements.FlexiTableElement;
-import org.olat.core.gui.components.form.flexible.elements.FormLink;
-import org.olat.core.gui.components.form.flexible.elements.TextElement;
+import org.olat.core.gui.components.form.flexible.elements.*;
 import org.olat.core.gui.components.form.flexible.impl.Form;
 import org.olat.core.gui.components.form.flexible.impl.FormEvent;
 import org.olat.core.gui.components.form.flexible.impl.FormLayoutContainer;
@@ -51,6 +49,7 @@ import org.olat.core.gui.control.Event;
 import org.olat.core.gui.control.WindowControl;
 import org.olat.core.gui.control.generic.ajax.autocompletion.FlexiAutoCompleterController;
 import org.olat.core.gui.control.generic.ajax.autocompletion.ListProvider;
+import org.olat.core.gui.control.winmgr.ScrollTopCommand;
 import org.olat.core.gui.translator.Translator;
 import org.olat.core.id.Identity;
 import org.olat.core.id.Roles;
@@ -166,6 +165,8 @@ public class UserSearchFlexiController extends FlexiAutoCompleterController {
 
 			searchFormContainer = FormLayoutContainer.createDefaultFormLayout("usersearchPanel", getTranslator());
 			searchFormContainer.setRootForm(mainForm);
+			searchFormContainer.setElementCssClass("o_sel_usersearch_searchform");
+			searchFormContainer.setFormTitle(translate("header.normal"));
 			layoutCont.add(searchFormContainer);
 			layoutCont.add("usersearchPanel", searchFormContainer);
 			
@@ -202,17 +203,17 @@ public class UserSearchFlexiController extends FlexiAutoCompleterController {
 			FlexiTableColumnModel tableColumnModel = FlexiTableDataModelFactory.createFlexiTableColumnModel();
 			int colPos = 0;
 			if(isAdministrativeUser) {
-				tableColumnModel.addFlexiColumnModel(new DefaultFlexiColumnModel("table.user.login", colPos++));
+				tableColumnModel.addFlexiColumnModel(new DefaultFlexiColumnModel("table.user.login", colPos++, true, "login"));
 			}
 			List<UserPropertyHandler> userPropertyHandlers = userManager.getUserPropertyHandlersFor(usageIdentifyer, isAdministrativeUser);
-			List<UserPropertyHandler> resultingPropertyHandlers = new ArrayList<UserPropertyHandler>();
+			List<UserPropertyHandler> resultingPropertyHandlers = new ArrayList<>();
 			// followed by the users fields
 			for (int i = 0; i < userPropertyHandlers.size(); i++) {
 				UserPropertyHandler userPropertyHandler	= userPropertyHandlers.get(i);
 				boolean visible = UserManager.getInstance().isMandatoryUserProperty(usageIdentifyer , userPropertyHandler);
 				if(visible) {
 					resultingPropertyHandlers.add(userPropertyHandler);
-					tableColumnModel.addFlexiColumnModel(new DefaultFlexiColumnModel(userPropertyHandler.i18nColumnDescriptorLabelKey(), colPos++));
+					tableColumnModel.addFlexiColumnModel(new DefaultFlexiColumnModel(userPropertyHandler.i18nColumnDescriptorLabelKey(), colPos++, true, userPropertyHandler.getName()));
 				}
 			}
 			tableColumnModel.addFlexiColumnModel(new DefaultFlexiColumnModel("select", translate("select"), "select"));
@@ -223,7 +224,7 @@ public class UserSearchFlexiController extends FlexiAutoCompleterController {
 			tableEl.setCustomizeColumns(false);
 			tableEl.setMultiSelect(true);
 			tableEl.setSelectAllEnable(true);
-			
+
 			layoutCont.put("userTable", tableEl.getComponent());
 		}
 	}
@@ -324,8 +325,7 @@ public class UserSearchFlexiController extends FlexiAutoCompleterController {
 			lastFormElement.setErrorKey("error.search.form.no.wildcard.dublicates", null);
 			return false;
 		}		
-		int MIN_LENGTH = 4;
-		if ( fullString.length() < MIN_LENGTH ) {
+		if ( fullString.length() < 4) {
 			lastFormElement.setErrorKey("error.search.form.to.short", null);
 			return false;
 		}
@@ -343,6 +343,7 @@ public class UserSearchFlexiController extends FlexiAutoCompleterController {
 			}
 		} else if(searchButton == source) {
 			if(validateForm(ureq)) {
+				getWindowControl().getWindowBackOffice().sendCommandTo(new ScrollTopCommand());
 				doSearch();
 			}
 		} else if (tableEl == source) {
@@ -373,7 +374,7 @@ public class UserSearchFlexiController extends FlexiAutoCompleterController {
 			if(StringHelper.isLong(searchValue)) {
 				doFireSelection(ureq, Collections.singletonList(searchValue));
 			} else if(searchValue.length() >= 3){
-				Map<String, String> userProperties = new HashMap<String, String>();
+				Map<String, String> userProperties = new HashMap<>();
 				userProperties.put(UserConstants.FIRSTNAME, searchValue);
 				userProperties.put(UserConstants.LASTNAME, searchValue);
 				userProperties.put(UserConstants.EMAIL, searchValue);
@@ -412,9 +413,12 @@ public class UserSearchFlexiController extends FlexiAutoCompleterController {
 			if (userPropertyHandler == null) continue;
 			FormItem ui = propFormItems.get(userPropertyHandler.getName());
 			String uiValue = userPropertyHandler.getStringValue(ui);
-			if (StringHelper.containsNonWhitespace(uiValue)) {
+			if(userPropertyHandler.getName().startsWith("genericCheckboxProperty")) {
+				if(!"false".equals(uiValue)) {
+					userPropertiesSearch.put(userPropertyHandler.getName(), uiValue);
+				}
+			} else if (StringHelper.containsNonWhitespace(uiValue)) {
 				userPropertiesSearch.put(userPropertyHandler.getName(), uiValue);
-				getLogger().info("Search property:" + userPropertyHandler.getName() + "=" + uiValue);
 			}
 		}
 		if (userPropertiesSearch.isEmpty()) {

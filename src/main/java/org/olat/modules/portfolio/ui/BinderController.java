@@ -48,6 +48,7 @@ import org.olat.modules.portfolio.Binder;
 import org.olat.modules.portfolio.BinderConfiguration;
 import org.olat.modules.portfolio.BinderSecurityCallback;
 import org.olat.modules.portfolio.BinderStatus;
+import org.olat.modules.portfolio.PortfolioService;
 import org.olat.modules.portfolio.PortfolioV2Module;
 import org.olat.modules.portfolio.ui.event.DeleteBinderEvent;
 import org.olat.modules.portfolio.ui.event.RestoreBinderEvent;
@@ -64,8 +65,11 @@ import org.springframework.beans.factory.annotation.Autowired;
  */
 public class BinderController extends BasicController implements TooledController, Activateable2 {
 	
-	private Link assessmentLink, publishLink;
-	private final Link overviewLink, entriesLink, historyLink;
+	private Link overviewLink;
+	private Link entriesLink;
+	private Link historyLink;
+	private Link assessmentLink;
+	private Link publishLink;
 	private final ButtonGroupComponent segmentButtonsCmp;
 	private final TooledStackedPanel stackPanel;
 	private StackedPanel mainPanel;
@@ -82,6 +86,8 @@ public class BinderController extends BasicController implements TooledControlle
 	
 	@Autowired
 	private PortfolioV2Module portfolioModule;
+	@Autowired
+	private PortfolioService portfolioService;
 
 	public BinderController(UserRequest ureq, WindowControl wControl, TooledStackedPanel stackPanel,
 			BinderSecurityCallback secCallback, Binder binder, BinderConfiguration config) {
@@ -95,15 +101,21 @@ public class BinderController extends BasicController implements TooledControlle
 
 		segmentButtonsCmp = new ButtonGroupComponent("segments");
 		segmentButtonsCmp.setElementCssClass("o_sel_pf_binder_navigation");
-		overviewLink = LinkFactory.createLink("portfolio.overview", getTranslator(), this);
-		overviewLink.setElementCssClass("o_sel_pf_toc");
-		segmentButtonsCmp.addButton(overviewLink, false);
-		entriesLink = LinkFactory.createLink("portfolio.entries", getTranslator(), this);
-		entriesLink.setElementCssClass("o_sel_pf_entries");
-		segmentButtonsCmp.addButton(entriesLink, false);
-		historyLink = LinkFactory.createLink("portfolio.history", getTranslator(), this);
-		historyLink.setElementCssClass("o_sel_pf_history");
-		segmentButtonsCmp.addButton(historyLink, false);
+		if (portfolioModule.isOverviewEnabled()) {
+			overviewLink = LinkFactory.createLink("portfolio.overview", getTranslator(), this);
+			overviewLink.setElementCssClass("o_sel_pf_toc");
+			segmentButtonsCmp.addButton(overviewLink, false);
+		}
+		if (portfolioModule.isEntriesEnabled()) {
+			entriesLink = LinkFactory.createLink("portfolio.entries", getTranslator(), this);
+			entriesLink.setElementCssClass("o_sel_pf_entries");
+			segmentButtonsCmp.addButton(entriesLink, false);
+		}
+		if (portfolioModule.isHistoryEnabled()) {
+			historyLink = LinkFactory.createLink("portfolio.history", getTranslator(), this);
+			historyLink.setElementCssClass("o_sel_pf_history");
+			segmentButtonsCmp.addButton(historyLink, false);
+		}
 		if(config.isShareable() && secCallback.canViewAccessRights()) {
 			publishLink = LinkFactory.createLink("portfolio.publish", getTranslator(), this);
 			publishLink.setElementCssClass("o_sel_pf_publication");
@@ -151,7 +163,11 @@ public class BinderController extends BasicController implements TooledControlle
 		if(entries == null || entries.isEmpty()) {
 			String ePoint = portfolioModule.getBinderEntryPoint();
 			if(binder != null && binder.getBinderStatus() == BinderStatus.deleted) {
-				doOpenOverview(ureq);
+				if (PortfolioV2Module.ENTRY_POINT_TOC.equals(ePoint)) {
+					doOpenOverview(ureq);
+				} else {
+					doOpenEntries(ureq);
+				}
 			} else if(PortfolioV2Module.ENTRY_POINT_TOC.equals(ePoint)) {
 				int numOfSections = doOpenOverview(ureq).getNumOfSections();
 				if(numOfSections == 0 && !secCallback.canEditBinder()) {
@@ -208,6 +224,7 @@ public class BinderController extends BasicController implements TooledControlle
 			if(event == Event.CHANGED_EVENT) {
 				removeAsListenerAndDispose(entriesCtrl);
 				entriesCtrl = null;
+				binder = portfolioService.getBinderByKey(binder.getKey());
 			} else if(event instanceof SectionSelectionEvent) {
 				SectionSelectionEvent sse = (SectionSelectionEvent)event;
 				List<ContextEntry> entries = new ArrayList<>();
@@ -259,6 +276,7 @@ public class BinderController extends BasicController implements TooledControlle
 			listenTo(overviewCtrl);
 		} else {
 			overviewCtrl.loadModel();
+			overviewCtrl.updateSummaryView(ureq);
 		}
 
 		segmentButtonsCmp.setSelectedButton(overviewLink);

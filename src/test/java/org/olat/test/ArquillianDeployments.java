@@ -47,10 +47,10 @@ public class ArquillianDeployments {
 	public static final String WEBINF    = "src/main/webapp/WEB-INF";
 	public static final String WEBINF_TOMCAT = "src/main/webapp-tomcat/WEB-INF";
 	public static final String TEST_RSRC = "src/test/resources";
-	public static final String LIB_DIR   = "target/openolat-lms-11.4-SNAPSHOT/WEB-INF/lib";
+	public static final String LIB_DIR   = "target/openolat-lms-12.5-SNAPSHOT/WEB-INF/lib";
 
 	public static WebArchive createDeployment() {
-		return createDeployment("openolat.war", new HashMap<String,String>());
+		return createDeployment("openolat.war", new HashMap<>());
 	}
 	
 	public static WebArchive createDeployment(Map<String,String> overrideProperties) {
@@ -123,8 +123,7 @@ public class ArquillianDeployments {
 		return archive
 				.addAsWebInfResource(new File(WEBINF, "olat_portals_links.xsd"), "olat_portals_links.xsd")
 				.addAsWebInfResource(new File(WEBINF, "olat_portals_links.xml"), "olat_portals_links.xml")
-				.addAsWebInfResource(new File(WEBINF, "olat_portals_institution.xml"), "olat_portals_institution.xml")
-				.addAsWebInfResource(new File(WEBINF, "sun-jaxws.xml"), "sun-jaxws.xml");
+				.addAsWebInfResource(new File(WEBINF, "olat_portals_institution.xml"), "olat_portals_institution.xml");
 	}
 	
 	public static WebArchive addWebResourceRecursive(File root, String startPath, FileFilter filter, WebArchive archive) {
@@ -257,6 +256,7 @@ public class ArquillianDeployments {
 			this.properties = properties;
 		}
 
+		@Override
 		public String resolvePlaceholder(String placeholderName) {
 			try {
 				String propVal = System.getProperty(placeholderName);

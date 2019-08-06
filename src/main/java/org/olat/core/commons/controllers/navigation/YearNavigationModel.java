@@ -20,7 +20,14 @@
 package org.olat.core.commons.controllers.navigation;
 
 import java.text.DateFormatSymbols;
-import java.util.*;
+import java.util.Calendar;
+import java.util.Collections;
+import java.util.Date;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Locale;
+import java.util.SortedMap;
+import java.util.TreeMap;
 
 /**
  * The data model for the YearNavigation.
@@ -43,7 +50,8 @@ public class YearNavigationModel {
 	 * @param datedObjects
 	 * @param locale
 	 */
-	YearNavigationModel(List<? extends Dated> datedObjects, Locale locale) {
+	YearNavigationModel(List<? extends Dated> datedObjects, Locale locale, Year currentYear) {
+		this.currentYear = currentYear;
 		cal = Calendar.getInstance();
 		symbols = new DateFormatSymbols(locale);
 		initializeYears(datedObjects);
@@ -55,10 +63,9 @@ public class YearNavigationModel {
 	 * @param datedObjects
 	 */
 	private void initializeYears(List<? extends Dated> datedObjects) {
-		List<Dated> copy = new ArrayList<>(datedObjects);
-		years = new TreeMap<Integer, Year>();
-		Collections.sort(copy, new DatedComparator());
-		for (Dated item : copy) {
+		years = new TreeMap<>();
+		Collections.sort(datedObjects, new DatedComparator());
+		for (Dated item : datedObjects) {
 			if(item.getDate() != null) {
 				add(item);
 			}
@@ -66,7 +73,7 @@ public class YearNavigationModel {
 		// Display the current year
 		Date today = new Date();
 		cal.setTime(today);
-		int thisYear = cal.get(Calendar.YEAR);
+		int thisYear = currentYear != null? currentYear.getYear(): cal.get(Calendar.YEAR);
 		goTo(thisYear);
 	}
 
@@ -152,13 +159,6 @@ public class YearNavigationModel {
 	 */
 	Year getCurrentYear() {
 		return currentYear;
-	}
-
-	/**
-	 * @param datedObjects
-	 */
-	void setDatedObjects(List<? extends Dated> datedObjects) {
-		initializeYears(datedObjects);
 	}
 
 	/**

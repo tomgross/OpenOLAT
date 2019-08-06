@@ -40,7 +40,6 @@ import org.quartz.Scheduler;
 import org.quartz.Trigger;
 import org.quartz.TriggerKey;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
@@ -152,7 +151,7 @@ public class ViteroModule extends AbstractSpringModule implements ConfigOnOff {
 		try {
 			TriggerKey triggerKey = new TriggerKey("Vitero_Cleaner_Cron_Trigger", Scheduler.DEFAULT_GROUP);
 			if(scheduler.getTrigger(triggerKey) == null) {
-
+				
 				// Create job with cron trigger configuration
 				JobDetail jobDetail = newJob(ViteroZombieSlayerJob.class)
 						.withIdentity("Vitero_Cleaner_Cron_Job", Scheduler.DEFAULT_GROUP)
@@ -161,10 +160,10 @@ public class ViteroModule extends AbstractSpringModule implements ConfigOnOff {
 				Calendar cal = Calendar.getInstance();
 				cal.add(Calendar.SECOND, 30);
 				Trigger trigger = newTrigger()
-						.withIdentity("Vitero_Cleaner_Cron_Trigger")
-						.withSchedule(cronSchedule(cronExpression))
-						.startAt(cal.getTime())
-						.build();
+					    .withIdentity("Vitero_Cleaner_Cron_Trigger")
+					    .withSchedule(cronSchedule(cronExpression))
+					    .startAt(cal.getTime())
+					    .build();
 
 				scheduler.scheduleJob(jobDetail, trigger);
 			}

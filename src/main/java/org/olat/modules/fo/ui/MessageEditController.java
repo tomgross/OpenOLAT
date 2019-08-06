@@ -175,10 +175,12 @@ public class MessageEditController extends FormBasicController {
 		titleEl.setNotEmptyCheck("error.field.not.empty");
 		bodyEl = uifactory.addRichTextElementForStringData("msgBody", "msg.body", message.getBody(), 15, -1, true, null, null,
 				formLayout, ureq.getUserSession(), getWindowControl());
+		bodyEl.setElementCssClass("o_sel_forum_message_body");
 		bodyEl.setMandatory(true);
 		bodyEl.setNotEmptyCheck("error.field.not.empty");
 		bodyEl.setMaxLength(MAX_BODY_LENGTH);
 		bodyEl.setNotLongerThanCheck(MAX_BODY_LENGTH, "input.toolong");
+		bodyEl.getEditorConfiguration().enableCharCount();
 		
 		setEditPermissions(message);
 		// list existing attachments. init attachment layout now, to place it in
@@ -206,6 +208,7 @@ public class MessageEditController extends FormBasicController {
 			passwordEl = uifactory.addPasswordElement("password", "password", 128, "", formLayout);
 			passwordEl.setElementCssClass("o_sel_forum_message_alias_pass");
 			passwordEl.setPlaceholderKey("password.placeholder", null);
+			passwordEl.setAutocomplete("new-password");
 
 			if(guestOnly) {
 				usePseudonymEl.setVisible(false);
@@ -493,7 +496,7 @@ public class MessageEditController extends FormBasicController {
 		if(editMode == EditMode.newThread) {
 			if(foCallback.mayOpenNewThread()) {
 				// save a new thread
-				fm.addTopMessage(message);
+				message = fm.addTopMessage(message);
 				fm.markNewMessageAsRead(getIdentity(), forum, message);
 				persistTempUploadedFiles(message);
 				// if notification is enabled -> notify the publisher about news
@@ -526,7 +529,7 @@ public class MessageEditController extends FormBasicController {
 				showWarning("may.not.save.msg.as.author");
 			}
 		} else if(editMode == EditMode.reply) { 
-			fm.replyToMessage(message, parentMessage);
+			message = fm.replyToMessage(message, parentMessage);
 			fm.markNewMessageAsRead(getIdentity(), forum, message);
 			persistTempUploadedFiles(message);
 			notifiySubscription();
@@ -656,11 +659,7 @@ public class MessageEditController extends FormBasicController {
 	 * @return the edited message
 	 */
 	public Message getMessage() {
-		if (!StringHelper.containsNonWhitespace(message.getTitle()) && message == null) {
-			throw new AssertException("Getting back the edited message failed! You first have to edit one and intialize properly!");
-		} else {
-			return message;
-		}
+		return message;
 	}
 
 	/**

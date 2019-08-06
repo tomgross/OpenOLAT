@@ -26,6 +26,7 @@ import static org.olat.ims.qti21.model.xml.AssessmentItemFactory.createNumerical
 import static org.olat.ims.qti21.model.xml.AssessmentItemFactory.createResponseProcessing;
 import static org.olat.ims.qti21.model.xml.AssessmentItemFactory.createTextEntryResponseDeclaration;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -35,8 +36,7 @@ import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.DoubleAdder;
 
-import javax.xml.transform.stream.StreamResult;
-
+import org.apache.commons.lang.StringEscapeUtils;
 import org.olat.core.gui.render.StringOutput;
 import org.olat.core.logging.OLog;
 import org.olat.core.logging.Tracing;
@@ -167,20 +167,24 @@ public class FIBAssessmentItemBuilder extends AssessmentItemBuilder {
 		}
 	}
 	
-	private void extractQuestions() {
-		StringOutput sb = new StringOutput();
-		List<Block> blocks = assessmentItem.getItemBody().getBlocks();
-		for(Block block:blocks) {
-			qtiSerializer.serializeJqtiObject(block, new StreamResult(sb));
+	public String extractQuestions() {
+		try(StringOutput sb = new StringOutput()) {
+			List<Block> blocks = assessmentItem.getItemBody().getBlocks();
+			for(Block block:blocks) {
+				serializeJqtiObject(block, sb);
+			}
+			question = sb.toString();
+		} catch(IOException e) {
+			log.error("", e);
 		}
-		question = sb.toString();
+		return question;
 	}
 	
 	/**
 	 * We loop around the textEntryInteraction, search the responseDeclaration. responseDeclaration
 	 * of type string are gap text, of type float are numerical.
 	 */
-	private void extractEntriesSettingsFromResponseDeclaration() {
+	public void extractEntriesSettingsFromResponseDeclaration() {
 		DoubleAdder mappedScore = new DoubleAdder();
 		AtomicInteger countAlternatives = new AtomicInteger(0);
 
@@ -199,6 +203,9 @@ public class FIBAssessmentItemBuilder extends AssessmentItemBuilder {
 						extractTextEntrySettingsFromResponseDeclaration(textEntry, responseDeclaration, countAlternatives, mappedScore);
 						String marker = "responseIdentifier=\"" + interaction.getResponseIdentifier().toString() + "\"";
 						question = question.replace(marker, marker + " openolatType=\"string\"");
+						if(StringHelper.containsNonWhitespace(textEntry.getSolution())) {
+							question = question.replace(marker, marker + " data-qti-solution=\"" + escapeForDataQtiSolution(textEntry.getSolution()) + "\"");
+						}
 						entry = textEntry;
 						
 					} else if(responseDeclaration.hasBaseType(BaseType.FLOAT) && responseDeclaration.hasCardinality(Cardinality.SINGLE)) {
@@ -208,6 +215,9 @@ public class FIBAssessmentItemBuilder extends AssessmentItemBuilder {
 						
 						String marker = "responseIdentifier=\"" + interaction.getResponseIdentifier().toString() + "\"";
 						question = question.replace(marker, marker + " openolatType=\"float\"");
+						if(numericalEntry.getSolution() != null) {
+							question = question.replace(marker, marker + " data-qti-solution=\"" + Double.toString(numericalEntry.getSolution()) + "\"");
+						}
 					}
 				}
 				if(entry != null) {
@@ -383,6 +393,14 @@ public class FIBAssessmentItemBuilder extends AssessmentItemBuilder {
 			textEntry.setAlternatives(alternatives);
 		}
 	}
+	
+	public String escapeForDataQtiSolution(String solution) {
+		return StringHelper.escapeHtml(solution).replace("/", "\u2215");
+	}
+	
+	public String unescapeDataQtiSolution(String solution) {
+		return StringEscapeUtils.unescapeHtml(solution).replace("\u2215", "/");
+	}
 
 	@Override
 	public QTI21QuestionType getQuestionType() {
@@ -546,8 +564,10 @@ public class FIBAssessmentItemBuilder extends AssessmentItemBuilder {
 				TextEntryInteraction textEntryInteraction = (TextEntryInteraction)interaction;
 				String responseIdentifier = interaction.getResponseIdentifier().toString();
 				AbstractEntry entry = responseIdentifierToTextEntry.get(responseIdentifier);
-				textEntryInteraction.setPlaceholderText(entry.getPlaceholder());
-				textEntryInteraction.setExpectedLength(entry.getExpectedLength());
+				if(entry != null) {
+					textEntryInteraction.setPlaceholderText(entry.getPlaceholder());
+					textEntryInteraction.setExpectedLength(entry.getExpectedLength());
+				}
 				usedResponseIdentifiers.add(responseIdentifier);
 			}
 		}
@@ -849,7 +869,6 @@ public class FIBAssessmentItemBuilder extends AssessmentItemBuilder {
 			incorrectOutcomeValue.setExpression(correctValue);
 			
 			responseRules.add(count++, incorrectOutcomeValue);
-			
 		}
 	}
 	
@@ -974,10 +993,13 @@ public class FIBAssessmentItemBuilder extends AssessmentItemBuilder {
 			return false;
 		}
 		
-		private boolean match(double firstNumber) {
+		private boolean match(double answer) {
 			double lTolerance = lowerTolerance == null ? 0.0d : lowerTolerance.doubleValue();
 			double uTolerance = upperTolerance == null ? 0.0d : upperTolerance.doubleValue();
-			return toleranceMode.isEqual(firstNumber, solution,
+			if(toleranceMode == ToleranceMode.ABSOLUTE && (lTolerance < 0.0d || uTolerance < 0.0d)) {
+				return false;
+			}
+			return toleranceMode.isEqual(solution, answer,
 					lTolerance, uTolerance,
 					true, true);
 		}
@@ -1016,17 +1038,6 @@ public class FIBAssessmentItemBuilder extends AssessmentItemBuilder {
 
 		public List<TextEntryAlternative> getAlternatives() {
 			return alternatives;
-		}
-		
-		public String alternativesToString() {
-			StringBuilder sb = new StringBuilder();
-			if(alternatives != null) {
-				for(TextEntryAlternative alternative:alternatives) {
-					if(sb.length() > 0) sb.append(",");
-					sb.append(alternative.getAlternative());
-				}
-			}
-			return sb.toString();
 		}
 
 		public void setAlternatives(List<TextEntryAlternative> alternatives) {
@@ -1087,6 +1098,7 @@ public class FIBAssessmentItemBuilder extends AssessmentItemBuilder {
 		 * @param response
 		 * @return
 		 */
+		@Override
 		public boolean match(String response) {
 			if(match(response, solution)) {
 				return true;
@@ -1102,10 +1114,12 @@ public class FIBAssessmentItemBuilder extends AssessmentItemBuilder {
 
 		private boolean match(String response, String alternative) {
 			if(caseSensitive) {
-				if(alternative.equals(response)) {
+				if(alternative.equals(response)
+						|| (response != null && alternative.trim().equals(response.trim()))) {
 					return true;
 				}
-			} else if(alternative.equalsIgnoreCase(response)) {
+			} else if(alternative.equalsIgnoreCase(response)
+					|| (response != null && alternative.trim().equalsIgnoreCase(response.trim()))) {
 				return true;
 			}
 			return false;

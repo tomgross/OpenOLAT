@@ -55,6 +55,7 @@ import org.olat.core.gui.control.Event;
 import org.olat.core.gui.control.WindowControl;
 import org.olat.core.gui.control.controller.MainLayoutBasicController;
 import org.olat.core.gui.control.generic.dtabs.Activateable2;
+import org.olat.core.gui.control.generic.dtabs.DTabs;
 import org.olat.core.id.Identity;
 import org.olat.core.id.OLATResourceable;
 import org.olat.core.id.context.ContextEntry;
@@ -120,6 +121,8 @@ public class UserInfoMainController extends MainLayoutBasicController implements
 	private CalendarModule calendarModule;
 	@Autowired
 	private CalendarManager calendarManager;
+	@Autowired
+	private HomePageConfigManager homePageConfigManager;
 
 	/**
 	 * @param ureq
@@ -138,7 +141,7 @@ public class UserInfoMainController extends MainLayoutBasicController implements
 			List<HistoryPoint> stack = session.getHistoryStack();
 			for(int i=stack.size() - 2; i-->0; ) {
 				HistoryPoint point = stack.get(stack.size() - 2);
-				if(point.getEntries().size() > 0) {
+				if(!point.getEntries().isEmpty()) {
 					OLATResourceable ores = point.getEntries().get(0).getOLATResourceable();
 					if(!chosenIdentity.getKey().equals(ores.getResourceableId())) {
 						launchedFromPoint = point;
@@ -154,12 +157,14 @@ public class UserInfoMainController extends MainLayoutBasicController implements
 		firstLastName = userManager.getUserDisplayName(chosenIdentity);
 
 		// Navigation menu
-		menuTree = new MenuTree("menuTree");
-		GenericTreeModel tm = buildTreeModel(firstLastName);
-		menuTree.setTreeModel(tm);
-		menuTree.setSelectedNodeId(tm.getRootNode().getChildAt(0).getIdent());
-		menuTree.addListener(this);
-		menuTree.setRootVisible(showRootNode);
+		if (!chosenIdentity.getStatus().equals(Identity.STATUS_DELETED)) {
+			menuTree = new MenuTree("menuTree");
+			GenericTreeModel tm = buildTreeModel(firstLastName);
+			menuTree.setTreeModel(tm);
+			menuTree.setSelectedNodeId(tm.getRootNode().getChildAt(0).getIdent());
+			menuTree.addListener(this);
+			menuTree.setRootVisible(showRootNode);
+		}
 
 		// override if user is guest, don't show anything
 		if (ureq.getUserSession().getRoles().isGuestOnly()) {
@@ -234,7 +239,7 @@ public class UserInfoMainController extends MainLayoutBasicController implements
 	 * @param firstLastName
 	 */
 	private GenericTreeModel buildTreeModel(String name) {
-		GenericTreeNode root, gtn;
+		GenericTreeNode root;
 
 		GenericTreeModel gtm = new GenericTreeModel();
 		root = new GenericTreeNode();
@@ -243,7 +248,7 @@ public class UserInfoMainController extends MainLayoutBasicController implements
 		root.setAccessible(false);
 		gtm.setRootNode(root);
 
-		gtn = new GenericTreeNode();
+		GenericTreeNode gtn = new GenericTreeNode();
 		gtn.setTitle(translate("menu.homepage"));
 		gtn.setUserObject(CMD_HOMEPAGE);
 		gtn.setAltText(translate("menu.homepage.alt"));
@@ -315,8 +320,7 @@ public class UserInfoMainController extends MainLayoutBasicController implements
 	private HomePageDisplayController doOpenHomepage(UserRequest ureq) {
 		removeAsListenerAndDispose(homePageDisplayController);
 		
-		HomePageConfigManager hpcm = HomePageConfigManagerImpl.getInstance();
-		HomePageConfig homePageConfig = hpcm.loadConfigFor(chosenIdentity.getName());
+		HomePageConfig homePageConfig = homePageConfigManager.loadConfigFor(chosenIdentity.getName());
 		removeAsListenerAndDispose(homePageDisplayController);
 		homePageDisplayController = new HomePageDisplayController(ureq, getWindowControl(), chosenIdentity, homePageConfig);
 		listenTo(homePageDisplayController);
@@ -333,7 +337,7 @@ public class UserInfoMainController extends MainLayoutBasicController implements
 		}
 		
 		calendarWrapper.setPrivateEventsVisible(chosenIdentity.equals(ureq.getIdentity()));
-		if (ureq.getUserSession().getRoles().isOLATAdmin() || chosenIdentity.equals(ureq.getIdentity())) {
+		if (chosenIdentity.equals(ureq.getIdentity())) {
 			calendarWrapper.setAccess(KalendarRenderWrapper.ACCESS_READ_WRITE);
 		} else {
 			calendarWrapper.setAccess(KalendarRenderWrapper.ACCESS_READ_ONLY);
@@ -343,8 +347,9 @@ public class UserInfoMainController extends MainLayoutBasicController implements
 		
 		OLATResourceable ores = OresHelper.createOLATResourceableType(CMD_CALENDAR);
 		WindowControl bwControl = addToHistory(ureq, ores, null);
+		OLATResourceable callerOres = OresHelper.createOLATResourceableInstance(chosenIdentity.getName(), chosenIdentity.getKey());
 		calendarController = new WeeklyCalendarController(ureq, bwControl, calendars,
-				WeeklyCalendarController.CALLER_PROFILE, false);
+				WeeklyCalendarController.CALLER_PROFILE, callerOres, false);
 		listenTo(calendarController);
 		return calendarController;
 	}
@@ -355,8 +360,7 @@ public class UserInfoMainController extends MainLayoutBasicController implements
 		String chosenUserFolderRelPath = FolderConfig.getUserHome(chosenIdentity.getName()) + "/public";
 
 		OlatRootFolderImpl rootFolder = new OlatRootFolderImpl(chosenUserFolderRelPath, null);
-		String rootFolderName = StringHelper.escapeHtml(firstLastName);
-		OlatNamedContainerImpl namedFolder = new OlatNamedContainerImpl(rootFolderName, rootFolder);
+		OlatNamedContainerImpl namedFolder = new OlatNamedContainerImpl(firstLastName, rootFolder);
 		
 		//decided in plenum to have read only view in the personal visiting card, even for admin
 		VFSSecurityCallback secCallback = new ReadOnlyCallback();
@@ -396,7 +400,14 @@ public class UserInfoMainController extends MainLayoutBasicController implements
 	}
 	
 	protected final void doClose(UserRequest ureq) {
-		OLATResourceable ores = OresHelper.createOLATResourceableInstance("HomeSite", chosenIdentity.getKey());
-		getWindowControl().getWindowBackOffice().getWindow().getDTabs().closeDTab(ureq, ores, launchedFromPoint);
+		// there are 2 paths for this page
+		OLATResourceable oresPage = OresHelper.createOLATResourceableInstance("HomePage", chosenIdentity.getKey());
+		DTabs dTabs = getWindowControl().getWindowBackOffice().getWindow().getDTabs();
+		if(dTabs.getDTab(oresPage) != null) {
+			getWindowControl().getWindowBackOffice().getWindow().getDTabs().closeDTab(ureq, oresPage, launchedFromPoint);
+		} else {
+			OLATResourceable oresSite = OresHelper.createOLATResourceableInstance("HomeSite", chosenIdentity.getKey());
+			getWindowControl().getWindowBackOffice().getWindow().getDTabs().closeDTab(ureq, oresSite, launchedFromPoint);
+		}
 	}
 }

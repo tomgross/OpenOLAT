@@ -60,6 +60,7 @@ import org.olat.core.gui.control.controller.BasicController;
 import org.olat.core.gui.control.generic.closablewrapper.CloseableModalController;
 import org.olat.core.gui.control.generic.dtabs.Activateable2;
 import org.olat.core.id.OLATResourceable;
+import org.olat.core.id.Roles;
 import org.olat.core.id.context.BusinessControl;
 import org.olat.core.id.context.BusinessControlFactory;
 import org.olat.core.id.context.ContextEntry;
@@ -70,20 +71,22 @@ import org.olat.core.logging.activity.CoreLoggingResourceable;
 import org.olat.core.logging.activity.ILoggingAction;
 import org.olat.core.logging.activity.ThreadLocalUserActivityLogger;
 import org.olat.core.util.StringHelper;
+import org.olat.core.util.UserSession;
 import org.olat.core.util.resource.OresHelper;
 import org.olat.core.util.vfs.OlatRelPathImpl;
 import org.olat.core.util.vfs.Quota;
 import org.olat.core.util.vfs.VFSContainer;
-import org.olat.core.util.vfs.VFSContainerMapper;
 import org.olat.core.util.vfs.VFSItem;
 import org.olat.core.util.vfs.VFSLeaf;
 import org.olat.core.util.vfs.VFSManager;
 import org.olat.core.util.vfs.callbacks.VFSSecurityCallback;
 import org.olat.core.util.vfs.filters.VFSItemFilter;
+import org.olat.search.SearchModule;
 import org.olat.search.SearchServiceUIFactory;
 import org.olat.search.SearchServiceUIFactory.DisplayOption;
 import org.olat.search.ui.SearchInputController;
 import org.olat.user.UserManager;
+import org.springframework.beans.factory.annotation.Autowired;
 
 /**
  * Description:<br>
@@ -112,6 +115,9 @@ public class FolderRunController extends BasicController implements Activateable
 	private FolderCommand folderCommand;
 	private CloseableModalController cmc;
 	private Link editQuotaButton;
+	
+	@Autowired
+	private SearchModule searchModule;
 
 	/**
 	 * Default Constructor, results in showing users personal folder, used by Spring
@@ -282,7 +288,8 @@ public class FolderRunController extends BasicController implements Activateable
 			}
 		}
 		
-		if(!ureq.getUserSession().getRoles().isGuestOnly() && displaySearch) {
+		Roles roles = ureq.getUserSession().getRoles();
+		if(displaySearch && searchModule.isSearchAllowed(roles)) {
 		  SearchServiceUIFactory searchUIFactory = (SearchServiceUIFactory)CoreSpringFactory.getBean(SearchServiceUIFactory.class);
 		  searchC = searchUIFactory.createInputController(ureq, wControl, DisplayOption.STANDARD, null);
 		  listenTo(searchC); // register for auto-dispose
@@ -290,7 +297,7 @@ public class FolderRunController extends BasicController implements Activateable
 		}
 		
 		
-		boolean isGuest = ureq.getUserSession().getRoles().isGuestOnly();
+		boolean isGuest = roles.isGuestOnly();
 		folderComponent = new FolderComponent(ureq, "foldercomp", rootContainer, filter, customLinkTreeModel, externContainerForCopy);
 		folderComponent.setCanMail(isGuest ? false : canMail); // guests can never send mail
 		folderComponent.addListener(this);
@@ -431,12 +438,6 @@ public class FolderRunController extends BasicController implements Activateable
 		}
 	}
 
-	/**
-	 * @seec org.olat removeAsListenerAndDispose(folderCommandController);
-	 *      folderCommandController = null; removeAsListenerAndDispose(cmc); cmc =
-	 *      null; .UserRequest, org.olat.core.gui.components.Component,
-	 *      org.olat.core.gui.control.Event)
-	 */
 	@Override
 	public void event(UserRequest ureq, Component source, Event event) {
 		if (source == folderComponent || source == folderContainer || source == editQuotaButton) {
@@ -496,12 +497,13 @@ public class FolderRunController extends BasicController implements Activateable
 
 	private void enableDisableQuota(UserRequest ureq) {
 		//prevent a timing condition if the user logout while a thumbnail is generated
-		if (ureq.getUserSession() == null || ureq.getUserSession().getRoles() == null) {
+		UserSession usess = ureq.getUserSession();
+		if (usess == null || usess.getRoles() == null) {
 			return;
 		} 
 		
 		Boolean newEditQuota = Boolean.FALSE;
-		if (ureq.getUserSession().getRoles().isOLATAdmin() || ureq.getUserSession().getRoles().isInstitutionalResourceManager()) {
+		if (usess.getRoles().isOLATAdmin() || usess.getRoles().isInstitutionalResourceManager()) {
 			// Only sys admins or institutonal resource managers can have the quota button
 			Quota q = VFSManager.isTopLevelQuotaContainer(folderComponent.getCurrentContainer());
 			newEditQuota = (q == null)? Boolean.FALSE : Boolean.TRUE;
@@ -536,10 +538,6 @@ public class FolderRunController extends BasicController implements Activateable
 		return null;
 	}
 
-	/**
-	 * 
-	 * @see org.olat.core.gui.control.DefaultController#doDispose(boolean)
-	 */
 	@Override
 	protected void doDispose() {		
 		//
@@ -570,13 +568,13 @@ public class FolderRunController extends BasicController implements Activateable
 				// and can not reuse the standard briefcase way of file delivering, some
 				// very old fancy code
 				// Mapper is cleaned up automatically by basic controller
-				String baseUrl = registerMapper(ureq, new VFSContainerMapper(folderComponent.getRootContainer()));
+				String baseUrl = registerMapper(ureq, new FolderMapper(folderComponent.getRootContainer()));
 				// Trigger auto-download
 				DisplayOrDownloadComponent dordc = new DisplayOrDownloadComponent("downloadcomp", baseUrl + path);
 				folderContainer.put("autoDownloadComp", dordc);
 				
-				if (path.lastIndexOf("/") > 0) {
-					String dirPath = path.substring(0, path.lastIndexOf("/"));
+				if (path.lastIndexOf('/') > 0) {
+					String dirPath = path.substring(0, path.lastIndexOf('/'));
 					if (StringHelper.containsNonWhitespace(dirPath)) {
 						folderComponent.setCurrentContainerPath(dirPath);
 					}

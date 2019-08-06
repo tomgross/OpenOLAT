@@ -56,6 +56,7 @@ import org.olat.core.id.context.BusinessControlFactory;
 import org.olat.core.id.context.ContextEntry;
 import org.olat.core.id.context.StateEntry;
 import org.olat.core.util.ArrayHelper;
+import org.olat.core.util.UserSession;
 import org.olat.core.util.Util;
 import org.olat.core.util.WebappHelper;
 import org.olat.core.util.i18n.I18nManager;
@@ -66,8 +67,7 @@ import org.olat.login.auth.AuthenticationProvider;
 import org.springframework.beans.factory.annotation.Autowired;
 
 /**
- * Description:<br>
- * TODO: patrickb Class Description for LoginAuthprovidersController
+ * A container for all the authentications methods available to the user.
  * 
  * <P>
  * Initial Date:  02.09.2007 <br>
@@ -80,10 +80,12 @@ public class LoginAuthprovidersController extends MainLayoutBasicController impl
 
 	private VelocityContainer content;
 	private Controller authController;
-	private final List<Controller> authControllers = new ArrayList<Controller>();
+	private final List<Controller> authControllers = new ArrayList<>();
 	private Link anoLink;
 	private StackedPanel dmzPanel;
 	
+	@Autowired
+	private I18nModule i18nModule;
 	@Autowired
 	private LoginModule loginModule;
 	
@@ -91,13 +93,14 @@ public class LoginAuthprovidersController extends MainLayoutBasicController impl
 		// Use fallback translator from full webapp package to translate accessibility stuff
 		super(ureq, wControl, Util.createPackageTranslator(BaseFullWebappController.class, ureq.getLocale()));
 		
-		if(ureq.getUserSession().getEntry("error.change.email") != null) {
-			wControl.setError(ureq.getUserSession().getEntry("error.change.email").toString());
-			ureq.getUserSession().removeEntryFromNonClearedStore("error.change.email");
+		UserSession usess = ureq.getUserSession();
+		if(usess.getEntry("error.change.email") != null) {
+			wControl.setError(usess.getEntry("error.change.email").toString());
+			usess.removeEntryFromNonClearedStore("error.change.email");
 		}
-		if(ureq.getUserSession().getEntry("error.change.email.time") != null) {
-			wControl.setError(ureq.getUserSession().getEntry("error.change.email.time").toString());
-			ureq.getUserSession().removeEntryFromNonClearedStore("error.change.email.time");
+		if(usess.getEntry("error.change.email.time") != null) {
+			wControl.setError(usess.getEntry("error.change.email.time").toString());
+			usess.removeEntryFromNonClearedStore("error.change.email.time");
 		}
 		
 		MainPanel panel = new MainPanel("content");
@@ -120,8 +123,8 @@ public class LoginAuthprovidersController extends MainLayoutBasicController impl
 			showAboutPage();
 		} else if ("registration".equals(type)) {
 			// make sure the OLAT authentication controller is activated as only this one can handle registration requests
-			AuthenticationProvider OLATProvider = loginModule.getAuthenticationProvider(BaseSecurityModule.getDefaultAuthProviderIdentifier());
-			if (OLATProvider.isEnabled()) {
+			AuthenticationProvider olatProvider = loginModule.getAuthenticationProvider(BaseSecurityModule.getDefaultAuthProviderIdentifier());
+			if (olatProvider.isEnabled()) {
 				initLoginContent(ureq, BaseSecurityModule.getDefaultAuthProviderIdentifier());
 				if(authController instanceof Activateable2) {
 					((Activateable2)authController).activate(ureq, entries, state);
@@ -223,27 +226,23 @@ public class LoginAuthprovidersController extends MainLayoutBasicController impl
 		
 		return contentBorn;
 	}
-	
-	/**
-	 * @see org.olat.core.gui.control.DefaultController#doDispose()
-	 */
+
 	@Override
 	protected void doDispose() {
 		//auto-disposed
 	}
 
-	/**
-	 * @see org.olat.core.gui.control.DefaultController#event(org.olat.core.gui.UserRequest, org.olat.core.gui.components.Component, org.olat.core.gui.control.Event)
-	 */
 	@Override
 	protected void event(UserRequest ureq, Component source, Event event) {
 		 if (source == anoLink) {
 			if (loginModule.isGuestLoginEnabled()) {				
 				int loginStatus = AuthHelper.doAnonymousLogin(ureq, ureq.getLocale());
 				if (loginStatus == AuthHelper.LOGIN_OK) {
-					return;
-				} else if (loginStatus == AuthHelper.LOGIN_NOTAVAILABLE){
+					//
+				} else if (loginStatus == AuthHelper.LOGIN_NOTAVAILABLE) {
 					DispatcherModule.redirectToServiceNotAvailable( ureq.getHttpResp() );
+				} else if(loginStatus == AuthHelper.LOGIN_DENIED) {
+					getWindowControl().setError(translate("error.guest.login", WebappHelper.getMailConfig("mailSupport")));
 				} else {
 					getWindowControl().setError(translate("login.error", WebappHelper.getMailConfig("mailSupport")));
 				}	
@@ -283,14 +282,14 @@ public class LoginAuthprovidersController extends MainLayoutBasicController impl
 		aboutVC.contextPut("version", Settings.getFullVersionInfo());
 		// Add translator and languages info
 		I18nManager i18nMgr = I18nManager.getInstance();
-		Collection<String> enabledKeysSet = I18nModule.getEnabledLanguageKeys();
-		Map<String, String> langNames = new HashMap<String, String>();
-		Map<String, String> langTranslators = new HashMap<String, String>();
+		Collection<String> enabledKeysSet = i18nModule.getEnabledLanguageKeys();
+		Map<String, String> langNames = new HashMap<>();
+		Map<String, String> langTranslators = new HashMap<>();
 		String[] enabledKeys = ArrayHelper.toArray(enabledKeysSet);
 		String[] names = new String[enabledKeys.length];
 		for (int i = 0; i < enabledKeys.length; i++) {
 			String key = enabledKeys[i];
-			String langName = i18nMgr.getLanguageInEnglish(key, I18nModule.isOverlayEnabled());
+			String langName = i18nMgr.getLanguageInEnglish(key, i18nModule.isOverlayEnabled());
 			langNames.put(key, langName);
 			names[i] = langName;
 			String author = i18nMgr.getLanguageAuthor(key);
@@ -314,7 +313,7 @@ public class LoginAuthprovidersController extends MainLayoutBasicController impl
 			Identity identity = authEvent.getIdentity();
 			int loginStatus = AuthHelper.doLogin(identity, BaseSecurityModule.getDefaultAuthProviderIdentifier(), ureq);
 			if (loginStatus == AuthHelper.LOGIN_OK) {
-				return;
+				// it's ok
 			} else if (loginStatus == AuthHelper.LOGIN_NOTAVAILABLE){
 				DispatcherModule.redirectToDefaultDispatcher(ureq.getHttpResp());
 			} else {

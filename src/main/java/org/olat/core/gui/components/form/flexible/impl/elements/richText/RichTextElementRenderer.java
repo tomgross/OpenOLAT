@@ -28,12 +28,17 @@ import org.olat.core.gui.components.Component;
 import org.olat.core.gui.components.DefaultComponentRenderer;
 import org.olat.core.gui.components.form.flexible.impl.Form;
 import org.olat.core.gui.components.form.flexible.impl.FormJSHelper;
+import org.olat.core.gui.components.form.flexible.impl.NameValuePair;
+import org.olat.core.gui.components.form.flexible.impl.elements.richText.RichTextElementImpl.TextModeState;
 import org.olat.core.gui.render.RenderResult;
 import org.olat.core.gui.render.Renderer;
 import org.olat.core.gui.render.StringOutput;
 import org.olat.core.gui.render.URLBuilder;
 import org.olat.core.gui.translator.Translator;
+import org.olat.core.helpers.Settings;
 import org.olat.core.util.Formatter;
+import org.olat.core.util.StringHelper;
+import org.olat.core.util.filter.FilterFactory;
 
 /**
  * 
@@ -48,56 +53,143 @@ import org.olat.core.util.Formatter;
  */
 class RichTextElementRenderer extends DefaultComponentRenderer {
 
-	/**
-	 * @see org.olat.core.gui.components.ComponentRenderer#render(org.olat.core.gui.render.Renderer,
-	 *      org.olat.core.gui.render.StringOutput,
-	 *      org.olat.core.gui.components.Component,
-	 *      org.olat.core.gui.render.URLBuilder,
-	 *      org.olat.core.gui.translator.Translator,
-	 *      org.olat.core.gui.render.RenderResult, java.lang.String[])
-	 */
 	@Override
 	public void render(Renderer renderer, StringOutput sb, Component source, URLBuilder ubu,
 			Translator translator, RenderResult renderResult, String[] args) {
 
 		RichTextElementComponent teC = (RichTextElementComponent) source;
 		RichTextElementImpl te = teC.getRichTextElementImpl();
-		int rows = teC.getRows();
 		// DOM ID used to identify the rich text element in the browser DOM
 		String domID = teC.getFormDispatchId();
-		
-        // Use an empty string as default value
-		String value = te.getRawValue();
-		if (value == null) {
-			value = "";
-		}
 
 		if (!source.isEnabled()) {
-			// Read only view
-			sb.append("<div ");
-			sb.append(FormJSHelper.getRawJSFor(te.getRootForm(), domID, te.getAction()));
-			sb.append(" id=\"");
-			sb.append(domID);
-			sb.append("_disabled\" class='form-control-static o_disabled' style=\"");
-			if (rows != -1) {
-				sb.append(" min-height:").append(rows).append("em;");
-			}
-			sb.append("\" >");
-			sb.append(Formatter.formatLatexFormulas(value));
-			sb.append("</div>");
+			renderDisabled(sb, domID, teC);
 		} else {
 			sb.append("<div id='").append(domID).append("_diw' class='o_richtext_mce");
 			if(!te.getEditorConfiguration().isPathInStatusBar()) {
 				sb.append(" o_richtext_mce_without_path");
 			}
 			sb.append("'>");
-			renderTinyMCE_4(sb, domID, teC, ubu, source.getTranslator());
+			//switches
+			TextMode currentTextMode;
+			if(te.getEditorConfiguration().getTextModes().size() > 1) {
+				TextModeState textModeState = te.getAvailableTextModes();
+				currentTextMode = textModeState.getCurrentMode();
+				List<TextMode> modes = textModeState.getAvailableTextModes();
+				if(!modes.isEmpty()) {
+					Form form = te.getRootForm();
+					sb.append("<div class='o_richtext_mce_modes'><div class='btn-group'>");
+					for(TextMode mode:modes) {
+						sb.append("<a href='javascript:;' class='btn btn-default btn-xs")
+						  .append(" active", currentTextMode == mode).append("' ")
+						  .onClickKeyEnter(FormJSHelper.getXHRFnCallFor(form, teC.getFormDispatchId(), 1, false, false, true,
+								new NameValuePair("cmd", mode.name()))).append(">")
+						  .append(source.getTranslator().translate(mode.name()))
+						  .append("</a>");
+					}
+					sb.append("</div></div>");
+				}
+			} else {
+				currentTextMode = TextMode.formatted;
+			}
+			
+			switch(currentTextMode) {
+				case formatted:
+					renderTinyMCE_4(sb, domID, teC, ubu, source.getTranslator());
+					break;
+				case multiLine:
+					renderMultiLine(sb, domID, teC);
+					break;
+				case oneLine:
+					renderOneLine(sb, domID, teC);
+					break;
+			}
 			sb.append("</div>");
 		}
+	}
+	
+	private void renderDisabled(StringOutput sb, String domID, RichTextElementComponent teC) {
+		int rows = teC.getRows();
+		RichTextElementImpl te = teC.getRichTextElementImpl();
+
+		// Read only view
+		sb.append("<div ")
+		  .append(FormJSHelper.getRawJSFor(te.getRootForm(), domID, te.getAction()))
+		  .append(" id=\"")
+		  .append(domID)
+		  .append("_disabled\" class='form-control-static o_disabled' style=\"");
+		if (rows != -1) {
+			sb.append(" min-height:").append(rows).append("em;");
+		}
+		sb.append("\" >");
+
+		String value = te.getRawValue();
+		if(StringHelper.containsNonWhitespace(value)) {
+			String mapperUri = te.getEditorConfiguration().getMapperURI();
+			if(StringHelper.containsNonWhitespace(mapperUri)) {
+				value = FilterFactory.getBaseURLToMediaRelativeURLFilter(mapperUri).filter(value);
+			}
+			sb.append(Formatter.formatLatexFormulas(value));
+		}
+		sb.append("</div>");
+	}
+	
+	private void renderOneLine(StringOutput sb, String domID, RichTextElementComponent teC) {
+		RichTextElementImpl te = teC.getRichTextElementImpl();
+		te.setRenderingMode(TextMode.oneLine);
+		String htmlVal = StringHelper.escapeHtml(te.getRawValue(TextMode.oneLine));
+
+		sb.append("<input id=\"").append(domID).append("\" name=\"").append(domID).append("\" ")
+		  .append(" type='text' class='form-control'")
+		  .append(" value=\"").append(htmlVal).append("\" ")
+		  .append(FormJSHelper.getRawJSFor(te.getRootForm(), domID, te.getAction()));
+		if (te.hasPlaceholder()) {
+			sb.append(" placeholder=\"").append(te.getPlaceholder()).append("\"");
+		}
+		if (te.hasFocus()) {
+			sb.append(" autofocus");
+		}
+
+		sb.append(" />");
+		//add set dirty form only if enabled
+		FormJSHelper.appendFlexiFormDirty(sb, te.getRootForm(), teC.getFormDispatchId());	
+	}
+	
+	private void renderMultiLine(StringOutput sb, String domID, RichTextElementComponent teC) {
+		RichTextElementImpl te = teC.getRichTextElementImpl();
+		te.setRenderingMode(TextMode.multiLine);
+		int cols = teC.getCols();
+		int rows = teC.getRows();
+		String value = te.getRawValue(TextMode.multiLine);
+		
+		// Read write view
+		sb.append("<textarea id=\"").append(domID).append("\" name=\"").append(domID).append("\" ");
+		StringBuilder rawData = FormJSHelper.getRawJSFor(te.getRootForm(), domID, te.getAction());
+		sb.append(rawData.toString());
+		sb.append(" class='form-control' style=\"width:");
+		if (cols == -1) {
+			sb.append("100%;");
+		} else {
+			sb.append(cols).append("em;");
+		}
+		sb.append("height:");
+		if (rows == -1) {
+			sb.append("100%;");
+		} else {
+			sb.append(rows).append("em;");
+		}
+		sb.append("\" class=\"BGlossarIgnore\">")
+		  .append(value)
+		  .append("</textarea>")
+		  .append(FormJSHelper.getJSStartWithVarDeclaration(domID))
+		  //plain textAreas should not propagate the keypress "enter" (keynum = 13) as this would submit the form
+		  .append(domID).append(".on('keypress', function(event, target){if (13 == event.keyCode) {event.stopPropagation()} })")
+		  .append(FormJSHelper.getJSEnd());
 	}
 
 	private void renderTinyMCE_4(StringOutput sb, String domID, RichTextElementComponent teC, URLBuilder ubu, Translator translator) {
 		RichTextElementImpl te = teC.getRichTextElementImpl();
+		te.setRenderingMode(TextMode.formatted);
 		RichTextConfiguration config = te.getEditorConfiguration();
 		List<String> onInit = config.getOnInit();
 
@@ -111,32 +203,43 @@ class RichTextElementRenderer extends DefaultComponentRenderer {
 		StaticMediaDispatcher.renderStaticURI(baseUrl, "js/tinymce4/tinymce/tinymce.min.js", true);
 		
 		// Read write view
-		if(config.isInline()) {
-			renderInlineEditor(sb, domID, teC);
-		} else {
-			renderTextarea(sb, domID, teC);
-		}
+		renderTinyMCETextarea(sb, domID, teC);
 		
 		Form form = te.getRootForm();
 		configurations.append("ffxhrevent: { formNam:\"").append(form.getFormName()).append("\", dispIdField:\"").append(form.getDispatchFieldId()).append("\",")
-		 .append(" dispId:\"").append(teC.getFormDispatchId()).append("\", eventIdField:\"").append(form.getEventFieldId()).append("\"}\n");
+		 .append(" dispId:\"").append(teC.getFormDispatchId()).append("\", eventIdField:\"").append(form.getEventFieldId()).append("\"},\n");
+		configurations.append("contextPath: \"").append(Settings.getServerContextPath()).append("\",\n");
+		if(te.getMaxLength() > 0) {
+			configurations.append("maxSize:").append(te.getMaxLength()).append("\n");
+		}
 		
+		Integer currentHeight = teC.getCurrentHeight();
+		
+		sb.append("<input type='hidden' id='rtinye_").append(teC.getFormDispatchId()).append("' name='rtinye_").append(teC.getFormDispatchId()).append("' value='' />");
 		sb.append("<script type='text/javascript'>/* <![CDATA[ */\n");
 		//file browser url
 		sb.append("  BTinyHelper.editorMediaUris.put('").append(domID).append("','");
 		ubu.buildURI(sb, null, null);
 		sb.append("');\n");
-		sb.append("  jQuery('#").append(domID).append("').tinymce({\n")
+		sb.append(" setTimeout(function() { jQuery('#").append(domID).append("').tinymce({\n")//delay for firefox + tinymce 4.5 + jQuery 3.3.1
 		  .append("    selector: '#").append(domID).append("',\n")
-		  .append("    script_url: '").append(baseUrl.toString()).append("',\n")
-		  .append("    setup: function(ed){\n")
+		  .append("    script_url: '").append(baseUrl.toString()).append("',\n");
+		if(currentHeight != null && currentHeight.intValue() > 20) {
+			sb.append("    height: ").append(currentHeight).append(",\n");
+		}
+		sb.append("    setup: function(ed){\n")
 		  .append("      ed.on('init', function(e) {\n")
 		  .append("        ").append(onInit.get(0).replace(".curry(", "(")).append(";\n")
 		  .append("      });\n")
 		  .append("      ed.on('change', function(e) {\n")
 		  .append("        BTinyHelper.triggerOnChange('").append(domID).append("');\n")
+		  .append("      });\n")
+		  .append("      ed.on('ResizeEditor', function(e) {\n")
+		  .append("        try {\n")
+		  .append("          jQuery('#rtinye_").append(teC.getFormDispatchId()).append("').val(ed.contentAreaContainer.clientHeight);\n")
+		  .append("        } catch(e) { }\n")
 		  .append("      });\n");
-		if(config.isInline() || config.isSendOnBlur()) {
+		if(config.isSendOnBlur()) {
 			sb.append("      ed.on('blur', function(e) {\n")
 			  .append("        o_ffXHREvent('").append(form.getFormName()).append("','").append(form.getDispatchFieldId()).append("','").append(teC.getFormDispatchId()).append("','").append(form.getEventFieldId()).append("', 2, false, false, false, 'cmd','saveinlinedtiny','").append(domID).append("',ed.getContent());\n")
 	          .append("      });\n");
@@ -144,48 +247,15 @@ class RichTextElementRenderer extends DefaultComponentRenderer {
 		sb.append("    },\n")
 		  .append(configurations)
 		  .append("  });\n")
+		  .append("}, 1);\n")// end timeout
 		  .append("/* ]]> */</script>\n");
 	}
 	
-	private void renderInlineEditor(StringOutput sb, String domID, RichTextElementComponent teC) {
+	private void renderTinyMCETextarea(StringOutput sb, String domID, RichTextElementComponent teC) {
 		RichTextElementImpl te = teC.getRichTextElementImpl();
 		int cols = teC.getCols();
 		int rows = teC.getRows();
-		String value = te.getRawValue();
-		
-		// Read write view
-		sb.append("<div id=\"");
-		sb.append(domID);
-		sb.append("\" name=\"");
-		sb.append(domID);
-		sb.append("\" ");
-		StringBuilder rawData = FormJSHelper.getRawJSFor(te.getRootForm(), domID, te.getAction());
-		sb.append(rawData.toString());
-		sb.append(" style=\"");
-		sb.append(" width:");
-		if (cols == -1) {
-			sb.append("100%;");
-		} else {
-			sb.append(cols);
-			sb.append("em;");
-		}
-		sb.append("height:");
-		if (rows == -1) {
-			sb.append("100%;");
-		} else {
-			sb.append(rows);
-			sb.append("em;");
-		}
-		sb.append("\" class=\"BGlossarIgnore\">");
-		sb.append(value);
-		sb.append("</div>");
-	}
-	
-	private void renderTextarea(StringOutput sb, String domID, RichTextElementComponent teC) {
-		RichTextElementImpl te = teC.getRichTextElementImpl();
-		int cols = teC.getCols();
-		int rows = teC.getRows();
-		String value = te.getRawValue();
+		String value = te.getRawValue(TextMode.formatted);
 		
 		// Read write view
 		sb.append("<textarea id=\"");

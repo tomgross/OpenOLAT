@@ -196,7 +196,7 @@ public class IFrameDeliveryMapper implements Mapper {
 		VFSItem vfsItem = null;
 		//if directory gets renamed root becomes null
 		if (rootDir == null) {
-			return new NotFoundMediaResource("directory not found"+path);
+			return new NotFoundMediaResource();
 		} else {
 			vfsItem = rootDir.resolve(path);
 		}
@@ -204,10 +204,10 @@ public class IFrameDeliveryMapper implements Mapper {
 		if (vfsItem instanceof VFSLeaf) {
 			vfsLeaf = (VFSLeaf) rootDir.resolve(path);
 		} else {
-			mr = new NotFoundMediaResource(path);
+			mr = new NotFoundMediaResource();
 		}
 		if (vfsLeaf == null) {
-			mr = new NotFoundMediaResource(path);
+			mr = new NotFoundMediaResource();
 		} else {
 			// check if path ends with .html, .htm or .xhtml. We do this by searching for "htm" 
 			// and accept positions of this string at length-3 or length-4
@@ -598,22 +598,32 @@ public class IFrameDeliveryMapper implements Mapper {
 		}
 		
 		public void appendJsMath() {
-			append("<script type=\"text/x-mathjax-config\">\n");
-			append("MathJax.Hub.Config({\n");
-			append(" root: \"" + WebappHelper.getMathJaxCdn() + "\",\n");
+			append("<script type=\"text/javascript\">\n");
+			append("window.MathJax = {\n");
 			append(" extensions: [\"jsMath2jax.js\"],\n");
+			append(" messageStyle: 'none',\n");
 			append(" showProcessingMessages: false,\n");
+			append(" showMathMenu: false,\n");
+			append(" menuSettings: { },\n");
 			append(" jsMath2jax: {\n");
 			append("   preview: \"none\"\n");
 			append(" },\n");
 			append(" tex2jax: {\n");
 			append("   ignoreClass: \"math\"\n");
+			append(" },\n");
+			append(" \"HTML-CSS\": {\n");
+			append("   EqnChunk: 5, EqnChunkFactor: 1, EqnChunkDelay: 100\n");
+			append(" },\n");
+			append(" \"fast-preview\": {\n");
+			append("   disabled: true\n");
 			append(" }\n");
-			append("});");
+			append("};");
 			append("</script>");
 			append("<script type=\"text/javascript\" src=\"");
 			append(WebappHelper.getMathJaxCdn());
-			append("/MathJax.js?config=TeX-AMS-MML_HTMLorMML\"></script>\n");
+			append("MathJax.js?config=");
+			append(WebappHelper.getMathJaxConfig());
+			append("\"></script>\n");
 		}
 		
 		public void appendGlossary() {

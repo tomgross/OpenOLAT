@@ -31,6 +31,7 @@ import java.util.Set;
 
 import org.olat.NewControllerFactory;
 import org.olat.basesecurity.BaseSecurity;
+import org.olat.basesecurity.BaseSecurityModule;
 import org.olat.commons.memberlist.manager.MembersExportManager;
 import org.olat.core.commons.fullWebApp.popup.BaseFullWebappPopupLayoutFactory;
 import org.olat.core.gui.UserRequest;
@@ -63,7 +64,6 @@ import org.olat.core.util.mail.ContactList;
 import org.olat.core.util.mail.ContactMessage;
 import org.olat.core.util.session.UserSessionManager;
 import org.olat.course.nodes.members.Member;
-import org.olat.course.nodes.members.MembersCourseNodeRunController;
 import org.olat.course.run.environment.CourseEnvironment;
 import org.olat.group.BusinessGroup;
 import org.olat.instantMessaging.InstantMessagingModule;
@@ -90,12 +90,11 @@ import org.springframework.beans.factory.annotation.Autowired;
  * @author fkiefer
  */
 public class MembersAvatarDisplayRunController extends FormBasicController {
-	
+
 	private final List<UserPropertyHandler> userPropertyHandlers;
-	public static final String USER_PROPS_ID = MembersCourseNodeRunController.class.getName();
+	private final List<UserPropertyHandler> userPropertyAvatarHandlers;
 
 	private final CourseEnvironment courseEnv;
-	private final DisplayPortraitManager portraitManager;
 	private final String avatarBaseURL;
 	
 	private Link printLink;
@@ -134,6 +133,8 @@ public class MembersAvatarDisplayRunController extends FormBasicController {
 	@Autowired
 	private BaseSecurity securityManager;
 	@Autowired
+	private BaseSecurityModule securityModule;
+	@Autowired
 	private InstantMessagingModule imModule;
 	@Autowired
 	private InstantMessagingService imService;
@@ -141,6 +142,8 @@ public class MembersAvatarDisplayRunController extends FormBasicController {
 	private UserSessionManager sessionManager;
 	@Autowired
 	private MembersExportManager exportManager;
+	@Autowired
+	private DisplayPortraitManager portraitManager;
 
 	private BusinessGroup businessGroup;
 	private RepositoryEntry repoEntry;
@@ -156,9 +159,12 @@ public class MembersAvatarDisplayRunController extends FormBasicController {
 		this.businessGroup = businessGroup;
 		this.repoEntry = courseEnv != null ? courseEnv.getCourseGroupManager().getCourseEntry() : null;
 
-		userPropertyHandlers = userManager.getUserPropertyHandlersFor(USER_PROPS_ID, false);
+		Roles roles = ureq.getUserSession().getRoles();
+		boolean isAdministrativeUser = securityModule.isUserAllowedAdminProps(roles);
+		userPropertyHandlers = userManager.getUserPropertyHandlersFor(MembersDisplayRunController.USER_PROPS_LIST_ID, isAdministrativeUser);
+		userPropertyAvatarHandlers = userManager.getUserPropertyHandlersFor(MembersDisplayRunController.USER_PROPS_AVATAR_ID, isAdministrativeUser);
+		
 		avatarBaseURL = registerCacheableMapper(ureq, "avatars-members", new UserAvatarMapper(true));
-		portraitManager = DisplayPortraitManager.getInstance();
 		chatEnabled = imModule.isEnabled() && imModule.isPrivateEnabled();
 		// lists
 		this.owners = owners;
@@ -215,13 +221,13 @@ public class MembersAvatarDisplayRunController extends FormBasicController {
 		if(formLayout instanceof FormLayoutContainer) {
 			FormLayoutContainer layoutCont = (FormLayoutContainer)formLayout;
 			layoutCont.contextPut("showOwners", showOwners);
-			layoutCont.contextPut("hasOwners", new Boolean(!ownerList.isEmpty()));
+			layoutCont.contextPut("hasOwners", Boolean.valueOf(!ownerList.isEmpty()));
 			layoutCont.contextPut("showCoaches", showCoaches);
-			layoutCont.contextPut("hasCoaches", new Boolean(!coachList.isEmpty()));
+			layoutCont.contextPut("hasCoaches", Boolean.valueOf(!coachList.isEmpty()));
 			layoutCont.contextPut("showParticipants", showParticipants);
-			layoutCont.contextPut("hasParticipants", new Boolean(!participantList.isEmpty()));
+			layoutCont.contextPut("hasParticipants", Boolean.valueOf(!participantList.isEmpty()));
 			layoutCont.contextPut("showWaiting", showWaiting);
-			layoutCont.contextPut("hasWaiting", new Boolean(!waitingtList.isEmpty()));
+			layoutCont.contextPut("hasWaiting", Boolean.valueOf(!waitingtList.isEmpty()));
 		}
 	}
 	
@@ -229,6 +235,15 @@ public class MembersAvatarDisplayRunController extends FormBasicController {
 		String page = velocity_root + "/memberList.html";
 		
 		FormLayoutContainer container = FormLayoutContainer.createCustomFormLayout(name, getTranslator(), page);
+		container.contextPut("userPropertyHandlers", userPropertyAvatarHandlers);
+		// add lookup table so the avatar properties can be read out from the member object that contains the full list of attributes
+		Map<String, Integer> handlerLookupMap = new HashMap<>();
+		for(int i=userPropertyHandlers.size(); i-->0; ) {
+			UserPropertyHandler handler = userPropertyHandlers.get(i);
+			handlerLookupMap.put(handler.getName(), i);
+		}
+		container.contextPut("handlerLookupMap", handlerLookupMap);
+		
 		formLayout.add(name, container);
 		container.setRootForm(mainForm);
 
@@ -239,9 +254,16 @@ public class MembersAvatarDisplayRunController extends FormBasicController {
 	}
 	
 	protected List<Member> createMemberLinks(List<Identity> identities, Set<Long> duplicateCatcher, FormLayoutContainer formLayout, boolean withEmail) {
-		List<Member> members = new ArrayList<>();
+		if(duplicateCatcher == null) {
+			duplicateCatcher = new HashSet<>();
+		}
+		
+		List<Member> members = new ArrayList<>(identities.size());
 		for(Identity identity:identities) {
-			if(duplicateCatcher != null && duplicateCatcher.contains(identity.getKey())) continue;
+			if(duplicateCatcher.contains(identity.getKey())) {
+				continue;
+			}
+			duplicateCatcher.add(identity.getKey());
 			
 			Member member = createMember(identity);
 			members.add(member);
@@ -269,10 +291,6 @@ public class MembersAvatarDisplayRunController extends FormBasicController {
 				chatLink.setElementCssClass("o_chat");
 				formLayout.add(chatLink.getComponent().getComponentName(), chatLink);
 				member.setChatLink(chatLink);
-			}
-			
-			if(duplicateCatcher != null) {
-				duplicateCatcher.add(identity.getKey());
 			}
 		}
 		
@@ -345,8 +363,6 @@ public class MembersAvatarDisplayRunController extends FormBasicController {
 	protected void formOK(UserRequest ureq) {
 		//
 	}
-	
-	
 
 	@Override
 	public void event(UserRequest ureq, Component source, Event event) {
@@ -445,7 +461,7 @@ public class MembersAvatarDisplayRunController extends FormBasicController {
 	}
 
 	private void doSendEmailToMember(ContactList contactList, UserRequest ureq) {
-		if (contactList.getEmailsAsStrings().size() > 0) {
+		if (contactList.hasAddresses()) {
 			removeAsListenerAndDispose(cmc);
 			removeAsListenerAndDispose(emailController);
 			
@@ -478,7 +494,8 @@ public class MembersAvatarDisplayRunController extends FormBasicController {
 			RepositoryEntry entry = courseEnv.getCourseGroupManager().getCourseEntry();
 			courseLink.append(Settings.getServerContextPathURI())
 				.append("/url/RepositoryEntry/").append(entry.getKey());
-			return translate("email.body.template", new String[]{courseName, courseLink.toString()});		
+			// the ext-ref and location are not in default mail template, but used by some instances
+			return translate("email.body.template", new String[]{courseName, courseLink.toString(), entry.getExternalRef(), entry.getLocation()});		
 		}
 	}
 	
@@ -494,8 +511,8 @@ public class MembersAvatarDisplayRunController extends FormBasicController {
 			@Override
 			public Controller createController(UserRequest lureq, WindowControl lwControl) {
 				lwControl.getWindowBackOffice().getChiefController().addBodyCssClass("o_cmembers_print");
-				return new MembersPrintController(lureq, lwControl, userPropertyHandlers, getTranslator(), ownerList, coachList,
-						participantList, waitingtList, showOwners, showCoaches, showParticipants, showWaiting, 
+				return new MembersPrintController(lureq, lwControl, getTranslator(), owners, coaches,
+						participants, waiting, showOwners, showCoaches, showParticipants, showWaiting, 
 						courseEnv != null ? courseEnv.getCourseTitle() : businessGroup.getName());
 			}					
 		};

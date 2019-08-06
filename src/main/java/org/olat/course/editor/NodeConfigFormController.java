@@ -45,17 +45,22 @@ public class NodeConfigFormController extends FormBasicController {
 	/**
 	 * Maximum length of a course's short title.
 	 */
-	public final static int SHORT_TITLE_MAX_LENGTH =25;
+	public static final int SHORT_TITLE_MAX_LENGTH =25;
 	
-	private final static String[] displayOptionsKeys = new String[]{
+	private static final String[] displayOptionsKeys = new String[]{
 		CourseNode.DISPLAY_OPTS_SHORT_TITLE_DESCRIPTION_CONTENT,
 		CourseNode.DISPLAY_OPTS_TITLE_DESCRIPTION_CONTENT,
 		CourseNode.DISPLAY_OPTS_SHORT_TITLE_CONTENT,
 		CourseNode.DISPLAY_OPTS_TITLE_CONTENT,
 		CourseNode.DISPLAY_OPTS_CONTENT};
 	
-	private final CourseNode courseNode;
-	private final boolean isRootCourseNode;
+	private String menuTitle;
+	
+	private String displayTitle;
+	
+	private String learningObjectives;
+	
+	private String displayOption;
 	
 	/**
 	 * Input element for this course's short title.
@@ -85,13 +90,15 @@ public class NodeConfigFormController extends FormBasicController {
 	 * @param courseNode The course node this controller will access.
 	 * @param withCancel Decides whether to show a <i>cancel</i> button.
 	 */
-	public NodeConfigFormController(UserRequest ureq, WindowControl wControl, CourseNode courseNode, boolean isRootCourseNode) {
+	public NodeConfigFormController(UserRequest ureq, WindowControl wControl, CourseNode courseNode) {
 		super(ureq, wControl, FormBasicController.LAYOUT_DEFAULT);
-		this.courseNode = courseNode;
-		this.isRootCourseNode = isRootCourseNode;
+		menuTitle = Formatter.truncate(courseNode.getShortTitle(), SHORT_TITLE_MAX_LENGTH);
+		displayTitle = courseNode.getLongTitle();
+		learningObjectives = courseNode.getLearningObjectives();
+		displayOption = courseNode.getDisplayOption();
 		initForm(ureq);
 	}
-
+	
 	
 	/**
 	 * @see org.olat.core.gui.components.form.flexible.impl.FormBasicController#doDispose()
@@ -132,24 +139,19 @@ public class NodeConfigFormController extends FormBasicController {
 	@Override
 	protected void initForm(FormItemContainer formLayout, Controller listener, UserRequest ureq) {
 		// add the short title text input element
-		String menuTitle = courseNode.getShortTitle() == null ? "" : Formatter.truncate(courseNode.getShortTitle(), SHORT_TITLE_MAX_LENGTH);
-
-		shortTitle = uifactory.addTextElement("nodeConfigForm.menutitle", "nodeConfigForm.menutitle", SHORT_TITLE_MAX_LENGTH, menuTitle, formLayout);
+		shortTitle = uifactory.addTextElement("nodeConfigForm.menutitle", "nodeConfigForm.menutitle", SHORT_TITLE_MAX_LENGTH, (menuTitle == null ? "": menuTitle), formLayout);
 		shortTitle.setElementCssClass("o_sel_node_editor_shorttitle");
 		shortTitle.setMandatory(true);
 		shortTitle.setCheckVisibleLength(true);
 		
 		// add the title input text element
-		title = uifactory.addTextElement("nodeConfigForm.displaytitle", "nodeConfigForm.displaytitle", 255, (courseNode.getLongTitle() == null ? "" : courseNode.getLongTitle()), formLayout);
-		title.setPlaceholderText(translate("longtitle.placeholder", new String[] { menuTitle }));
+		title = uifactory.addTextElement("nodeConfigForm.displaytitle", "nodeConfigForm.displaytitle", 255, (displayTitle==null? "": displayTitle), formLayout);
+		String longTitle = new String(translate("longtitle.placeholder", new String[]{menuTitle}));
+		title.setPlaceholderText(longTitle);
 		title.setElementCssClass("o_sel_node_editor_title");
-		if (isRootCourseNode) {
-			title.setEnabled(false);
-			title.setHelpText(translate("nodeConfigForm.displaytitle.hover"));
-		}
-
+		
 		// add the learning objectives rich text input element
-		objectives = uifactory.addRichTextElementForStringData("nodeConfigForm.learningobjectives", "nodeConfigForm.learningobjectives", (courseNode.getLearningObjectives() == null ? "" : courseNode.getLearningObjectives()), 10, -1, false, null, null, formLayout, ureq.getUserSession(), getWindowControl());
+		objectives = uifactory.addRichTextElementForStringData("nodeConfigForm.learningobjectives", "nodeConfigForm.learningobjectives", (learningObjectives==null?"":learningObjectives), 10, -1, false, null, null, formLayout, ureq.getUserSession(), getWindowControl());
 		objectives.setMaxLength(4000);
 		
 		String[] values = new String[]{
@@ -159,10 +161,14 @@ public class NodeConfigFormController extends FormBasicController {
 				translate("nodeConfigForm.title_content"),
 				translate("nodeConfigForm.content_only")};
 		displayOptions = uifactory.addDropdownSingleselect("displayOptions", "nodeConfigForm.display_options", formLayout, displayOptionsKeys, values, null);
-		displayOptions.select(courseNode.getDisplayOption(), true);
+		for(String displayOptionsKey:displayOptionsKeys) {
+			if(displayOptionsKey.equals(displayOption)) {
+				displayOptions.select(displayOption, true);
+			}
+		}
 		
 		// Create submit and cancel buttons
-		final FormLayoutContainer buttonLayout = FormLayoutContainer.createButtonLayout("buttonLayout", getTranslator());
+		FormLayoutContainer buttonLayout = FormLayoutContainer.createButtonLayout("buttonLayout", getTranslator());
 		formLayout.add(buttonLayout);
 		uifactory.addFormSubmitButton("nodeConfigForm.save", buttonLayout)
 			.setElementCssClass("o_sel_node_editor_submit");
@@ -174,20 +180,23 @@ public class NodeConfigFormController extends FormBasicController {
 	 */
 	@Override
 	protected boolean validateFormLogic(UserRequest ureq) {
-		boolean shortTitleOk = true;
+		boolean allOk = super.validateFormLogic(ureq);
+
+		shortTitle.clearError();
 		if (!StringHelper.containsNonWhitespace(shortTitle.getValue())) {
 			// the short title is mandatory
-			shortTitle.setErrorKey("nodeConfigForm.menumust", new String[] {});
-			shortTitleOk = false;
+			shortTitle.setErrorKey("nodeConfigForm.menumust", null);
+			allOk &= false;
 		} else if (shortTitle.hasError()) {
-			shortTitleOk = false;
+			allOk &= false;
 		}
-		if (shortTitleOk && super.validateFormLogic(ureq)) {
-			shortTitle.clearError();
-			return true;
-		} else {
-			return false;
+		
+		if(!displayOptions.isOneSelected()) {
+			displayOptions.setErrorKey("form.legende.mandatory", null);
+			allOk &= false;
 		}
+
+		return allOk;
 	}
 
 	/**

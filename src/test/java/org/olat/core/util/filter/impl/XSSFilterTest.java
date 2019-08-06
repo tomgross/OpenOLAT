@@ -26,6 +26,7 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.olat.core.util.filter.Filter;
+import org.olat.core.util.filter.impl.OWASPAntiSamyXSSFilter.Variant;
 
 /**
  * Description:<br>
@@ -116,6 +117,12 @@ public class XSSFilterTest {
 		t("b>", "b&gt;");
 		t("<img src=\"foo\"/", "<img src=\"foo\" />");
 		t(">", "&gt;");
+		//FIXME: what to do? it should work if in another tag!
+//		t("foo<b", "foo&lt;b");
+//		t("<span>foo<b</span>", "<span>foo<b</span>");
+//		t("b>foo", "b&gt;foo");
+//		t("><b", "&gt;&lt;b");
+//		t("><f", "&gt;&lt;f");
 		t("b><", "b&gt;&lt;");
 		t("><b>", "&gt;");
 	}
@@ -228,6 +235,16 @@ public class XSSFilterTest {
 //		t("<span style=\"font-family: serif, arial;\">preformated</span>", "<span style=\"font-family: courier new , courier;\">preformated</span>");
 		t("<span class=\"schoen\">irgendwas</span>", "<span class=\"schoen\">irgendwas</span>");
 	}
+	
+	/**
+	 * This checks a bug in Batik
+	 */
+	@Test
+	public void test_style_rgb(){
+		t("<p style=\"background-color: rgb(0%,0,0);\">background</p>", "<p>background</p>");
+		t("<p style=\"background-color: rgba(100%,0,0);\">background</p>", "<p style=\"\">background</p>");
+		t("<p style=\"background-color: rgb(100,50,50);\">background</p>", "<p style=\"background-color: rgb(100,50,50);\">background</p>");
+	}
 
 	@Test
 	public void test_tiny_lists(){
@@ -267,7 +284,14 @@ public class XSSFilterTest {
 		// for now i tags must have at least a space to not b removed
 		t("<i class=\"o_icon o_icon_dev\"> </i> ", "<i class=\"o_icon o_icon_dev\"> </i> ");
 	}
+
+	@Test
+	public void test_figure() {
+		// for now i tags must have at least a space to not b removed
+		t("<figure class=\"image\"><img src=\"bla.png\" /><figcaption>gugs</figcaption></figure>", "<figure class=\"image\"><img src=\"bla.png\" /><figcaption>gugs</figcaption></figure>");
+	}
 	
+
 	@Test
 	public void test_big_tiny_output(){
 		testsToRun = 1;
@@ -278,13 +302,13 @@ public class XSSFilterTest {
 	
 	@Test
 	public void test_rawText() {
-		OWASPAntiSamyXSSFilter intlFilter = new OWASPAntiSamyXSSFilter(-1, false);
+		OWASPAntiSamyXSSFilter intlFilter = new OWASPAntiSamyXSSFilter(-1, false, Variant.tinyMce, true);
 		t("Stéphane Rossé", "Stéphane Rossé", intlFilter);
 	}
 	
 	@Test
 	public void test_rawTextAttaqu() {
-		OWASPAntiSamyXSSFilter intlFilter = new OWASPAntiSamyXSSFilter(-1, false);
+		OWASPAntiSamyXSSFilter intlFilter = new OWASPAntiSamyXSSFilter(-1, false, Variant.tinyMce, true);
 		t("&lt;script&gt;alert('hello');&lt;//script&gt;", "&lt;script&gt;alert('hello');&lt;//script&gt;", intlFilter);
 	}
 

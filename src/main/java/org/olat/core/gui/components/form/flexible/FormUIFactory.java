@@ -31,11 +31,12 @@ import java.util.Date;
 import java.util.List;
 import java.util.Map;
 
-import org.checkerframework.checker.nullness.qual.Nullable;
 import org.olat.core.commons.controllers.linkchooser.CustomLinkTreeModel;
 import org.olat.core.gui.UserRequest;
 import org.olat.core.gui.components.Component;
 import org.olat.core.gui.components.ComponentEventListener;
+import org.olat.core.gui.components.dropdown.DropdownItem;
+import org.olat.core.gui.components.form.flexible.elements.AutoCompleter;
 import org.olat.core.gui.components.form.flexible.elements.DateChooser;
 import org.olat.core.gui.components.form.flexible.elements.DownloadLink;
 import org.olat.core.gui.components.form.flexible.elements.FileElement;
@@ -59,6 +60,7 @@ import org.olat.core.gui.components.form.flexible.impl.FormEvent;
 import org.olat.core.gui.components.form.flexible.impl.FormItemImpl;
 import org.olat.core.gui.components.form.flexible.impl.components.SimpleExampleText;
 import org.olat.core.gui.components.form.flexible.impl.components.SimpleFormErrorText;
+import org.olat.core.gui.components.form.flexible.impl.elements.AutoCompleterImpl;
 import org.olat.core.gui.components.form.flexible.impl.elements.DownloadLinkImpl;
 import org.olat.core.gui.components.form.flexible.impl.elements.FileElementImpl;
 import org.olat.core.gui.components.form.flexible.impl.elements.FormCancel;
@@ -85,6 +87,7 @@ import org.olat.core.gui.components.form.flexible.impl.elements.table.FlexiTable
 import org.olat.core.gui.components.form.flexible.impl.elements.table.FlexiTableElementImpl;
 import org.olat.core.gui.components.link.Link;
 import org.olat.core.gui.components.progressbar.ProgressBarItem;
+import org.olat.core.gui.components.rating.RatingFormItem;
 import org.olat.core.gui.components.tree.MenuTreeItem;
 import org.olat.core.gui.components.tree.TreeModel;
 import org.olat.core.gui.control.WindowBackOffice;
@@ -290,6 +293,24 @@ public class FormUIFactory {
 		formLayout.add(mse);
 		return mse;
 	}
+	
+	public MultipleSelectionElement addCheckboxesDropdown(String name, FormItemContainer formLayout) {
+		return addCheckboxesDropdown(name, name, formLayout, new String[] {}, new String[] {});
+	}
+	
+	public MultipleSelectionElement addCheckboxesDropdown(String name, String i18nLabel, FormItemContainer formLayout,
+			String[] keys, String[] values) {
+		return addCheckboxesDropdown(name, i18nLabel, formLayout, keys, values, null, null);
+	}
+	
+	public MultipleSelectionElement addCheckboxesDropdown(String name, String i18nLabel, FormItemContainer formLayout,
+			String[] keys, String[] values, String[] cssClasses, String[] iconLeftCSS) {
+		MultipleSelectionElement mse = new MultipleSelectionElementImpl(name, Layout.dropdown);
+		mse.setKeysAndValues(keys, values, cssClasses, iconLeftCSS);
+		setLabelIfNotNull(i18nLabel, mse);
+		formLayout.add(mse);
+		return mse;
+	}
 
 	/**
 	 * Create a multiple selection element as a tree.
@@ -384,6 +405,9 @@ public class FormUIFactory {
 		return ss;
 	}
 
+	public SingleSelection addDropdownSingleselect(final String name, FormItemContainer formLayout, final String[] theKeys, final String[] theValues) {
+		return addDropdownSingleselect(name, name, name, formLayout, theKeys, theValues, null);
+	}
 
 	/**
 	 * Add a drop down menu (also called pulldown menu), with a label's i18n key being the same as the <code>name<code>.
@@ -397,7 +421,7 @@ public class FormUIFactory {
 	 * @param theCssClasses the css classes to style the menu items or NULL to use no special styling
 	 * @return
 	 */
-	public SingleSelection addDropdownSingleselect(final String name, FormItemContainer formLayout, final String[] theKeys, final String[] theValues, final String @Nullable [] theCssClasses) {
+	public SingleSelection addDropdownSingleselect(final String name, FormItemContainer formLayout, final String[] theKeys, final String[] theValues, final String[] theCssClasses) {
 		return addDropdownSingleselect(name, name, name, formLayout, theKeys, theValues, theCssClasses);
 	}
 	
@@ -411,7 +435,7 @@ public class FormUIFactory {
 	 * @param theCssClasses
 	 * @return
 	 */
-	public SingleSelection addDropdownSingleselect(final String name, final String i18nLabel, FormItemContainer formLayout, final String[] theKeys, final String[] theValues, final String @Nullable [] theCssClasses) {
+	public SingleSelection addDropdownSingleselect(final String name, final String i18nLabel, FormItemContainer formLayout, final String[] theKeys, final String[] theValues, final String[] theCssClasses) {
 		return addDropdownSingleselect(name, name, i18nLabel, formLayout, theKeys, theValues, theCssClasses);
 	}
 	
@@ -426,8 +450,8 @@ public class FormUIFactory {
 	 * @param theCssClasses
 	 * @return
 	 */
-	public SingleSelection addDropdownSingleselect(final String id, final String name, final String i18nLabel, FormItemContainer formLayout, final String[] theKeys, final String[] theValues, final String @Nullable [] theCssClasses) {
-		SingleSelection ss = new SelectboxSelectionImpl(id, name);
+	public SingleSelection addDropdownSingleselect(final String id, final String name, final String i18nLabel, FormItemContainer formLayout, final String[] theKeys, final String[] theValues, final String[] theCssClasses) {
+		SingleSelection ss = new SelectboxSelectionImpl(id, name, formLayout.getTranslator().getLocale());
 		ss.setKeysAndValues(theKeys, theValues, theCssClasses);
 		setLabelIfNotNull(i18nLabel, ss);
 		formLayout.add(ss);
@@ -496,7 +520,7 @@ public class FormUIFactory {
 	 * @param formLayout
 	 * @return
 	 */
-	public FormItem addStaticExampleText(String name, String text, @Nullable FormItemContainer formLayout){
+	public FormItem addStaticExampleText(String name, String text, FormItemContainer formLayout){
 		return addStaticExampleText(name, name, text, formLayout);
 	}
 	
@@ -508,7 +532,7 @@ public class FormUIFactory {
 	 * @param formLayout
 	 * @return
 	 */
-	public FormItem addStaticExampleText(String name, String i18nLabel, String text, @Nullable FormItemContainer formLayout){
+	public FormItem addStaticExampleText(String name, String i18nLabel, String text, FormItemContainer formLayout){
 		final SimpleExampleText set = new SimpleExampleText(name, text);
 		//wrap the SimpleExampleText Component within a FormItem
 		FormItem fiWrapper = new FormItemImpl("simpleExampleTextWrapper_"+name) {
@@ -539,16 +563,14 @@ public class FormUIFactory {
 			}
 		};
 		setLabelIfNotNull(i18nLabel, fiWrapper);
-		/**
-		 * TODO sev26
-		 * Adapt the behaviour of the other factory methods.
-		 */
-		if(formLayout != null) {
-			formLayout.add(fiWrapper);
-		}
+		formLayout.add(fiWrapper);
 		return fiWrapper;
 	}
 	
+	public TextElement addTextElement(final String i18nLabel, final int maxLen, String initialValue,
+			FormItemContainer formLayout) {
+		return addTextElement(i18nLabel, i18nLabel, maxLen, initialValue, formLayout);
+	}
 	
 	/**
 	 * 
@@ -616,6 +638,23 @@ public class FormUIFactory {
 		te.setNotLongerThanCheck(maxLen, "text.element.error.notlongerthan");
 		setLabelIfNotNull(i18nLabel, te);
 		te.setMaxLength(maxLen);
+		formLayout.add(te);
+		return te;
+	}
+	
+	public AutoCompleter addTextElementWithAutoCompleter(String name, final String i18nLabel, final int maxLen, String initialValue,
+			FormItemContainer formLayout) {
+		return addTextElementWithAutoCompleter(null, name, i18nLabel, maxLen, initialValue, formLayout);
+	}
+	
+	public AutoCompleter addTextElementWithAutoCompleter(String id, String name, final String i18nLabel, final int maxLen, String initialValue,
+			FormItemContainer formLayout) {
+		String val = initialValue == null ? "" : initialValue;
+		AutoCompleterImpl te = new AutoCompleterImpl(id, name);
+		te.setNotLongerThanCheck(maxLen, "text.element.error.notlongerthan");
+		setLabelIfNotNull(i18nLabel, te);
+		te.setMaxLength(maxLen);
+		te.setValue(val);
 		formLayout.add(te);
 		return te;
 	}
@@ -698,7 +737,8 @@ public class FormUIFactory {
 		RichTextElement rte = new RichTextElementImpl(name, initialHTMLValue, rows, cols, formLayout.getRootForm(), formLayout.getTranslator().getLocale());
 		setLabelIfNotNull(i18nLabel, rte);
 		// Now configure editor
-		rte.getEditorConfiguration().setConfigProfileFormEditorMinimalistic(wControl.getWindowBackOffice().getWindow().getGuiTheme());			
+		rte.getEditorConfiguration().setConfigProfileFormEditorMinimalistic(wControl.getWindowBackOffice().getWindow().getGuiTheme());		
+		rte.getEditorConfiguration().setPathInStatusBar(false);
 		// Add to form and finish
 		formLayout.add(rte);
 		return rte;
@@ -799,6 +839,7 @@ public class FormUIFactory {
 		rte.getEditorConfiguration().setExtendedValidElements("script[src|type|defer]");
 		rte.getEditorConfiguration().disableTinyMedia();
 		rte.getEditorConfiguration().setFilenameUriValidation(true);
+		rte.getEditorConfiguration().setFigCaption(false);
 		// Add to form and finish
 		formLayout.add(rte);
 		return rte;
@@ -816,6 +857,7 @@ public class FormUIFactory {
 		rte.getEditorConfiguration().setExtendedValidElements("script[src|type|defer]");
 		rte.getEditorConfiguration().disableTinyMedia();
 		rte.getEditorConfiguration().setFilenameUriValidation(true);
+		rte.getEditorConfiguration().setFigCaption(false);
 		// Add to form and finish
 		formLayout.add(rte);
 		return rte;
@@ -938,13 +980,6 @@ public class FormUIFactory {
 		return fte;
 	}
 
-	public FlexiTableElement addTableElement(WindowControl wControl, String name, FlexiTableDataModel<?> tableModel,
-											 int pageSize, boolean loadOnInit, Translator translator, FormItemContainer formLayout, int minSearchLength) {
-		FlexiTableElementImpl fte = new FlexiTableElementImpl(wControl, name, translator, tableModel, pageSize, loadOnInit, minSearchLength);
-		formLayout.add(fte);
-		return fte;
-	}
-
 	
 	/**
 	 * creates a form link with the given name which acts also as command, i18n
@@ -1007,7 +1042,7 @@ public class FormUIFactory {
 	 * @param presentation See Link.BUTTON etc. 
 	 * @return
 	 */
-	public FormLink addFormLink(String name, String cmd, String i18nLink, @Nullable String i18nLabel, @Nullable FormItemContainer formLayout, int presentation){
+	public FormLink addFormLink(String name, String cmd, String i18nLink, String i18nLabel, FormItemContainer formLayout, int presentation){
 		FormLinkImpl fte = new FormLinkImpl(name, cmd, i18nLink, presentation);
 		fte.setI18nKey(i18nLink);
 		setLabelIfNotNull(i18nLabel, fte);
@@ -1229,5 +1264,27 @@ public class FormUIFactory {
 		setLabelIfNotNull(i18nLabel, slider);
 		formLayout.add(slider);
 		return slider;
+	}
+	
+	
+	public DropdownItem addDropdownMenu(String name, String i18nLabel, FormItemContainer formLayout, Translator translator) {
+		DropdownItem dropdown = new DropdownItem(name, name, translator);
+		dropdown.setEmbbeded(true);
+		dropdown.setButton(true);
+		setLabelIfNotNull(i18nLabel, dropdown);
+		formLayout.add(dropdown);
+		return dropdown;
+	}
+	
+	public RatingFormItem addRatingItem(String name, String i18nLabel, float initialRating, int maxRating, boolean allowUserInput, FormItemContainer formLayout) {
+		RatingFormItem ratingCmp = new RatingFormItem(name, initialRating, maxRating, allowUserInput);
+		setLabelIfNotNull(i18nLabel, ratingCmp);
+		if(i18nLabel != null) {
+			ratingCmp.showLabel(true);
+		}
+		if(formLayout != null) {
+			formLayout.add(ratingCmp);
+		}
+		return ratingCmp;
 	}
 }

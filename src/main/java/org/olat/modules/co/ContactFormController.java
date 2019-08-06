@@ -27,11 +27,8 @@ package org.olat.modules.co;
 
 import java.io.File;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
-import java.util.UUID;
 
-import org.apache.velocity.VelocityContext;
 import org.olat.core.gui.UserRequest;
 import org.olat.core.gui.components.Component;
 import org.olat.core.gui.control.Controller;
@@ -41,17 +38,17 @@ import org.olat.core.gui.control.controller.BasicController;
 import org.olat.core.gui.control.generic.messages.MessageUIFactory;
 import org.olat.core.gui.control.generic.modal.DialogBoxController;
 import org.olat.core.gui.control.generic.modal.DialogBoxUIFactory;
-import org.olat.core.helpers.Settings;
 import org.olat.core.id.Identity;
-import org.olat.core.id.User;
-import org.olat.core.id.UserConstants;
 import org.olat.core.logging.activity.ThreadLocalUserActivityLogger;
-import org.olat.core.util.StringHelper;
-import org.olat.core.util.mail.*;
-import org.olat.core.util.mail.model.SimpleMailContent;
-import org.olat.repository.RepositoryEntry;
-import org.olat.repository.manager.RepositoryEntryDAO;
-import org.olat.user.UserManager;
+import org.olat.core.util.mail.ContactList;
+import org.olat.core.util.mail.ContactMessage;
+import org.olat.core.util.mail.MailBundle;
+import org.olat.core.util.mail.MailContext;
+import org.olat.core.util.mail.MailContextImpl;
+import org.olat.core.util.mail.MailHelper;
+import org.olat.core.util.mail.MailLoggingAction;
+import org.olat.core.util.mail.MailManager;
+import org.olat.core.util.mail.MailerResult;
 import org.springframework.beans.factory.annotation.Autowired;
 
 /**
@@ -86,7 +83,7 @@ import org.springframework.beans.factory.annotation.Autowired;
  * <LI>contact messages with pre-initialized subject and/or body</LI>
  * </UL>
  * <P>
- * @see org.olat.core.util.mail.ContactList
+ * @see org.olat.modules.co.ContactList
  * Initial Date: Jul 19, 2004
  * @author patrick
  */
@@ -97,18 +94,16 @@ public class ContactFormController extends BasicController {
 	private ContactForm cntctForm;
 	private DialogBoxController noUsersErrorCtr;
 	private List<String> myButtons;
+	private Object userObject;
 	
 	@Autowired
 	private MailManager mailService;
-	@Autowired
-	private UserManager userManager;
-	@Autowired
-	private RepositoryEntryDAO repositoryEntryDAO;
-
+	
 	/**
 	 * 
 	 * @param ureq
 	 * @param windowControl
+	 * @param useDefaultTitle
 	 * @param isCanceable
 	 * @param isReadonly
 	 * @param hasRecipientsEditable
@@ -132,19 +127,53 @@ public class ContactFormController extends BasicController {
 		init(ureq, hasAtLeastOneAddress, cmsg.getDisabledIdentities());
 	}
 	
+	public Object getUserObject() {
+		return userObject;
+	}
+
+	public void setUserObject(Object userObject) {
+		this.userObject = userObject;
+	}
+	
+	public void setContactFormTitle(String translatedTitle) {
+		if(cntctForm != null) {
+			cntctForm.setFormTranslatedTitle(translatedTitle);
+		}
+	}
+
 	private boolean hasAtLeastOneAddress(List<ContactList> recipList) {
 		boolean hasAtLeastOneAddress = false;
 		if (recipList != null && recipList.size() > 0 ) {
 			for (ContactList cl: recipList) {
-				if (!hasAtLeastOneAddress && cl != null && cl.getEmailsAsStrings().size() > 0) {
+				if (!hasAtLeastOneAddress && cl != null && cl.hasAddresses()) {
 					hasAtLeastOneAddress = true;
 				}
-				if (cl.getEmailsAsStrings().size() > 0) cntctForm.addEmailTo(cl);
+				if (cl.hasAddresses()) {
+					cntctForm.addEmailTo(cl);
+				}
 			}
 		}
 		return hasAtLeastOneAddress;
 	}
+	
+	public String getSubject() {
+		if(cntctForm != null) {
+			return cntctForm.getSubject();
+		}
+		return null;
+	}
+	
+	public String getBody() {
+		if(cntctForm != null) {
+			return cntctForm.getBody();
+		}
+		return null;
+	}
 
+	/**
+	 * @param useDefaultTitle
+	 * @param hasAtLeastOneAddress
+	 */
 	private void init(UserRequest ureq, boolean hasAtLeastOneAddress, List<Identity> disabledIdentities) {
 		if (hasAtLeastOneAddress) {
 			putInitialPanel(cntctForm.getInitialComponent());	
@@ -198,91 +227,51 @@ public class ContactFormController extends BasicController {
 	}
 	
 	private void doSend(UserRequest ureq) {
-		MailerResult result = new MailerResult();
+
+		MailerResult result;
 		try {
 			File[] attachments = cntctForm.getAttachments();
-			String businessPath = getWindowControl().getBusinessControl().getAsString();
-			String repoEntryKey = getRepoEntryKey(businessPath);
-			RepositoryEntry entry = repositoryEntryDAO.loadByKey(Long.parseLong(repoEntryKey));
-			MailContext context = new MailContextImpl(businessPath);
-			ContactMailTemplate template = new ContactMailTemplate(cntctForm.getSubject(), cntctForm.getBody(), entry);
-
-			// prepare bundle
-			String metaId = UUID.randomUUID().toString().replace("-", "");
+			MailContext context = new MailContextImpl(getWindowControl().getBusinessControl().getAsString());
+			
 			MailBundle bundle = new MailBundle();
 			bundle.setContext(context);
-			bundle.setMetaId(metaId);
 			if (emailFrom == null) {
 				// in case the user provides his own email in form						
 				bundle.setFrom(cntctForm.getEmailFrom()); 
 			} else {
-				bundle.setFromId(emailFrom);
+				bundle.setFromId(emailFrom);						
 			}
-
-			// TODO clean-up after the release using prepared patch (AZU)
-
-			// send message to all defined recipients
-			List<String> failedIdentities = new ArrayList<>();
-			List<String> allIdentities = new ArrayList<>();
-			List<ContactList> contactLists = cntctForm.getEmailToContactLists();
-			for (ContactList contactList : contactLists) {
-				//
-				for (String email : contactList.getStringEmails().values()) {
-					allIdentities.add(email);
-					// can't process template because there's no Identity. Just send template as it is
-					bundle.setTo(email);
-					bundle.setContent(new SimpleMailContent(cntctForm.getSubject(), cntctForm.getBody(), attachments));
-					result.append(mailService.sendMessage(bundle));
-				}
-				// clean up recipients before reusing bundle
-				bundle.setTo(null);
-				for (Identity toIdentity : contactList.getIdentiEmails().values()) {
-					allIdentities.add(toIdentity.getKey().toString());
-					bundle.setToId(toIdentity);
-					MailContent msg = mailService.createContentFromTemplate(toIdentity, template, result);
-					if (msg != null) {
-                        msg.setAttachments(Arrays.asList(attachments));
-						bundle.setContent(msg);
-						result.append(mailService.sendMessage(bundle));
-					} else {
-						failedIdentities.add(toIdentity.getName());
-					}
-				}
-				// clean up recipients before reusing bundle
-				bundle.setToId(null);
-			}
-
-			// also send a copy to sender
-			if (cntctForm.isTcpFrom()) {
+			bundle.setContactLists(cntctForm.getEmailToContactLists());
+			bundle.setContent(cntctForm.getSubject(), cntctForm.getBody(), attachments);
+			
+			result = mailService.sendMessage(bundle);
+			if(cntctForm.isTcpFrom()) {
+				MailBundle ccBundle = new MailBundle();
+				ccBundle.setContext(context);
 				if (emailFrom == null) {
-					// can't process template because there's no Identity. Just send template as it is
-					bundle.setTo(cntctForm.getEmailFrom());
-					bundle.setContent(new SimpleMailContent(cntctForm.getSubject(), cntctForm.getBody(), attachments));
-					result.append(mailService.sendMessage(bundle));
+					// in case the user provides his own email in form
+					ccBundle.setFrom(cntctForm.getEmailFrom()); 
+					ccBundle.setTo(cntctForm.getEmailFrom()); 
 				} else {
-					bundle.setToId(emailFrom);
-					MailContent msg = mailService.createContentFromTemplate(emailFrom, template, result);
-					if (msg != null) {
-                        msg.setAttachments(Arrays.asList(attachments));
-						bundle.setContent(msg);
-						result.append(mailService.sendMessage(bundle));
-					}
+					ccBundle.setFromId(emailFrom); 
+					ccBundle.setCc(emailFrom);							
 				}
+				ccBundle.setContent(cntctForm.getSubject(), cntctForm.getBody(), attachments);
+				
+				MailerResult ccResult = mailService.sendMessage(ccBundle);
+				result.append(ccResult);
 			}
 			
-			if (result.isSuccessful()) {
-				if (failedIdentities.size() > 0) {
-					int succeededIdentities = allIdentities.size() - failedIdentities.size();
-					showWarning("msg.send.ok.some.failed", new String[] { String.valueOf(succeededIdentities), String.valueOf(failedIdentities.size()), String.join(", ", failedIdentities) });
-				} else {
+			if(result != null) {
+				if (result.isSuccessful()) {
 					showInfo("msg.send.ok");
+					// do logging
+					ThreadLocalUserActivityLogger.log(MailLoggingAction.MAIL_SENT, getClass());
+					fireEvent(ureq, Event.DONE_EVENT);
+				} else {
+					showError(ureq, result);
+					fireEvent(ureq, Event.FAILED_EVENT);
 				}
-				// do logging
-				ThreadLocalUserActivityLogger.log(MailLoggingAction.MAIL_SENT, getClass());
-				fireEvent(ureq, Event.DONE_EVENT);
-			} else {
-				showError(result);
-				fireEvent(ureq, Event.FAILED_EVENT);
 			}
 		} catch (Exception e) {
 			logError("", e);
@@ -290,34 +279,19 @@ public class ContactFormController extends BasicController {
 		}
 		cntctForm.setDisplayOnly(true);
 	}
+	
+	private void showError(UserRequest ureq, MailerResult result) {
+		StringBuilder errors = new StringBuilder(1024);
+		StringBuilder warnings = new StringBuilder(1024);
+		MailHelper.appendErrorsAndWarnings(result, errors, warnings, ureq.getUserSession().getRoles().isOLATAdmin(), getLocale());
 
-	// TODO consider creating globally reusable static method to pars repo entry key from any possible business path
-	private String getRepoEntryKey(String businessPath) {
-		String[] parts = businessPath.split(":");
-		if (parts.length < 2) return "";
-		return parts[1].substring(0, parts[1].lastIndexOf("]"));
-	}
-
-	private void showError(MailerResult result) {
 		StringBuilder error = new StringBuilder(1024);
 		error.append(translate("error.msg.send.nok"));
-		if(result != null && (result.getFailedIdentites().size() > 0 || result.getInvalidAddresses().size() > 0)) {
-			error.append("<br />");
-
-			StringBuilder ids = new StringBuilder(1024);
-			for(Identity identity:result.getFailedIdentites()) {
-				if(ids.length() > 0) ids.append(", ");
-				
-				String fullname = userManager.getUserDisplayName(identity);
-				if(StringHelper.containsNonWhitespace(fullname)) {
-					ids.append(fullname);
-				}
-			}
-			for(String invalidAddress:result.getInvalidAddresses()) {
-				if(ids.length() > 0) ids.append(", ");
-				ids.append(invalidAddress);
-			}
-			error.append(translate("error.msg.send.invalid.rcps", new String[]{ ids.toString() }));
+		if(errors.length() > 0) {
+			error.append("<br>").append(errors);
+		}
+		if(warnings.length() > 0) {
+			warnings.append("<br>").append(warnings);
 		}
 		getWindowControl().setError(error.toString());
 	}
@@ -327,41 +301,11 @@ public class ContactFormController extends BasicController {
 		//
 	}
 
+	/**
+	 * @see org.olat.core.gui.control.DefaultController#doDispose(boolean)
+	 */
 	@Override
 	protected void doDispose() {
 		//
-	}
-
-	// TODO consider making a reusable public class for a template that has a RepositoryEntry to add in the context
-	private class ContactMailTemplate extends MailTemplate {
-
-		private final RepositoryEntry repositoryEntry;
-
-		public ContactMailTemplate(String subjectTemplate, String bodyTemplate, RepositoryEntry repositoryEntry) {
-			super(subjectTemplate, bodyTemplate, null);
-			this.repositoryEntry = repositoryEntry;
-		}
-
-		@Override
-		public void putVariablesInMailContext(VelocityContext vContext, Identity recipient) {
-			User user = recipient.getUser();
-			vContext.put("firstname", user.getProperty(UserConstants.FIRSTNAME, null));
-			vContext.put(UserConstants.FIRSTNAME, user.getProperty(UserConstants.FIRSTNAME, null));
-			vContext.put("lastname", user.getProperty(UserConstants.LASTNAME, null));
-			vContext.put(UserConstants.LASTNAME, user.getProperty(UserConstants.LASTNAME, null));
-			String fullName = userManager.getUserDisplayName(recipient);
-			vContext.put("fullname", fullName);
-			vContext.put("fullName", fullName);
-			vContext.put("mail", user.getProperty(UserConstants.EMAIL, null));
-			vContext.put("email", user.getProperty(UserConstants.EMAIL, null));
-			vContext.put("username", recipient.getName());
-			// Put variables from greater context
-			if(repositoryEntry != null) {
-				String url = Settings.getServerContextPathURI() + "/url/RepositoryEntry/" + repositoryEntry.getKey();
-				vContext.put("courseurl", url);
-				vContext.put("coursename", repositoryEntry.getDisplayname());
-				vContext.put("coursedescription", repositoryEntry.getDescription());
-			}
-		}
 	}
 }

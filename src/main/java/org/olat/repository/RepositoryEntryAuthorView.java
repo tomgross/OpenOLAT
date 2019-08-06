@@ -53,12 +53,14 @@ public interface RepositoryEntryAuthorView extends OLATResourceable, RepositoryE
 	
 	public RepositoryEntryLifecycle getLifecycle();
 	
+	public int getNumOfReferences();
+	
 	public Date getDeletionDate();
 	
 	public String getDeletedByFullName();
 	
 	/**
-	 * @return True if the user as bookmarked this entry
+	 * @return True if the user has bookmarked this entry
 	 */
 	public boolean isMarked();
 	

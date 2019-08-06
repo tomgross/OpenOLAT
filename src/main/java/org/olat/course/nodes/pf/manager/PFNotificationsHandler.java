@@ -46,6 +46,7 @@ import org.olat.course.run.environment.CourseEnvironment;
 import org.olat.group.BusinessGroup;
 import org.olat.group.BusinessGroupService;
 import org.olat.repository.RepositoryManager;
+import org.olat.user.UserManager;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 /**
@@ -64,6 +65,8 @@ public class PFNotificationsHandler implements NotificationsHandler {
 	private NotificationsManager notificationsManager;
 	@Autowired 
 	private PFManager pfManager;
+	@Autowired
+	private UserManager userManager;
 
 	public PFNotificationsHandler() {
 
@@ -82,7 +85,7 @@ public class PFNotificationsHandler implements NotificationsHandler {
 		 	final Translator translator = Util.createPackageTranslator(PFRunController.class, locale);
 			
 		 	PFNotifications notifications = new PFNotifications(subscriber, locale, compareDate, 
-		 			pfManager, notificationsManager);
+		 			pfManager, notificationsManager, userManager);
 		 	List<SubscriptionListItem> items = notifications.getItems();
 			
 			if (items.isEmpty()) {

@@ -219,6 +219,11 @@ public class RepositoryEntryMyCourseQueries implements MyCourseRepositoryQuery {
 		}
 		//user course informations
 		//efficiency statements
+		
+		// join seems to be quicker
+		if(params.getMarked() != null && params.getMarked().booleanValue()) {
+			sb.append(" inner join ").append(MarkImpl.class.getName()).append(" as mark2 on (mark2.creator.key=:identityKey and mark2.resId=v.key and mark2.resName='RepositoryEntry')");
+		}
 
 		// join seems to be quicker
 		if(params.getMarked() != null && params.getMarked()) {
@@ -289,9 +294,13 @@ public class RepositoryEntryMyCourseQueries implements MyCourseRepositoryQuery {
 		
 		Long id = null;
 		String refs = null;
+		String fuzzyRefs = null;
 		if(StringHelper.containsNonWhitespace(params.getIdAndRefs())) {
 			refs = params.getIdAndRefs();
-			sb.append(" and (v.externalId=:ref or v.externalRef=:ref or v.softkey=:ref");
+			fuzzyRefs = PersistenceHelper.makeFuzzyQueryString(refs);
+			sb.append(" and (v.externalId=:ref or ");
+			PersistenceHelper.appendFuzzyLike(sb, "v.externalRef", "fuzzyRefs", dbInstance.getDbVendor());
+			sb.append(" or v.softkey=:ref");
 			if(StringHelper.isLong(refs)) {
 				try {
 					id = Long.parseLong(refs);
@@ -310,8 +319,9 @@ public class RepositoryEntryMyCourseQueries implements MyCourseRepositoryQuery {
 		if(StringHelper.containsNonWhitespace(params.getIdRefsAndTitle())) {
 			quickRefs = params.getIdRefsAndTitle();
 			quickText = PersistenceHelper.makeFuzzyQueryString(quickRefs);
-			
-			sb.append(" and (v.externalId=:quickRef or v.externalRef=:quickRef or v.softkey=:quickRef or ");
+			sb.append(" and (v.externalId=:quickRef or ");
+			PersistenceHelper.appendFuzzyLike(sb, "v.externalRef", "quickText", dbInstance.getDbVendor());
+			sb.append(" or v.softkey=:quickRef or ");
 			PersistenceHelper.appendFuzzyLike(sb, "v.displayname", "quickText", dbInstance.getDbVendor());
 			if(StringHelper.isLong(quickRefs)) {
 				try {
@@ -347,6 +357,9 @@ public class RepositoryEntryMyCourseQueries implements MyCourseRepositoryQuery {
 		}
 		if(refs != null) {
 			dbQuery.setParameter("ref", refs);
+		}
+		if(fuzzyRefs != null) {
+			dbQuery.setParameter("fuzzyRefs", fuzzyRefs);
 		}
 		if(quickId != null) {
 			dbQuery.setParameter("quickVKey", quickId);

@@ -74,7 +74,9 @@ import org.olat.core.commons.persistence.DB;
 import org.olat.core.id.Identity;
 import org.olat.core.id.OLATResourceable;
 import org.olat.core.id.Roles;
+import org.olat.core.id.User;
 import org.olat.core.id.UserConstants;
+import org.olat.core.util.CodeHelper;
 import org.olat.core.util.nodes.INode;
 import org.olat.core.util.resource.OresHelper;
 import org.olat.core.util.tree.TreeVisitor;
@@ -143,6 +145,8 @@ public class UserMgmtTest extends OlatJerseyTestCase {
 	@Autowired
 	private DB dbInstance;
 	@Autowired
+	private ForumManager forumManager;
+	@Autowired
 	private BusinessGroupRelationDAO businessGroupRelationDao;
 	@Autowired
 	private BusinessGroupService businessGroupService;
@@ -152,6 +156,8 @@ public class UserMgmtTest extends OlatJerseyTestCase {
 	private RepositoryService repositoryService;
 	@Autowired
 	private UserManager userManager;
+	@Autowired
+	private DisplayPortraitManager portraitManager;
 	
 	@Before
 	@Override
@@ -220,10 +226,10 @@ public class UserMgmtTest extends OlatJerseyTestCase {
 		CollaborationTools g1CTSMngr = CollaborationToolsFactory.getInstance().getOrCreateCollaborationTools(g1);
 		g1CTSMngr.setToolEnabled(CollaborationTools.TOOL_FORUM, true);
 		Forum g1Forum = g1CTSMngr.getForum();//create the forum
-		Message m1 = ForumManager.getInstance().createMessage(g1Forum, id1, false);
+		Message m1 = forumManager.createMessage(g1Forum, id1, false);
 		m1.setTitle("Thread-1");
 		m1.setBody("Body of Thread-1");
-		ForumManager.getInstance().addTopMessage(m1);
+		forumManager.addTopMessage(m1);
 		
 		dbInstance.commitAndCloseSession();
 		
@@ -256,10 +262,10 @@ public class UserMgmtTest extends OlatJerseyTestCase {
 					if(demoForumNode == null) {
 						demoForumNode = (FOCourseNode)node;
 						Forum courseForum = demoForumNode.loadOrCreateForum(demoCourse.getCourseEnvironment());
-						Message message1 = ForumManager.getInstance().createMessage(courseForum, id1, false);
+						Message message1 = forumManager.createMessage(courseForum, id1, false);
 						message1.setTitle("Thread-1");
 						message1.setBody("Body of Thread-1");
-						ForumManager.getInstance().addTopMessage(message1);
+						forumManager.addTopMessage(message1);
 					}	
 				} else if (node instanceof BCCourseNode) {
 					if(demoBCCourseNode == null) {
@@ -565,6 +571,60 @@ public class UserMgmtTest extends OlatJerseyTestCase {
 		assertEquals("39847592", savedIdent.getUser().getProperty("telPrivate", Locale.ENGLISH));
 		assertEquals("12/12/2009", savedIdent.getUser().getProperty("birthDay", Locale.ENGLISH));
 		conn.shutdown();
+	}
+	
+	@Test
+	public void testCreateUser_emptyLogin() throws IOException, URISyntaxException {
+		RestConnection conn = new RestConnection();
+		assertTrue(conn.login("administrator", "openolat"));
+		
+		UserVO vo = new UserVO();
+		vo.setLogin("");
+		vo.setFirstName("John");
+		vo.setLastName("Smith");
+		vo.setEmail(UUID.randomUUID() + "@frentix.com");
+		vo.putProperty("telOffice", "39847592");
+		vo.putProperty("telPrivate", "39847592");
+		vo.putProperty("telMobile", "39847592");
+		vo.putProperty("gender", "Female");//male or female
+		vo.putProperty("birthDay", "12/12/2009");
+		
+		URI request = UriBuilder.fromUri(getContextURI()).path("users").build();
+		HttpPut method = conn.createPut(request, MediaType.APPLICATION_JSON, true);
+		conn.addJsonEntity(method, vo);
+		method.addHeader("Accept-Language", "en");
+		
+		HttpResponse response = conn.execute(method);
+		int statusCode = response.getStatusLine().getStatusCode();
+		EntityUtils.consume(response.getEntity());
+		Assert.assertEquals(406, statusCode);
+	}
+	
+	@Test
+	public void testCreateUser_special() throws IOException, URISyntaxException {
+		RestConnection conn = new RestConnection();
+		assertTrue(conn.login("administrator", "openolat"));
+		
+		UserVO vo = new UserVO();
+		vo.setLogin("tes @-()_" + CodeHelper.getForeverUniqueID());
+		vo.setFirstName("John");
+		vo.setLastName("Smith");
+		vo.setEmail(UUID.randomUUID() + "@frentix.com");
+		vo.putProperty("telOffice", "39847592");
+		vo.putProperty("telPrivate", "39847592");
+		vo.putProperty("telMobile", "39847592");
+		vo.putProperty("gender", "Female");//male or female
+		vo.putProperty("birthDay", "12/12/2009");
+		
+		URI request = UriBuilder.fromUri(getContextURI()).path("users").build();
+		HttpPut method = conn.createPut(request, MediaType.APPLICATION_JSON, true);
+		conn.addJsonEntity(method, vo);
+		method.addHeader("Accept-Language", "en");
+		
+		HttpResponse response = conn.execute(method);
+		int statusCode = response.getStatusLine().getStatusCode();
+		EntityUtils.consume(response.getEntity());
+		Assert.assertEquals(200, statusCode);
 	}
 	
 	/**
@@ -889,6 +949,42 @@ public class UserMgmtTest extends OlatJerseyTestCase {
 
 		conn.shutdown();
 	}
+	
+	@Test
+	public void testUpdateUser_emptyInstitutionalEmail() throws IOException, URISyntaxException {
+		String login = "update-" + UUID.randomUUID();
+		User user = userManager.createUser(login, login, login + "@openolat.com");
+		user.setProperty(UserConstants.INSTITUTIONALEMAIL, "inst" + login + "@openolat.com");
+		Identity id = securityManager.createAndPersistIdentityAndUser(login, null, user, "OLAT", login,"secret");
+		dbInstance.commitAndCloseSession();
+		Assert.assertEquals("inst" + login + "@openolat.com", id.getUser().getInstitutionalEmail());
+		
+		RestConnection conn = new RestConnection();
+		assertTrue(conn.login("administrator", "openolat"));
+
+		// set the institutional email empty 
+		UserVO updateVo = new UserVO();
+		updateVo.setKey(id.getKey());
+		updateVo.setLogin(id.getName());
+		updateVo.setFirstName(id.getUser().getFirstName());
+		updateVo.setLastName(id.getUser().getLastName());
+		updateVo.setEmail(id.getUser().getEmail());
+		updateVo.putProperty(UserConstants.INSTITUTIONALEMAIL, "");
+		
+		URI updateRequest = UriBuilder.fromUri(getContextURI()).path("users").path(id.getKey().toString()).build();
+		HttpPost updateMethod = conn.createPost(updateRequest, MediaType.APPLICATION_JSON);
+		conn.addJsonEntity(updateMethod, updateVo);
+		updateMethod.addHeader("Accept-Language", "en");
+		
+		HttpResponse updateResponse = conn.execute(updateMethod);
+		int  statusCode = updateResponse.getStatusLine().getStatusCode();
+		Assert.assertEquals(200, statusCode);
+		EntityUtils.consume(updateResponse.getEntity());
+		
+		Identity identity = securityManager.loadIdentityByKey(id.getKey());
+		String institutionalEmail = identity.getUser().getInstitutionalEmail();
+		Assert.assertTrue(institutionalEmail == null || institutionalEmail.isEmpty());
+	}	
 	
 	@Test
 	public void testDeleteUser() throws IOException, URISyntaxException {
@@ -1450,6 +1546,46 @@ public class UserMgmtTest extends OlatJerseyTestCase {
 	}
 	
 	@Test
+	public void testUserGroup_checkRefusedAccess() throws IOException, URISyntaxException {
+		Identity alien = JunitTestHelper.createAndPersistIdentityAsRndUser("user-group-alien-");
+		dbInstance.commitAndCloseSession();
+		
+		RestConnection conn = new RestConnection();
+		assertTrue(conn.login(alien.getName(), JunitTestHelper.PWD));
+		
+		//retrieve all groups
+		URI uri =UriBuilder.fromUri(getContextURI()).path("users").path(id1.getKey().toString()).path("groups")
+			.queryParam("start", 0).queryParam("limit", 1).build();
+
+		HttpGet method = conn.createGet(uri, MediaType.APPLICATION_JSON + ";pagingspec=1.0", true);
+		HttpResponse response = conn.execute(method);
+		assertEquals(401, response.getStatusLine().getStatusCode());
+		EntityUtils.consume(response.getEntity());
+
+		conn.shutdown();
+	}
+	
+	@Test
+	public void testUserGroup_checkAllowedAccess() throws IOException, URISyntaxException {
+		RestConnection conn = new RestConnection();
+		assertTrue(conn.login(id1.getName(), JunitTestHelper.PWD));
+		
+		//retrieve all groups
+		URI uri =UriBuilder.fromUri(getContextURI()).path("users").path(id1.getKey().toString()).path("groups")
+			.queryParam("start", 0).queryParam("limit", 1).build();
+
+		HttpGet method = conn.createGet(uri, MediaType.APPLICATION_JSON + ";pagingspec=1.0", true);
+		HttpResponse response = conn.execute(method);
+		assertEquals(200, response.getStatusLine().getStatusCode());
+		GroupVOes groups = conn.parse(response, GroupVOes.class);
+		
+		assertNotNull(groups);
+		assertNotNull(groups.getGroups());
+
+		conn.shutdown();
+	}
+	
+	@Test
 	public void testUserGroup_owner() throws IOException, URISyntaxException {
 		RestConnection conn = new RestConnection();
 		assertTrue(conn.login("administrator", "openolat"));
@@ -1530,8 +1666,7 @@ public class UserMgmtTest extends OlatJerseyTestCase {
 
 		
 		//check if big and small portraits exist
-		DisplayPortraitManager dps = DisplayPortraitManager.getInstance();
-		File bigPortrait = dps.getBigPortrait(id1.getName());
+		File bigPortrait = portraitManager.getBigPortrait(id1.getName());
 		assertNotNull(bigPortrait);
 		assertTrue(bigPortrait.exists());
 		assertTrue(bigPortrait.exists());
@@ -1550,7 +1685,7 @@ public class UserMgmtTest extends OlatJerseyTestCase {
 		
 		assertEquals(-1, b);//up to end of file
 		assertTrue(count > 1000);//enough bytes
-		bigPortrait = dps.getBigPortrait(id1.getName());
+		bigPortrait = portraitManager.getBigPortrait(id1.getName());
 		assertNotNull(bigPortrait);
 		assertEquals(count, bigPortrait.length());
 
@@ -1566,7 +1701,7 @@ public class UserMgmtTest extends OlatJerseyTestCase {
 		assertNotNull(datas);
 		assertTrue(datas.length > 0);
 		
-		File smallPortrait = dps.getSmallPortrait(id1.getName());
+		File smallPortrait = portraitManager.getSmallPortrait(id1.getName());
 		assertNotNull(smallPortrait);
 		assertEquals(datas.length, smallPortrait.length());
 		

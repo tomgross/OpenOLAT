@@ -26,12 +26,12 @@ import java.util.Map;
 
 import org.olat.basesecurity.BaseSecurity;
 import org.olat.basesecurity.GroupRoles;
+import org.olat.commons.memberlist.ui.MembersTableController;
 import org.olat.core.gui.media.MediaResource;
 import org.olat.core.gui.translator.Translator;
 import org.olat.core.id.Identity;
 import org.olat.core.util.Util;
 import org.olat.course.nodes.members.Member;
-import org.olat.course.nodes.members.MembersCourseNodeRunController;
 import org.olat.group.BusinessGroup;
 import org.olat.group.BusinessGroupMembership;
 import org.olat.group.BusinessGroupService;
@@ -52,7 +52,7 @@ import org.springframework.stereotype.Service;
 @Service
 public class MembersExportManager {
 	
-	public static final String USER_PROPS_ID = MembersCourseNodeRunController.class.getName();
+	public static final String USER_PROPS_ID = MembersTableController.class.getName();
 	
 	public static final int USER_PROPS_OFFSET = 500;
 	

@@ -28,6 +28,7 @@ import java.text.ParseException;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
+import java.util.Locale;
 import java.util.UUID;
 
 import org.apache.velocity.VelocityContext;
@@ -49,7 +50,6 @@ import org.olat.core.util.mail.MailContextImpl;
 import org.olat.core.util.mail.MailManager;
 import org.olat.core.util.mail.MailTemplate;
 import org.olat.core.util.mail.MailerResult;
-import org.olat.core.util.xml.XStreamHelper;
 import org.olat.modules.reminder.Reminder;
 import org.olat.modules.reminder.ReminderRule;
 import org.olat.modules.reminder.ReminderService;
@@ -68,8 +68,6 @@ import org.olat.user.UserManager;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
-import com.thoughtworks.xstream.XStream;
-
 /**
  * 
  * Initial date: 08.04.2015<br>
@@ -80,13 +78,6 @@ import com.thoughtworks.xstream.XStream;
 public class ReminderServiceImpl implements ReminderService {
 	
 	private static final OLog log = Tracing.createLoggerFor(ReminderServiceImpl.class);
-	private static final XStream ruleXStream = XStreamHelper.createXStreamInstance();
-	static {
-		ruleXStream.alias("rule", org.olat.modules.reminder.model.ReminderRuleImpl.class);
-		ruleXStream.alias("rules", org.olat.modules.reminder.model.ReminderRules.class);
-		ruleXStream.alias("reminders", org.olat.modules.reminder.model.ImportExportReminders.class);
-		ruleXStream.alias("reminder", org.olat.modules.reminder.model.ImportExportReminder.class);
-	}
 	
 	
 	@Autowired
@@ -173,12 +164,12 @@ public class ReminderServiceImpl implements ReminderService {
 
 	@Override
 	public String toXML(ReminderRules rules) {
-		return ruleXStream.toXML(rules);
+		return ReminderRulesXStream.toXML(rules);
 	}
 	
 	@Override
 	public ReminderRules toRules(String rulesXml) {
-		return (ReminderRules)ruleXStream.fromXML(rulesXml);
+		return ReminderRulesXStream.toRules(rulesXml);
 	}
 	
 	@Override
@@ -191,7 +182,7 @@ public class ReminderServiceImpl implements ReminderService {
 					ImportExportReminder exportReminder = new ImportExportReminder(reminder);
 					exportReminders.getReminders().add(exportReminder);
 				}
-				ruleXStream.toXML(exportReminders, fOut);
+				ReminderRulesXStream.toXML(exportReminders, fOut);
 			} catch(Exception e) {
 				log.error("", e);
 			}
@@ -204,12 +195,13 @@ public class ReminderServiceImpl implements ReminderService {
 		List<Reminder> reminders = new ArrayList<>();
 		if(reminderFile.exists()) {
 			try(InputStream in = new FileInputStream(reminderFile)) {
-				ImportExportReminders importReminders = (ImportExportReminders)ruleXStream.fromXML(in);
+				ImportExportReminders importReminders = ReminderRulesXStream.fromXML(in);
 				List<ImportExportReminder> importReminderList = importReminders.getReminders();
 				for(ImportExportReminder importReminder:importReminderList) {
 					Reminder reminder = reminderDao.createReminder(newEntry, creator);
 					reminder.setDescription(importReminder.getDescription());
 					reminder.setEmailBody(importReminder.getEmailBody());	
+					reminder.setEmailSubject(importReminder.getEmailSubject() == null ? importReminder.getDescription() : importReminder.getEmailSubject());
 					reminder.setConfiguration(importReminder.getConfiguration());
 					reminders.add(reminder);
 				}
@@ -242,26 +234,36 @@ public class ReminderServiceImpl implements ReminderService {
 		contactList.addAllIdentites(identitiesToRemind);
 		
 		MailContext context = new MailContextImpl("[RepositoryEntry:" + entry.getKey() + "]");
-		Translator trans = Util.createPackageTranslator(ReminderAdminController.class, I18nModule.getDefaultLocale());
-		String subject = trans.translate("reminder.subject");
+		Locale locale = I18nModule.getDefaultLocale();
+		Translator trans = Util.createPackageTranslator(ReminderAdminController.class, locale);
+		String subject = reminder.getEmailSubject();
 		String body = reminder.getEmailBody();
+		if (body.contains("$courseurl")) {
+			body = body.replace("$courseurl", "<a href=\"$courseurl\">$courseurl</a>");
+		} else {			
+			body = body + "<p>---<br />" + trans.translate("reminder.from.course", new String[] {"<a href=\"$courseurl\">$coursename</a>"}) + "</p>";
+		}
 		String metaId = UUID.randomUUID().toString();
 		String url = Settings.getServerContextPathURI() + "/url/RepositoryEntry/" + entry.getKey();
 
 		MailerResult overviewResult = new MailerResult();
-		ReminderTemplate template = new ReminderTemplate(subject, body, url, entry);
+		ReminderTemplate template = new ReminderTemplate(subject, body, url, entry, locale);
 
 		for(Identity identityToRemind:identitiesToRemind) {
 			String status;
 			MailBundle bundle = mailManager.makeMailBundle(context, identityToRemind, template, null, metaId, overviewResult);
-			MailerResult result = mailManager.sendMessage(bundle);
-			overviewResult.append(result);
-			
-			List<Identity> failedIdentities = result.getFailedIdentites();
-			if(failedIdentities != null && failedIdentities.contains(identityToRemind)) {
+			if(bundle == null) {
 				status = "error";
 			} else {
-				status = "ok";
+				MailerResult result = mailManager.sendMessage(bundle);
+				overviewResult.append(result);
+				
+				List<Identity> failedIdentities = result.getFailedIdentites();
+				if(failedIdentities != null && failedIdentities.contains(identityToRemind)) {
+					status = "error";
+				} else {
+					status = "ok";
+				}
 			}
 			reminderDao.markAsSend(reminder, identityToRemind, status);
 		}
@@ -273,11 +275,13 @@ public class ReminderServiceImpl implements ReminderService {
 		
 		private final String url;
 		private final RepositoryEntry entry;
+		private final Locale locale;
 		
-		public ReminderTemplate(String subjectTemplate, String bodyTemplate, String url, RepositoryEntry entry) {
+		public ReminderTemplate(String subjectTemplate, String bodyTemplate, String url, RepositoryEntry entry, Locale locale) {
 			super(subjectTemplate, bodyTemplate, null);
 			this.url = url;
 			this.entry = entry;
+			this.locale = locale;
 		}
 
 		@Override
@@ -290,8 +294,8 @@ public class ReminderServiceImpl implements ReminderService {
 			String fullName = userManager.getUserDisplayName(recipient);
 			vContext.put("fullname", fullName);
 			vContext.put("fullName", fullName); 
-			vContext.put("mail", user.getProperty(UserConstants.EMAIL, null));
-			vContext.put("email", user.getProperty(UserConstants.EMAIL, null));
+			vContext.put("mail", userManager.getUserDisplayEmail(user, locale));
+			vContext.put("email", userManager.getUserDisplayEmail(user, locale));
 			vContext.put("username", recipient.getName());
 			// Put variables from greater context
 			if(entry != null) {

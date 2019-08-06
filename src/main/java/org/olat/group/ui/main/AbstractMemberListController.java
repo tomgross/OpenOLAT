@@ -123,7 +123,8 @@ public abstract class AbstractMemberListController extends FormBasicController i
 	protected static final String USER_PROPS_ID = MemberListController.class.getCanonicalName();
 	
 	public static final int USER_PROPS_OFFSET = 500;
-	
+	public static final int BUSINESS_COLUMNS_OFFSET = 1000;  // Must be larger than USER_PROPS_OFFSET
+
 	public static final String TABLE_ACTION_EDIT = "tbl_edit";
 	public static final String TABLE_ACTION_MAIL = "tbl_mail";
 	public static final String TABLE_ACTION_REMOVE = "tbl_remove";
@@ -494,7 +495,7 @@ public abstract class AbstractMemberListController extends FormBasicController i
 			}
 			if(numOfRemovedOwner == 0 || numOfOwners - numOfRemovedOwner > 0) {
 				List<Identity> ids = securityManager.loadIdentityByKeys(identityKeys);
-				leaveDialogBox = new MemberLeaveConfirmationController(ureq, getWindowControl(), ids);
+				leaveDialogBox = new MemberLeaveConfirmationController(ureq, getWindowControl(), ids, repoEntry != null);
 				listenTo(leaveDialogBox);
 				
 				cmc = new CloseableModalController(getWindowControl(), translate("close"), leaveDialogBox.getInitialComponent(),

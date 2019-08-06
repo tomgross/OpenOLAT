@@ -22,6 +22,7 @@ package org.olat.user.restapi;
 import static org.olat.restapi.security.RestSecurityHelper.getIdentity;
 import static org.olat.restapi.security.RestSecurityHelper.getLocale;
 import static org.olat.restapi.security.RestSecurityHelper.getUserRequest;
+import static org.olat.restapi.security.RestSecurityHelper.isAuthor;
 import static org.olat.restapi.security.RestSecurityHelper.isUserManager;
 import static org.olat.user.restapi.UserVOFactory.formatDbUserProperty;
 import static org.olat.user.restapi.UserVOFactory.get;
@@ -67,6 +68,7 @@ import org.olat.basesecurity.BaseSecurity;
 import org.olat.basesecurity.BaseSecurityManager;
 import org.olat.basesecurity.IdentityShort;
 import org.olat.basesecurity.SearchIdentityParams;
+import org.olat.core.CoreSpringFactory;
 import org.olat.core.gui.components.form.ValidationError;
 import org.olat.core.gui.translator.PackageTranslator;
 import org.olat.core.gui.translator.Translator;
@@ -130,17 +132,19 @@ public class UserWebService {
 	 * Don't forget the right escaping in the URL!<br>
 	 * You can make a search with the user properties like this:<br>
 	 * users?telMobile=39847592&login=test
+	 * <br >/ The lookup is possible for authors, usermanagers and system administrators. Normal
+	 * users are not allowed to use the lookup service.
 	 * 
 	 * @response.representation.200.qname {http://www.example.com}userVO
-   * @response.representation.200.mediaType application/xml, application/json
-   * @response.representation.200.doc The list of all users in the OLAT system
-   * @response.representation.200.example {@link org.olat.user.restapi.Examples#SAMPLE_USERVOes}
+	 * @response.representation.200.mediaType application/xml, application/json
+	 * @response.representation.200.doc The list of all users in the OLAT system
+	 * @response.representation.200.example {@link org.olat.user.restapi.Examples#SAMPLE_USERVOes}
 	 * @response.representation.401.doc The roles of the authenticated user are not sufficient
 	 * @param login The login (search with like)
 	 * @param authProvider An authentication provider (optional)
 	 * @param authUsername An specific username from the authentication provider
-   * @param uriInfo The URI infos
-   * @param httpRequest The HTTP request
+	 * @param uriInfo The URI infos
+	 * @param httpRequest The HTTP request
 	 * @return An array of users
 	 */
 	@GET
@@ -149,8 +153,12 @@ public class UserWebService {
 			@QueryParam("authProvider") String authProvider, @QueryParam("authUsername") String authUsername,
 			@QueryParam("statusVisibleLimit") String statusVisibleLimit,
 			@Context UriInfo uriInfo, @Context HttpServletRequest httpRequest) {
-		
-		if(!isUserManager(httpRequest)) {
+
+		// User lookup allowed for authors, usermanagers and admins. For
+		// usernamanger and up are considered "administrative" when it comes to
+		// lookup of the user properties
+		boolean isAdministrativeUser = isUserManager(httpRequest);
+		if(!isAdministrativeUser && !isAuthor(httpRequest)) {
 			return Response.serverError().status(Status.UNAUTHORIZED).build();
 		}
 		
@@ -175,7 +183,7 @@ public class UserWebService {
 			if(!params.isEmpty()) {
 				UserManager um = UserManager.getInstance();
 				Locale locale = getLocale(httpRequest);
-				List<UserPropertyHandler> propertyHandlers = um.getUserPropertyHandlersFor(PROPERTY_HANDLER_IDENTIFIER, false);
+				List<UserPropertyHandler> propertyHandlers = um.getUserPropertyHandlersFor(PROPERTY_HANDLER_IDENTIFIER, isAdministrativeUser);
 				for(UserPropertyHandler handler:propertyHandlers) {
 					if(!params.containsKey(handler.getName())) continue;
 					
@@ -188,7 +196,7 @@ public class UserWebService {
 			}
 			
 			Integer status = Identity.STATUS_VISIBLE_LIMIT;
-			if("all".equalsIgnoreCase(statusVisibleLimit)) {
+			if(isAdministrativeUser && "all".equalsIgnoreCase(statusVisibleLimit)) {
 				status = null;
 			}
 			identities = BaseSecurityManager.getInstance().getIdentitiesByPowerSearch(login, userProps, true, null, null, authProviders, null, null, null, null, status);
@@ -247,6 +255,16 @@ public class UserWebService {
 			return Response.serverError().status(Status.UNAUTHORIZED).build();
 		}
 		
+		if (!syntaxCheckOlatLogin(user)) {
+			Locale locale = getLocale(request);
+			Translator translator = Util.createPackageTranslator(UserShortDescription.class, locale);
+			String translation = translator.translate("new.error.loginname.empty");
+			ErrorVO[] errorVos = new ErrorVO[]{
+				new ErrorVO("org.olat.admin.user", "new.error.loginname.empty", translation)
+			};
+			return Response.ok(errorVos).status(Status.NOT_ACCEPTABLE).build();
+		}
+			
 		// Check if login is still available
 		Identity identity = BaseSecurityManager.getInstance().findIdentityByName(user.getLogin());
 		if (identity != null) {
@@ -272,6 +290,34 @@ public class UserWebService {
 		ErrorVO[] errorVos = new ErrorVO[errors.size()];
 		errors.toArray(errorVos);
 		return Response.ok(errorVos).status(Status.NOT_ACCEPTABLE).build();
+	}
+	
+	/**
+	 * This a minimal syntax check specific to the REST API.
+	 * 
+	 * @param user
+	 * @return
+	 */
+	private boolean syntaxCheckOlatLogin(UserVO user) {
+		String login = user.getLogin();
+		if(!StringHelper.containsNonWhitespace(login)) {
+			return false;
+		}
+		
+		char[] charArr = login.toCharArray();
+		for(char ch:charArr) {
+			if(ch == '/') {
+				return false;
+			}
+			if(ch < 32) {
+				return false;
+			}
+			
+		}
+		if(login.indexOf('/') >= 0) {
+			return false;
+		}
+		return login.length() >= 3;
 	}
 	
 	/**
@@ -401,8 +447,9 @@ public class UserWebService {
 	@Produces({MediaType.APPLICATION_XML ,MediaType.APPLICATION_JSON})
 	public Response updateStatus(@PathParam("identityKey") Long identityKey, StatusVO status, @Context HttpServletRequest request) {
 		try {
+			Identity actingIdentity = getIdentity(request);
 			boolean isUserManager = isUserManager(request);
-			if(!isUserManager) {
+			if(actingIdentity == null || !isUserManager) {
 				return Response.serverError().status(Status.FORBIDDEN).build();
 			}
 			Identity identity = BaseSecurityManager.getInstance().loadIdentityByKey(identityKey, false);
@@ -411,7 +458,7 @@ public class UserWebService {
 			}
 			
 			Integer newStatus = status.getStatus();
-			identity = BaseSecurityManager.getInstance().saveIdentityStatus(identity, newStatus);
+			identity = BaseSecurityManager.getInstance().saveIdentityStatus(identity, newStatus, actingIdentity);
 			StatusVO reloadedStatus = new StatusVO();
 			reloadedStatus.setStatus(identity.getStatus());
 			return Response.ok(reloadedStatus).build();
@@ -556,12 +603,12 @@ public class UserWebService {
 	@Produces({"image/jpeg","image/jpg",MediaType.APPLICATION_OCTET_STREAM})
 	public Response getPortraitHead(@PathParam("identityKey") Long identityKey) {
 		try {
-			IdentityShort identity = BaseSecurityManager.getInstance().loadIdentityShortByKey(identityKey);
+			IdentityShort identity = CoreSpringFactory.getImpl(BaseSecurity.class).loadIdentityShortByKey(identityKey);
 			if(identity == null) {
 				return Response.serverError().status(Status.NOT_FOUND).build();
 			}
 			
-			File portrait = DisplayPortraitManager.getInstance().getBigPortrait(identity.getName());
+			File portrait = CoreSpringFactory.getImpl(DisplayPortraitManager.class).getBigPortrait(identity.getName());
 			if(portrait == null || !portrait.exists()) {
 				return Response.serverError().status(Status.NOT_FOUND).build();
 			}
@@ -586,12 +633,12 @@ public class UserWebService {
 	@Produces({"image/jpeg","image/jpg",MediaType.APPLICATION_OCTET_STREAM})
 	public Response getOriginalPortraitHead(@PathParam("identityKey") Long identityKey, @PathParam("size") String size) {
 		try {
-			IdentityShort identity = BaseSecurityManager.getInstance().loadIdentityShortByKey(identityKey);
+			IdentityShort identity = CoreSpringFactory.getImpl(BaseSecurity.class).loadIdentityShortByKey(identityKey);
 			if(identity == null) {
 				return Response.serverError().status(Status.NOT_FOUND).build();
 			}
 			
-			DisplayPortraitManager portraitManager = DisplayPortraitManager.getInstance();
+			DisplayPortraitManager portraitManager = CoreSpringFactory.getImpl(DisplayPortraitManager.class);
 			
 			File portrait = null;
 			if("master".equals(size)) {
@@ -626,12 +673,12 @@ public class UserWebService {
 	@Produces({"image/jpeg","image/jpg",MediaType.APPLICATION_OCTET_STREAM})
 	public Response getPortrait(@PathParam("identityKey") Long identityKey, @Context Request request) {
 		try {
-			IdentityShort identity = BaseSecurityManager.getInstance().loadIdentityShortByKey(identityKey);
+			IdentityShort identity = CoreSpringFactory.getImpl(BaseSecurity.class).loadIdentityShortByKey(identityKey);
 			if(identity == null) {
 				return Response.serverError().status(Status.NOT_FOUND).build();
 			}
 			
-			File portrait = DisplayPortraitManager.getInstance().getBigPortrait(identity.getName());
+			File portrait = CoreSpringFactory.getImpl(DisplayPortraitManager.class).getBigPortrait(identity.getName());
 			if(portrait == null || !portrait.exists()) {
 				return Response.serverError().status(Status.NOT_FOUND).build();
 			}
@@ -664,7 +711,7 @@ public class UserWebService {
 	public Response postPortrait(@PathParam("identityKey") Long identityKey, @Context HttpServletRequest request) {
 		MultipartReader partsReader = null;
 		try {
-			IdentityShort identity = BaseSecurityManager.getInstance().loadIdentityShortByKey(identityKey);
+			IdentityShort identity = CoreSpringFactory.getImpl(BaseSecurity.class).loadIdentityShortByKey(identityKey);
 			if(identity == null) {
 				return Response.serverError().status(Status.NOT_FOUND).build();
 			}
@@ -676,7 +723,7 @@ public class UserWebService {
 			partsReader = new MultipartReader(request);
 			File tmpFile = partsReader.getFile();
 			String filename = partsReader.getFilename();
-			DisplayPortraitManager.getInstance().setPortrait(tmpFile, filename, identity.getName());
+			CoreSpringFactory.getImpl(DisplayPortraitManager.class).setPortrait(tmpFile, filename, identity.getName());
 			return Response.ok().build();
 		} catch (Throwable e) {
 			throw new WebApplicationException(e);
@@ -698,14 +745,14 @@ public class UserWebService {
 	public Response deletePortrait(@PathParam("identityKey") Long identityKey, @Context HttpServletRequest request) {
 		try {
 			Identity authIdentity = getUserRequest(request).getIdentity();
-			Identity identity = BaseSecurityManager.getInstance().loadIdentityByKey(identityKey, false);
+			Identity identity = CoreSpringFactory.getImpl(BaseSecurity.class).loadIdentityByKey(identityKey, false);
 			if(identity == null) {
 				return Response.serverError().status(Status.NOT_FOUND).build();
 			} else if(!isUserManager(request) && !identity.equalsByPersistableKey(authIdentity)) {
 				return Response.serverError().status(Status.UNAUTHORIZED).build();
 			}
 		
-			DisplayPortraitManager.getInstance().deletePortrait(identity);
+			CoreSpringFactory.getImpl(DisplayPortraitManager.class).deletePortrait(identity);
 			return Response.ok().build();
 		} catch (Throwable e) {
 			throw new WebApplicationException(e);
@@ -769,8 +816,10 @@ public class UserWebService {
 					retrievedIdentity = baseSecurity.setExternalId(retrievedIdentity, user.getExternalId());
 					retrievedUser = retrievedIdentity.getUser();
 				}
+				String oldEmail = retrievedUser.getEmail();
 				post(retrievedUser, user, getLocale(request));
 				UserManager.getInstance().updateUser(retrievedUser);
+				BaseSecurityManager.getInstance().deleteInvalidAuthenticationsByEmail(oldEmail);
 				return Response.ok(get(retrievedIdentity, true, true)).build();
 			}
 			
@@ -783,12 +832,12 @@ public class UserWebService {
 			return Response.serverError().status(Status.INTERNAL_SERVER_ERROR).build();
 		}
 	}
-	
+
 	private List<ErrorVO> validateUser(User user, UserVO userVo, HttpServletRequest request) {
 		UserManager um = UserManager.getInstance();
 		
 		Locale locale = getLocale(request);
-		List<ErrorVO> errors = new ArrayList<ErrorVO>();
+		List<ErrorVO> errors = new ArrayList<>();
 		List<UserPropertyHandler> propertyHandlers = um.getUserPropertyHandlersFor(PROPERTY_HANDLER_IDENTIFIER, false);
 		validateProperty(user, UserConstants.FIRSTNAME, userVo.getFirstName(), propertyHandlers, errors, um, locale);
 		validateProperty(user, UserConstants.LASTNAME, userVo.getLastName(), propertyHandlers, errors, um, locale);
@@ -834,16 +883,13 @@ public class UserWebService {
 			String translation = translator.translate(error.getErrorKey(), error.getArgs());
 			errors.add(new ErrorVO(pack, error.getErrorKey(), translation));
 			return false;
-		} else if((userPropertyHandler.getName().equals(UserConstants.INSTITUTIONALEMAIL) || userPropertyHandler.getName().equals(UserConstants.EMAIL))
-				&& StringHelper.containsNonWhitespace(value)) {
-			
-			List<Identity> identities = UserManager.getInstance().findIdentitiesByEmail(Collections.singletonList(value));
-			if((user == null && identities.size() > 0)
-					||  identities.size() > 1
-					|| (user != null && identities.size() == 1 && !user.equals(identities.get(0).getUser()))) {
+		} else if((userPropertyHandler.getName().equals(UserConstants.INSTITUTIONALEMAIL) && StringHelper.containsNonWhitespace(value)) 
+				|| userPropertyHandler.getName().equals(UserConstants.EMAIL)) {
+			if (!UserManager.getInstance().isEmailAllowed(value, user)) {
 				String pack = userPropertyHandler.getClass().getPackage().getName();
 				Translator translator = new PackageTranslator(pack, locale);
-				String translation = translator.translate("form.name." + userPropertyHandler.getName() + ".error.exists");
+				String translation = translator.translate("form.name." + userPropertyHandler.getName() + ".error.exists", new String[] { value });
+				translation += " (" + value + ")";
 				errors.add(new ErrorVO("org.olat.user.propertyhandlers:new.form.name." + userPropertyHandler.getName() + ".exists", translation));
 			}
 		}
@@ -855,7 +901,8 @@ public class UserWebService {
 	 * Delete an user from the system
 	 * @response.representation.200.doc The user is removed from the group
 	 * @response.representation.401.doc The roles of the authenticated user are not sufficient
-   * @response.representation.404.doc The identity not found
+	 * @response.representation.404.doc The identity not found
+	 * @response.representation.500.doc Unknown problem while deleting, see olat.log
 	 * @param identityKey The user key identifier
 	 * @param request The HTTP request
 	 * @return <code>Response</code> object. The operation status (success or fail)
@@ -863,7 +910,8 @@ public class UserWebService {
 	@DELETE
 	@Path("{identityKey}")
 	public Response delete(@PathParam("identityKey") Long identityKey, @Context HttpServletRequest request) {
-		if(!isUserManager(request)) {
+		Identity actingIdentity = getIdentity(request);
+		if(actingIdentity == null || !isUserManager(request)) {
 			return Response.serverError().status(Status.UNAUTHORIZED).build();
 		}
 		
@@ -871,7 +919,11 @@ public class UserWebService {
 		if(identity == null) {
 			return Response.serverError().status(Status.NOT_FOUND).build();
 		}
-		UserDeletionManager.getInstance().deleteIdentity(identity);
-		return Response.ok().build();
+		boolean success = UserDeletionManager.getInstance().deleteIdentity(identity, actingIdentity);
+		if (success) {
+			return Response.ok().build();			
+		} else {
+			return Response.serverError().status(Status.INTERNAL_SERVER_ERROR).build();
+		}
 	}
 }

@@ -101,11 +101,12 @@ import de.vitero.schema.booking.UpdateBookingRequest;
 import de.vitero.schema.group.ChangeGroupRoleRequest;
 import de.vitero.schema.group.Completegrouptype;
 import de.vitero.schema.group.CreateGroupRequest;
+import de.vitero.schema.group.DeleteGroupRequest;
 import de.vitero.schema.group.Group;
 import de.vitero.schema.group.GroupService;
 import de.vitero.schema.group.Group_Type;
 import de.vitero.schema.group.Groupid;
-import de.vitero.schema.group.Groupiduserid;
+import de.vitero.schema.group.Groupiduseridstrict;
 import de.vitero.schema.group.Groupnamecustomerid;
 import de.vitero.schema.licence.GetBookableRoomsForGroupResponse;
 import de.vitero.schema.licence.GetBookableRoomsForGroupResponse.Rooms;
@@ -126,12 +127,13 @@ import de.vitero.schema.sessioncode.SessionCode;
 import de.vitero.schema.sessioncode.SessionCodeService;
 import de.vitero.schema.user.Completeusertype;
 import de.vitero.schema.user.CreateUserRequest;
+import de.vitero.schema.user.CreateUserResponse;
+import de.vitero.schema.user.DeleteUserRequest;
 import de.vitero.schema.user.GetUserListByCustomerRequest;
 import de.vitero.schema.user.GetUserListByGroupRequest;
 import de.vitero.schema.user.Newusertype;
 import de.vitero.schema.user.UpdateUserRequest;
 import de.vitero.schema.user.UserService;
-import de.vitero.schema.user.Userid;
 import de.vitero.schema.user.Userlist;
 import de.vitero.schema.user.Usertype;
 
@@ -160,6 +162,8 @@ public class ViteroManager implements UserDataDeletable {
 	private PropertyManager propertyManager;
 	@Autowired
 	private BaseSecurity securityManager;
+	@Autowired
+	private DisplayPortraitManager portraitManager;
 	@Autowired
 	private DB dbInstance;
 	
@@ -226,8 +230,7 @@ public class ViteroManager implements UserDataDeletable {
 	public String getURLToBooking(Identity identity, ViteroBooking booking)
 	throws VmsNotAvailableException {
 		String sessionCode = createPersonalBookingSessionCode(identity, booking);
-		String url = getStartPoint(sessionCode);
-		return url;
+		return getStartPoint(sessionCode);
 	}
 	
 	public String getURLToGroup(Identity identity, ViteroBooking booking)
@@ -235,10 +238,8 @@ public class ViteroManager implements UserDataDeletable {
 		String sessionCode = createVMSSessionCode(identity);
 		if(sessionCode == null) {
 			return null;
-		} else {
-			String url = getGroupURL(sessionCode, booking.getGroupId());
-			return url;
 		}
+		return getGroupURL(sessionCode, booking.getGroupId());
 	}
 	
 	/**
@@ -259,7 +260,7 @@ public class ViteroManager implements UserDataDeletable {
 					updateVmsUser(identity, userId);
 					storePortrait(identity, userId);
 				} catch (Exception e) {
-					log.error("Cannot update user on vitero system:" + identity.getName(), e);
+					log.error("Cannot update user on vitero system:" + identity.getKey(), e);
 				}
 			}
 			
@@ -315,10 +316,9 @@ public class ViteroManager implements UserDataDeletable {
 					updateVmsUser(identity, userId);
 					storePortrait(identity, userId);
 				} catch (Exception e) {
-					log.error("Cannot update user on vitero system:" + identity.getName(), e);
+					log.error("Cannot update user on vitero system:" + identity.getKey(), e);
 				}
 			}
-
 			
 			CreatePersonalBookingSessionCodeRequest.Sessioncode code = new CreatePersonalBookingSessionCodeRequest.Sessioncode();
 			code.setBookingid(booking.getBookingId());
@@ -375,11 +375,11 @@ public class ViteroManager implements UserDataDeletable {
 
 			ViteroGroupRoles groupRoles = new ViteroGroupRoles();
 			if(numOfParticipants > 0) {
-				Map<Integer,String> idToEmails = new HashMap<Integer,String>();
+				Map<Integer,String> idToEmails = new HashMap<>();
 				List<Usertype> vmsUsers = getVmsUsersByGroup(id);
 				if(vmsUsers != null) {
 					for(Usertype vmsUser:vmsUsers) {
-						Integer userId = new Integer(vmsUser.getId());
+						Integer userId = Integer.valueOf(vmsUser.getId());
 						String email = vmsUser.getEmail();
 						groupRoles.getEmailsOfParticipants().add(email);
 						idToEmails.put(userId, email);
@@ -388,7 +388,7 @@ public class ViteroManager implements UserDataDeletable {
 				
 				for(int i=0; i<numOfParticipants; i++) {
 					Completegrouptype.Participant participant = participants.get(i);
-					Integer userId = new Integer(participant.getUserid());
+					Integer userId = Integer.valueOf(participant.getUserid());
 					String email = idToEmails.get(userId);
 					if(email != null) {
 						GroupRole role = GroupRole.valueOf(participant.getRole());
@@ -441,8 +441,7 @@ public class ViteroManager implements UserDataDeletable {
 			GetUserListByCustomerRequest listRequest = new GetUserListByCustomerRequest();
 			listRequest.setCustomerid(viteroModule.getCustomerId());
 			Userlist userList = getUserWebService().getUserListByCustomer(listRequest);
-			List<Usertype> userTypes = userList.getUser();
-			return userTypes;
+			return userList.getUser();
 		} catch(SOAPFaultException f) {
 			ErrorCode code = handleAxisFault(f);
 			switch(code) {
@@ -464,8 +463,7 @@ public class ViteroManager implements UserDataDeletable {
 			GetUserListByGroupRequest listRequest = new GetUserListByGroupRequest();
 			listRequest.setGroupid(groupId);
 			Userlist userList = getUserWebService().getUserListByGroup(listRequest);
-			List<Usertype> userTypes = userList.getUser();
-			return userTypes;
+			return userList.getUser();
 		} catch(SOAPFaultException f) {
 			ErrorCode code = handleAxisFault(f);
 			switch(code) {
@@ -613,7 +611,7 @@ public class ViteroManager implements UserDataDeletable {
 			user.setEmail(olatUser.getProperty(UserConstants.EMAIL, null));
 			user.setPassword("changeme");
 			int customerId =viteroModule.getCustomerId();
-			user.getCustomeridlist().add(new Integer(customerId));
+			user.getCustomeridlist().add(String.valueOf(customerId));
 
 			//optional
 			String language = identity.getUser().getPreferences().getLanguage();
@@ -658,13 +656,10 @@ public class ViteroManager implements UserDataDeletable {
 			if(StringHelper.containsNonWhitespace(institution)) {
 				user.setCompany(institution);
 			}
-			/*
-			user.setTitle("");
-			*/
 			user.setTechnicalnote("Generated by OpenOLAT");
 			
 			createRequest.setUser(user);
-			Userid userId = getUserWebService().createUser(createRequest);
+			CreateUserResponse userId = getUserWebService().createUser(createRequest);
 			
 			storePortrait(identity, userId.getUserid());
 			return userId.getUserid();
@@ -686,7 +681,7 @@ public class ViteroManager implements UserDataDeletable {
 	protected boolean storePortrait(Identity identity, int userId)
 	throws VmsNotAvailableException {
 		try {
-			File portrait = DisplayPortraitManager.getInstance().getBigPortrait(identity.getName());
+			File portrait = portraitManager.getBigPortrait(identity.getName());
 			if(portrait != null && portrait.exists()) {
 				Mtom mtomWs = getMtomWebService();
 				
@@ -719,7 +714,7 @@ public class ViteroManager implements UserDataDeletable {
 	}
 	
 	@Override
-	public void deleteUserData(Identity identity, String newDeletedUserName, File archivePath) {
+	public void deleteUserData(Identity identity, String newDeletedUserName) {
 		if(!viteroModule.isDeleteVmsUserOnUserDelete()) return;
 		
 		try {
@@ -736,9 +731,9 @@ public class ViteroManager implements UserDataDeletable {
 	protected void deleteVmsUser(int userId) 
 	throws VmsNotAvailableException {
 		try {
-			Userid userIdType = new Userid();
-			userIdType.setUserid(userId);
-			getUserWebService().deleteUser(userIdType);
+			DeleteUserRequest deleteUserRequest = new DeleteUserRequest();
+			deleteUserRequest.setUserid(userId);
+			getUserWebService().deleteUser(deleteUserRequest);
 		} catch (SOAPFaultException f) {
 			ErrorCode code = handleAxisFault(f);
 			switch(code) {
@@ -754,7 +749,7 @@ public class ViteroManager implements UserDataDeletable {
 
 	public List<Integer> getLicencedRoomSizes() 
 	throws VmsNotAvailableException {
-		List<Integer> roomSizes = new ArrayList<Integer>();
+		List<Integer> roomSizes = new ArrayList<>();
 		try {
 			GetModulesForCustomerRequest licenceRequest = new GetModulesForCustomerRequest();
 			licenceRequest.setCustomerid(viteroModule.getCustomerId());
@@ -786,7 +781,7 @@ public class ViteroManager implements UserDataDeletable {
 	
 	public List<Integer> getLicenceForAvailableRooms(Date begin, Date end) 
 	throws VmsNotAvailableException {
-		List<Integer> roomSizes = new ArrayList<Integer>();
+		List<Integer> roomSizes = new ArrayList<>();
 		try {
 			Grouprequesttype groupRequest = new Grouprequesttype();
 			groupRequest.setStart(format(begin));
@@ -866,9 +861,9 @@ public class ViteroManager implements UserDataDeletable {
 	public boolean deleteGroup(ViteroBooking vBooking)
 	throws VmsNotAvailableException {
 		try {
-			Groupid groupId = new Groupid();
-			groupId.setGroupid(vBooking.getGroupId());
-			getGroupWebService().deleteGroup(groupId);
+			DeleteGroupRequest deleteGroupRequest = new DeleteGroupRequest();
+			deleteGroupRequest.setGroupid(vBooking.getGroupId());
+			getGroupWebService().deleteGroup(deleteGroupRequest);
 			return true;
 		} catch(SOAPFaultException f) {
 			ErrorCode code = handleAxisFault(f);
@@ -927,16 +922,16 @@ public class ViteroManager implements UserDataDeletable {
 			//update user information
 				try {
 					updateVmsUser(identity, userId);
-					//storePortrait(identity, userId);
 				} catch (Exception e) {
-					log.error("Cannot update user on vitero system:" + identity.getName(), e);
+					log.error("Cannot update user on vitero system:" + identity.getKey(), e);
 				}
 			}
 			
 			Group groupWs = getGroupWebService();
-			Groupiduserid groupuserId = new Groupiduserid();
+			Groupiduseridstrict groupuserId = new Groupiduseridstrict();
 			groupuserId.setGroupid(booking.getGroupId());
 			groupuserId.setUserid(userId);
+			groupuserId.setStrictwsdl(Boolean.FALSE);
 			groupWs.addUserToGroup(groupuserId);
 			
 			if(role != null) {
@@ -981,7 +976,7 @@ public class ViteroManager implements UserDataDeletable {
 	public ViteroStatus removeFromRoom(ViteroBooking booking, int userId)
 	throws VmsNotAvailableException {
 		try {
-			Groupiduserid groupuserId = new Groupiduserid();
+			Groupiduseridstrict groupuserId = new Groupiduseridstrict();
 			groupuserId.setGroupid(booking.getGroupId());
 			groupuserId.setUserid(userId);
 			getGroupWebService().removeUserFromGroup(groupuserId);
@@ -1392,7 +1387,7 @@ public class ViteroManager implements UserDataDeletable {
 						if(identity != null) {
 							authenticationCreated++;
 							securityManager.createAndPersistAuthentication(identity, VMS_PROVIDER, Integer.toString(user.getId()), null, null);
-							log.info("Recreate VMS authentication for: " + identity.getName());
+							log.info("Recreate VMS authentication for: " + identity.getKey());
 						}
 					}
 				}	

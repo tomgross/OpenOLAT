@@ -23,8 +23,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
-import org.olat.core.logging.OLog;
-import org.olat.core.logging.Tracing;
 import org.springframework.stereotype.Service;
 
 /**
@@ -37,8 +35,7 @@ import org.springframework.stereotype.Service;
  */
 @Service("afterLoginInterceptionManager")
 public class AfterLoginInterceptionManager {
-	private static final OLog log = Tracing.createLoggerFor(AfterLoginInterceptionManager.class);
-	
+
 	private List<Map<String, Object>> afterLoginControllerList;
 	
 	/**
@@ -77,13 +74,12 @@ public class AfterLoginInterceptionManager {
 	 */
 	public void addAfterLoginControllerConfig(AfterLoginConfig aLConf) {
 		if (afterLoginControllerList == null) {
-			afterLoginControllerList = new ArrayList<Map<String, Object>>();
+			afterLoginControllerList = new ArrayList<>();
 		}
-		log.info("added one or more afterLoginControllers to the list.");
 		afterLoginControllerList.addAll(aLConf.getAfterLoginControllerList());
 	}
 
 	public boolean containsAnyController() {
-		return afterLoginControllerList != null && afterLoginControllerList.size() > 0;
+		return afterLoginControllerList != null && !afterLoginControllerList.isEmpty();
 	}
 }

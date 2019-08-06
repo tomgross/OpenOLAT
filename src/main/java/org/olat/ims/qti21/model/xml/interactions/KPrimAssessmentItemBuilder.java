@@ -27,14 +27,15 @@ import static org.olat.ims.qti21.model.xml.AssessmentItemFactory.appendMatchInte
 import static org.olat.ims.qti21.model.xml.AssessmentItemFactory.createKPrimResponseDeclaration;
 import static org.olat.ims.qti21.model.xml.AssessmentItemFactory.createResponseProcessing;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import javax.xml.transform.stream.StreamResult;
-
 import org.olat.core.gui.render.StringOutput;
+import org.olat.core.logging.OLog;
+import org.olat.core.logging.Tracing;
 import org.olat.ims.qti21.QTI21Constants;
 import org.olat.ims.qti21.model.QTI21QuestionType;
 import org.olat.ims.qti21.model.xml.AssessmentItemBuilder;
@@ -79,6 +80,8 @@ import uk.ac.ed.ph.jqtiplus.value.SingleValue;
  *
  */
 public class KPrimAssessmentItemBuilder extends AssessmentItemBuilder {
+	
+	private static final OLog log = Tracing.createLoggerFor(KPrimAssessmentItemBuilder.class);
 
 	private boolean shuffle;
 	private String question;
@@ -111,6 +114,10 @@ public class KPrimAssessmentItemBuilder extends AssessmentItemBuilder {
 		//the single choice interaction
 		ItemBody itemBody = appendDefaultItemBody(assessmentItem);
 		MatchInteraction matchInteraction = appendMatchInteractionForKPrim(itemBody, responseDeclarationId, defaultAnswer);
+		List<String> cssClasses = new ArrayList<>();
+		cssClasses.add(QTI21Constants.CSS_MATCH_KPRIM);
+		matchInteraction.setClassAttr(cssClasses);
+		
 		SimpleMatchSet matchSet = matchInteraction.getSimpleMatchSets().get(0);
 		Map<Identifier,Identifier> associations = new HashMap<>();
 		for(SimpleAssociableChoice choice:matchSet.getSimpleAssociableChoices()) {
@@ -162,20 +169,23 @@ public class KPrimAssessmentItemBuilder extends AssessmentItemBuilder {
 	}
 	
 	private void extractMatchInteraction() {
-		StringOutput sb = new StringOutput();
-		List<Block> blocks = assessmentItem.getItemBody().getBlocks();
-		for(Block block:blocks) {
-			if(block instanceof MatchInteraction) {
-				matchInteraction = (MatchInteraction)block;
-				responseIdentifier = matchInteraction.getResponseIdentifier();
-				shuffle = matchInteraction.getShuffle();
-				cssClass = matchInteraction.getClassAttr();
-				break;
-			} else {
-				qtiSerializer.serializeJqtiObject(block, new StreamResult(sb));
+		try(StringOutput sb = new StringOutput()) {
+			List<Block> blocks = assessmentItem.getItemBody().getBlocks();
+			for(Block block:blocks) {
+				if(block instanceof MatchInteraction) {
+					matchInteraction = (MatchInteraction)block;
+					responseIdentifier = matchInteraction.getResponseIdentifier();
+					shuffle = matchInteraction.getShuffle();
+					cssClass = matchInteraction.getClassAttr();
+					break;
+				} else {
+					serializeJqtiObject(block, sb);
+				}
 			}
+			question = sb.toString();
+		} catch(IOException e) {
+			log.error("", e);
 		}
-		question = sb.toString();
 	}
 	
 	@Override
@@ -225,6 +235,23 @@ public class KPrimAssessmentItemBuilder extends AssessmentItemBuilder {
 	}
 	
 	/**
+	 * @return A copy of the list of blocks which make the question.
+	 * 		The list is a copy and modification will not be persisted.
+	 */
+	public List<Block> getQuestionBlocks() {
+		List<Block> blocks = assessmentItem.getItemBody().getBlocks();
+		List<Block> questionBlocks = new ArrayList<>(blocks.size());
+		for(Block block:blocks) {
+			if(block instanceof MatchInteraction) {
+				break;
+			} else {
+				questionBlocks.add(block);
+			}
+		}
+		return questionBlocks;
+	}
+	
+	/**
 	 * Return the HTML block before the choice interaction as a string.
 	 * 
 	 * @return
@@ -245,6 +272,12 @@ public class KPrimAssessmentItemBuilder extends AssessmentItemBuilder {
 	
 	public List<SimpleAssociableChoice> getKprimChoices() {
 		return matchInteraction.getSimpleMatchSets().get(0).getSimpleAssociableChoices();
+	}
+	
+	public void setKprimChoices(List<SimpleAssociableChoice> choices) {
+		SimpleMatchSet matchSet = matchInteraction.getSimpleMatchSets().get(0);
+		matchSet.getSimpleAssociableChoices().clear();
+		matchSet.getSimpleAssociableChoices().addAll(new ArrayList<>(choices));
 	}
 
 	@Override
@@ -271,14 +304,16 @@ public class KPrimAssessmentItemBuilder extends AssessmentItemBuilder {
 
 		//add question
 		getHtmlHelper().appendHtml(assessmentItem.getItemBody(), question);
+		
+		if(cssClass == null) {
+			cssClass = new ArrayList<>();
+		}
+		if(!cssClass.contains(QTI21Constants.CSS_MATCH_KPRIM)) {
+			cssClass.add(QTI21Constants.CSS_MATCH_KPRIM);
+		}
 
 		matchInteraction.setShuffle(isShuffle());
-		if(cssClass == null || cssClass.isEmpty()) {
-			matchInteraction.setClassAttr(null);
-		} else {
-			matchInteraction.setClassAttr(cssClass);
-		}
-		
+		matchInteraction.setClassAttr(cssClass);
 		blocks.add(matchInteraction);
 	}
 

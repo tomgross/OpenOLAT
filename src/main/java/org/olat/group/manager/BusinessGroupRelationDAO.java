@@ -295,6 +295,7 @@ public class BusinessGroupRelationDAO {
 				.getResultList();
 		for(GroupMembershipImpl membership:memberships) {
 			membership.setLastModified(new Date());
+			dbInstance.getCurrentEntityManager().merge(membership);
 		}
 	}
 	
@@ -318,6 +319,30 @@ public class BusinessGroupRelationDAO {
 			members.setParameter("roles", roleList);
 		}
 		return members.getResultList();
+	}
+	
+	public List<Identity> getMembers(List<? extends BusinessGroupRef> groups, String... roles) {
+		if(groups == null || groups.isEmpty()) return Collections.emptyList();
+		
+		StringBuilder sb = new StringBuilder();
+		sb.append("select ident from businessgroup as bgroup ")
+		  .append(" inner join bgroup.baseGroup as baseGroup")
+		  .append(" inner join baseGroup.members as membership")
+		  .append(" inner join membership.identity as ident")
+		  .append(" inner join fetch ident.user as identUser")
+		  .append(" where bgroup.key in (:businessGroupKeys) and membership.role in (:roles)");
+		
+		List<String> roleList = GroupRoles.toList(roles);
+		List<Long> groupKeys = new ArrayList<>(groups.size());
+		for(BusinessGroupRef group:groups) {
+			groupKeys.add(group.getKey());
+		}
+		
+		return dbInstance.getCurrentEntityManager()
+				.createQuery(sb.toString(), Identity.class)
+				.setParameter("businessGroupKeys", groupKeys)
+				.setParameter("roles", roleList)
+				.getResultList();
 	}
 	
 	public List<Long> getMemberKeys(List<? extends BusinessGroupRef> groups, String... roles) {
@@ -503,6 +528,18 @@ public class BusinessGroupRelationDAO {
 			.setParameter("groups", baseGroups)
 			.getSingleResult();
 		return count == null ? false : count.intValue() > 0;
+	}
+	
+	public List<Long> getRepositoryEntryKeys(BusinessGroup group) {
+		StringBuilder sb = new StringBuilder();
+		sb.append("select distinct v.key from repositoryentry as v ")
+			.append(" inner join v.groups as relGroup")
+			.append(" inner join businessgroup as bgi on (bgi.baseGroup.key=relGroup.group.key)")
+			.append(" where  bgi.key=:groupKey");
+		return dbInstance.getCurrentEntityManager()
+				.createQuery(sb.toString(), Long.class)
+				.setParameter("groupKey", group.getKey())
+				.getResultList();
 	}
 	
 	public List<RepositoryEntry> findRepositoryEntries(Collection<BusinessGroup> groups, int firstResult, int maxResults) {

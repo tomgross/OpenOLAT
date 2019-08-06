@@ -34,15 +34,15 @@ import org.olat.core.gui.components.form.flexible.FormItemContainer;
 import org.olat.core.gui.components.form.flexible.elements.FlexiTableElement;
 import org.olat.core.gui.components.form.flexible.elements.FormLink;
 import org.olat.core.gui.components.form.flexible.elements.MultipleSelectionElement;
-import org.olat.core.gui.components.form.flexible.elements.TextElement;
 import org.olat.core.gui.components.form.flexible.elements.MultipleSelectionElement.Layout;
+import org.olat.core.gui.components.form.flexible.elements.TextElement;
 import org.olat.core.gui.components.form.flexible.impl.Form;
 import org.olat.core.gui.components.form.flexible.impl.FormEvent;
 import org.olat.core.gui.components.form.flexible.impl.FormLayoutContainer;
 import org.olat.core.gui.components.form.flexible.impl.elements.FormSubmit;
 import org.olat.core.gui.components.form.flexible.impl.elements.MultipleSelectionElementImpl;
 import org.olat.core.gui.components.form.flexible.impl.elements.table.DefaultFlexiColumnModel;
-import org.olat.core.gui.components.form.flexible.impl.elements.table.FlexiColumnModel;
+import org.olat.core.gui.components.form.flexible.impl.elements.table.FlexiColumnDef;
 import org.olat.core.gui.components.form.flexible.impl.elements.table.FlexiTableColumnModel;
 import org.olat.core.gui.components.form.flexible.impl.elements.table.FlexiTableDataModel;
 import org.olat.core.gui.components.form.flexible.impl.elements.table.FlexiTableDataModelFactory;
@@ -55,8 +55,10 @@ import org.olat.core.gui.control.generic.wizard.StepFormBasicController;
 import org.olat.core.gui.control.generic.wizard.StepsEvent;
 import org.olat.core.gui.control.generic.wizard.StepsRunContext;
 import org.olat.core.gui.translator.Translator;
+import org.olat.core.util.Formatter;
 import org.olat.core.util.StringHelper;
 import org.olat.core.util.Util;
+import org.olat.core.util.filter.FilterFactory;
 import org.olat.group.BusinessGroup;
 import org.olat.group.BusinessGroupManagedFlag;
 import org.olat.group.BusinessGroupService;
@@ -117,6 +119,7 @@ public class GroupSearchController extends StepFormBasicController {
 	@Override
 	protected void initForm(FormItemContainer formLayout, Controller listener, UserRequest ureq) {
 		setFormDescription("group.search.description");
+		formLayout.setElementCssClass("o_sel_groups_search");
 
 		search = uifactory.addTextElement("search.field", "search.field", 100, "", formLayout);
 		
@@ -136,12 +139,12 @@ public class GroupSearchController extends StepFormBasicController {
 
 		//group rights
 		FlexiTableColumnModel tableColumnModel = FlexiTableDataModelFactory.createFlexiTableColumnModel();
-		tableColumnModel.addFlexiColumnModel(new DefaultFlexiColumnModel(Cols.groupName.i18n(), Cols.groupName.ordinal()));
-		tableColumnModel.addFlexiColumnModel(new DefaultFlexiColumnModel(true, Cols.description.i18n(), Cols.description.ordinal(),
-				false, null, FlexiColumnModel.ALIGNMENT_LEFT, new TextFlexiCellRenderer(EscapeMode.antisamy)));
-		tableColumnModel.addFlexiColumnModel(new DefaultFlexiColumnModel(Cols.courses.i18n(), Cols.courses.ordinal()));
-		tableColumnModel.addFlexiColumnModel(new DefaultFlexiColumnModel(Cols.tutor.i18n(), Cols.tutor.ordinal()));
-		tableColumnModel.addFlexiColumnModel(new DefaultFlexiColumnModel(Cols.participant.i18n(), Cols.participant.ordinal()));
+		tableColumnModel.addFlexiColumnModel(new DefaultFlexiColumnModel(Cols.key));
+		tableColumnModel.addFlexiColumnModel(new DefaultFlexiColumnModel(Cols.groupName));
+		tableColumnModel.addFlexiColumnModel(new DefaultFlexiColumnModel(Cols.description, new TextFlexiCellRenderer(EscapeMode.antisamy)));
+		tableColumnModel.addFlexiColumnModel(new DefaultFlexiColumnModel(Cols.courses));
+		tableColumnModel.addFlexiColumnModel(new DefaultFlexiColumnModel(Cols.tutor));
+		tableColumnModel.addFlexiColumnModel(new DefaultFlexiColumnModel(Cols.participant));
 		
 		tableDataModel = new GroupTableDataModel(Collections.<GroupWrapper>emptyList(), tableColumnModel);
 		table = uifactory.addTableElement(getWindowControl(), "groupList", tableDataModel, getTranslator(), tableCont);
@@ -152,10 +155,7 @@ public class GroupSearchController extends StepFormBasicController {
 			saveLink = uifactory.addFormLink("save", formLayout, Link.BUTTON);
 		}
 	}
-	
-	/**
-	 * @see org.olat.core.gui.components.form.flexible.impl.FormBasicController#formOK(org.olat.core.gui.UserRequest)
-	 */
+
 	@Override
 	protected void formOK(UserRequest ureq) {
 		doSearchGroups();
@@ -411,8 +411,13 @@ public class GroupSearchController extends StepFormBasicController {
 		public Object getValueAt(int row, int col) {
 			GroupWrapper option = getObject(row);
 			switch(Cols.values()[col]) {
+				case key: return option.getGroupKey();
 				case groupName: return option.getGroupName();
-				case description: return option.getDescription();
+				case description: 
+					String description = option.getDescription();
+					description = FilterFactory.getHtmlTagsFilter().filter(description);
+					description = Formatter.truncate(description, 256);
+					return description;
 				case courses: return option.getCourses();
 				case tutor: return option.getTutor();
 				case participant: return option.getParticipant();
@@ -426,7 +431,8 @@ public class GroupSearchController extends StepFormBasicController {
 		}
 	}
 	
-	public static enum Cols {
+	public static enum Cols implements FlexiColumnDef {
+		key("table.group.key"),
 		groupName("table.group.name"),
 		description("description"),
 		courses("table.header.resources"),
@@ -439,7 +445,8 @@ public class GroupSearchController extends StepFormBasicController {
 			this.i18n = i18n;
 		}
 		
-		public String i18n() {
+		@Override
+		public String i18nHeaderKey() {
 			return i18n;
 		}
 	}

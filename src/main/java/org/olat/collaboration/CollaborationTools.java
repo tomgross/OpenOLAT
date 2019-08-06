@@ -39,6 +39,7 @@ import org.olat.basesecurity.BaseSecurityManager;
 import org.olat.basesecurity.Constants;
 import org.olat.basesecurity.GroupRoles;
 import org.olat.commons.calendar.CalendarManager;
+import org.olat.commons.calendar.manager.ImportToCalendarManager;
 import org.olat.commons.calendar.ui.CalendarController;
 import org.olat.commons.calendar.ui.WeeklyCalendarController;
 import org.olat.commons.calendar.ui.components.KalendarRenderWrapper;
@@ -51,6 +52,7 @@ import org.olat.core.gui.UserRequest;
 import org.olat.core.gui.components.stack.TooledStackedPanel;
 import org.olat.core.gui.control.Controller;
 import org.olat.core.gui.control.WindowControl;
+import org.olat.core.gui.control.generic.messages.MessageUIFactory;
 import org.olat.core.gui.control.generic.title.TitleInfo;
 import org.olat.core.gui.translator.Translator;
 import org.olat.core.id.Identity;
@@ -76,6 +78,7 @@ import org.olat.core.util.vfs.QuotaManager;
 import org.olat.core.util.vfs.VFSContainer;
 import org.olat.core.util.vfs.VFSLeaf;
 import org.olat.core.util.vfs.callbacks.VFSSecurityCallback;
+import org.olat.course.CorruptedCourseException;
 import org.olat.course.CourseFactory;
 import org.olat.course.CourseModule;
 import org.olat.course.ICourse;
@@ -118,7 +121,6 @@ import org.olat.portfolio.EPUIFactory;
 import org.olat.portfolio.manager.EPFrontendManager;
 import org.olat.portfolio.model.structel.PortfolioStructureMap;
 import org.olat.portfolio.ui.structel.EPCreateMapController;
-import org.olat.portfolio.ui.structel.EPMapViewController;
 import org.olat.properties.NarrowedPropertyManager;
 import org.olat.properties.Property;
 import org.olat.properties.PropertyManager;
@@ -261,7 +263,6 @@ public class CollaborationTools implements Serializable {
 	}
 
 	/**
-	 * TODO: rename to getForumController and save instance?
 	 * 
 	 * @param ureq
 	 * @param wControl
@@ -336,7 +337,7 @@ public class CollaborationTools implements Serializable {
 	}
 	
 	public Forum getForum() {
-		final ForumManager fom = ForumManager.getInstance();
+		final ForumManager fom = CoreSpringFactory.getImpl(ForumManager.class);
 		final NarrowedPropertyManager npm = NarrowedPropertyManager.getInstance(ores);
 		Property forumProperty = npm.findProperty(null, null, PROP_CAT_BG_COLLABTOOLS, KEY_FORUM);
 		
@@ -344,8 +345,8 @@ public class CollaborationTools implements Serializable {
 		if(forumProperty != null) {
 			forum = fom.loadForum(forumProperty.getLongValue());
 		} else {
-			//TODO gsync
 			forum = coordinatorManager.getCoordinator().getSyncer().doInSync(ores, new SyncerCallback<Forum>(){
+				@Override
 				public Forum execute() {
 					Forum aforum;
 					Long forumKey;
@@ -449,11 +450,15 @@ public class CollaborationTools implements Serializable {
 		// add linking
 		List<RepositoryEntry> repoEntries = CoreSpringFactory.getImpl(BusinessGroupService.class).findRepositoryEntries(Collections.singleton(businessGroup), 0, -1);
 		
-		List<ICourse> courses = new ArrayList<ICourse>(repoEntries.size());
+		List<ICourse> courses = new ArrayList<>(repoEntries.size());
 		for (RepositoryEntry repoEntry:repoEntries) {
 			if (repoEntry.getOlatResource().getResourceableTypeName().equals(CourseModule.getCourseTypeName())) {
-				ICourse course = CourseFactory.loadCourse(repoEntry);
-				courses.add(course);
+				try {
+					ICourse course = CourseFactory.loadCourse(repoEntry);
+					courses.add(course);
+				} catch (CorruptedCourseException e) {
+					log.error("Course corrupted: " + repoEntry.getKey() + " (" + repoEntry.getOlatResource().getResourceableId() + ")", e);
+				}
 			}
 		}
 		if(!courses.isEmpty()) {
@@ -461,11 +466,11 @@ public class CollaborationTools implements Serializable {
 			calRenderWrapper.setLinkProvider(clp);
 		}
 
-		List<KalendarRenderWrapper> calendars = new ArrayList<KalendarRenderWrapper>();
+		List<KalendarRenderWrapper> calendars = new ArrayList<>();
 		calendars.add(calRenderWrapper);
 		
 		return new WeeklyCalendarController(ureq, wControl, calendars,
-				WeeklyCalendarController.CALLER_COLLAB, false);
+				WeeklyCalendarController.CALLER_COLLAB, businessGroup, false);
 	}
 
 	/**
@@ -528,52 +533,55 @@ public class CollaborationTools implements Serializable {
 	 * @param wControl
 	 * @return
 	 */
-
-	// LMSUZH-465: Reverted code to OO-10.5 using ePortfolio-1.0 in group collaboration tools
-	public EPMapViewController createPortfolioController(final UserRequest ureq, WindowControl wControl, final BusinessGroup group) {
-		final EPFrontendManager ePFMgr = (EPFrontendManager)CoreSpringFactory.getBean("epFrontendManager");
+	public Controller createPortfolioController(final UserRequest ureq, final WindowControl wControl,
+			final TooledStackedPanel stackPanel, final BusinessGroup group) {
 		final NarrowedPropertyManager npm = NarrowedPropertyManager.getInstance(ores);
-		//TODO gsync
-		PortfolioStructureMap map = coordinatorManager.getCoordinator().getSyncer().doInSync(ores, new SyncerCallback<PortfolioStructureMap>(){
-			public PortfolioStructureMap execute() {
-				PortfolioStructureMap aMap;
-				Long mapKey;
-				Property mapKeyProperty = npm.findProperty(null, null, PROP_CAT_BG_COLLABTOOLS, KEY_PORTFOLIO);
-				if (mapKeyProperty == null) {
-					// First call of portfolio-tool, create new map and save
-					aMap = ePFMgr.createAndPersistPortfolioDefaultMap(group.getName(), group.getDescription());
-					Translator pT = Util.createPackageTranslator(EPCreateMapController.class, ureq.getLocale());
-					// add a page, as each map should have at least one per default!
-					final String title = pT.translate("new.page.title");
-					final String description = pT.translate("new.page.desc");
-					ePFMgr.createAndPersistPortfolioPage(aMap, title, description);
-					mapKey = aMap.getKey();
-					if (log.isDebug()) {
-						log.debug("created new portfolio map in collab tools: mapid::" + mapKey + " for ores::" + ores.getResourceableTypeName() + "/"
-								+ ores.getResourceableId());
+		Property mapProperty = npm.findProperty(null, null, PROP_CAT_BG_COLLABTOOLS, KEY_PORTFOLIO);
+		if(mapProperty != null) {
+			return createPortfolioController(ureq, wControl, stackPanel, mapProperty);
+		} else {
+			return coordinatorManager.getCoordinator().getSyncer().doInSync(ores, new SyncerCallback<Controller>() {
+				@Override
+				public Controller execute() {
+					Controller ctrl;
+					Property mapKeyProperty = npm.findProperty(null, null, PROP_CAT_BG_COLLABTOOLS, KEY_PORTFOLIO);
+					if (mapKeyProperty == null) {
+						PortfolioV2Module moduleV2 = CoreSpringFactory.getImpl(PortfolioV2Module.class);
+						if(moduleV2.isEnabled()) {
+							PortfolioService portfolioService = CoreSpringFactory.getImpl(PortfolioService.class);
+							Binder binder = portfolioService.createNewBinder(group.getName(), group.getDescription(), null, null);
+							CoreSpringFactory.getImpl(BinderUserInformationsDAO.class).updateBinderUserInformationsInSync(binder, ureq.getIdentity());
+							mapKeyProperty = npm.createPropertyInstance(null, null, PROP_CAT_BG_COLLABTOOLS, KEY_PORTFOLIO, null, binder.getKey(), "2", null);
+							BinderSecurityCallback secCallback = BinderSecurityCallbackFactory.getCallbackForBusinessGroup();
+							BinderController binderCtrl = new BinderController(ureq, wControl, stackPanel, secCallback, binder, BinderConfiguration.createBusinessGroupConfig());					
+							List<ContextEntry> entries = BusinessControlFactory.getInstance().createCEListFromResourceType("Toc");
+							binderCtrl.activate(ureq, entries, null);
+							ctrl = binderCtrl;
+
+							ThreadLocalUserActivityLogger.addLoggingResourceInfo(LoggingResourceable.wrap(binder));
+							ThreadLocalUserActivityLogger.log(PortfolioLoggingAction.PORTFOLIO_BINDER_CREATED, getClass());
+						} else {
+							EPFrontendManager ePFMgr = CoreSpringFactory.getImpl(EPFrontendManager.class);
+							PortfolioStructureMap map = ePFMgr.createAndPersistPortfolioDefaultMap(group.getName(), group.getDescription());					
+							Translator pT = Util.createPackageTranslator(EPCreateMapController.class, ureq.getLocale());					
+							// add a page, as each map should have at least one per default!
+							ePFMgr.createAndPersistPortfolioPage(map, pT.translate("new.page.title"), pT.translate("new.page.desc"));
+							mapKeyProperty = npm.createPropertyInstance(null, null, PROP_CAT_BG_COLLABTOOLS, KEY_PORTFOLIO, null, map.getKey(), null, null);
+							EPSecurityCallback secCallback = new EPSecurityCallbackImpl(true, true);
+							ctrl = EPUIFactory.createMapViewController(ureq, wControl, map, secCallback);
+						}
+						npm.saveProperty(mapKeyProperty);
+					} else {
+						ctrl = createPortfolioController(ureq, wControl, stackPanel, mapProperty);
 					}
-					mapKeyProperty = npm.createPropertyInstance(null, null, PROP_CAT_BG_COLLABTOOLS, KEY_PORTFOLIO, null, mapKey, null, null);
-					npm.saveProperty(mapKeyProperty);
-				} else {
-					// map does already exist, load map with key from properties
-					mapKey = mapKeyProperty.getLongValue();
-					aMap = (PortfolioStructureMap) ePFMgr.loadPortfolioStructureByKey(mapKey);
-					if (aMap == null) { throw new AssertException("Unable to load portfolio map with key " + mapKey + " for ores "
-							+ ores.getResourceableTypeName() + " with key " + ores.getResourceableId()); }
-					if (log.isDebug()) {
-						log.debug("loading portfolio map in collab tools from properties: foid::" + mapKey + " for ores::"
-								+ ores.getResourceableTypeName() + "/" + ores.getResourceableId());
-					}
+					return ctrl;
 				}
-				return aMap;
-			}});
-
-		EPSecurityCallback secCallback = new EPSecurityCallbackImpl(true, true);
-		return EPUIFactory.createMapViewController(ureq, wControl, map, secCallback);
+			});
+		}
 	}
-
+	
 	/**
-	 *
+	 * 
 	 * @param ureq
 	 * @param wControl
 	 * @param mapProperty The property is mandatory!
@@ -583,20 +591,31 @@ public class CollaborationTools implements Serializable {
 			Property mapProperty) {
 		Long key = mapProperty.getLongValue();
 		String version = mapProperty.getStringValue();
-
+		
 		Controller ctrl;
 		if("2".equals(version)) {
 			PortfolioService portfolioService = CoreSpringFactory.getImpl(PortfolioService.class);
 			Binder binder = portfolioService.getBinderByKey(key);
-			portfolioService.updateBinderUserInformations(binder, ureq.getIdentity());
-			BinderSecurityCallback secCallback = BinderSecurityCallbackFactory.getCallbackForBusinessGroup();
-			BinderController binderCtrl = new BinderController(ureq, wControl, stackPanel, secCallback, binder, BinderConfiguration.createBusinessGroupConfig());
-			ctrl = binderCtrl;
+			if(binder == null) {
+				Translator trans = Util.createPackageTranslator(this.getClass(), ureq.getLocale());
+				String text = trans.translate("error.missing.map");
+				ctrl = MessageUIFactory.createErrorMessage(ureq, wControl, "", text);
+			} else {
+				portfolioService.updateBinderUserInformations(binder, ureq.getIdentity());
+				BinderSecurityCallback secCallback = BinderSecurityCallbackFactory.getCallbackForBusinessGroup();
+				ctrl = new BinderController(ureq, wControl, stackPanel, secCallback, binder, BinderConfiguration.createBusinessGroupConfig());
+			}
 		} else {
 			PortfolioStructureMap map = (PortfolioStructureMap) CoreSpringFactory.getImpl(EPFrontendManager.class)
 					.loadPortfolioStructureByKey(key);
-		EPSecurityCallback secCallback = new EPSecurityCallbackImpl(true, true);
-			ctrl = EPUIFactory.createMapViewController(ureq, wControl, map, secCallback);
+			if(map == null) {
+				Translator trans = Util.createPackageTranslator(this.getClass(), ureq.getLocale());
+				String text = trans.translate("error.missing.map");
+				ctrl = MessageUIFactory.createErrorMessage(ureq, wControl, "", text);
+			} else {
+				EPSecurityCallback secCallback = new EPSecurityCallbackImpl(true, true);
+				ctrl = EPUIFactory.createMapViewController(ureq, wControl, map, secCallback);
+			}
 		}
 		return ctrl;
 	}
@@ -641,7 +660,7 @@ public class CollaborationTools implements Serializable {
 		/*
 		 * delete the forum, if existing
 		 */
-		ForumManager fom = ForumManager.getInstance();
+		ForumManager fom = CoreSpringFactory.getImpl(ForumManager.class);
 		Property forumKeyProperty = npm.findProperty(null, null, PROP_CAT_BG_COLLABTOOLS, KEY_FORUM);
 		if (forumKeyProperty != null) {
 			// if there was a forum, delete it
@@ -668,8 +687,8 @@ public class CollaborationTools implements Serializable {
 		 * Delete calendar if exists
 		 */
 		if (businessGroupTodelete != null) {
-			CalendarManager calManager =  CoreSpringFactory.getImpl(CalendarManager.class);
-			calManager.deleteGroupCalendar(businessGroupTodelete);
+			CoreSpringFactory.getImpl(ImportToCalendarManager.class).deleteGroupImportedCalendars(businessGroupTodelete);
+			CoreSpringFactory.getImpl(CalendarManager.class).deleteGroupCalendar(businessGroupTodelete);
 		}
 		
 		/*
@@ -740,8 +759,8 @@ public class CollaborationTools implements Serializable {
 		// handle Boolean Values via String Field in Property DB Table
 		final String toolValueStr = toolValue ? TRUE : FALSE;
 		final PropertyManager pm = PropertyManager.getInstance();
-		//TODO gsync
 		coordinatorManager.getCoordinator().getSyncer().doInSync(ores, new SyncerExecutor() {
+			@Override
 			public void execute() {				
 				//was: synchronized (CollaborationTools.class) {
 				Property property = getPropertyOf(selectedTool);
@@ -938,10 +957,12 @@ public class CollaborationTools implements Serializable {
 			}
 		}
 
+		@Override
 		public boolean canRead() {
 			return true;
 		}
 
+		@Override
 		public boolean canWrite() {
 			return write;
 		}
@@ -951,30 +972,37 @@ public class CollaborationTools implements Serializable {
 			return write;
 		}
 
+		@Override
 		public boolean canDelete() {
 			return write;
 		}
 
+		@Override
 		public boolean canList() {
 			return true;
 		}
 
+		@Override
 		public boolean canCopy() {
 			return true;
 		}
-		
+
+		@Override
 		public boolean canDeleteRevisionsPermanently() {
 			return write;
 		}
 
+		@Override
 		public Quota getQuota() {
 			return folderQuota;
 		}
 
+		@Override
 		public void setQuota(Quota quota) {
 			this.folderQuota = quota;
 		}
 
+		@Override
 		public SubscriptionContext getSubscriptionContext() {
 			return subsContext;
 		}
@@ -1004,7 +1032,7 @@ public class CollaborationTools implements Serializable {
 			String archiveForumName = "del_forum_" + forumKeyProperty.getLongValue();
 			VFSContainer archiveForumContainer = archiveContainer.createChildContainer(archiveForumName);
 			ForumFormatter ff = new ForumRTFFormatter(archiveForumContainer, false, I18nModule.getDefaultLocale());
-			ForumArchiveManager.getInstance().applyFormatter(ff, forumKeyProperty.getLongValue(), null);
+			CoreSpringFactory.getImpl(ForumArchiveManager.class).applyFormatter(ff, forumKeyProperty.getLongValue(), null);
 		}
 	}
 

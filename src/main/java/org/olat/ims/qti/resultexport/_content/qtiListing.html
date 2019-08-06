@@ -4,7 +4,7 @@
 	<meta http-equiv="Content-type" content="text/html; charset=utf-8">
 	<link rel="stylesheet" href="../../css/offline/qti/theme.css" />
 	<title>$title</title>
-	<script type="text/javascript" src="../../css/offline/qti/jquery-2.1.3.min.js" ></script>
+	<script src='../../js/jquery/jquery-2.1.3.min.js'></script>
 	<script >
     $.noConflict();
     jQuery(document).ready(function(){
@@ -60,7 +60,7 @@
 					<td>$assessment.duration</td>
 					<td>$assessment.score</td>
 					<td>$assessment.passed</td>	
-					<td><span class="btn btn-default btn-sm">$t.translate("button.show")</span></td>								
+					<td>#if($assessment.link == "null") Missing data #else<span class="btn btn-default btn-sm">$t.translate("button.show")</span>#end</td>								
 				</tr>
 				#end
 			</tbody>

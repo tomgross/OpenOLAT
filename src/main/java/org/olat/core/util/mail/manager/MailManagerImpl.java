@@ -30,7 +30,15 @@ import java.io.OutputStream;
 import java.io.StringReader;
 import java.io.StringWriter;
 import java.io.UnsupportedEncodingException;
-import java.util.*;
+import java.util.Arrays;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Date;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Properties;
+import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.zip.Adler32;
@@ -200,7 +208,7 @@ public class MailManagerImpl implements MailManager, InitializingBean  {
 		PublisherData data = getPublisherData();
 		SubscriptionContext context = getSubscriptionContext();
 		if(context != null) {
-			notificationsManager.subscribe(identity, context, data);
+			notificationsManager.asyncSubscribe(identity, context, data);
 		}
 	}
 
@@ -513,8 +521,8 @@ public class MailManagerImpl implements MailManager, InitializingBean  {
 			.append(" inner join fetch mail.from fromRecipient")
 			.append(" inner join fromRecipient.recipient fromRecipientIdentity")
 			.append(" inner join ").append(fetchRecipients ? "fetch" : "").append(" mail.recipients recipient")
-			.append(" inner join ").append(fetchRecipients ? "fetch" : "").append(" recipient.recipient recipientIdentity")
-			.append(" where fromRecipientIdentity.key=:fromKey and fromRecipient.deleted=false and recipientIdentity.key!=:fromKey")
+			.append(" left join ").append(fetchRecipients ? "fetch" : "").append(" recipient.recipient recipientIdentity")
+			.append(" where fromRecipientIdentity.key=:fromKey and fromRecipient.deleted=false ")
 			.append(" order by mail.creationDate desc");
 
 		TypedQuery<DBMailLight> query = dbInstance.getCurrentEntityManager()
@@ -526,8 +534,7 @@ public class MailManagerImpl implements MailManager, InitializingBean  {
 		if(firstResult > 0) {
 			query.setFirstResult(firstResult);
 		}
-		List<DBMailLight> mails = query.getResultList();
-		return mails;
+		return query.getResultList();
 	}
 
 	@Override
@@ -586,8 +593,7 @@ public class MailManagerImpl implements MailManager, InitializingBean  {
 			query.setParameter("from", from, TemporalType.TIMESTAMP);
 		}
 
-		List<DBMailLight> mails = query.getResultList();
-		return mails;
+		return query.getResultList();
 	}
 
 	@Override
@@ -596,7 +602,7 @@ public class MailManagerImpl implements MailManager, InitializingBean  {
 		File template = new File(baseFolder, "mail_template.html");
 		if(template.exists()) {
 			try(InputStream in = new FileInputStream(template)) {
-				return IOUtils.toString(in);
+				return IOUtils.toString(in, "UTF-8");
 			} catch (IOException e) {
 				log.error("", e);
 			}
@@ -610,23 +616,20 @@ public class MailManagerImpl implements MailManager, InitializingBean  {
 		if(!baseFolder.exists()) {
 			baseFolder.mkdirs();
 		}
-		OutputStream out = null;
-		try {
-			File templateFile = new File(baseFolder, "mail_template.html");
+		
+		File templateFile = new File(baseFolder, "mail_template.html");
+		try(OutputStream out = new FileOutputStream(templateFile);) {
 			StringReader reader = new StringReader(template);
-			out = new FileOutputStream(templateFile);
-			IOUtils.copy(reader, out);
+			IOUtils.copy(reader, out, "UTF-8");
 		} catch (IOException e) {
 			log.error("", e);
-		} finally {
-			IOUtils.closeQuietly(out);
 		}
 	}
 
 	@Override
 	public String getDefaultMailTemplate() {
 		try(InputStream in = MailModule.class.getResourceAsStream("_content/mail_template.html")) {
-			return IOUtils.toString(in);
+			return IOUtils.toString(in, "UTF-8");
 		} catch (IOException e) {
 			log.error("Cannot read the default mail template", e);
 			return null;
@@ -636,7 +639,7 @@ public class MailManagerImpl implements MailManager, InitializingBean  {
 	@Override
 	public MailBundle[] makeMailBundles(MailContext ctxt, List<Identity> recipientsTO,
 			MailTemplate template, Identity sender, String metaId, MailerResult result) {
-		List<MailBundle> bundles = new ArrayList<MailBundle>();
+		List<MailBundle> bundles = new ArrayList<>();
 		if(recipientsTO != null) {
 			for(Identity recipient: recipientsTO) {
 				MailBundle bundle =  makeMailBundle(ctxt, recipient, template, sender, metaId, result);
@@ -657,7 +660,7 @@ public class MailManagerImpl implements MailManager, InitializingBean  {
 		if(MailHelper.isDisabledMailAddress(recipientTO, result)) {
 			bundle = null;//email disabled, nothing to do
 		} else {
-			MailContent msg = createContentFromTemplate(recipientTO, template, result);
+			MailContent msg = createWithContext(recipientTO, template, result);
 			if(msg != null && result.getReturnCode() == MailerResult.OK){
 				// send mail
 				bundle = new MailBundle();
@@ -734,33 +737,29 @@ public class MailManagerImpl implements MailManager, InitializingBean  {
 		return new SimpleMailContent(content.getSubject(), decoratedBody, content.getAttachments());
 	}
 	
-	public MailContent createContentFromTemplate(Identity recipient, MailTemplate template, MailerResult result) {
+	protected MailContent createWithContext(Identity recipient, MailTemplate template, MailerResult result) {
 		VelocityContext context;
 		if(template != null && template.getContext() != null) {
 			context = new VelocityContext(template.getContext());
 		} else {
 			context = new VelocityContext();
 		}
+		template.putVariablesInMailContext(context, recipient);
 
+		// merge subject template with context variables
 		StringWriter subjectWriter = new StringWriter();
+		evaluate(context, template.getSubjectTemplate(), subjectWriter, result);
+		// merge body template with context variables
 		StringWriter bodyWriter = new StringWriter();
-		List<File> checkedFiles = new ArrayList<>();
-
-		if (template != null) {
-			template.putVariablesInMailContext(context, recipient);
-			// merge subject template with context variables
-			evaluate(context, template.getSubjectTemplate(), subjectWriter, result);
-			// merge body template with context variables
-			evaluate(context, template.getBodyTemplate(), bodyWriter, result);
-			// check for errors - exit
-			if (result.getReturnCode() != MailerResult.OK) {
-				return null;
-			}
-			checkedFiles = MailHelper.checkAttachments(template.getAttachments(), result);
+		evaluate(context, template.getBodyTemplate(), bodyWriter, result);
+		// check for errors - exit
+		if (result.getReturnCode() != MailerResult.OK) {
+			return null;
 		}
-
+		
 		String subject = subjectWriter.toString();
 		String body = bodyWriter.toString();
+		List<File> checkedFiles = MailHelper.checkAttachments(template.getAttachments(), result);
 		File[] attachments = checkedFiles.toArray(new File[checkedFiles.size()]);
 		return new SimpleMailContent(subject, body, attachments);
 	}
@@ -807,9 +806,8 @@ public class MailManagerImpl implements MailManager, InitializingBean  {
 		List<DBMailAttachment> attachments = getAttachments(mail);
 
 		Address to = createAddress(identity, result, true);
-		Address from = createAddress(mail.getFrom().getRecipient(), result, true);
-		MimeMessage message = createForwardMimeMessage(from, to, mail.getSubject(), mail.getBody(), attachments, result);
-		if (message != null) {
+		MimeMessage message = createForwardMimeMessage(to, to, mail.getSubject(), mail.getBody(), attachments, result);
+		if(message != null) {
 			sendMessage(message, result);
 		}
 
@@ -857,6 +855,8 @@ public class MailManagerImpl implements MailManager, InitializingBean  {
 	
 	private boolean wantRealMailToo(Identity id) {
 		if(id == null) return false;
+		boolean hasNoEmail = !StringHelper.containsNonWhitespace(id.getUser().getEmail());
+		if (hasNoEmail) return false;
 		String want = id.getUser().getPreferences().getReceiveRealMail();
 		if(want != null) {
 			return "true".equals(want);
@@ -1008,18 +1008,15 @@ public class MailManagerImpl implements MailManager, InitializingBean  {
 			List<File> attachments = content.getAttachments();
 			if(attachments != null && !attachments.isEmpty()) {
 				for(File attachment:attachments) {
-
-					FileInputStream in = null;
-					try {
+					try(FileInputStream in = new FileInputStream(attachment)) {
 						DBMailAttachment data = new DBMailAttachment();
 						data.setSize(attachment.length());
 						data.setName(attachment.getName());
 						
 						long checksum = FileUtils.checksum(attachment, new Adler32()).getValue();
-						data.setChecksum(new Long(checksum));
+						data.setChecksum(Long.valueOf(checksum));
 						data.setMimetype(WebappHelper.getMimeType(attachment.getName()));
-						
-						in = new FileInputStream(attachment);
+	
 						String path = saveAttachmentToStorage(data.getName(), data.getMimetype(), checksum, attachment.length(), in);
 						data.setPath(path);
 						data.setMail(mail);
@@ -1029,8 +1026,6 @@ public class MailManagerImpl implements MailManager, InitializingBean  {
 						log.error("File attachment not found: " + attachment, e);
 					} catch (IOException e) {
 						log.error("Error with file attachment: " + attachment, e);
-					} finally {
-						IOUtils.closeQuietly(in);
 					}
 				}
 			}
@@ -1088,9 +1083,9 @@ public class MailManagerImpl implements MailManager, InitializingBean  {
 			}
 			if(bccLists != null && bccLists.size() > 0) {
 				for(ContactList bccList:bccLists) {
-					Map<String,Identity> emailToIdentityMap = bccList.getIdentiEmails();
-					for(Map.Entry<String,Identity> entry:emailToIdentityMap.entrySet()) {
-						if(match(entry.getKey(), invalidAddresses, true)) {
+					Map<Long, Identity> emailToIdentityMap = bccList.getIdentiEmails();
+					for(Map.Entry<Long,Identity> entry:emailToIdentityMap.entrySet()) {
+						if(match(entry.getValue().getUser().getEmail(), invalidAddresses, true)) {
 							result.addFailedIdentites(entry.getValue());
 						}
 					}
@@ -1292,6 +1287,7 @@ public class MailManagerImpl implements MailManager, InitializingBean  {
 	}
 	
 	private Address createAddressWithName(String address, String name) throws UnsupportedEncodingException, AddressException {
+		if (!StringHelper.containsNonWhitespace(address)) return null;
 		InternetAddress add = new InternetAddress(address, name);
 		try {
 			add.validate();
@@ -1302,6 +1298,10 @@ public class MailManagerImpl implements MailManager, InitializingBean  {
 	}
 	
 	private Address createFromAddress(String address, MailerResult result) throws AddressException {
+		if (!StringHelper.containsNonWhitespace(address)) {
+			address = WebappHelper.getMailConfig("mailFrom");
+		}
+		
 		try {
 			Address add = new InternetAddress(address);
 			return add;
@@ -1344,6 +1344,9 @@ public class MailManagerImpl implements MailManager, InitializingBean  {
 				if(!StringHelper.containsNonWhitespace(emailAddress)) {
 					emailAddress = recipient.getRecipient().getUser().getProperty(UserConstants.EMAIL, null);
 				}
+				if(!StringHelper.containsNonWhitespace(emailAddress)) {
+					return true;
+				}
 				try {
 					Address address = createAddress(emailAddress);
 					if(address != null) {
@@ -1372,6 +1375,7 @@ public class MailManagerImpl implements MailManager, InitializingBean  {
 				result.addFailedIdentites(recipient);
 			} else {
 				String emailAddress = recipient.getUser().getProperty(UserConstants.EMAIL, null);
+				if(!StringHelper.containsNonWhitespace(emailAddress)) return null;
 				Address address;
 				try {
 					address = createAddress(emailAddress);
@@ -1396,6 +1400,9 @@ public class MailManagerImpl implements MailManager, InitializingBean  {
 	private Address createFromAddress(Identity recipient, MailerResult result) {
 		if(recipient != null) {
 			String emailAddress = recipient.getUser().getProperty(UserConstants.EMAIL, null);
+			if (emailAddress == null) {
+				emailAddress = WebappHelper.getMailConfig("mailFrom");
+			}
 			String name = recipient.getUser().getProperty(UserConstants.FIRSTNAME, null) + " " + recipient.getUser().getProperty(UserConstants.LASTNAME, null); 
 			Address address;
 			try {
@@ -1452,11 +1459,19 @@ public class MailManagerImpl implements MailManager, InitializingBean  {
 
 			if (attachments != null && !attachments.isEmpty()) {
 				// with attachment use multipart message
-				Multipart multipart = new MimeMultipart();
+				Multipart multipart = new MimeMultipart("mixed");
 				// 1) add body part
-				addBodyPart(body, multipart);
+				if(StringHelper.isHtml(body)) {
+					Multipart alternativePart = createMultipartAlternative(body);
+					MimeBodyPart wrap = new MimeBodyPart();
+					wrap.setContent(alternativePart);
+					multipart.addBodyPart(wrap);
+				} else {
+					BodyPart messageBodyPart = new MimeBodyPart();
+					messageBodyPart.setText(body);
+					multipart.addBodyPart(messageBodyPart);
+				}
 				// 2) add attachments
-				BodyPart messageBodyPart;
 				for (DBMailAttachment attachment : attachments) {
 					// abort if attachment does not exist
 					if (attachment == null || attachment.getSize()  <= 0) {
@@ -1465,7 +1480,7 @@ public class MailManagerImpl implements MailManager, InitializingBean  {
 								+ (attachment == null ? null : attachment.getName()), null);
 						return msg;
 					}
-					messageBodyPart = new MimeBodyPart();
+					BodyPart messageBodyPart = new MimeBodyPart();
 
 					VFSLeaf data = getAttachmentDatas(attachment);
 					DataSource source = new VFSDataSource(attachment.getName(), attachment.getMimetype(), data);
@@ -1491,27 +1506,18 @@ public class MailManagerImpl implements MailManager, InitializingBean  {
 			return null;
 		}
 	}
-
-	private void addBodyPart(String body, Multipart multipart) throws MessagingException {
-		if(StringHelper.isHtml(body)) {
-			Multipart alternativePart = createMultipartAlternative(body);
-			MimeBodyPart wrap = new MimeBodyPart();
-			wrap.setContent(alternativePart);
-			multipart.addBodyPart(wrap);
-		} else {
-			BodyPart messageBodyPart = new MimeBodyPart();
-			messageBodyPart.setText(body);
-			multipart.addBodyPart(messageBodyPart);
-		}
-	}
-
+	
 	/**
-	 * Only legal way to create a MimeMessage!
+	 * Only legal way to create a MimeMessage!<br>
+	 * 
+	 * The specified from will be at the end the reply-to of the mime message.
+	 * The from from the mime message is the property defined with fromemail
+	 * in olat.local.properties.<br>
 	 * 
 	 * @see FXOLAT-74: send all mails as <fromemail> (in config) to have a valid reverse lookup and therefore pass spam protection.
 	 *
-	 * @param subject
-	 * @param from
+	 * @param subject The subject
+	 * @param from The from will be the reply-to
 	 * @return
 	 * @throws AddressException
 	 * @throws MessagingException
@@ -1586,10 +1592,26 @@ public class MailManagerImpl implements MailManager, InitializingBean  {
 		return new InternetAddress(fromPlainAddress);
 	}
 
+	private boolean hasExternalFromAndRecipient(MimeMessage msg) throws MessagingException {
+		String fromDomain = WebappHelper.getMailConfig("mailFromDomain");
+		if (!StringHelper.containsNonWhitespace(fromDomain)) {
+			// if no mailFromDomain property is set every address is considered external
+			return true;
+		}
+		return containsExternalAddress(msg.getFrom(), fromDomain)
+				&& containsExternalAddress(msg.getAllRecipients(), fromDomain);
+	}
+
+	private boolean containsExternalAddress(Address[] addressArray, String fromDomain) {
+		return !(Arrays.stream(addressArray).map(r -> ((InternetAddress) r).getAddress())
+				.filter(x -> x.contains("@")).allMatch(x -> x.endsWith(fromDomain)));
+	}
+
 	@Override
 	public MimeMessage createMimeMessage(Address from, Address[] tos, Address[] ccs, Address[] bccs, String subject, String body,
 			List<File> attachments, MailerResult result) {
 		
+		if (from == null || ((tos == null || tos.length == 0) && ((ccs == null || ccs.length == 0)) && (bccs == null || bccs.length == 0))) return null;
 		try {
 			MimeMessage msg = createMessage(subject, from);
 			if(tos != null && tos.length > 0) {
@@ -1604,12 +1626,32 @@ public class MailManagerImpl implements MailManager, InitializingBean  {
 				msg.addRecipients(RecipientType.BCC, bccs);
 			}
 
+			String platformFrom = WebappHelper.getMailConfig("mailFrom");
+			String platformName = WebappHelper.getMailConfig("mailFromName");
+			Address viewablePlatformFrom = createAddressWithName(platformFrom, platformName);
+			// in case the sender and one of the recipients has an external mail address domain we set
+			// the from header to the admin address to prevent rejected or messages detected as spam.
+			msg.setFrom(from);
+			// from has to be set for this check to work
+			if (hasExternalFromAndRecipient(msg)) {
+				msg.setFrom(viewablePlatformFrom);
+			}
+
 			if (attachments != null && !attachments.isEmpty()) {
 				// with attachment use multipart message
 				Multipart multipart = new MimeMultipart("mixed");
 				// 1) add body part
-				addBodyPart(body, multipart);
-
+				if(StringHelper.isHtml(body)) {
+					Multipart alternativePart = createMultipartAlternative(body);
+					MimeBodyPart wrap = new MimeBodyPart();
+					wrap.setContent(alternativePart);
+					multipart.addBodyPart(wrap);
+				} else {
+					BodyPart messageBodyPart = new MimeBodyPart();
+					messageBodyPart.setText(body);
+					multipart.addBodyPart(messageBodyPart);
+				}
+				
 				// 2) add attachments
 				for (File attachmentFile : attachments) {
 					// abort if attachment does not exist
@@ -1670,6 +1712,8 @@ public class MailManagerImpl implements MailManager, InitializingBean  {
 
 	@Override
 	public void sendMessage(MimeMessage msg, MailerResult result) {
+		if (msg == null) return;
+
 		String smtpFrom = WebappHelper.getMailConfig("smtpFrom");
 		if(StringHelper.containsNonWhitespace(smtpFrom)) {
 			try {
@@ -1699,22 +1743,15 @@ public class MailManagerImpl implements MailManager, InitializingBean  {
 			result.setReturnCode(MailerResult.RECIPIENT_ADDRESS_ERROR);
 			result.addInvalidAddresses(e.getInvalidAddresses());
 			result.addInvalidAddresses(e.getValidUnsentAddresses());
+			result.setErrorMessage(e.getMessage());
 			log.warn("Could not send mail", e);
 		} catch (MessagingException e) {
 			result.setReturnCode(MailerResult.SEND_GENERAL_ERROR);
+			result.setErrorMessage(e.getMessage());
 			log.warn("Could not send mail", e);
 		}
 	}
-
-	@Override
-	public void sendToRecipientsList(MailContext context, MailTemplate template, List<Identity> recipients) {
-		if (recipients.size() > 0) {
-			MailerResult result = new MailerResult();
-			MailBundle[] bundles = makeMailBundles(context, recipients, template, null, UUID.randomUUID().toString(), result);
-			sendMessage(bundles);
-		}
-	}
-
+	
 	private void logMessage(MimeMessage msg) throws MessagingException {
 		try {
 			log.info("E-mail send: " + msg.getSubject());

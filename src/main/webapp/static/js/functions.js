@@ -80,7 +80,6 @@ var BLoader = {
 			if (o_info.debug) { // add webbrowser console log
 				o_logerr('BLoader::executeGlobalJS: Error when executing JS code in contextDesc::' + contextDesc + ' error::"'+showerror(e)+' for: '+escape(jsString));
 			}
-			if(jQuery(document).ooLog().isDebugEnabled()) jQuery(document).ooLog('debug','BLoader::executeGlobalJS: Error when executing JS code in contextDesc::' + contextDesc + ' error::"'+showerror(e)+' for: '+escape(jsString), "functions.js::BLoader::executeGlobalJS::" + contextDesc);
 			// Parsing of JS script can fail in IE for unknown reasons (e.g. tinymce gets 8002010 error)
 			// Try to do a 'full page refresh' and load everything via page header, this normally works
 			if (window.location.href.indexOf('o_winrndo') != -1) window.location.reload();
@@ -144,7 +143,6 @@ var BLoader = {
 			if (o_info.debug) { // add webbrowser console log
 				o_logerr('BLoader::loadCSS: Error when loading CSS from URL::' + cssURL);
 			}
-			if(jQuery(document).ooLog().isDebugEnabled()) jQuery(document).ooLog('debug','BLoader::loadCSS: Error when loading CSS from URL::' + cssURL, "functions.js::BLoader::loadCSS");
 		}				
 	},
 
@@ -192,7 +190,6 @@ var BLoader = {
 			if (o_info.debug) { // add webbrowser console log
 				o_logerr('BLoader::unLoadCSS: Error when unloading CSS from URL::' + cssURL);
 			}
-			if(jQuery(document).ooLog().isDebugEnabled()) jQuery(document).ooLog('debug','BLoader::unLoadCSS: Error when unloading CSS from URL::' + cssURL, "functions.js::BLoader::loadCSS");
 		}				
 	}
 };
@@ -225,6 +222,34 @@ var BFormatter = {
 		} catch(e) {
 			if (window.console) console.log("error in BFormatter.formatLatexFormulas: ", e);
 		}
+	},
+	// Align columns of different tables with the same column count
+	// Note: it is best to set the width of the fixed sized colums via css 
+	// (e.g. to 1% to make them as small as possible). Table must set to max-size:100% 
+	// to not overflow. New width of table can be larger than before because the largest
+	// width of each column is applied to all tables. With max-size the browsers magically
+	// fix this overflow problem.
+	alignTableColumns : function(tableArray) {
+		try {
+			var cellWidths = new Array();
+			// find all widest cells
+			jQuery(tableArray).each(function() {
+				for(j = 0; j < jQuery(this)[0].rows[0].cells.length; j++){
+					var cell = jQuery(this)[0].rows[0].cells[j];
+					if(!cellWidths[j] || cellWidths[j] < cell.clientWidth) {
+						cellWidths[j] = cell.clientWidth;
+					}
+				}
+			});
+			// set same width to columns of all tables
+			jQuery(tableArray).each(function() {
+				for(j = 0; j < jQuery(this)[0].rows[0].cells.length; j++){
+					jQuery(this)[0].rows[0].cells[j].style.width = cellWidths[j]+'px';
+				}
+			});
+		} catch(e) {
+			if (window.console) console.log("error in BFormatter.alignTableColumns: ", e);
+		}	
 	}
 };
 
@@ -254,7 +279,6 @@ function o_initEmPxFactor() {
 	o_info.emPxFactor = jQuery('#o_width_1em').width();
 	if (o_info.emPxFactor == 0 || o_info.emPxFactor == 'undefined') {
 		o_info.emPxFactor = 12; // default value for all strange settings
-		if(jQuery(document).ooLog().isDebugEnabled()) jQuery(document).ooLog('debug','Could not read with of element b_width_1em, set o_info.emPxFactor to 12', "functions.js");
 	}
 }
 
@@ -451,17 +475,9 @@ if(!Array.prototype.indexOf) {
 //DEPRECATED: listen to event "oo.dom.replacement.after"
 var b_onDomReplacementFinished_callbacks=new Array();//array holding js callback methods that should be executed after the next ajax call
 function b_AddOnDomReplacementFinishedCallback(funct) {
-	var debug = jQuery(document).ooLog().isDebugEnabled();
-	
-	if(debug) jQuery(document).ooLog('debug',"callback stack size: " + b_onDomReplacementFinished_callbacks.length, "functions.js ADD"); 
-	if (debug && b_onDomReplacementFinished_callbacks.toSource) {
-		jQuery(document).ooLog('debug',"stack content"+b_onDomReplacementFinished_callbacks.toSource(), "functions.js ADD")
-	};
-
 	b_onDomReplacementFinished_callbacks.push(funct);
-	if(debug) jQuery(document).ooLog('debug',"push to callback stack, func: " + funct, "functions.js ADD");
 }
-//fxdiff FXOLAT-310 
+
 var b_changedDomEl=new Array();
 
 //same as above, but with a filter to prevent adding a funct. more than once
@@ -469,10 +485,8 @@ var b_changedDomEl=new Array();
 // DEPRECATED: listen to event "oo.dom.replacement.after"
 function b_AddOnDomReplacementFinishedUniqueCallback(funct) {
 	if (funct.constructor == Array){
-		if(jQuery(document).ooLog().isDebugEnabled()) jQuery(document).ooLog('debug',"add: its an ARRAY! ", "functions.js ADD"); 
 		//check if it has been added before
 		if (b_onDomReplacementFinished_callbacks.search(funct[0])){
-			if(jQuery(document).ooLog().isDebugEnabled()) jQuery(document).ooLog('debug',"push to callback stack, already there!!: " + funct[0], "functions.js ADD");		
 			return;
 		} 
 	}
@@ -494,7 +508,6 @@ function o_ainvoke(r) {
 		// let everybody know dom replacement has finished
 		jQuery(document).trigger("oo.dom.replacement.before");
 
-		//fxdiff FXOLAT-310 
 		b_changedDomEl = new Array();
 		
 		if (o_info.debug) { o_debug_trid++; }
@@ -646,51 +659,32 @@ function o_ainvoke(r) {
 						break;	
 					default:
 						if (o_info.debug) o_log("?: unknown command "+co); 
-						if(jQuery(document).ooLog().isDebugEnabled()) jQuery(document).ooLog('debug',"Error in o_ainvoke(), ?: unknown command "+co, "functions.js");
 						break;
 				}		
 			} else {
-				if (o_info.debug) o_log ("could not find window??");
-				if(jQuery(document).ooLog().isDebugEnabled()) jQuery(document).ooLog('debug',"Error in o_ainvoke(), could not find window??", "functions.js");
+				if (o_info.debug) o_log("could not find window??");
 			}		
 		}
 
 		// BEGIN DEPRECATED DOM REPLACEMENT CALLBACK: new style below
 		// execute onDomReplacementFinished callback functions
 		var stacklength = b_onDomReplacementFinished_callbacks.length;
-		if (b_onDomReplacementFinished_callbacks.toSource && jQuery(document).ooLog().isDebugEnabled()) { 
-			jQuery(document).ooLog('debug',"stack content"+b_onDomReplacementFinished_callbacks.toSource(), "functions.js");
-		}
-		
 		for (mycounter = 0; stacklength > mycounter; mycounter++) {
 			
 			if (mycounter > 50) {
-				if(jQuery(document).ooLog().isDebugEnabled()) {
-					jQuery(document).ooLog('debug',"Stopped executing DOM replacement callback functions - to many functions::" + b_onDomReplacementFinished_callbacks.length, "functions.js");
-				}
 				break; // emergency break
-			}
-			if(jQuery(document).ooLog().isDebugEnabled()) {
-				jQuery(document).ooLog('debug',"Stacksize before shift: " + b_onDomReplacementFinished_callbacks.length, "functions.js");
 			}
 			var func = b_onDomReplacementFinished_callbacks.shift();
 			if (typeof func.length === 'number'){
 				if (func[0] == "glosshighlighter") {
 					var tmpArr = func[1];
-					if(jQuery(document).ooLog().isDebugEnabled())
-						jQuery(document).ooLog('debug',"arr fct: "+ tmpArr, "functions.js");
 					func = tmpArr;
 				 }				
 			}
-			if(jQuery(document).ooLog().isDebugEnabled())
-				jQuery(document).ooLog('debug',"Executing DOM replacement callback function #" + mycounter + " with timeout funct::" + func, "functions.js");
 			// don't use execScript here - must be executed outside this function scope so that dom replacement elements are available
 			
 			//func.delay(0.01);
 			func();//TODO jquery
-			
-			if(jQuery(document).ooLog().isDebugEnabled())
-				jQuery(document).ooLog('debug',"Stacksize after timeout: " + b_onDomReplacementFinished_callbacks.length, "functions.js");
 		}
 		// END DEPRECATED DOM REPLACEMENT CALLBACK: new style on next line
 		
@@ -769,8 +763,6 @@ function setFormDirty(formId) {
 		}
 		// set dirty css class
 		if(mySubmit) mySubmit.className ="btn o_button_dirty";
-	} else if(jQuery(document).ooLog().isDebugEnabled()) {
-		jQuery(document).ooLog('debug',"Error in setFormDirty, myForm was null for formId=" + formId, "functions.js");
 	}
 }
 
@@ -804,12 +796,40 @@ function o_openPopUp(url, windowname, width, height, menubar) {
 }
 
 function b_handleFileUploadFormChange(fileInputElement, fakeInputElement, saveButton) {
+
+	fileInputElement.setCustomValidity('');
+
+	if (fileInputElement.hasAttribute('data-max-size')) {
+		// check if the file selected does satisfy the max-size constraint
+		var maxSize = fileInputElement.getAttribute('data-max-size');
+		if (maxSize) {
+			var fileSize = formInputFileSize(fileInputElement);
+			if (fileSize > maxSize) {
+				// show a validation error message, reset the fileInputElement and stop processing
+				// to prevent unneeded uploads of potentially really big files
+				var trans = jQuery(document).ooTranslator().getTranslator(o_info.locale, 'org.olat.modules.forms.ui');
+				var msgLimitExceeded = trans.translate('file.upload.error.limit.exeeded');
+				var msgUploadLimit = trans.translate('file.upload.limit');
+				var maxSizeFormatted;
+				if(maxSize < 250 * 1024) {
+					maxSizeFormatted = (maxSize / 1024).toFixed(1) + " KB";
+				} else if(maxSize < 250 * 1024 * 1024) {
+					maxSizeFormatted = (maxSize / 1024 / 1024).toFixed(1) + " MB";
+				} else {
+					maxSizeFormatted = (maxSize / 1024 / 1024 / 1024).toFixed(1) + " GB";
+				}
+				fileInputElement.setCustomValidity(msgLimitExceeded
+						+ " (" + msgUploadLimit + ": " + maxSizeFormatted + ")");
+			}
+		}
+	}
+
 	// file upload forms are rendered transparent and have a fake input field that is rendered.
 	// on change events of the real input field this method is triggered to display the file 
 	// path in the fake input field. See the code for more info on this
 	var fileName = fileInputElement.value;
 	// remove unix path
-	slashPos = fileName.lastIndexOf('/');
+	var slashPos = fileName.lastIndexOf('/');
 	if (slashPos != -1) {
 		fileName=fileName.substring(slashPos + 1); 
 	}
@@ -833,6 +853,30 @@ function b_handleFileUploadFormChange(fileInputElement, fakeInputElement, saveBu
 	}
 }
 
+// Return the file size of the selected file in bytes. Returns -1 when API is not working or
+// no file was selected.
+function formInputFileSize(fileInputElement) {
+	try {
+		if (!window.FileReader) {
+			// file API is not supported do proceed as if the file satisfies the constraint
+			return -1;
+		}
+		if (!fileInputElement || !fileInputElement.files) {
+			// missing input element parameter or element is not a file input
+			return -1;
+		}
+		var file = fileInputElement.files[0];
+		if (!file) {
+			// no file selected!
+			return -1;
+		}
+		return file.size;
+	} catch (e) {
+		o_logerr('form input file size check failed: ' + e);
+	}
+	return -1;
+}
+
 // goto node must be in global scope to support content that has been opened in a new window 
 // with the clone controller - real implementation is moved to course run scope o_activateCourseNode()
 function gotonode(nodeid) {
@@ -844,13 +888,10 @@ function gotonode(nodeid) {
 			// must be content opened using the clone controller - search in opener window
 			if (opener && typeof opener.o_activateCourseNode != 'undefined') {
 			  opener.o_activateCourseNode(nodeid);
-			} else if(jQuery(document).ooLog().isDebugEnabled()) {
-				jQuery(document).ooLog('debug',"Error in gotonode(), could not find main window", "functions.js");
-			}			
+			}		
 		}
 	} catch (e) {
 		alert('Goto node error:' + e);
-		if(jQuery(document).ooLog().isDebugEnabled()) jQuery(document).ooLog('debug',"Error in gotonode()::" + e.message, "functions.js");
 	}
 }
 
@@ -1177,13 +1218,29 @@ function o_ffEvent(formNam, dispIdField, dispId, eventIdField, eventInt){
 	eventIdEl.value=eventInt;
 	// manually execute onsubmit method - calling submit itself does not trigger onsubmit event!
 	var form = jQuery('#' + formNam);
-	var enctype = form.attr('enctype');
-	if(enctype && enctype.indexOf("multipart") == 0) {
-		o_XHRSubmitMultipart(formNam);
-	} else if (document.forms[formNam].onsubmit()) {
-		document.forms[formNam].submit();
+	var formValid = true;
+	jQuery('#' + formNam + ' input[type=file]')
+		.filter(function(index, element) {return !element.checkValidity()})
+		.each(function(index, element) {
+			var valErrorElementId = element.getAttribute('id') + "_validation_error";
+			var valErrorElement = document.getElementById(valErrorElementId);
+			if (!valErrorElement) {
+				valErrorElement = document.createElement('div');
+				valErrorElement.setAttribute('class','o_error');
+				valErrorElement.setAttribute('id', valErrorElementId);
+				element.parentNode.parentNode.appendChild(valErrorElement);
+			}
+			valErrorElement.innerHTML = element.validationMessage;
+			formValid = false;
+		});
+	if (formValid) {
+		var enctype = form.attr('enctype');
+		if(enctype && enctype.indexOf("multipart") == 0) {
+			o_XHRSubmitMultipart(formNam);
+		} else if (document.forms[formNam].onsubmit()) {
+			document.forms[formNam].submit();
+		}
 	}
-	
 	dispIdEl.value = defDispId;
 	eventIdEl.value = defEventId;
 }
@@ -1280,12 +1337,42 @@ function o_removeIframe(id) {
 	jQuery('#' + id).remove();
 }
 
+/**
+ * Opens the form-dirty dialog. Use the callback to add code that should be executed in case the user 
+ * presses the "ignore button" (Code that executes the original action the user initiated)
+ */
+function o_showFormDirtyDialog(onIgnoreCallback) {
+	// open our form-dirty dialog
+	o_scrollToElement('#o_top');
+	jQuery("#o_form_dirty_message").modal('show');
+	jQuery("#o_form_dirty_message .o_form_dirty_ignore").on("click", function() {
+		// Remove dialog and all listeners for dirty button
+		jQuery("#o_form_dirty_message").modal('hide');
+		jQuery("#o_form_dirty_message .o_form_dirty_ignore").off();
+		// Execute the ignore callback with original user action
+		onIgnoreCallback();
+	});
+	return false;
+}
+
 function o_ffXHREvent(formNam, dispIdField, dispId, eventIdField, eventInt, dirtyCheck, push, submit) {
-	if(dirtyCheck) {
-		if(!o2cl()) return false;
+	if(dirtyCheck && o2c==1) {
+		// Copy function arguments and set the dirtyCheck to false for execution in callback.
+		// Note that the argument list is dynamic, there are potentially more arguments than
+		// listed in the function (e.g. in QTI2)
+		var callbackArguments = Array.prototype.slice.call(arguments);
+		callbackArguments[5] = false; 		
+		var onIgnoreCallback = function() {
+			// fire original event when the "ok, delete anyway" button was pressed
+			o_ffXHREvent.apply(window, callbackArguments);
+		}
+		return o_showFormDirtyDialog(onIgnoreCallback);
 	} else {
 		if(!o2cl_noDirtyCheck()) return false;
-	}
+	}	
+	// Start event execution, start server to prevend concurrent executions of other events. 
+	// o_afterserver() called when AJAX call terminates
+	o_beforeserver();
 	
 	var data = new Object();
 	if(submit) {
@@ -1363,12 +1450,33 @@ function o_ffXHRNFEvent(formNam, dispIdField, dispId, eventIdField, eventInt) {
 	})
 }
 
+function o_XHRWikiEvent(link) {
+	var href = jQuery(link).attr('href');
+	if(href.indexOf(o_info.serverUri) == 0) {
+		href = href.substring(o_info.serverUri.length, href.length);
+	}
+	o_XHREvent(href, false, true);
+	return false;
+}
+
 function o_XHREvent(targetUrl, dirtyCheck, push) {
-	if(dirtyCheck) {
-		if(!o2cl()) return false;
+	if(dirtyCheck && o2c==1) {
+		// Copy function arguments and set the dirtyCheck to false for execution in callback.
+		// Note that the argument list is dynamic, there are potentially more arguments than
+		// listed in the function
+		var callbackArguments = Array.prototype.slice.call(arguments);
+		callbackArguments[1] = false; 		
+		var onIgnoreCallback = function() {
+			// fire original event when the "ok, delete anyway" button was pressed
+			o_XHREvent.apply(window, callbackArguments);
+		}
+		return o_showFormDirtyDialog(onIgnoreCallback);		
 	} else {
 		if(!o2cl_noDirtyCheck()) return false;
 	}
+	// Start event execution, start server to prevend concurrent executions of other events. 
+	// o_afterserver() called when AJAX call terminates
+	o_beforeserver();
 	
 	var data = new Object();
 	if(arguments.length > 3) {
@@ -1387,15 +1495,21 @@ function o_XHREvent(targetUrl, dirtyCheck, push) {
 		dataType: 'json',
 		success: function(data, textStatus, jqXHR) {
 			try {
-				o_ainvoke(data);
+				
 				if(push) {
-					var businessPath = data['businessPath'];
-					var documentTitle = data['documentTitle'];
-					var historyPointId = data['historyPointId'];
-					if(businessPath) {
-						o_pushState(historyPointId, documentTitle, businessPath);
+					try {
+						var businessPath = data['businessPath'];
+						var documentTitle = data['documentTitle'];
+						var historyPointId = data['historyPointId'];
+						if(businessPath) {
+							// catch separately - nothing must fail here!
+							o_pushState(historyPointId, documentTitle, businessPath);
+						}
+					} catch(e) {
+						if(window.console) console.log(e);
 					}
 				}
+				o_ainvoke(data);
 			} catch(e) {
 				if(window.console) console.log(e);
 			} finally {
@@ -1474,6 +1588,30 @@ function o_toggleMark(el) {
 	} else {
 		jQuery('i', el).removeClass('o_icon_bookmark').addClass('o_icon_bookmark_add');
 	}
+}
+
+//try to mimic the FileUtils.normalizeFilename method
+function o_normalizeFilename(filename) {
+	filename = filename.replace(/\s/g, "_")
+	var replaceByUnderscore = [ "/", ",", ":", "(", ")" ];
+	for(var i=replaceByUnderscore.length; i-->0; ) {
+		filename = filename.split(replaceByUnderscore[i]).join("_");
+	}
+
+	var beautifyGermanUnicode = [ "\u00C4", "\u00D6", "\u00DC", "\u00E4", "\u00F6", "\u00E6", "\u00FC", "\u00DF", "\u00F8", "\u2205" ],
+		beautifyGermanReplacement = [ "Ae", "Oe",     "Ue",     "ae",     "oe",     "ae",     "ue",     "ss",     "o",      "o" ];
+	for(var i=beautifyGermanUnicode.length; i-->0; ) {
+		filename = filename.split(beautifyGermanUnicode[i]).join(beautifyGermanReplacement[i]);
+	}
+
+	try {//if something is not supported by the browser
+		filename = filename.normalize('NFKD');
+		filename = filename.replace("/\p{InCombiningDiacriticalMarks}+/g","");
+		filename = filename.replace("/\W+/g", "");
+	} catch(e) {
+		if(window.console) console.log(e);
+	}
+	return filename;
 }
 
 //
@@ -1840,10 +1978,8 @@ function b_attach_i18n_inline_editing() {
 	// Add hover handler to display inline edit links
 	jQuery('span.o_translation_i18nitem').hover(function() {
 		jQuery(this.firstChild).show();
-		if(jQuery(document).ooLog().isDebugEnabled()) jQuery(document).ooLog('debug',"Entered i18nitem::" + this.firstChild, "functions.js:b_attach_i18n_inline_editing()");
 	},function(){
 		jQuery('a.o_translation_i18nitem_launcher').hide();
-		if(jQuery(document).ooLog().isDebugEnabled()) jQuery(document).ooLog('debug',"Leaving i18nitem::" + this, "functions.js:b_attach_i18n_inline_editing()");
 	});
 	// Add highlight effect on link to show which element is affected by this link
 	jQuery('a.o_translation_i18nitem_launcher').hover(function() {	

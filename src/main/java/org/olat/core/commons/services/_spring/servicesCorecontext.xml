@@ -9,6 +9,8 @@
   http://www.springframework.org/schema/context/spring-context.xsd">
   
 	<context:component-scan base-package="org.olat.core.commons.services" />
+	
+  	<import resource="classpath:/org/olat/core/commons/services/jmx/_spring/jmxContext.xml"/>
 	<import resource="classpath:/org/olat/core/commons/services/scheduler/_spring/schedulerContext.xml"/>
 	<import resource="classpath:/org/olat/core/commons/services/taskexecutor/_spring/taskExecutorCorecontext.xml"/>
 	<import resource="classpath:/org/olat/core/commons/services/notifications/_spring/notificationsContext.xml"/>
@@ -34,6 +36,57 @@
 				<value>org.olat.home.HomeMainController</value>
 			</list>
 		</property>
+	</bean>
+	
+	<!-- Analytics admin module -->
+	<bean class="org.olat.core.extensions.action.GenericActionExtension" init-method="initExtensionPoints">
+		<property name="order" value="8270" />
+		<property name="actionController">	
+			<bean class="org.olat.core.gui.control.creator.AutoCreator" scope="prototype">
+				<property name="className" value="org.olat.core.commons.services.analytics.ui.AnalyticsAdminController"/>
+			</bean>
+		</property>
+		<property name="navigationKey" value="analytics" />
+		<property name="parentTreeNodeIdentifier" value="externalToolsParent" /> 
+		<property name="i18nActionKey" value="admin.menu.title"/>
+		<property name="i18nDescriptionKey" value="admin.menu.title.alt"/>
+		<property name="translationPackage" value="org.olat.core.commons.services.analytics.ui"/>
+		<property name="extensionPoints">
+			<list>	
+				<value>org.olat.admin.SystemAdminMainController</value>		
+			</list>
+		</property>
+	</bean>
+	
+	<!-- License module -->
+	<bean class="org.olat.core.extensions.action.GenericActionExtension" init-method="initExtensionPoints">
+		<property name="order" value="8280" />
+		<property name="actionController">	
+			<bean class="org.olat.core.gui.control.creator.AutoCreator" scope="prototype">
+				<property name="className" value="org.olat.core.commons.services.license.ui.LicenseAdminController"/>
+			</bean>
+		</property>
+		<property name="navigationKey" value="license" />
+		<property name="parentTreeNodeIdentifier" value="sysconfigParent" /> 
+		<property name="i18nActionKey" value="admin.menu.title"/>
+		<property name="i18nDescriptionKey" value="admin.menu.title.alt"/>
+		<property name="translationPackage" value="org.olat.core.commons.services.license.ui"/>
+		<property name="extensionPoints">
+			<list>	
+				<value>org.olat.admin.SystemAdminMainController</value>		
+			</list>
+		</property>
+	</bean>
+	
+	<!-- Cleaning job for CSP reports -->
+	<bean id="cspCleanupJob" class="org.springframework.scheduling.quartz.CronTriggerFactoryBean">
+		<property name="jobDetail">
+	    		<bean class="org.springframework.scheduling.quartz.JobDetailFactoryBean">
+					<property name="jobClass" value="org.olat.core.commons.services.csp.manager.CSPLogCleanup" />
+				</bean>
+	    	</property>
+	    	<property name="cronExpression" value="0 0 4 * * ?"/><!-- 2am, daily -->
+	    	<property name="startDelay" value="45000" />
 	</bean>
 
 </beans>

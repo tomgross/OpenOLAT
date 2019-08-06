@@ -25,12 +25,15 @@ import java.net.URI;
 import java.util.Collections;
 
 import org.apache.velocity.context.Context;
+import org.olat.core.CoreSpringFactory;
 import org.olat.core.gui.UserRequest;
 import org.olat.core.gui.components.AbstractComponent;
 import org.olat.core.gui.components.Component;
 import org.olat.core.gui.control.JSAndCSSAdder;
 import org.olat.core.gui.render.ValidationResult;
 import org.olat.core.gui.render.velocity.VelocityComponent;
+import org.olat.core.helpers.Settings;
+import org.olat.ims.qti21.QTI21Module;
 import org.olat.ims.qti21.ui.CandidateSessionContext;
 
 import uk.ac.ed.ph.jqtiplus.node.content.variable.FeedbackElement;
@@ -53,6 +56,12 @@ public abstract class AssessmentObjectComponent extends AbstractComponent implem
 	
 	private Context context;
 	
+	private final boolean mathAssess;
+	private boolean hideFeedbacks = false;
+	private boolean correctionHelp = false;
+	private boolean correctionSolution = false;
+	private boolean maxScoreAssessmentItem = false;
+	
 	private String mapperUri;
 	private String submissionMapperUri;
 	private URI assessmentObjectUri;
@@ -61,6 +70,7 @@ public abstract class AssessmentObjectComponent extends AbstractComponent implem
 	
 	public AssessmentObjectComponent(String name) {
 		super(name);
+		mathAssess = CoreSpringFactory.getImpl(QTI21Module.class).isMathAssessExtensionEnabled();
 	}
 	
 	public abstract AssessmentObjectFormItem getQtiItem();
@@ -94,6 +104,38 @@ public abstract class AssessmentObjectComponent extends AbstractComponent implem
 		this.assessmentObjectUri = assessmentObjectUri;
 	}
 	
+	public boolean isHideFeedbacks() {
+		return hideFeedbacks;
+	}
+
+	public void setHideFeedbacks(boolean hideFeedbacks) {
+		this.hideFeedbacks = hideFeedbacks;
+	}
+
+	public boolean isMaxScoreAssessmentItem() {
+		return maxScoreAssessmentItem;
+	}
+
+	public void setMaxScoreAssessmentItem(boolean maxScoreAssessmentItem) {
+		this.maxScoreAssessmentItem = maxScoreAssessmentItem;
+	}
+
+	public boolean isCorrectionHelp() {
+		return correctionHelp;
+	}
+
+	public void setCorrectionHelp(boolean correctionHelp) {
+		this.correctionHelp = correctionHelp;
+	}
+	
+	public boolean isCorrectionSolution() {
+		return correctionSolution;
+	}
+
+	public void setCorrectionSolution(boolean correctionSolution) {
+		this.correctionSolution = correctionSolution;
+	}
+
 	public abstract String getResponseUniqueIdentifier(ItemSessionState itemSessionState, Interaction interaction);
 
 	public abstract Interaction getInteractionOfResponseUniqueIdentifier(String responseUniqueId);
@@ -175,29 +217,51 @@ public abstract class AssessmentObjectComponent extends AbstractComponent implem
 	@Override
 	public void validate(UserRequest ureq, ValidationResult vr) {
 		super.validate(ureq, vr);
-
+		loadJavascripts(vr);
+	}
+	
+	protected void loadJavascripts(ValidationResult vr) {
 		JSAndCSSAdder jsa = vr.getJsAndCSSAdder();
 		jsa.addRequiredStaticJsFile("assessment/rendering/javascript/QtiWorksRendering.js");
-		jsa.addRequiredStaticJsFile("assessment/rendering/javascript/AsciiMathInputController.js");
-		jsa.addRequiredStaticJsFile("assessment/rendering/javascript/UpConversionAjaxController.js");
+		if(mathAssess) {
+			jsa.addRequiredStaticJsFile("assessment/rendering/javascript/AsciiMathInputController.js");
+			jsa.addRequiredStaticJsFile("assessment/rendering/javascript/UpConversionAjaxController.js");
+		}
 		
-		jsa.addRequiredStaticJsFile("js/jquery/maphilight/jquery.maphilight.js");
+		// drawing needs slider, slider need it too
+		// drag and drop used a lot...
 		jsa.addRequiredStaticJsFile("js/jquery/ui/jquery-ui-1.11.4.custom.qti.min.js");
-		
-
+		// hotspot
+		jsa.addRequiredStaticJsFile("js/jquery/maphilight/jquery.maphilight.js");
+		// drawing
 		jsa.addRequiredStaticJsFile("js/jquery/openolat/jquery.paint.js");
+		//tab
+		jsa.addRequiredStaticJsFile("js/jquery/taboverride/taboverride-4.0.0.min.js");
 		
-		jsa.addRequiredStaticJsFile("js/jquery/qti/jquery.associate.js");
-		jsa.addRequiredStaticJsFile("js/jquery/qti/jquery.graphicAssociate.js");
-		jsa.addRequiredStaticJsFile("js/jquery/qti/jquery.graphicGap.js");
-		jsa.addRequiredStaticJsFile("js/jquery/qti/jquery.graphicOrder.js");
-		jsa.addRequiredStaticJsFile("js/jquery/qti/jquery.selectPoint.js");
-		jsa.addRequiredStaticJsFile("js/jquery/qti/jquery.positionObject.js");
-		jsa.addRequiredStaticJsFile("js/jquery/qti/jquery.slider.js");
-		jsa.addRequiredStaticJsFile("js/jquery/qti/jquery.order.js");
-		jsa.addRequiredStaticJsFile("js/jquery/qti/jquery.match.js");
-		jsa.addRequiredStaticJsFile("js/jquery/qti/jquery.gapMatch.js");
-		jsa.addRequiredStaticJsFile("js/jquery/qti/jquery.hotspot.js");
+		if(Settings.isDebuging()) {
+			// order needs dragula
+			jsa.addRequiredStaticJsFile("js/dragula/dragula.js");
+			jsa.addRequiredStaticJsFile("js/jquery/taboverride/jquery.taboverride.js");
+			// qtiAutosave and qtiTimer are loaded by the controller
+			jsa.addRequiredStaticJsFile("js/jquery/qti/jquery.associate.js");
+			jsa.addRequiredStaticJsFile("js/jquery/qti/jquery.choice.js");
+			jsa.addRequiredStaticJsFile("js/jquery/qti/jquery.gapMatch.js");
+			jsa.addRequiredStaticJsFile("js/jquery/qti/jquery.graphicAssociate.js");
+			jsa.addRequiredStaticJsFile("js/jquery/qti/jquery.graphicGap.js");
+			jsa.addRequiredStaticJsFile("js/jquery/qti/jquery.graphicOrder.js");
+			jsa.addRequiredStaticJsFile("js/jquery/qti/jquery.hotspot.js");
+			jsa.addRequiredStaticJsFile("js/jquery/qti/jquery.hotspot.responsive.js");
+			jsa.addRequiredStaticJsFile("js/jquery/qti/jquery.match.js");
+			jsa.addRequiredStaticJsFile("js/jquery/qti/jquery.match_dnd.js");
+			jsa.addRequiredStaticJsFile("js/jquery/qti/jquery.order.js");
+			jsa.addRequiredStaticJsFile("js/jquery/qti/jquery.positionObject.js");
+			jsa.addRequiredStaticJsFile("js/jquery/qti/jquery.selectPoint.js");
+			jsa.addRequiredStaticJsFile("js/jquery/qti/jquery.slider.js");
+		} else {
+			jsa.addRequiredStaticJsFile("js/dragula/dragula.min.js");
+			jsa.addRequiredStaticJsFile("js/jquery/taboverride/jquery.taboverride.min.js");
+			jsa.addRequiredStaticJsFile("js/jquery/qti/jquery.qti.min.js");
+		}
 	}
 	
 	@Override

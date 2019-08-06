@@ -21,8 +21,15 @@ package org.olat.repository.ui.author;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
 
+import org.olat.core.commons.services.license.LicenseModule;
+import org.olat.core.commons.services.license.LicenseService;
+import org.olat.core.commons.services.license.LicenseType;
+import org.olat.core.commons.services.license.ui.LicenseUIFactory;
 import org.olat.core.gui.UserRequest;
 import org.olat.core.gui.components.form.flexible.FormItem;
 import org.olat.core.gui.components.form.flexible.FormItemContainer;
@@ -44,6 +51,9 @@ import org.olat.core.util.Util;
 import org.olat.repository.RepositoryManager;
 import org.olat.repository.handlers.RepositoryHandlerFactory;
 import org.olat.repository.handlers.RepositoryHandlerFactory.OrderedRepositoryHandler;
+import org.olat.repository.manager.RepositoryEntryLicenseHandler;
+import org.olat.repository.model.SearchAuthorRepositoryEntryViewParams.ResourceUsage;
+import org.olat.repository.ui.RepositoyUIFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 
 /**
@@ -55,24 +65,32 @@ import org.springframework.beans.factory.annotation.Autowired;
 public class AuthorSearchController extends FormBasicController implements ExtendedFlexiTableSearchController {
 
 	private static final String[] keys = new String[]{ "my" };
-	static final int MINIMAL_CHAR_LENGTH_SEARCH_FIELD = 3;
-	private static final int MINIMAL_CHAR_LENGTH_AUTHOR_SEARCH_FIELD = 2;
+	private static final String[] statusKeys = new String[]{ "all", "active", "closed" };
+	private static final String[] usageKeys = new String[]{ ResourceUsage.all.name(), ResourceUsage.used.name(), ResourceUsage.notUsed.name() };
 	
 	private TextElement id; // only for admins
 	private TextElement displayName;
 	private TextElement author;
 	private TextElement description;
-	private SingleSelection types;
+	private MultipleSelectionElement types;
+	private SingleSelection closedEl;
+	private SingleSelection resourceUsageEl;
 	private MultipleSelectionElement ownedResourcesOnlyEl;
+	private MultipleSelectionElement licenseEl;
 	private FormLink searchButton;
 	
 	private String[] typeKeys;
-	private String[] limitTypes;
 	private boolean cancelAllowed;
 	private boolean enabled = true;
 	
 	@Autowired
 	private RepositoryHandlerFactory repositoryHandlerFactory;
+	@Autowired
+	private LicenseService licenseService;
+	@Autowired
+	private LicenseModule licenseModule;
+	@Autowired
+	private RepositoryEntryLicenseHandler licenseHandler;
 	
 	public AuthorSearchController(UserRequest ureq, WindowControl wControl, boolean cancelAllowed) {
 		super(ureq, wControl, "search");
@@ -94,27 +112,63 @@ public class AuthorSearchController extends FormBasicController implements Exten
 		leftContainer.setRootForm(mainForm);
 		formLayout.add(leftContainer);
 
+		// LEFT part of form
 		displayName = uifactory.addTextElement("cif_displayname", "cif.displayname", 255, "", leftContainer);
 		displayName.setElementCssClass("o_sel_repo_search_displayname");
 		displayName.setFocus(true);
 
+		id = uifactory.addTextElement("cif_id", "cif.id", 128, "", leftContainer);
+		id.setElementCssClass("o_sel_repo_search_id");
+		
+		author = uifactory.addTextElement("cif_author", "cif.author", 255, "", leftContainer);
+		author.setElementCssClass("o_sel_repo_search_author");
+		
 		description = uifactory.addTextElement("cif_description", "cif.description", 255, "", leftContainer);
 		description.setElementCssClass("o_sel_repo_search_description");
+
+		// RIGHT part of form
+		FormLayoutContainer rightContainer = FormLayoutContainer.createDefaultFormLayout("right_1", getTranslator());
+		rightContainer.setRootForm(mainForm);
+		formLayout.add(rightContainer);
 
 		List<String> typeList = getResources();
 		typeKeys = typeList.toArray(new String[typeList.size()]);
 		String[] typeValues = getTranslatedResources(typeList);
-		types = uifactory.addDropdownSingleselect("cif.type", "cif.type", leftContainer, typeKeys, typeValues, null);
+		String[] typeCSS = getResourcesCSS(typeList);
+		types = uifactory.addCheckboxesDropdown("cif.type", "cif.type", rightContainer, typeKeys, typeValues, null, typeCSS);
+		types.setNonSelectedText(translate("table.showall"));
+		
+		if (licenseModule.isEnabled(licenseHandler)) {
+			List<LicenseType> activeLicenseTypes = licenseService.loadActiveLicenseTypes(licenseHandler);
+			Collections.sort(activeLicenseTypes);
+			
+			String[] licenseTypeKeys = new String[activeLicenseTypes.size()];
+			String[] licenseTypeValues = new String[activeLicenseTypes.size()];
+			int counter = 0;
+			for (LicenseType licenseType: activeLicenseTypes) {
+				licenseTypeKeys[counter] = String.valueOf(licenseType.getKey());
+				licenseTypeValues[counter] = LicenseUIFactory.translate(licenseType, getLocale());
+				counter++;
+			}
+			licenseEl = uifactory.addCheckboxesDropdown("cif.license", "cif.license", rightContainer, licenseTypeKeys, licenseTypeValues, null, null);
+			licenseEl.setNonSelectedText(translate("table.showall"));
+		}
 
-		FormLayoutContainer rightContainer = FormLayoutContainer.createDefaultFormLayout("right_1", getTranslator());
-		rightContainer.setRootForm(mainForm);
-		formLayout.add(rightContainer);
-		
-		author = uifactory.addTextElement("cif_author", "cif.author", 255, "", rightContainer);
-		author.setElementCssClass("o_sel_repo_search_author");
-		
-		id = uifactory.addTextElement("cif_id", "cif.id", 128, "", rightContainer);
-		id.setElementCssClass("o_sel_repo_search_id");
+		String[] statusValues = new String[] {
+				translate("cif.resources.status.all"),
+				translate("cif.resources.status.active"),
+				translate("cif.resources.status.closed")
+			};
+		closedEl = uifactory.addRadiosHorizontal("cif_status", "cif.resources.status", rightContainer, statusKeys, statusValues);
+		closedEl.select(statusKeys[1], true);
+
+		String[] usageValues = new String[] {
+			translate("cif.owned.resources.usage.all"),
+			translate("cif.owned.resources.usage.used"),
+			translate("cif.owned.resources.usage.notUsed")
+		};
+		resourceUsageEl = uifactory.addRadiosHorizontal("cif_used", "cif.owned.resources.usage", rightContainer, usageKeys, usageValues);
+		resourceUsageEl.select(usageKeys[0], true);
 		
 		ownedResourcesOnlyEl = uifactory.addCheckboxesHorizontal("cif_my", "cif.owned.resources.only", rightContainer, keys, new String[]{ "" });
 		ownedResourcesOnlyEl.select(keys[0], true);
@@ -134,13 +188,28 @@ public class AuthorSearchController extends FormBasicController implements Exten
 		author.setValue(se.getAuthor());
 		ownedResourcesOnlyEl.select(keys[0], se.isOwnedResourcesOnly());
 		description.setValue(se.getDescription());
-		
-		String type = se.getType();
-		if(StringHelper.containsNonWhitespace(type)) {
-			for(String typeKey:typeKeys) {
-				if(type.equals(typeKey)) {
-					types.select(typeKey, true);
-				}
+		if(se.getResourceUsage() != null) {
+			resourceUsageEl.select(se.getResourceUsage().name(), true);
+		}
+		if(se.getClosed() != null) {
+			if(se.getClosed().booleanValue()) {
+				closedEl.select(statusKeys[2], true);
+			} else {
+				closedEl.select(statusKeys[1], true);
+			}
+		} else {
+			closedEl.select(statusKeys[0], true);
+		}
+		Set<String> selectedTypes = se.getTypes();
+		if(selectedTypes != null && selectedTypes.size() > 0) {
+			for(String typeKey: selectedTypes) {
+				types.select(typeKey, true);
+			}
+		}
+		if (licenseModule.isEnabled(licenseHandler)) {
+			for (Long licenseTypeKey: se.getLicenseTypeKeys()) {
+				String key = String.valueOf(licenseTypeKey);
+				licenseEl.select(key, true);
 			}
 		}
 	}
@@ -177,7 +246,7 @@ public class AuthorSearchController extends FormBasicController implements Exten
 	}
 
 	/**
-	 * @return Descritpion field value.
+	 * @return Description field value.
 	 */
 	public String getDescription() {
 		return description.getValue();
@@ -186,17 +255,36 @@ public class AuthorSearchController extends FormBasicController implements Exten
 	/**
 	 * @return Limiting type selections.
 	 */
-	public String getRestrictedType() {
-		if(types.isOneSelected()) {
-			return types.getSelectedKey();
-		} else if (limitTypes != null && limitTypes.length > 0) {
-			return limitTypes[0];
+	public Set<String> getRestrictedTypes() {
+		if(types.isAtLeastSelected(1)) {
+			Set<String> selectedTypes = new HashSet<>(types.getSelectedKeys());
+			return selectedTypes;
 		}
 		return null;
 	}
 	
 	public boolean isOwnedResourcesOnly() {
 		return ownedResourcesOnlyEl.isAtLeastSelected(1);
+	}
+	
+	public ResourceUsage getResourceUsage() {
+		if(resourceUsageEl.isOneSelected()) {
+			return ResourceUsage.valueOf(resourceUsageEl.getSelectedKey());
+		}
+		return ResourceUsage.all;
+	}
+	
+	public Boolean getClosed() {
+		Boolean status = null;
+		if(closedEl.isOneSelected()) {
+			int selected = closedEl.getSelected();
+			if(selected == 1) {
+				status = Boolean.FALSE;
+			} else if(selected == 2) {
+				status = Boolean.TRUE;
+			}
+		}
+		return status;
 	}
 	
 	@Override
@@ -208,17 +296,8 @@ public class AuthorSearchController extends FormBasicController implements Exten
 	protected boolean validateFormLogic(UserRequest ureq) {
 		if(!enabled) return true;
 		
-		if (displayName.getValue().length() < MINIMAL_CHAR_LENGTH_SEARCH_FIELD &&
-				author.getValue().length() < MINIMAL_CHAR_LENGTH_AUTHOR_SEARCH_FIELD &&
-				description.getValue().length() < MINIMAL_CHAR_LENGTH_SEARCH_FIELD &&
-				(id != null && id.getValue().length() < MINIMAL_CHAR_LENGTH_SEARCH_FIELD))	{
-			if (displayName.getValue().isEmpty() && author.getValue().isEmpty() && description.getValue().isEmpty() && (id != null && id.getValue().isEmpty())) {
-				showWarning("cif.error.allempty");
-			} else if (displayName.getValue().isEmpty() && !author.getValue().isEmpty() && description.getValue().isEmpty() && (id != null && id.getValue().isEmpty())) {
-				showWarning("cif.error.not.enough.chars", new String[]{Integer.toString(MINIMAL_CHAR_LENGTH_AUTHOR_SEARCH_FIELD)});
-			} else {
-				showWarning("cif.error.not.enough.chars", new String[]{Integer.toString(MINIMAL_CHAR_LENGTH_SEARCH_FIELD)});
-			}
+		if (displayName.isEmpty() && author.isEmpty() && description.isEmpty() && (id != null && id.isEmpty()))	{
+			showWarning("cif.error.allempty");
 			return false;
 		}
 		return true;
@@ -240,9 +319,7 @@ public class AuthorSearchController extends FormBasicController implements Exten
 	protected void formInnerEvent (UserRequest ureq, FormItem source, FormEvent event) {
 		if(enabled) {
 			if (source == searchButton) {
-				if (validateFormLogic(ureq)) {
-					fireSearchEvent(ureq);
-				}
+				fireSearchEvent(ureq);
 			}
 		}
 	}
@@ -253,13 +330,19 @@ public class AuthorSearchController extends FormBasicController implements Exten
 		e.setAuthor(getAuthor());
 		e.setDisplayname(getDisplayName());
 		e.setDescription(getDescription());
-		e.setType(getRestrictedType());
+		e.setTypes(getRestrictedTypes());
 		e.setOwnedResourcesOnly(isOwnedResourcesOnly());
+		e.setResourceUsage(getResourceUsage());
+		e.setClosed(getClosed());
+		if (licenseModule.isEnabled(licenseHandler)) {
+			Set<Long> keys = licenseEl.getSelectedKeys().stream().map(Long::valueOf).collect(Collectors.toSet());
+			e.setLicenseTypeKeys(keys);
+		}
 		fireEvent(ureq, e);
 	}
-
+	
 	private String[] getTranslatedResources(List<String> resources) {
-		List<String> l = new ArrayList<String>();
+		List<String> l = new ArrayList<>();
 		for(String key: resources){
 			if(StringHelper.containsNonWhitespace(key)) {
 				l.add(translate(key));
@@ -270,15 +353,22 @@ public class AuthorSearchController extends FormBasicController implements Exten
 		return l.toArray(new String[0]);
 	}
 	
-	private List<String> getResources() {
-		List<String> resources = new ArrayList<String>();
-		resources.add("");
-		for(OrderedRepositoryHandler handler:repositoryHandlerFactory.getOrderRepositoryHandlers()) {
-			// filter out disabled types in advanced search
-			// TODO: generalize by using a specific (new) handler-method
-			if (handler.getHandler().isCreate() || handler.getOrder() > 10000 || handler.getOrder() == 42 || handler.getOrder() == 20) {
-				resources.add(handler.getHandler().getSupportedType());
+	private String[] getResourcesCSS(List<String> resources) {
+		List<String> l = new ArrayList<>();
+		for(String key: resources){
+			if(StringHelper.containsNonWhitespace(key)) {
+				l.add("o_icon o_icon-fw " + RepositoyUIFactory.getIconCssClass(key));
+			} else {
+				l.add("");
 			}
+		}
+		return l.toArray(new String[0]);
+	}
+	
+	private List<String> getResources() {
+		List<String> resources = new ArrayList<>();
+		for(OrderedRepositoryHandler handler:repositoryHandlerFactory.getOrderRepositoryHandlers()) {
+			resources.add(handler.getHandler().getSupportedType());
 		}
 		return resources;
 	}

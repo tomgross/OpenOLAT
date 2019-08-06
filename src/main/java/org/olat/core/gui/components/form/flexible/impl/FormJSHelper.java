@@ -25,15 +25,17 @@
 */
 package org.olat.core.gui.components.form.flexible.impl;
 
+import java.io.IOException;
 import java.util.Iterator;
 import java.util.Set;
 
-import org.apache.commons.io.IOUtils;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.olat.core.gui.components.form.flexible.FormItem;
 import org.olat.core.gui.render.StringOutput;
 import org.olat.core.logging.OLATRuntimeException;
+import org.olat.core.logging.OLog;
+import org.olat.core.logging.Tracing;
 
 /**
  * Description:<br>
@@ -44,6 +46,8 @@ import org.olat.core.logging.OLATRuntimeException;
  * @author patrickb
  */
 public class FormJSHelper {
+	
+	private static final OLog log = Tracing.createLoggerFor(FormJSHelper.class);
 
 	private static final String[] EXTJSACTIONS = { "dblclick", "click", "change" };
 
@@ -68,25 +72,51 @@ public class FormJSHelper {
 				sb.append(getJSFnCallFor(form, id, i));
 				sb.append("\"");
 				break;
-				// actions = actions - FormEvent.ON_DOTDOTDOT[i];
 			}
 		}
 		return sb;
 	}
 
 	public static String getJSFnCallFor(Form form, String id, int actionIndex) {
-		String content = "o_ffEvent('";
-		content += form.getFormName() + "','";
-		content += form.getDispatchFieldId() + "','";
-		content += id + "','";
-		content += form.getEventFieldId() + "','";
-		content += (FormEvent.ON_DOTDOTDOT[actionIndex]);
-		content += ("')");
-		return content;
+		StringBuilder sb = new StringBuilder(64);
+		sb.append("o_ffEvent('")
+		  .append(form.getFormName()).append("','")
+		  .append(form.getDispatchFieldId()).append("','")
+		  .append(id).append("','")
+		  .append(form.getEventFieldId()).append("','")
+		  .append(FormEvent.ON_DOTDOTDOT[actionIndex])
+		  .append("')");
+		return sb.toString();
 	}
 	
 	/**
-	 * Build the javascript method to send a flexi form event.
+	 * Wrap the JavaScript method for onclick and onkeyup (limit to enter).
+	 * 
+	 * @param fnCall The function
+	 * @return The html code
+	 */
+	public static String onClickKeyEnter(String fnCall) {
+		StringBuilder sb = new StringBuilder(128);
+		onClickKeyEnter(sb, fnCall);
+		return sb.toString();
+	}
+	
+	/**
+	 * Wrap the JavaScript method for onclick and onkeyup (limit to enter).
+	 * 
+	 * @param sb The buffer to append the html code to
+	 * @param fnCall The function
+	 * @return The html code
+	 */
+	public static void onClickKeyEnter(StringBuilder sb, String fnCall) {
+		sb.append(" onclick=\"")
+		  .append(fnCall).append(";\" onkeyup=\"if(event.which == 13 || event.keyCode == 13) {")
+		  .append(fnCall)
+		  .append("; }\"");
+	}
+	
+	/**
+	 * Build the JavaScript method to send a flexi form event.
 	 * 
 	 * @param item The form item
 	 * @param dirtyCheck If false, the dirty check is by passed
@@ -99,7 +129,7 @@ public class FormJSHelper {
 	}
 	
 	/**
-	 * Build the javascript method to send a flexi form event.
+	 * Build the JavaScript method to send a flexi form event.
 	 * 
 	 * @param form The form object
 	 * @param id The id of the element
@@ -114,7 +144,7 @@ public class FormJSHelper {
 	}
 	
 	/**
-	 * Build the javascript method to send a flexi form event with all possible settings.
+	 * Build the JavaScript method to send a flexi form event with all possible settings.
 	 * 
 	 * @param form The form object
 	 * @param id The id of the element
@@ -123,50 +153,66 @@ public class FormJSHelper {
 	 * @param pushState If true, the state (visible url in browser) will be pushed to the browser
 	 * @param submit If true, the form will be submitted but it only works for none multi part forms.
 	 * @param pairs Additional name value pairs send by the link
-	 * @return
+	 * @return The code
 	 */
 	public static String getXHRFnCallFor(Form form, String id, int actionIndex, boolean dirtyCheck, boolean pushState, boolean submit, NameValuePair... pairs) {
-		StringOutput sb = new StringOutput(128);
-		sb.append("o_ffXHREvent('")
-		  .append(form.getFormName()).append("','")
-		  .append(form.getDispatchFieldId()).append("','")
-		  .append(id).append("','")
-		  .append(form.getEventFieldId()).append("','")
-		  .append(FormEvent.ON_DOTDOTDOT[actionIndex])
-		  .append("',").append(dirtyCheck)
-		  .append(",").append(pushState)
-		  .append(",").append(submit);
-
-		if(pairs != null && pairs.length > 0) {
-			for(NameValuePair pair:pairs) {
-				sb.append(",'").append(pair.getName()).append("','").append(pair.getValue()).append("'");
+		try(StringOutput sb = new StringOutput(128)) {
+			sb.append("o_ffXHREvent('")
+			  .append(form.getFormName()).append("','")
+			  .append(form.getDispatchFieldId()).append("','")
+			  .append(id).append("','")
+			  .append(form.getEventFieldId()).append("','")
+			  .append(FormEvent.ON_DOTDOTDOT[actionIndex])
+			  .append("',").append(dirtyCheck)
+			  .append(",").append(pushState)
+			  .append(",").append(submit);
+	
+			if(pairs != null && pairs.length > 0) {
+				for(NameValuePair pair:pairs) {
+					sb.append(",'").append(pair.getName()).append("','").append(pair.getValue()).append("'");
+				}
 			}
+	
+			sb.append(")");
+			return sb.toString();
+		} catch(IOException e) {
+			log.error("", e);
+			return "";
 		}
-
-		sb.append(")");
-		IOUtils.closeQuietly(sb);
-		return sb.toString();
 	}
 	
+	/**
+	 * This send an event to the server but don't wait for an answer in the form
+	 * of HTML to render.
+	 * 
+	 * @param form The form object
+	 * @param id The id of the element
+	 * @param actionIndex The type of event (click...)
+	 * @param pairs Additional name value pairs send by the AJAX call
+	 * @return The code
+	 */
 	public static String getXHRNFFnCallFor(Form form, String id, int actionIndex, NameValuePair... pairs) {
-		StringOutput sb = new StringOutput(128);
-		sb.append("o_ffXHRNFEvent('")
-		  .append(form.getFormName()).append("','")
-		  .append(form.getDispatchFieldId()).append("','")
-		  .append(id).append("','")
-		  .append(form.getEventFieldId()).append("','")
-		  .append(FormEvent.ON_DOTDOTDOT[actionIndex])
-		  .append("'");
-
-		if(pairs != null && pairs.length > 0) {
-			for(NameValuePair pair:pairs) {
-				sb.append(",'").append(pair.getName()).append("','").append(pair.getValue()).append("'");
+		try(StringOutput sb = new StringOutput(128)) {
+			sb.append("o_ffXHRNFEvent('")
+			  .append(form.getFormName()).append("','")
+			  .append(form.getDispatchFieldId()).append("','")
+			  .append(id).append("','")
+			  .append(form.getEventFieldId()).append("','")
+			  .append(FormEvent.ON_DOTDOTDOT[actionIndex])
+			  .append("'");
+	
+			if(pairs != null && pairs.length > 0) {
+				for(NameValuePair pair:pairs) {
+					sb.append(",'").append(pair.getName()).append("','").append(pair.getValue()).append("'");
+				}
 			}
-		}
-
-		sb.append(")");
-		IOUtils.closeQuietly(sb);
+	
+			sb.append(")");
 		return sb.toString();
+		} catch(IOException e) {
+			log.error("", e);
+			return "";
+		}
 	}
 	
 	public static String generateXHRFnCallVariables(Form form, String id, int actionIndex) {
@@ -180,17 +226,20 @@ public class FormJSHelper {
 	}
 	
 	public static String getXHRSubmit(Form form, NameValuePair... pairs) {
-		StringOutput sb = new StringOutput(128);
-		sb.append("o_ffXHRNFEvent('")
-		   .append(form.getFormName()).append("'");
-		if(pairs != null && pairs.length > 0) {
-			for(NameValuePair pair:pairs) {
-				sb.append(",'").append(pair.getName()).append("','").append(pair.getValue()).append("'");
+		try(StringOutput sb = new StringOutput(128)) {
+			sb.append("o_ffXHRNFEvent('")
+			   .append(form.getFormName()).append("'");
+			if(pairs != null && pairs.length > 0) {
+				for(NameValuePair pair:pairs) {
+					sb.append(",'").append(pair.getName()).append("','").append(pair.getValue()).append("'");
+				}
 			}
+			sb.append(")");
+			return sb.toString();
+		} catch(IOException e) {
+			log.error("", e);
+			return "";
 		}
-		sb.append(")");
-		IOUtils.closeQuietly(sb);
-		return sb.toString();
 	}
 
 	/**
@@ -237,7 +286,7 @@ public class FormJSHelper {
 	
 	public static String getJSStartWithVarDeclaration(String id){
 		StringBuilder sb = new StringBuilder(150);
-		sb.append(" <script type=\"text/javascript\">\n /* <![CDATA[ */ \n");
+		sb.append(" <script>\n /* <![CDATA[ */ \n");
 		// Execute code within an anonymous function (closure) to not leak
 		// variables to global scope (OLAT-5755)
 		sb.append("(function() {");
@@ -248,7 +297,7 @@ public class FormJSHelper {
 	public static String getJSStart(){
 		// Execute code within an anonymous function (closure) to not leak
 		// variables to global scope (OLAT-5755)
-		return " <script type=\"text/javascript\">\n /* <![CDATA[ */ \n (function() {";
+		return " <script>\n /* <![CDATA[ */ \n (function() {";
 	}
 	
 	public static String getJSEnd(){
@@ -279,7 +328,7 @@ public class FormJSHelper {
 	 * @return
 	 */
 	public static StringOutput appendFlexiFormDirtyOn(StringOutput sb, Form form, String events, String formDispatchId) {
-		sb.append(" <script type=\"text/javascript\">\n /* <![CDATA[ */ \n")
+		sb.append(" <script>\n /* <![CDATA[ */ \n")
 		  .append("(function() { jQuery('#").append(formDispatchId).append("').on('").append(events).append("', {formId:\"").append(form.getDispatchFieldId()).append("\", hideMessage:").append(form.isHideDirtyMarkingMessage()).append("}, setFlexiFormDirtyByListener);")
 		  .append("})();\n /* ]]> */ \n</script>");
 		return sb;
@@ -294,10 +343,16 @@ public class FormJSHelper {
 	 * @return
 	 */
 	public static StringOutput setFlexiFormDirtyOnLoad(StringOutput sb, Form form) {
-		sb.append("<script type=\"text/javascript\">\n /* <![CDATA[ */ \n")
+		sb.append("<script>\n /* <![CDATA[ */ \n")
 		  .append(" setTimeout(function(){ setFlexiFormDirty(\"").append(form.getDispatchFieldId()).append("\",").append(form.isHideDirtyMarkingMessage()).append(");}, 500);")
 		  .append("\n/* ]]> */ \n</script>");
 		return sb;
+	}
+	
+	public static String setFlexiFormDirtyOnLoad(Form form) {
+		StringBuilder sb = new StringBuilder(256);
+		sb.append(" setTimeout(function(){ setFlexiFormDirty(\"").append(form.getDispatchFieldId()).append("\",").append(form.isHideDirtyMarkingMessage()).append(");}, 500);");
+		return sb.toString();
 	}
 	
 	public static String getSetFlexiFormDirtyFnCallOnly(Form form){

@@ -13,6 +13,9 @@
 		&.o_table_no_margin .table {
 			margin: 0;
 		}
+		tfoot {
+			border-top:solid $table-border-color 2px;
+		}
 	}
 	
 	&.o_table_edit table tbody {
@@ -29,7 +32,7 @@
 
 		.o_table_pagination {
 			text-align: center;
-		}		
+		}
 	}
 	
 	.o_table_rows_infos {
@@ -81,6 +84,20 @@
 	}
 }
 
+.o_breadcrumb.o_table_flexi_breadcrumb ol.breadcrumb {
+	margin: 5px 0 0 0;
+}
+
+div.o_table_flexi div.o_table_flexi_leaf  {
+	margin-left: 1.55em;
+}
+
+@for $i from 0 through 11 {
+	div.o_table_flexi div.o_table_flexi_l#{$i}  {
+		padding-left: ($i * $o-tree-padding-steps-px); 
+	}
+}
+
 @media (max-width: $screen-xs-max) { 
 	.o_table_wrapper .o_table_rows_infos {
 		clear:both;
@@ -124,7 +141,7 @@ a.o_orderby, a.o_orderby:hover {
 	margin-left: 6px;
 }
 
-.o_table_tools_indications {
+.o_table_tools_indications, .o_table_tools_indications_filter_only {
 	margin-left: 10px;
 	padding-top:3px;
 	font-size:80%;

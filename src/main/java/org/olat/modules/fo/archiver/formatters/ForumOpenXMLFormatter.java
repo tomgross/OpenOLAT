@@ -185,12 +185,7 @@ public class ForumOpenXMLFormatter extends ForumFormatter {
 				if (lastDot > 0) {
 					String extension = filename.substring(lastDot + 1).toLowerCase();
 					if("jpeg".equals(extension) || "jpg".equals(extension) || "gif".equals(extension) || "png".equals(extension)) {
-						try {
-							document.appendImage(file.toURI().toURL());
-						} catch (MalformedURLException e) {
-							LOG.error(e.getMessage());
-						}
-
+						document.appendImage(file);
 						attach = false;
 					}
 				}

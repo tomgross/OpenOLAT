@@ -51,6 +51,13 @@
 				<bean id="upgrade_11_2_1" class="org.olat.upgrade.OLATUpgrade_11_2_1"/>
 				<bean id="upgrade_11_3_0" class="org.olat.upgrade.OLATUpgrade_11_3_0"/>
 				<bean id="upgrade_11_4_0" class="org.olat.upgrade.OLATUpgrade_11_4_0"/>				
+				<bean id="upgrade_12_0_0" class="org.olat.upgrade.OLATUpgrade_12_0_0"/>
+				<bean id="upgrade_12_2_0" class="org.olat.upgrade.OLATUpgrade_12_2_0"/>
+				<bean id="upgrade_12_3_0" class="org.olat.upgrade.OLATUpgrade_12_3_0"/>
+				<bean id="upgrade_12_4_0" class="org.olat.upgrade.OLATUpgrade_12_4_0"/>
+				<bean id="upgrade_12_4_1" class="org.olat.upgrade.OLATUpgrade_12_4_1"/>
+				<bean id="upgrade_12_5_3" class="org.olat.upgrade.OLATUpgrade_12_5_3"/>
+				<bean id="upgrade_12_5_17" class="org.olat.upgrade.OLATUpgrade_12_5_17"/>
 			</list>
 		</property>
 	</bean>

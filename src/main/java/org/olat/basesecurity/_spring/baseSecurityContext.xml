@@ -10,9 +10,12 @@
 
 	<context:component-scan base-package="org.olat.basesecurity" />
 
-	<!-- manager -->
-	<bean id="baseSecurityManager" class="org.olat.basesecurity.BaseSecurityManager" init-method="init" 
-		depends-on="loginModule, resourceManager, invitationDao, i18nModule, triggerI18nModuleInit">
+	<bean id="baseSecurityManager" class="org.olat.basesecurity.BaseSecurityManager" init-method="init" depends-on="database">
+		<property name="resourceManager" ref="resourceManager"/>
+		<property name="loginModule" ref="loginModule"/>
+		<property name="dbInstance" ref="database"/>
+		<property name="invitationDao" ref="invitationDao" />
+		<property name="authenticationHistoryDao" ref="authenticationHistoryDao" />
+		<property name="dbVendor" value="${db.vendor}" />
 	</bean>
-
 </beans>

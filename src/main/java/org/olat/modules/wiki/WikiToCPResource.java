@@ -29,6 +29,7 @@ import javax.servlet.http.HttpServletResponse;
 
 import org.apache.commons.io.IOUtils;
 import org.olat.core.gui.media.MediaResource;
+import org.olat.core.gui.media.ServletUtil;
 import org.olat.core.gui.translator.Translator;
 import org.olat.core.id.Identity;
 import org.olat.core.id.OLATResourceable;
@@ -50,7 +51,7 @@ public class WikiToCPResource implements MediaResource {
 	
 	private static final OLog log = Tracing.createLoggerFor(WikiToCPResource.class);
 	
-	private final String encoding = "UTF-8";
+	private static final String encoding = "UTF-8";
 	
 	private final Identity identity;
 	private final Translator translator;
@@ -62,6 +63,11 @@ public class WikiToCPResource implements MediaResource {
 		this.ores = ores;
 	}
 	
+	@Override
+	public long getCacheControlDuration() {
+		return ServletUtil.CACHE_NO_CACHE;
+	}
+
 	@Override
 	public boolean acceptRanges() {
 		return false;
@@ -101,15 +107,11 @@ public class WikiToCPResource implements MediaResource {
 		hres.setHeader("Content-Disposition","attachment; filename*=UTF-8''" + urlEncodedLabel);			
 		hres.setHeader("Content-Description", urlEncodedLabel);
 		
-		ZipOutputStream zout = null;
-		try {
-			zout = new ZipOutputStream(hres.getOutputStream());
+		try(ZipOutputStream zout = new ZipOutputStream(hres.getOutputStream())) {
 			zout.setLevel(9);
 			wikiToCP(wiki, zout);
 		} catch (Exception e) {
 			log.error("", e);
-		} finally {
-			IOUtils.closeQuietly(zout);
 		}
 	}
 
@@ -125,7 +127,7 @@ public class WikiToCPResource implements MediaResource {
 		// create the ims manifest
 		String manifest = export.createIMSManifest(wiki, identity);
 		zout.putNextEntry(new ZipEntry("imsmanifest.xml"));
-		IOUtils.write(manifest, zout);
+		IOUtils.write(manifest, zout, "UTF-8");
 		zout.closeEntry();
 
 		VFSContainer mediaContainer = WikiManager.getInstance().getMediaFolder(ores);
@@ -137,7 +139,7 @@ public class WikiToCPResource implements MediaResource {
 		// create the javascript mapping file
 		String jsContent = export.createJsMappingContent(wiki);
 		zout.putNextEntry(new ZipEntry("mapping.js"));
-		IOUtils.write(jsContent, zout);
+		IOUtils.write(jsContent, zout, "UTF-8");
 		zout.closeEntry();
 		
 		
@@ -145,7 +147,7 @@ public class WikiToCPResource implements MediaResource {
 		for (WikiPage page: pages) {
 			String htmlPage = export.wikiPageToHtml(page);
 			zout.putNextEntry(new ZipEntry(page.getPageId() + ".html"));
-			IOUtils.write(htmlPage, zout);
+			IOUtils.write(htmlPage, zout, "UTF-8");
 			zout.closeEntry();
 		}
 		

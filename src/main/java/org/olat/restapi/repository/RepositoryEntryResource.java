@@ -26,16 +26,19 @@ package org.olat.restapi.repository;
 
 import static org.olat.restapi.security.RestSecurityHelper.getIdentity;
 import static org.olat.restapi.security.RestSecurityHelper.getUserRequest;
+import static org.olat.restapi.security.RestSecurityHelper.isAdmin;
 import static org.olat.restapi.security.RestSecurityHelper.isAuthor;
 import static org.olat.restapi.security.RestSecurityHelper.isAuthorEditor;
 
 import java.io.File;
+import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Date;
 import java.util.List;
 
 import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
 import javax.ws.rs.Consumes;
 import javax.ws.rs.DELETE;
 import javax.ws.rs.FormParam;
@@ -68,8 +71,11 @@ import org.olat.core.logging.activity.OlatResourceableType;
 import org.olat.core.logging.activity.ThreadLocalUserActivityLogger;
 import org.olat.core.util.FileUtils;
 import org.olat.core.util.coordinate.LockResult;
+import org.olat.core.util.mail.MailPackage;
 import org.olat.fileresource.FileResourceManager;
 import org.olat.fileresource.types.ImsCPFileResource;
+import org.olat.modules.lecture.restapi.LectureBlocksWebService;
+import org.olat.modules.reminder.restapi.RemindersWebService;
 import org.olat.repository.ErrorList;
 import org.olat.repository.RepositoryEntry;
 import org.olat.repository.RepositoryManager;
@@ -157,15 +163,42 @@ public class RepositoryEntryResource {
     return response.build();
   }
   
-  
-  //get put/post delete add owner
+	/**
+	 * To get the web service for the lecture blocks of a specific learning resource.
+	 * @response.representation.200.doc A web service to manage the lecture blocks
+	 * @param repoEntryKey The primary key of the learning resource 
+	 * @return The web service for lecture blocks.
+	 */
+	@Path("lectureblocks")
+	public LectureBlocksWebService getLectureBlocksWebService(@PathParam("repoEntryKey")String repoEntryKey) {
+	    RepositoryEntry re = lookupRepositoryEntry(repoEntryKey);
+	    if(re == null) return null;
+		LectureBlocksWebService service = new LectureBlocksWebService(re);
+		CoreSpringFactory.autowireObject(service);
+		return service;
+	}
+	
+	/**
+	 * To get the web service for the reminders of a specific learning resource.
+	 * @response.representation.200.doc A web service to manage the reminders
+	 * @param repoEntryKey The primary key of the learning resource 
+	 * @return The web service for reminders.
+	 */
+	@Path("reminders")
+	public RemindersWebService getRemindersWebService(@PathParam("repoEntryKey")String repoEntryKey) {
+	    RepositoryEntry re = lookupRepositoryEntry(repoEntryKey);
+	    if(re == null) return null;
+	    RemindersWebService service = new RemindersWebService(re);
+		CoreSpringFactory.autowireObject(service);
+		return service;
+	}
   
 	/**
 	 * Returns the list of owners of the repository entry specified by the groupKey.
 	 * @response.representation.200.qname {http://www.example.com}userVO
-   * @response.representation.200.mediaType application/xml, application/json
-   * @response.representation.200.doc Owners of the repository entry
-   * @response.representation.200.example {@link org.olat.user.restapi.Examples#SAMPLE_USERVOes}
+	 * @response.representation.200.mediaType application/xml, application/json
+	 * @response.representation.200.doc Owners of the repository entry
+	 * @response.representation.200.example {@link org.olat.user.restapi.Examples#SAMPLE_USERVOes}
 	 * @response.representation.404.doc The repository entry cannot be found
 	 * @param repoEntryKey The key of the repository entry
 	 * @param request The HTTP Request
@@ -213,7 +246,7 @@ public class RepositoryEntryResource {
 
 			UserRequest ureq = RestSecurityHelper.getUserRequest(request);
 			IdentitiesAddEvent iae = new IdentitiesAddEvent(identityToAdd);
-			repositoryManager.addOwners(ureq.getIdentity(), iae, repoEntry);
+			repositoryManager.addOwners(ureq.getIdentity(), iae, repoEntry, new MailPackage(false));
 			return Response.ok().build();
 		} catch (Exception e) {
 			log.error("Trying to add an owner to a repository entry", e);
@@ -237,7 +270,7 @@ public class RepositoryEntryResource {
 			List<Identity> identityToAdd = loadIdentities(owners);
 			UserRequest ureq = RestSecurityHelper.getUserRequest(request);
 			IdentitiesAddEvent iae = new IdentitiesAddEvent(identityToAdd);
-			repositoryManager.addOwners(ureq.getIdentity(), iae, repoEntry);
+			repositoryManager.addOwners(ureq.getIdentity(), iae, repoEntry, new MailPackage(false));
 			return Response.ok().build();
 		} catch (Exception e) {
 			log.error("Trying to add an owner to a repository entry", e);
@@ -272,7 +305,7 @@ public class RepositoryEntryResource {
 			}
 
 			final UserRequest ureq = RestSecurityHelper.getUserRequest(request);
-			repositoryManager.removeOwners(ureq.getIdentity(), Collections.singletonList(identityToRemove), repoEntry);
+			repositoryManager.removeOwners(ureq.getIdentity(), Collections.singletonList(identityToRemove), repoEntry, new MailPackage(false));
 			return Response.ok().build();
 		} catch (Exception e) {
 			log.error("Trying to remove an owner to a repository entry", e);
@@ -283,9 +316,9 @@ public class RepositoryEntryResource {
 	/**
 	 * Returns the list of coaches of the repository entry.
 	 * @response.representation.200.qname {http://www.example.com}userVO
-   * @response.representation.200.mediaType application/xml, application/json
-   * @response.representation.200.doc Coaches of the repository entry
-   * @response.representation.200.example {@link org.olat.user.restapi.Examples#SAMPLE_USERVOes}
+	 * @response.representation.200.mediaType application/xml, application/json
+	 * @response.representation.200.doc Coaches of the repository entry
+	 * @response.representation.200.example {@link org.olat.user.restapi.Examples#SAMPLE_USERVOes}
 	 * @response.representation.404.doc The repository entry cannot be found
 	 * @param repoEntryKey The key of the repository entry
 	 * @param request The HTTP Request
@@ -392,7 +425,7 @@ public class RepositoryEntryResource {
 			}
 
 			final UserRequest ureq = RestSecurityHelper.getUserRequest(request);
-			repositoryManager.removeTutors(ureq.getIdentity(), Collections.singletonList(identityToRemove), repoEntry);
+			repositoryManager.removeTutors(ureq.getIdentity(), Collections.singletonList(identityToRemove), repoEntry, new MailPackage(false));
 			return Response.ok().build();
 		} catch (Exception e) {
 			log.error("Trying to remove a coach from a repository entry", e);
@@ -544,42 +577,65 @@ public class RepositoryEntryResource {
    * @param request The HTTP request
    * @return
    */
-  @GET
-  @Path("file")
-  @Produces({"application/zip", MediaType.APPLICATION_OCTET_STREAM})
-  public Response getRepoFileById(@PathParam("repoEntryKey")String repoEntryKey, @Context HttpServletRequest request) {
-    RepositoryEntry re = lookupRepositoryEntry(repoEntryKey);
-    if(re == null) return Response.serverError().status(Status.NOT_FOUND).build();
+	@GET
+	@Path("file")
+	@Produces({ "application/zip", MediaType.APPLICATION_OCTET_STREAM })
+	public Response getRepoFileById(@PathParam("repoEntryKey") String repoEntryKey,
+			@Context HttpServletRequest request, @Context HttpServletResponse response) {
+		RepositoryEntry re = lookupRepositoryEntry(repoEntryKey);
+		if (re == null) {
+			return Response.serverError().status(Status.NOT_FOUND).build();
+		}
 
-    RepositoryHandler typeToDownload = RepositoryHandlerFactory.getInstance().getRepositoryHandler(re);
-    if(typeToDownload == null) return Response.serverError().status(Status.NOT_FOUND).build();
-    
-    OLATResource ores = OLATResourceManager.getInstance().findResourceable(re.getOlatResource());
-    if(ores == null) return Response.serverError().status(Status.NOT_FOUND).build();
+		RepositoryHandler typeToDownload = RepositoryHandlerFactory.getInstance().getRepositoryHandler(re);
+		if (typeToDownload == null) {
+			return Response.serverError().status(Status.NOT_FOUND).build();
+		}
 
-    Identity identity = getIdentity(request);
-    boolean isAuthor = RestSecurityHelper.isAuthor(request);
-    boolean isOwner = repositoryManager.isOwnerOfRepositoryEntry(identity, re);
-    if(!(isAuthor | isOwner)) return Response.serverError().status(Status.UNAUTHORIZED).build();
-    boolean canDownload = re.getCanDownload() && typeToDownload.supportsDownload();
-    if(!canDownload) return Response.serverError().status(Status.NOT_ACCEPTABLE).build();
+		OLATResource ores = OLATResourceManager.getInstance().findResourceable(re.getOlatResource());
+		if (ores == null) {
+			return Response.serverError().status(Status.NOT_FOUND).build();
+		}
 
-    boolean isAlreadyLocked = typeToDownload.isLocked(ores);
-    LockResult lockResult = null;
-    try {
-      lockResult = typeToDownload.acquireLock(ores, identity);
-      if(lockResult == null || (lockResult != null && lockResult.isSuccess() && !isAlreadyLocked)) {
-        MediaResource mr = typeToDownload.getAsMediaResource(ores, false);
-        if(mr != null) {
-        	repositoryService.incrementDownloadCounter(re);
-          return Response.ok(mr.getInputStream()).cacheControl(cc).build(); // success
-        } else return Response.serverError().status(Status.NO_CONTENT).build();
-      } else return Response.serverError().status(Status.CONFLICT).build();
-    }
-    finally {
-      if((lockResult != null && lockResult.isSuccess() && !isAlreadyLocked)) typeToDownload.releaseLock(lockResult);
-    }
-  }
+		Identity identity = getIdentity(request);
+		boolean canDownload = re.getCanDownload() && typeToDownload.supportsDownload();
+		if (isAdmin(request) || RepositoryManager.getInstance().isOwnerOfRepositoryEntry(identity, re)) {
+			canDownload = true;
+		} else if(!isAuthor(request)) {
+			return Response.serverError().status(Status.UNAUTHORIZED).build();
+		}
+
+		if (!canDownload) {
+			return Response.serverError().status(Status.NOT_ACCEPTABLE).build();
+		}
+
+		boolean isAlreadyLocked = typeToDownload.isLocked(ores);
+		LockResult lockResult = null;
+		try {
+			lockResult = typeToDownload.acquireLock(ores, identity);
+			if (lockResult == null || (lockResult.isSuccess() && !isAlreadyLocked)) {
+				MediaResource mr = typeToDownload.getAsMediaResource(ores, false);
+				if (mr != null) {
+					repositoryService.incrementDownloadCounter(re);
+					InputStream in = mr.getInputStream();
+					if(in == null) {
+						mr.prepare(response);
+						return null;
+					} else {
+						return Response.ok(in).cacheControl(cc).build(); // success
+					}
+				} else {
+					return Response.serverError().status(Status.NO_CONTENT).build();
+				}
+			} else {
+				return Response.serverError().status(Status.CONFLICT).build();
+			}
+		} finally {
+			if ((lockResult != null && lockResult.isSuccess() && !isAlreadyLocked)) {
+				typeToDownload.releaseLock(lockResult);
+			}
+		}
+	}
   
   @POST
   @Produces({MediaType.APPLICATION_XML, MediaType.APPLICATION_JSON})
@@ -726,7 +782,7 @@ public class RepositoryEntryResource {
 				}
 				frm.unzipFileResource(re.getOlatResource());
 			}
-			log.audit("Resource: " + re.getOlatResource() + " replaced by " + identity.getName());
+			log.audit("Resource: " + re.getOlatResource() + " replaced by " + identity.getKey());
 			return re;
 		}
 
@@ -805,7 +861,7 @@ public class RepositoryEntryResource {
 		
 		RepositoryService rs = CoreSpringFactory.getImpl(RepositoryService.class);
 		if("closed".equals(newStatus)) {
-			rs.closeRepositoryEntry(re);
+			rs.closeRepositoryEntry(re, null, false);
 			log.audit("REST closing course: " + re.getDisplayname() + " [" + re.getKey() + "]");
 			ThreadLocalUserActivityLogger.log(LearningResourceLoggingAction.LEARNING_RESOURCE_CLOSE, getClass(),
 					LoggingResourceable.wrap(re, OlatResourceableType.genRepoEntry));
@@ -821,7 +877,7 @@ public class RepositoryEntryResource {
 					LoggingResourceable.wrap(re, OlatResourceableType.genRepoEntry));
 		} else if("deleted".equals(newStatus)) {
 			Identity identity = getIdentity(request);
-			rs.deleteSoftly(re, identity, true);
+			rs.deleteSoftly(re, identity, true, false);
 			log.audit("REST deleting (soft) course: " + re.getDisplayname() + " [" + re.getKey() + "]");
 			ThreadLocalUserActivityLogger.log(LearningResourceLoggingAction.LEARNING_RESOURCE_TRASH, getClass(),
 					LoggingResourceable.wrap(re, OlatResourceableType.genRepoEntry));

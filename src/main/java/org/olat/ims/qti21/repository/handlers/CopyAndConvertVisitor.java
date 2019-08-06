@@ -20,6 +20,7 @@
 package org.olat.ims.qti21.repository.handlers;
 
 import java.io.File;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.Writer;
@@ -42,10 +43,14 @@ import javax.xml.stream.FactoryConfigurationError;
 import javax.xml.stream.XMLOutputFactory;
 import javax.xml.stream.XMLStreamWriter;
 
+import org.olat.core.CoreSpringFactory;
 import org.olat.core.logging.OLog;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.WebappHelper;
+import org.olat.fileresource.types.ImsQTI21Resource;
 import org.olat.fileresource.types.ImsQTI21Resource.PathResourceLocator;
+import org.olat.ims.qti21.QTI21Service;
+import org.olat.ims.qti21.model.xml.AssessmentItemChecker;
 import org.olat.ims.qti21.model.xml.BadRessourceHelper;
 import org.olat.ims.qti21.model.xml.Onyx38ToQtiWorksHandler;
 import org.olat.ims.qti21.model.xml.OnyxToQtiWorksHandler;
@@ -57,6 +62,7 @@ import org.xml.sax.helpers.DefaultHandler;
 
 import uk.ac.ed.ph.jqtiplus.JqtiExtensionManager;
 import uk.ac.ed.ph.jqtiplus.node.RootNode;
+import uk.ac.ed.ph.jqtiplus.node.item.AssessmentItem;
 import uk.ac.ed.ph.jqtiplus.provision.BadResourceException;
 import uk.ac.ed.ph.jqtiplus.reading.AssessmentObjectXmlLoader;
 import uk.ac.ed.ph.jqtiplus.reading.QtiXmlInterpretationException;
@@ -65,6 +71,7 @@ import uk.ac.ed.ph.jqtiplus.resolution.ResolvedAssessmentItem;
 import uk.ac.ed.ph.jqtiplus.resolution.ResolvedAssessmentTest;
 import uk.ac.ed.ph.jqtiplus.validation.ItemValidationResult;
 import uk.ac.ed.ph.jqtiplus.validation.TestValidationResult;
+import uk.ac.ed.ph.jqtiplus.xmlutils.locators.FileResourceLocator;
 import uk.ac.ed.ph.jqtiplus.xmlutils.locators.ResourceLocator;
 
 /**
@@ -101,17 +108,17 @@ class CopyAndConvertVisitor extends SimpleFileVisitor<Path> {
 	public FileVisitResult visitFile(Path file, BasicFileAttributes attrs)
     throws IOException {
 		Path relativeFile = source.relativize(file);
-        final Path destFile = Paths.get(destDir.toString(), relativeFile.toString());
-        if(filter.matches(file)) {
-        	String filename = file.getFileName().toString();
-        	if(filename.startsWith(".")) {
-        		//ignore
-        	} else if(filename != null && filename.endsWith("xml") && !filename.equals("imsmanifest.xml")) {
-        		convertXmlFile(file, destFile);
-        	} else {
-        		Files.copy(file, destFile, StandardCopyOption.REPLACE_EXISTING);
-        	}
-        }
+		final Path destFile = Paths.get(destDir.toString(), relativeFile.toString());
+		if(filter.matches(file)) {
+			String filename = file.getFileName().toString();
+			if(filename.startsWith(".")) {
+				//ignore
+			} else if(filename.endsWith("xml") && !filename.equals("imsmanifest.xml")) {
+				convertXmlFile(file, destFile);
+			} else {
+				Files.copy(file, destFile, StandardCopyOption.REPLACE_EXISTING);
+			}
+		}
         return FileVisitResult.CONTINUE;
 	}
  
@@ -120,7 +127,7 @@ class CopyAndConvertVisitor extends SimpleFileVisitor<Path> {
 	throws IOException {
 		Path relativeDir = source.relativize(dir);
         final Path dirToCreate = Paths.get(destDir.toString(), relativeDir.toString());
-        if(Files.notExists(dirToCreate)){
+        if(!dirToCreate.toFile().exists()) {
         	Files.createDirectory(dirToCreate);
         }
         return FileVisitResult.CONTINUE;
@@ -136,20 +143,24 @@ class CopyAndConvertVisitor extends SimpleFileVisitor<Path> {
 		try {
 			boolean validated = true;
 			QTI21Infos fileInfos = scanFile(inputFile);
+			//inherit from test if needed
+			if(fileInfos.getEditor() == null && infos.getEditor() != null) {
+				fileInfos.setEditor(infos.getEditor());
+				fileInfos.setVersion(infos.getVersion());
+			}
 			if(onyx38Family(fileInfos)) {
-				validated = convertXmlFile(inputFile, outputFile, fileInfos.getType(), new HandlerProvider() {
-					@Override
-					public DefaultHandler2 create(XMLStreamWriter xtw) {
-						return new Onyx38ToQtiWorksHandler(xtw);
-					}
+				validated = convertXmlFile(inputFile, outputFile, fileInfos.getType(), xtw -> {
+					return new Onyx38ToQtiWorksHandler(xtw);
 				});
 			} else if(onyxWebFamily(fileInfos)) {
-				validated = convertXmlFile(inputFile, outputFile, infos.getType(), new HandlerProvider() {
-					@Override
-					public DefaultHandler2 create(XMLStreamWriter xtw) {
-						return new OnyxToQtiWorksHandler(xtw, infos);
-					}
+				validated = convertXmlFile(inputFile, outputFile, fileInfos.getType(), xtw -> {
+					return new OnyxToQtiWorksHandler(xtw, infos);
 				});
+				
+				if(validated && fileInfos.getType() == InputType.assessmentItem) {
+					//check templateVariables
+					checkAssessmentItem(outputFile);
+				}
 			} else {
 				Files.copy(inputFile, outputFile, StandardCopyOption.REPLACE_EXISTING);
 			}
@@ -162,14 +173,14 @@ class CopyAndConvertVisitor extends SimpleFileVisitor<Path> {
 	
 	private boolean onyx38Family(QTI21Infos fileInfos) {
 		if(fileInfos == null || fileInfos.getEditor() == null) return false;
-		String version = infos.getVersion();
-		return "Onyx Editor".equals(infos.getEditor()) && version != null &&
+		String version = fileInfos.getVersion();
+		return "Onyx Editor".equals(fileInfos.getEditor()) && version != null &&
 				(version.startsWith("2.") || version.startsWith("3."));
 	}
 	
 	private boolean onyxWebFamily(QTI21Infos fileInfos) {
 		if(fileInfos == null || fileInfos.getEditor() == null) return false;
-		return "ONYX Editor".equals(infos.getEditor());
+		return "ONYX Editor".equals(fileInfos.getEditor());
 	}
 	
 	private QTI21Infos scanFile(Path inputFile) {
@@ -198,6 +209,9 @@ class CopyAndConvertVisitor extends SimpleFileVisitor<Path> {
 			
 			boolean valid = validate(tmpFile.toPath(), type, true);
 			if(valid) {
+				if(!outputFile.getParent().toFile().exists()) {
+					outputFile.getParent().toFile().mkdirs();
+				}
 				Files.copy(tmpFile.toPath(), outputFile, StandardCopyOption.REPLACE_EXISTING);
 			}
 			return valid;
@@ -242,6 +256,27 @@ class CopyAndConvertVisitor extends SimpleFileVisitor<Path> {
 		} catch (URISyntaxException e) {
 			log.error("", e);
 			return false;
+		}
+	}
+	
+	private void checkAssessmentItem(Path outputFile) {
+		QTI21Service qtiService = CoreSpringFactory.getImpl(QTI21Service.class);
+		QtiXmlReader qtiXmlReader = new QtiXmlReader(qtiService.jqtiExtensionManager());
+		ResourceLocator fileResourceLocator = new FileResourceLocator();
+		ResourceLocator inputResourceLocator = 
+				ImsQTI21Resource.createResolvingResourceLocator(fileResourceLocator);
+		
+		URI assessmentObjectSystemId = outputFile.toFile().toURI();
+		AssessmentObjectXmlLoader assessmentObjectXmlLoader = new AssessmentObjectXmlLoader(qtiXmlReader, inputResourceLocator);
+		ResolvedAssessmentItem resolvedAssessmentItem = assessmentObjectXmlLoader.loadAndResolveAssessmentItem(assessmentObjectSystemId);
+		AssessmentItem assessmentItem = resolvedAssessmentItem.getRootNodeLookup().extractIfSuccessful();
+
+		if(!AssessmentItemChecker.checkAndCorrect(assessmentItem)) {
+			try(FileOutputStream out = new FileOutputStream(outputFile.toFile())) {
+				qtiService.qtiSerializer().serializeJqtiObject(assessmentItem, out);
+			} catch(Exception e) {
+				log.error("", e);
+			}
 		}
 	}
 	

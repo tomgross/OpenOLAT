@@ -8,7 +8,7 @@
   http://www.springframework.org/schema/context 
   http://www.springframework.org/schema/context/spring-context.xsd">
   
-	<context:component-scan base-package="org.olat.core.util.session,org.olat.core.util.vfs.version,org.olat.core.helpers" />
+	<context:component-scan base-package="org.olat.core.util.session,org.olat.core.util.vfs.version,org.olat.core.util.i18n" />
 
 	<bean id="codeHelper" class="org.olat.core.util.CodeHelper" >
 		<constructor-arg value="${node.id}" />
@@ -31,6 +31,7 @@
 				<entry key="sslEnabled" value="${smtp.sslEnabled}"/>
 				<entry key="sslCheckCertificate" value="${smtp.sslCheckCertificate}"/>
 				<entry key="smtpStarttls" value="${smtp.starttls}"/>
+				<entry key="mailFromDomain" value="${fromdomain}"/>
 				<entry key="mailFrom" value="${fromemail}"/>
 				<entry key="mailFromName" value="${fromname}"/>
 				<entry key="smtpFrom" value="${smtp.from}"/>
@@ -48,6 +49,8 @@
 		<property name="applicationName" value="${application.name}" />
 		<property name="mobileContext" value="${mobile.context}" />
 		<property name="mathJaxCdn" value="${mathjax.cdn}"/>
+		<property name="mathJaxConfig" value="${mathjax.config}"/>
+		<property name="mathJaxMarkers" value="${mathjax.markers}"/>
 	</bean>
 
 	<bean id="org.olat.core.helpers.Settings" class="org.olat.core.helpers.Settings" depends-on="org.olat.core.util.WebappHelper">
@@ -72,8 +75,7 @@
 				<value>.*Gecko/200[0123456].*</value>	<!-- Gecko engine older than 2006  -->
 				<value>.*Lynx.*</value>					<!-- Lynx console browser (no js) -->
 			</list>
-		</property>
-		<property name="crossOriginFilter" value="${allow.cross.origin.domain}"/>				
+		</property>		
 		<!-- 
 			Optional path to a directory which contains custom themes. This is an alternative to placing the theme
 			into the webapp, default is to have your custom themes in olatdata/customizing/themes

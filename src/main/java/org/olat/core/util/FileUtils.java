@@ -45,17 +45,19 @@ import java.nio.file.SimpleFileVisitor;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.text.Normalizer;
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-import org.apache.commons.io.IOUtils;
 import org.olat.core.logging.AssertException;
 import org.olat.core.logging.OLATRuntimeException;
 import org.olat.core.logging.OLog;
 import org.olat.core.logging.Tracing;
+import org.olat.core.util.vfs.VFSContainer;
+import org.olat.core.util.vfs.VFSItem;
+import org.olat.core.util.vfs.VFSLeaf;
+import org.olat.core.util.vfs.filters.SystemItemFilter;
 import org.springframework.core.io.Resource;
 
 
@@ -72,31 +74,17 @@ public class FileUtils {
 
 	// matches files and folders of type:
 	// bla, bla1, bla12, bla.html, bla1.html, bla12.html
-	private static final Pattern fileNamePattern = Pattern.compile("(.+?)\\p{Digit}*(\\.\\w{2,4})?");
-
-	/**
-	 * For security reasons Servlet containers deny requests with an encoded
-	 * slash (/) or backslash (\) in the request URL (they return a 400 code).
-	 * As a result, a file or directory that contains such character in its
-	 * name cannot be accessed (or created by WebDAV). To prevent the creation
-	 * of such named objects in the OLAT GUI, the two characters are
-	 * blacklisted. However, with the help of a ZIP archive, that contains
-	 * e.g. files with such malicious names, such objects can be created (but
-	 * never accessed). The good thing is, that such objects can be deleted
-	 * via the OLAT GUI.
-	 *
-	 * URL: invalid characters for a request: / \ (denied by the Servlet container, see above)
-	 * Windows: invalid characters for a file name: \ / : * ? " < > | (true but such can be created via WebDAV or with the help of a ZIP archive)
-	 * Linux: invalid characters for a file or directory name: / (but you have to escape certain chars like ";$%&*")
-	 */
-	private static final int[] FILE_NAME_FORBIDDEN_CHARS = { '/', '\\', '\n', '\r', '\t', '\f' };
-	private static final int[] FILE_NAME_ACCEPTED_CHARS = { ' ' };
-    private static final List<String> META_FILENAMES = Collections.emptyList();
-
-    static {
-		Arrays.sort(FILE_NAME_FORBIDDEN_CHARS);
-		Arrays.sort(FILE_NAME_ACCEPTED_CHARS);
-	}
+	private static final Pattern fileNamePattern = Pattern.compile("(.+?)\\p{Digit}*(\\.\\w{2,7})?");
+	
+	//windows: invalid characters for filenames: \ / : * ? " < > | 
+	//linux: invalid characters for file/folder names: /, but you have to escape certain chars, like ";$%&*"
+	//zip: may cause errors: =
+	//OLAT reserved char: ":"	
+	public static char[] FILE_NAME_FORBIDDEN_CHARS = { '/', '\n', '\r', '\t', '\f', '`', '?', '*', '\\', '<', '>', '|', '\"', ':', ',', '=' };
+  //private static char[] FILE_NAME_ACCEPTED_CHARS = { 'ä', 'Ä', 'ü', 'Ü', 'ö', 'Ö', ' '};
+	public static char[] FILE_NAME_ACCEPTED_CHARS = { '\u0228', '\u0196', '\u0252', '\u0220', '\u0246', '\u0214', ' '};
+	// known metadata files
+	public static final List<String> META_FILENAMES = Arrays.asList(".DS_Store",".CVS",".nfs",".sass-cache",".hg");
 
 	/**
 	 * @param sourceFile
@@ -150,6 +138,35 @@ public class FileUtils {
 	 */
 	public static boolean copyFileToDir(File sourceFile, File targetDir, String wt) {
 		return copyFileToDir(sourceFile, targetDir, false, null, wt);
+	}
+	
+	/**
+	 * 
+	 * @param source The source
+	 * @param targetDirectory The directory to copy the source in
+	 * @param wt A message
+	 * @return True if ok
+	 */
+	public static boolean copyItemToDir(VFSItem source, File targetDirectory, String wt) {
+		targetDirectory.mkdirs();
+
+		File target = new File(targetDirectory, source.getName());
+		if(source instanceof VFSLeaf) {
+			try(InputStream inStream = ((VFSLeaf)source).getInputStream();
+					OutputStream outStream = new FileOutputStream(target)) {
+				bcopy(inStream, outStream, wt);
+			} catch(IOException ex) {
+				log.error("", ex);
+				return false;
+			}
+		} else if(source instanceof VFSContainer) {
+			target.mkdir();
+			List<VFSItem> items = ((VFSContainer)source).getItems(new SystemItemFilter());
+			for(VFSItem item:items) {
+				copyItemToDir(item, target, wt);
+			}
+		}
+		return true;
 	}
 
 	/**
@@ -418,26 +435,23 @@ public class FileUtils {
 		return true;
 	} // end copy
 	
-	public static boolean copyToFile(InputStream in, File targetFile, String wt) {
+	public static boolean copyToFile(InputStream in, File targetFile, String wt) throws IOException {
 		if (targetFile.isDirectory()) return false;
-
+		
 		// create target directories
 		targetFile.getParentFile().mkdirs(); // don't check for success... would return false on
 
-		BufferedInputStream  bis = new BufferedInputStream(in);
-		try (OutputStream dst = new FileOutputStream(targetFile);
+		try(BufferedInputStream  bis = new BufferedInputStream(in);
+				OutputStream dst = new FileOutputStream(targetFile);
 				BufferedOutputStream bos = getBos (dst)) {
 			cpio (bis, bos, wt);
 			bos.flush();
 			return true;
 		} catch (IOException e) {
-			throw new RuntimeException("I/O error in cpio "+wt);
-		} finally {
-			IOUtils.closeQuietly(bis);
-			IOUtils.closeQuietly(in);
+			throw e;
 		}
 	}
-
+	
 	/**
 	 * Copy method to copy a file to another file
 	 * @param sourceFile
@@ -742,10 +756,6 @@ public class FileUtils {
 		}		
 	}
 
-	public static void saveToDir(InputStream inputStream, File directory, String newFileName) {
-		save(inputStream, new File(directory, newFileName));
-	}
-
 	public static String load(Resource source, String encoding) {
     		try {
     			return load(source.getInputStream(), encoding);
@@ -804,6 +814,22 @@ public class FileUtils {
 	}
 	
 	/**
+	 * 
+	 * @param dir
+	 * @param file
+	 * @return
+	 */
+	public static boolean isInSubDirectory(File dir, File file) {
+	    if (file == null) {
+	        return false;
+	    }
+	    if (file.equals(dir)) {
+	        return true;
+	    }
+	    return isInSubDirectory(dir, file.getParentFile());
+	}
+	
+	/**
 	 * @param is the inputstream to close, may also be null
 	 */
 	public static void closeSafely(InputStream is) {
@@ -858,27 +884,27 @@ public class FileUtils {
 	 * @return true if filename valid
 	 */
 	public static boolean validateFilename(String filename) {
-		if (filename == null) {
+		if(!StringHelper.containsNonWhitespace(filename)) {
 			return false;
 		}
+		Arrays.sort(FILE_NAME_FORBIDDEN_CHARS);
+		Arrays.sort(FILE_NAME_ACCEPTED_CHARS);
 		
-		int length = filename.codePointCount(0, filename.length());
-		for (int i = 0; i < length; i++) {
-			int character = filename.codePointAt(i);
-			if (Arrays.binarySearch(FILE_NAME_ACCEPTED_CHARS, character) < 0) {
-				if (character < 33 || Arrays.binarySearch(FILE_NAME_FORBIDDEN_CHARS, character) >= 0) {
-					return false;
-				}
+		for(int i=0; i<filename.length(); i++) {
+			char character = filename.charAt(i);
+			if(Arrays.binarySearch(FILE_NAME_ACCEPTED_CHARS, character)>=0) {
+				continue;
+			} else if(character<33 || character>255 || Arrays.binarySearch(FILE_NAME_FORBIDDEN_CHARS, character)>=0) {
+				return false;
 			}
 		}
 		//check if there are any unwanted path denominators in the name
-		if (".".equals(filename) || "..".equals(filename)) {
+		if (filename.indexOf("..") > -1) {
 			return false;
 		}
-
 		return true;
 	}
-
+	
 	public static String normalizeFilename(String name) {
 		String nameFirstPass = name.replace(" ", "_")
 				.replace("\u00C4", "Ae")
@@ -897,7 +923,39 @@ public class FileUtils {
 		return nameSanitized;
 	}
 	
+	/**
+	 * Cleans the filename from invalid character to make a filename compatible for
+	 * the usual operating systems and browsers.. Suffixes are preserved. This
+	 * method is not as strict as {@link #normalizeFilename(String)}.
+	 * 
+	 * @param filename
+	 * @return the cleaned filename
+	 */
+	public static String cleanFilename(String filename) {
+		boolean hasExtension = false;
+		String name = filename;
+		String extension = getFileSuffix(filename);
+		if (extension != null && extension.length() > 0) {
+			hasExtension = true;
+			name = filename.substring(0, filename.length() - extension.length() - 1);
+		}
+		StringBuilder normalizedFilename = new StringBuilder();
+		normalizedFilename.append(cleanFilenamePart(name));
+		if (hasExtension) {
+			normalizedFilename.append(".");
+			normalizedFilename.append(cleanFilenamePart(extension));
+		}
+		return normalizedFilename.toString();
+	}
 	
+	private static String cleanFilenamePart(String filename) {
+		String cleaned = Normalizer.normalize(filename, Normalizer.Form.NFKD);
+		cleaned = cleaned.replaceAll("\\p{InCombiningDiacriticalMarks}+","");
+		for (char character: FILE_NAME_FORBIDDEN_CHARS) {
+			cleaned = cleaned.replace(character, '_');
+		}
+		return cleaned;
+	}
 	
 	/**
 	 * Creates a new directory in the specified directory, using the given prefix and suffix strings to generate its name.
@@ -1038,27 +1096,27 @@ public class FileUtils {
 	 * Check if the given filename is a metadata filename generated by macOS or
 	 * windows when browsing a directory or generated by one of the known
 	 * repository systems.
-	 *
+	 * 
 	 * @param filename
 	 * @return
 	 */
 	public static boolean isMetaFilename(String filename) {
 		boolean isMeta = false;
 		if (filename != null) {
-			// 1) check for various known filenames
+			// 1) check for various known filenames 
 			isMeta = META_FILENAMES.parallelStream().anyMatch(filename::contains);
 			if (!isMeta) {
 				// 2) macOS meta files generated with WebDAV starts with ._
 				isMeta = filename.startsWith("._");
 			}
-
+			
 		}
 		return isMeta;
 	}
+	
 
-
-
-
+	
+	
 	public static String rename(File f) {
 		String filename = f.getName();
 		String newName = filename;

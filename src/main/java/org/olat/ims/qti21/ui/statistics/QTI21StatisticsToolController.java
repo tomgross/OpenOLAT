@@ -27,9 +27,8 @@ import org.olat.basesecurity.Group;
 import org.olat.core.commons.fullWebApp.LayoutMain3ColsController;
 import org.olat.core.gui.UserRequest;
 import org.olat.core.gui.components.Component;
-import org.olat.core.gui.components.link.Link;
-import org.olat.core.gui.components.link.LinkFactory;
 import org.olat.core.gui.components.panel.Panel;
+import org.olat.core.gui.components.stack.TooledController;
 import org.olat.core.gui.components.stack.TooledStackedPanel;
 import org.olat.core.gui.components.tree.GenericTreeModel;
 import org.olat.core.gui.components.tree.MenuTree;
@@ -61,16 +60,14 @@ import org.springframework.beans.factory.annotation.Autowired;
  * @author srosse, stephane.rosse@frentix.com, http://www.frentix.com
  *
  */
-public class QTI21StatisticsToolController extends BasicController implements Activateable2 {
+public class QTI21StatisticsToolController extends BasicController implements Activateable2, TooledController {
 
 	private MenuTree courseTree;
-	private final Link statsButton;
 	private Controller currentCtrl;
 	private final TooledStackedPanel stackPanel;
 	private LayoutMain3ColsController layoutCtr;
 
 	private final ArchiveOptions options;
-	private final QTICourseNode courseNode;
 	private final RepositoryEntry testEntry;
 	private final RepositoryEntry courseEntry;
 	private QTI21StatisticResourceResult result;
@@ -96,10 +93,9 @@ public class QTI21StatisticsToolController extends BasicController implements Ac
 			AssessmentToolOptions asOptions, QTICourseNode courseNode) {
 		super(ureq, wControl);
 		this.stackPanel = stackPanel;
-		this.options = new ArchiveOptions();
-		this.options.setGroup(asOptions.getGroup());
-		this.options.setIdentities(asOptions.getIdentities());
-		this.courseNode = courseNode;
+		options = new ArchiveOptions();
+		options.setGroup(asOptions.getGroup());
+		options.setIdentities(asOptions.getIdentities());
 		courseEntry = courseEnv.getCourseGroupManager().getCourseEntry();
 		testEntry = courseNode.getReferencedRepositoryEntry();
 		
@@ -119,16 +115,42 @@ public class QTI21StatisticsToolController extends BasicController implements Ac
 			searchParams.setViewNonMembers(asOptions.isNonMembers());
 		}
 		
-		statsButton = LinkFactory.createButton("menu.title", null, this);
-		statsButton.setIconLeftCSS("o_icon o_icon-fw o_icon_statistics_tool");
-		statsButton.setTranslator(getTranslator());
-		putInitialPanel(statsButton);
-		getInitialComponent().setSpanAsDomReplaceable(true); // override to wrap panel as span to not break link layout 
+		result = new QTI21StatisticResourceResult(testEntry, courseEntry, courseNode, searchParams, secCallback);
+		result.setWithFilter(false);
+		
+		GenericTreeModel treeModel = new GenericTreeModel();
+		StatisticResourceNode rootTreeNode = new StatisticResourceNode(courseNode, result);
+		treeModel.setRootNode(rootTreeNode);
+		
+		TreeNode subRootNode = result.getSubTreeModel().getRootNode();
+		List<INode> subNodes = new ArrayList<>();
+		for(int i=0; i<subRootNode.getChildCount(); i++) {
+			subNodes.add(subRootNode.getChildAt(i));
+		}
+		for(INode subNode:subNodes) {
+			rootTreeNode.addChild(subNode);
+		}
+
+		courseTree = new MenuTree("qti21StatisticsTree");
+		courseTree.setTreeModel(treeModel);
+		courseTree.addListener(this);
+		
+		layoutCtr = new LayoutMain3ColsController(ureq, wControl, courseTree, new Panel("empty"), null);
+		listenTo(layoutCtr);
+		putInitialPanel(layoutCtr.getInitialComponent());
+		doSelectNode(ureq, courseTree.getTreeModel().getRootNode());
 	}
 
 	@Override
 	protected void doDispose() {
 		//
+	}
+
+	@Override
+	public void initTools() {
+		if(currentCtrl instanceof TooledController) {
+			((TooledController)currentCtrl).initTools();
+		}
 	}
 
 	@Override
@@ -149,10 +171,7 @@ public class QTI21StatisticsToolController extends BasicController implements Ac
 
 	@Override
 	protected void event(UserRequest ureq, Component source, Event event) {
-		if(statsButton == source) {
-			doLaunchStatistics(ureq, getWindowControl());
-			doSelectNode(ureq, courseTree.getTreeModel().getRootNode());
-		} else if(courseTree == source) {
+		if(courseTree == source) {
 			if(event instanceof TreeEvent) {
 				TreeEvent te = (TreeEvent)event;
 				if(MenuTree.COMMAND_TREENODE_CLICKED.equals(te.getCommand())) {
@@ -174,32 +193,5 @@ public class QTI21StatisticsToolController extends BasicController implements Ac
 		} else {
 			layoutCtr.setCol3(new Panel("empty"));
 		}
-	}
-
-	private void doLaunchStatistics(UserRequest ureq, WindowControl wControl) {
-		if(result == null) {
-			result = new QTI21StatisticResourceResult(testEntry, courseEntry, courseNode, searchParams, secCallback);
-			result.setWithFilter(false);
-		}
-		
-		GenericTreeModel treeModel = new GenericTreeModel();
-		StatisticResourceNode rootTreeNode = new StatisticResourceNode(courseNode, result);
-		treeModel.setRootNode(rootTreeNode);
-		
-		TreeNode subRootNode = result.getSubTreeModel().getRootNode();
-		List<INode> subNodes = new ArrayList<>();
-		for(int i=0; i<subRootNode.getChildCount(); i++) {
-			subNodes.add(subRootNode.getChildAt(i));
-		}
-		for(INode subNode:subNodes) {
-			rootTreeNode.addChild(subNode);
-		}
-
-		courseTree = new MenuTree("qti21StatisticsTree");
-		courseTree.setTreeModel(treeModel);
-		courseTree.addListener(this);
-		
-		layoutCtr = new LayoutMain3ColsController(ureq, wControl, courseTree, new Panel("empty"), null);
-		stackPanel.pushController("Stats", layoutCtr);
 	}
 }

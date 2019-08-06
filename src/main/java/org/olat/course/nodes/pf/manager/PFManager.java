@@ -40,8 +40,6 @@ import org.olat.basesecurity.GroupRoles;
 import org.olat.core.commons.modules.bc.components.FolderComponent;
 import org.olat.core.commons.modules.bc.vfs.OlatRootFolderImpl;
 import org.olat.core.commons.services.notifications.SubscriptionContext;
-import org.olat.core.gui.UserRequest;
-import org.olat.core.gui.media.MediaResource;
 import org.olat.core.gui.translator.Translator;
 import org.olat.core.id.Identity;
 import org.olat.core.logging.OLog;
@@ -65,7 +63,9 @@ import org.olat.course.nodes.pf.ui.PFRunController;
 import org.olat.course.run.environment.CourseEnvironment;
 import org.olat.course.run.userview.UserCourseEnvironment;
 import org.olat.group.BusinessGroup;
+import org.olat.group.BusinessGroupRef;
 import org.olat.group.BusinessGroupService;
+import org.olat.group.manager.BusinessGroupRelationDAO;
 import org.olat.repository.RepositoryEntry;
 import org.olat.repository.RepositoryEntryRelationType;
 import org.olat.repository.RepositoryService;
@@ -98,9 +98,26 @@ public class PFManager {
 	@Autowired
 	private RepositoryService repositoryService;
 	@Autowired
+	private BusinessGroupRelationDAO businessGroupRelationDao;
+	@Autowired
 	private RepositoryEntryRelationDAO repositoryEntryRelationDao;
 	@Autowired
 	private UserManager userManager;
+	
+	/**
+	 * Resolve an existing drop folder or return null
+	 * 
+	 * @param courseEnv The course environment
+	 * @param pfNode The course element
+	 * @param identity The identity which can drop files
+	 * @return
+	 */
+	public VFSContainer resolveDropFolder(CourseEnvironment courseEnv, PFCourseNode pfNode, Identity identity) {
+		Path relPath = Paths.get(FILENAME_PARTICIPANTFOLDER, pfNode.getIdent(), getIdFolderName(identity), FILENAME_DROPBOX); 
+		OlatRootFolderImpl baseContainer = courseEnv.getCourseBaseContainer();
+		VFSItem dropboxContainer = baseContainer.resolve(relPath.toString());
+		return dropboxContainer instanceof VFSContainer ? (VFSContainer)dropboxContainer : null;
+	}
 	
 	/**
 	 * Resolve or create drop folder.
@@ -245,21 +262,6 @@ public class PFManager {
 			uploadFileToReturnBox(uploadFile, fileName, courseEnv, pfNode, identity);			
 		}
 	}
-
-	
-	/**
-	 * Export media resource as folder download.
-	 *
-	 * @param ureq
-	 * @param identities
-	 * @param pfNode 
-	 * @param courseEnv 
-	 */
-	public MediaResource exportMediaResource (UserRequest ureq, List<Identity> identities, PFCourseNode pfNode, CourseEnvironment courseEnv) {
-		MediaResource resource = new FileSystemExport (identities, pfNode, courseEnv, ureq.getLocale());
-		ureq.getDispatchResult().setResultingMediaResource(resource);
-		return resource;
-	}
 	
 	/**
 	 * Calculate callback dependent on ModuleConfiguration.
@@ -268,7 +270,7 @@ public class PFManager {
 	 * @param dropbox
 	 * @return the VFSSecurityCallback
 	 */
-	private VFSSecurityCallback calculateCallback (CourseEnvironment courseEnv, PFCourseNode pfNode, VFSContainer dropbox, boolean webdav) {
+	private VFSSecurityCallback calculateCallback(CourseEnvironment courseEnv, String quotaPath, PFCourseNode pfNode, VFSContainer dropbox, boolean webdav) {
 		VFSSecurityCallback callback;
 		SubscriptionContext folderSubContext = CourseModule.createSubscriptionContext(courseEnv, pfNode);
 		int count = countFiles(dropbox);
@@ -282,9 +284,9 @@ public class PFManager {
 		} else if (limitCount && alterFile) {
 			callback = new ReadDeleteCallback(folderSubContext);
 		} else if (!limitCount && !alterFile) {
-			callback = new ReadWriteCallback(folderSubContext);
+			callback = new ReadWriteCallback(folderSubContext, quotaPath);
 		} else {
-			callback = new ReadWriteDeleteCallback(folderSubContext);
+			callback = new ReadWriteDeleteCallback(folderSubContext, quotaPath);
 		}
 		return callback;
 	}
@@ -323,6 +325,7 @@ public class PFManager {
 		Translator translator = Util.createPackageTranslator(PFRunController.class, locale);
 		SubscriptionContext subsContext = CourseModule.createSubscriptionContext(courseEnv, pfNode);
 		String path = courseEnv.getCourseBaseContainer().getRelPath() + "/" + FILENAME_PARTICIPANTFOLDER;
+		String quotaPath = path + "/" + pfNode.getIdent();
 		VFSContainer courseElementBaseContainer = new OlatRootFolderImpl(path, null);
 		VirtualContainer namedCourseFolder = new VirtualContainer(identity.getName());
 		Path relPath = Paths.get(pfNode.getIdent(), getIdFolderName(identity));
@@ -334,7 +337,7 @@ public class PFManager {
 				dropContainer.setLocalSecurityCallback(new ReadOnlyCallback(subsContext));
 			} else {
 				VFSContainer dropbox = resolveOrCreateDropFolder(courseEnv, pfNode, identity);
-				VFSSecurityCallback callback = calculateCallback(courseEnv, pfNode, dropbox, true);
+				VFSSecurityCallback callback = calculateCallback(courseEnv, quotaPath, pfNode, dropbox, true);
 				dropContainer.setLocalSecurityCallback(callback);
 			}
 			namedCourseFolder.addItem(dropContainer);
@@ -360,8 +363,10 @@ public class PFManager {
 		Locale locale = I18nManager.getInstance().getLocaleOrDefault(identity.getUser().getPreferences().getLanguage());
 		Translator translator = Util.createPackageTranslator(PFRunController.class, locale);
 		SubscriptionContext nodefolderSubContext = CourseModule.createSubscriptionContext(courseEnv, pfNode);
-		List<Identity> participants =  getParticipants(identity, courseEnv, admin); 
-		String path = courseEnv.getCourseBaseContainer().getRelPath() + "/" + FILENAME_PARTICIPANTFOLDER;
+		List<Identity> participants =  getParticipants(identity, courseEnv, admin);
+		String courseContainerRelPath = courseEnv.getCourseBaseContainer().getRelPath();
+		String path = courseContainerRelPath + "/" + FILENAME_PARTICIPANTFOLDER;
+		String quotaPath = path + "/" + pfNode.getIdent();
 		VFSContainer courseElementBaseContainer = new OlatRootFolderImpl(path, null);
 		VirtualContainer namedCourseFolder = new VirtualContainer(translator.translate("participant.folder"));
 		for (Identity participant : participants) {
@@ -377,7 +382,7 @@ public class PFManager {
 				//if coach is also participant, can user his/her webdav folder with participant rights
 				if (identity.equals(participant)){
 					VFSContainer dropbox = resolveOrCreateDropFolder(courseEnv, pfNode, identity);
-					VFSSecurityCallback callback = calculateCallback(courseEnv, pfNode, dropbox, true);
+					VFSSecurityCallback callback = calculateCallback(courseEnv, quotaPath, pfNode, dropbox, true);
 					dropContainer.setLocalSecurityCallback(callback);
 				} else {
 					dropContainer.setLocalSecurityCallback(new ReadOnlyCallback(nodefolderSubContext));
@@ -388,7 +393,7 @@ public class PFManager {
 			if (pfNode.hasCoachBoxConfigured()){
 				VFSContainer returnContainer = new NamedContainerImpl(translator.translate("return.box"),
 						VFSManager.resolveOrCreateContainerFromPath(userBaseContainer, FILENAME_RETURNBOX));
-				returnContainer.setLocalSecurityCallback(new ReadWriteDeleteCallback(nodefolderSubContext));
+				returnContainer.setLocalSecurityCallback(new ReadWriteDeleteCallback(nodefolderSubContext, quotaPath));
 				participantFolder.addItem(returnContainer);
 			}
 		}
@@ -408,8 +413,11 @@ public class PFManager {
 		SubscriptionContext nodefolderSubContext = CourseModule.createSubscriptionContext(courseEnv, pfNode);
 		RepositoryEntry re = courseEnv.getCourseGroupManager().getCourseEntry();
 		List<Identity> participants =  repositoryEntryRelationDao.getMembers(re, 
-				RepositoryEntryRelationType.both, GroupRoles.participant.name());		
+				RepositoryEntryRelationType.both, GroupRoles.participant.name());
+		participants = new ArrayList<>(new HashSet<>(participants));
+		
 		String path = courseEnv.getCourseBaseContainer().getRelPath() + "/" + FILENAME_PARTICIPANTFOLDER;
+		String quotaPath = path + "/" + pfNode.getIdent();
 		VFSContainer courseElementBaseContainer = new OlatRootFolderImpl(path, null);
 		VirtualContainer namedCourseFolder = new VirtualContainer(translator.translate("participant.folder"));
 		for (Identity participant : participants) {
@@ -430,7 +438,7 @@ public class PFManager {
 			if (pfNode.hasCoachBoxConfigured()){
 				VFSContainer returnContainer = new NamedContainerImpl(translator.translate("return.box"),
 						VFSManager.resolveOrCreateContainerFromPath(userBaseContainer, FILENAME_RETURNBOX));
-				returnContainer.setLocalSecurityCallback(new ReadWriteDeleteCallback(nodefolderSubContext));
+				returnContainer.setLocalSecurityCallback(new ReadWriteDeleteCallback(nodefolderSubContext, quotaPath));
 				participantFolder.addItem(returnContainer);
 			}
 		}		
@@ -454,6 +462,7 @@ public class PFManager {
 		SubscriptionContext nodefolderSubContext = CourseModule.createSubscriptionContext(courseEnv, pfNode);
 		
 		String path = courseEnv.getCourseBaseContainer().getRelPath() + "/" + FILENAME_PARTICIPANTFOLDER;
+		String quotaPath = path + "/" + pfNode.getIdent();
 		VFSContainer courseElementBaseContainer = new OlatRootFolderImpl(path, null);
 
 		Path relPath = Paths.get(pfNode.getIdent(), getIdFolderName(identity));
@@ -488,10 +497,10 @@ public class PFManager {
 		} else {
 			if (isCoach) {
 				dropContainer.setLocalSecurityCallback(new ReadOnlyCallback(nodefolderSubContext));
-				returnContainer.setLocalSecurityCallback(new ReadWriteDeleteCallback(nodefolderSubContext));
+				returnContainer.setLocalSecurityCallback(new ReadWriteDeleteCallback(nodefolderSubContext, quotaPath));
 			} else {
 				VFSContainer dropbox = resolveOrCreateDropFolder(courseEnv, pfNode, identity);
-				VFSSecurityCallback callback = calculateCallback(courseEnv, pfNode, dropbox, false);
+				VFSSecurityCallback callback = calculateCallback(courseEnv, path, pfNode, dropbox, false);
 				dropContainer.setLocalSecurityCallback(callback);
 				returnContainer.setLocalSecurityCallback(new ReadOnlyCallback(nodefolderSubContext));
 			}
@@ -530,7 +539,9 @@ public class PFManager {
 		Set<Identity> identitySet = new HashSet<>();
 		RepositoryEntry re = courseEnv.getCourseGroupManager().getCourseEntry();
 		if(admin) {
-			return repositoryEntryRelationDao.getMembers(re, RepositoryEntryRelationType.both, GroupRoles.participant.name());
+			List<Identity> participants = repositoryEntryRelationDao.getMembers(re, RepositoryEntryRelationType.both, GroupRoles.participant.name());
+			// deduplicate list (participants from groups and direct course membership)
+			identitySet.addAll(participants);
 		} else {
 			if(repositoryService.hasRole(id, re, GroupRoles.coach.name())) {
 				List<Identity> identities = repositoryService.getMembers(re, GroupRoles.participant.name());
@@ -552,18 +563,28 @@ public class PFManager {
 	/**
 	 * Gets the participants for different group or course coaches as TableModel. 
 	 *
-	 * @param id the identity
-	 * @param pfNode 
-	 * @param userPropertyHandlers 
-	 * @param locale 
-	 * @param courseEnv
-	 * @param admin
-	 * @return the participants
+	 * @param id The identity of the user who searches
+	 * @param pfNode  The course element
+	 * @param userPropertyHandlers The list of properties to hold
+	 * @param locale The locale
+	 * @param courseEnv The course environment
+	 * @param admin If the user is an administrator
+	 * @return the participants The list of dropbox
 	 */
-	public List<DropBoxRow> getParticipants (Identity id, PFCourseNode pfNode, List<UserPropertyHandler> userPropertyHandlers, 
+	public List<DropBoxRow> getParticipants(Identity id, PFCourseNode pfNode, List<UserPropertyHandler> userPropertyHandlers, 
 			Locale locale, CourseEnvironment courseEnv, boolean admin) {
-
 		List<Identity> identityList = getParticipants(id, courseEnv, admin);
+		return getParticipants(pfNode, userPropertyHandlers, locale, identityList, courseEnv);
+	}
+	
+	public List<DropBoxRow> getParticipants(List<BusinessGroupRef> businessGroupRefs, PFCourseNode pfNode, List<UserPropertyHandler> userPropertyHandlers, 
+			Locale locale, CourseEnvironment courseEnv) {
+		List<Identity> identityList = businessGroupRelationDao.getMembers(businessGroupRefs, GroupRoles.participant.name());
+		return getParticipants(pfNode, userPropertyHandlers, locale, identityList, courseEnv);
+	}
+	
+	private List<DropBoxRow> getParticipants(PFCourseNode pfNode, List<UserPropertyHandler> userPropertyHandlers, 
+			Locale locale, List<Identity> identityList, CourseEnvironment courseEnv) {
 
 		Set<Identity> duplicates = new HashSet<>();
 		List<DropBoxRow> participants = new ArrayList<>(identityList.size());

@@ -73,10 +73,10 @@ public class PoolDAO {
 		return pool;
 	}
 	
-	public int removeFromPools(List<QuestionItemShort> items) {
+	public int removeFromPools(List<? extends QuestionItemShort> items) {
 		if(items == null || items.isEmpty()) return 0;
 		
-		List<Long> keys = new ArrayList<Long>();
+		List<Long> keys = new ArrayList<>();
 		for(QuestionItemShort item:items) {
 			keys.add(item.getKey());
 		}
@@ -92,7 +92,7 @@ public class PoolDAO {
 	public int removeFromPool(List<QuestionItemShort> items, Pool pool) {
 		if(items == null || items.isEmpty()) return 0;
 		
-		List<Long> keys = new ArrayList<Long>();
+		List<Long> keys = new ArrayList<>();
 		for(QuestionItemShort item:items) {
 			keys.add(item.getKey());
 		}
@@ -208,6 +208,8 @@ public class PoolDAO {
 	
 	public void addItemToPool(QuestionItemShort item, List<Pool> pools, boolean editable) {
 		QuestionItem lockedItem = questionItemDao.loadForUpdate(item);
+		if (lockedItem == null) return;
+		
 		for(Pool pool:pools) {
 			if(!isInPool(lockedItem, pool)) {
 				PoolToItem p2i = new PoolToItem();

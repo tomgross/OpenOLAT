@@ -55,7 +55,7 @@ public class CheckListConfigurationController extends FormBasicController {
 	private static final String[] onKeys = new String[]{ "on" };
 	private static final String[] outputKeys = new String[]{ "cutvalue", "sum", "coach"};
 	
-	private MultipleSelectionElement dueDateEl, scoreGrantedEl, passedEl, commentEl;
+	private MultipleSelectionElement dueDateEl, scoreGrantedEl, passedEl, commentEl, assessmentDocsEl;
 	private SingleSelection outputEl, numOfCheckListEl, sumCheckboxEl;
 	private TextElement minPointsEl, maxPointsEl, cutValueEl, titlePrefixEl;
 	private RichTextElement tipUserEl, tipCoachEl;
@@ -200,6 +200,14 @@ public class CheckListConfigurationController extends FormBasicController {
 			commentEl.select(onKeys[0], true);
 		}
 		
+		assessmentDocsEl = uifactory.addCheckboxesHorizontal("form.individual.assessment.docs", formLayout, onKeys, new String[]{null});
+		boolean docsCf = config.getBooleanSafe(MSCourseNode.CONFIG_KEY_HAS_INDIVIDUAL_ASSESSMENT_DOCS, false);
+		if(docsCf) {
+			assessmentDocsEl.select(onKeys[0], true);
+		}
+		
+		uifactory.addSpacerElement("spacer-comment", formLayout, false);
+		
 		String iu = (String)config.get(MSCourseNode.CONFIG_KEY_INFOTEXT_USER);
 		tipUserEl = uifactory.addRichTextElementForStringDataMinimalistic("tip.user", "config.tip.user", iu, 5, -1, formLayout,
 				getWindowControl());
@@ -231,7 +239,7 @@ public class CheckListConfigurationController extends FormBasicController {
 
 		//due date
 		boolean closeAfterDueDate = dueDateEl.isAtLeastSelected(1);
-		config.set(CheckListCourseNode.CONFIG_KEY_CLOSE_AFTER_DUE_DATE, new Boolean(closeAfterDueDate));
+		config.set(CheckListCourseNode.CONFIG_KEY_CLOSE_AFTER_DUE_DATE, Boolean.valueOf(closeAfterDueDate));
 		Date dueDate = dueDateChooserEl.getDate();
 		if(dueDate != null) {
 			config.set(CheckListCourseNode.CONFIG_KEY_DUE_DATE, dueDate);
@@ -239,7 +247,7 @@ public class CheckListConfigurationController extends FormBasicController {
 			config.remove(CheckListCourseNode.CONFIG_KEY_DUE_DATE);
 		}
 		//score
-		Boolean sf = new Boolean(scoreGrantedEl.isSelected(0));
+		Boolean sf = Boolean.valueOf(scoreGrantedEl.isSelected(0));
 		config.set(MSCourseNode.CONFIG_KEY_HAS_SCORE_FIELD, sf);
 		if (sf.booleanValue()) {
 			config.set(MSCourseNode.CONFIG_KEY_SCORE_MIN, new Float(minPointsEl.getValue()));
@@ -250,7 +258,7 @@ public class CheckListConfigurationController extends FormBasicController {
 		}
 		
 		// mandatory passed flag
-		Boolean pf = new Boolean(passedEl.isSelected(0));
+		Boolean pf = Boolean.valueOf(passedEl.isSelected(0));
 		config.set(MSCourseNode.CONFIG_KEY_HAS_PASSED_FIELD, pf);
 		config.remove(MSCourseNode.CONFIG_KEY_PASSED_CUT_VALUE);
 		config.remove(CheckListCourseNode.CONFIG_KEY_PASSED_SUM_CUTVALUE);
@@ -263,14 +271,16 @@ public class CheckListConfigurationController extends FormBasicController {
 			} else if("sum".equals(output)) {
 				config.set(CheckListCourseNode.CONFIG_KEY_PASSED_SUM_CHECKBOX, Boolean.TRUE);
 				int sumCutValue = Integer.parseInt(sumCheckboxEl.getSelectedKey());
-				config.set(CheckListCourseNode.CONFIG_KEY_PASSED_SUM_CUTVALUE, new Integer(sumCutValue));
+				config.set(CheckListCourseNode.CONFIG_KEY_PASSED_SUM_CUTVALUE, Integer.valueOf(sumCutValue));
 			} else if("coach".equals(output)) {
 				config.set(CheckListCourseNode.CONFIG_KEY_PASSED_MANUAL_CORRECTION, Boolean.TRUE);
 			}
 		}
 
 		// mandatory comment flag
-		config.set(MSCourseNode.CONFIG_KEY_HAS_COMMENT_FIELD, new Boolean(commentEl.isSelected(0)));
+		config.set(MSCourseNode.CONFIG_KEY_HAS_COMMENT_FIELD, Boolean.valueOf(commentEl.isSelected(0)));
+		// individual assessment docs
+		config.setBooleanEntry(MSCourseNode.CONFIG_KEY_HAS_INDIVIDUAL_ASSESSMENT_DOCS, assessmentDocsEl.isSelected(0));
 
 		// set info text only if something is in there
 		String iu = tipUserEl.getValue();
@@ -290,7 +300,7 @@ public class CheckListConfigurationController extends FormBasicController {
 
 	@Override
 	protected boolean validateFormLogic(UserRequest ureq) {
-		boolean allOk = true;
+		boolean allOk = super.validateFormLogic(ureq);
 		
 		//wizardery need title prefix and number of checklist to be defined
 		if(wizard) {
@@ -346,13 +356,13 @@ public class CheckListConfigurationController extends FormBasicController {
 		
 		dueDateChooserEl.clearError();
 		if(dueDateEl.isAtLeastSelected(1)) {
-			if (dueDateChooserEl.isEmpty()) {
+			if (!wizard && dueDateChooserEl.isEmpty()) {
 				dueDateChooserEl.setErrorKey("form.error.date", null);
 				allOk &= false;
 			}
 		}
 		
-		return allOk & super.validateFormLogic(ureq);
+		return allOk;
 	}
 	
 	private float toFloat(String val) {

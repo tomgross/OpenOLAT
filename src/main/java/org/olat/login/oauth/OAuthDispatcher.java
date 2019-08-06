@@ -20,8 +20,6 @@
 package org.olat.login.oauth;
 
 import java.io.IOException;
-import java.io.UnsupportedEncodingException;
-import java.net.URLDecoder;
 
 import javax.servlet.ServletException;
 import javax.servlet.http.HttpServletRequest;
@@ -43,7 +41,6 @@ import org.olat.core.gui.media.MediaResource;
 import org.olat.core.gui.media.RedirectMediaResource;
 import org.olat.core.gui.translator.Translator;
 import org.olat.core.id.Identity;
-import org.olat.core.logging.AssertException;
 import org.olat.core.logging.OLog;
 import org.olat.core.logging.Tracing;
 import org.olat.core.logging.activity.ThreadLocalUserActivityLoggerInstaller;
@@ -83,15 +80,7 @@ public class OAuthDispatcher implements Dispatcher {
 	public void execute(HttpServletRequest request, HttpServletResponse response)
 	throws ServletException, IOException {
 		
-		String uri = request.getRequestURI();
-		try {
-			uri = URLDecoder.decode(uri, "UTF-8");
-		} catch (UnsupportedEncodingException e) {
-			throw new AssertException("UTF-8 encoding not supported!!!!");
-		}
 		String uriPrefix = DispatcherModule.getLegacyUriPrefix(request);
-		uri = uri.substring(uriPrefix.length());
-
 		UserRequest ureq = null;
 		try{
 			//upon creation URL is checked for 
@@ -123,7 +112,11 @@ public class OAuthDispatcher implements Dispatcher {
 			OAuthSPI provider = (OAuthSPI)sess.getAttribute(OAuthConstants.OAUTH_SPI);
 
 			Token accessToken;
-			if(provider.isImplicitWorkflow()) {
+			if(provider == null) {
+				log.audit("OAuth Login failed, no provider in request");
+				DispatcherModule.redirectToDefaultDispatcher(response);
+				return;
+			} else if(provider.isImplicitWorkflow()) {
 				String idToken = ureq.getParameter("id_token");
 				if(idToken == null) {
 					redirectImplicitWorkflow(ureq);
@@ -143,19 +136,29 @@ public class OAuthDispatcher implements Dispatcher {
 			OAuthUser infos = provider.getUser(service, accessToken);
 			if(infos == null || !StringHelper.containsNonWhitespace(infos.getId())) {
 				error(ureq, translate(ureq, "error.no.id"));
-				log.error("OAuth Login failed, no infos extracted from access token ");
+				log.error("OAuth Login failed, no infos extracted from access token: " + accessToken);
 				return;
 			}
 
 			OAuthRegistration registration = new OAuthRegistration(provider.getProviderName(), infos);
 			login(infos, registration);
+
+			if(provider instanceof OAuthUserCreator) {
+				OAuthUserCreator userCreator = (OAuthUserCreator)provider;
+				if(registration.getIdentity() != null) {
+					Identity newIdentity = userCreator.updateUser(infos, registration.getIdentity());
+					registration.setIdentity(newIdentity);		
+				}
+			}
 			
-			if(registration.getIdentity() == null) {
+			if(provider instanceof OAuthUserCreator && registration.getIdentity() == null) {
+				disclaimer(request, response, infos, (OAuthUserCreator)provider);
+			} else if(registration.getIdentity() == null) {
 				if(CoreSpringFactory.getImpl(OAuthLoginModule.class).isAllowUserCreation()) {
 					register(request, response, registration);
 				} else {
 					error(ureq, translate(ureq, "error.account.creation"));
-					log.error("OAuth Login ok but the user has not an account on OpenOLAT");
+					log.error("OAuth Login ok but the user has not an account on OpenOLAT: " + infos);
 				}
 			} else {
 				if(ureq.getUserSession() != null) {
@@ -185,7 +188,7 @@ public class OAuthDispatcher implements Dispatcher {
 				}
 			}
 		} catch (Exception e) {
-			log.error("", e);
+			log.error("Unexpected error", e);
 			error(ureq, translate(ureq, "error.generic"));
 		}
 	}
@@ -204,19 +207,12 @@ public class OAuthDispatcher implements Dispatcher {
 			if(auth == null) {
 				String email = infos.getEmail();
 				if(StringHelper.containsNonWhitespace(email)) {
-					Identity identity = null;
-					try {
-						identity = userManager.findIdentityByEmail(email);
-					} catch(AssertException e) {
-						// username was not an valid mail address. That is
-						// totally ok here, continue with search by identity
-						// name. 
-					}
+					Identity identity = userManager.findUniqueIdentityByEmail(email);
 					if(identity == null) {
 						identity = securityManager.findIdentityByName(id);
 					}
 					if(identity != null) {
-						auth = securityManager.createAndPersistAuthentication(identity, registration.getAuthProvider(), id, null, null);
+						securityManager.createAndPersistAuthentication(identity, registration.getAuthProvider(), id, null, null);
 						registration.setIdentity(identity);
 					} else {
 						log.error("OAuth Login failed, user with user name " + email + " not found.");
@@ -258,6 +254,16 @@ public class OAuthDispatcher implements Dispatcher {
 		sb.append("</p>");
 		ChiefController msgcc = new MessageWindowController(ureq, sb.toString());
 		msgcc.getWindow().dispatchRequest(ureq, true);
+	}
+	
+	private void disclaimer(HttpServletRequest request, HttpServletResponse response, OAuthUser user, OAuthUserCreator userCreator) {
+		try {
+			request.getSession().setAttribute(OAuthConstants.OAUTH_USER_CREATOR_ATTR, userCreator);
+			request.getSession().setAttribute(OAuthConstants.OAUTH_USER_ATTR, user);
+			response.sendRedirect(WebappHelper.getServletContextPath() + DispatcherModule.getPathDefault() + OAuthConstants.OAUTH_DISCLAIMER_PATH + "/");
+		} catch (IOException e) {
+			log.error("Redirect failed: url=" + WebappHelper.getServletContextPath() + DispatcherModule.getPathDefault(),e);
+		}
 	}
 	
 	private void register(HttpServletRequest request, HttpServletResponse response, OAuthRegistration registration) {

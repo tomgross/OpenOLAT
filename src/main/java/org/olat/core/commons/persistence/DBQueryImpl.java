@@ -55,7 +55,7 @@ public class DBQueryImpl implements DBQuery {
 	private static final OLog log = Tracing.createLoggerFor(DBQueryImpl.class);
 
 	private Query query = null;
-
+	
 	/**
 	 * Default construcotr.
 	 * @param q
@@ -102,7 +102,7 @@ public class DBQueryImpl implements DBQuery {
 	 * @see org.olat.core.commons.persistence.DBQuery#list()
 	 */
 	public List list() {
-		try {
+		try{
 			return query.list();
 		}
 		catch (HibernateException he) {

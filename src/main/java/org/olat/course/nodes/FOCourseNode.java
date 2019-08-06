@@ -446,14 +446,14 @@ public class FOCourseNode extends AbstractAccessableCourseNode {
 			return false;
 		}
 		Long forumKey = forumKeyProperty.getLongValue();
-		if(ForumManager.getInstance().countThreadsByForumID(forumKey) <= 0) {
+		if(CoreSpringFactory.getImpl(ForumManager.class).countThreadsByForumID(forumKey) <= 0) {
 			return false;
 		}
 		
 		String forumName = "forum_" + Formatter.makeStringFilesystemSave(getShortTitle())
 				+ "_" + Formatter.formatDatetimeFilesystemSave(new Date(System.currentTimeMillis()));
 		ForumStreamedRTFFormatter rtff = new ForumStreamedRTFFormatter(exportStream, forumName, false, locale);	
-		ForumArchiveManager.getInstance().applyFormatter(rtff, forumKey, null);
+		CoreSpringFactory.getImpl(ForumArchiveManager.class).applyFormatter(rtff, forumKey, null);
 		return true;
 	}
 
@@ -472,7 +472,10 @@ public class FOCourseNode extends AbstractAccessableCourseNode {
 	/**
 	 * @see org.olat.course.nodes.GenericCourseNode#cleanupOnDelete(org.olat.course.ICourse)
 	 */
+	@Override
 	public void cleanupOnDelete(ICourse course) {
+		super.cleanupOnDelete(course);
+		
 		// mark the subscription to this node as deleted
 		SubscriptionContext forumSubContext = CourseModule.createTechnicalSubscriptionContext(course.getCourseEnvironment(), this);
 		NotificationsManager.getInstance().delete(forumSubContext);
@@ -482,7 +485,7 @@ public class FOCourseNode extends AbstractAccessableCourseNode {
 		Property forumKeyProperty = cpm.findCourseNodeProperty(this, null, null, FORUM_KEY);
 		if (forumKeyProperty != null) {
 			Long forumKey = forumKeyProperty.getLongValue();
-			ForumManager.getInstance().deleteForum(forumKey); // delete the forum
+			CoreSpringFactory.getImpl(ForumManager.class).deleteForum(forumKey); // delete the forum
 			cpm.deleteProperty(forumKeyProperty); // delete the property
 		}
 	}

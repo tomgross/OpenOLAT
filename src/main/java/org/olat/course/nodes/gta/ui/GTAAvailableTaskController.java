@@ -57,11 +57,17 @@ import org.olat.core.util.mail.MailContextImpl;
 import org.olat.core.util.mail.MailManager;
 import org.olat.core.util.vfs.VFSContainer;
 import org.olat.course.nodes.GTACourseNode;
-import org.olat.course.nodes.gta.*;
+import org.olat.course.nodes.gta.AssignmentResponse;
+import org.olat.course.nodes.gta.GTAManager;
+import org.olat.course.nodes.gta.GTAType;
+import org.olat.course.nodes.gta.Task;
+import org.olat.course.nodes.gta.TaskList;
 import org.olat.course.nodes.gta.model.TaskDefinition;
+import org.olat.course.nodes.gta.ui.component.DescriptionWithTooltipCellRenderer;
 import org.olat.course.run.environment.CourseEnvironment;
 import org.olat.group.BusinessGroup;
 import org.olat.group.BusinessGroupService;
+import org.olat.modules.assessment.Role;
 import org.springframework.beans.factory.annotation.Autowired;
 
 /**
@@ -97,8 +103,7 @@ public class GTAAvailableTaskController extends FormBasicController {
 	private final TaskList taskList;
 	private final Identity assessedIdentity;
 	private final BusinessGroup assessedGroup;
-	private Task selectedTask;
-
+	
 	public GTAAvailableTaskController(UserRequest ureq, WindowControl wControl,
 			List<TaskDefinition> taskDefs, TaskList taskList,
 			BusinessGroup assessedGroup, Identity assessedIdentity,
@@ -137,11 +142,7 @@ public class GTAAvailableTaskController extends FormBasicController {
 		
 		loadModel();
 	}
-
-	public Task getSelectedTask() {
-		return selectedTask;
-	}
-
+	
 	private void loadModel() {
 		File taskFolder = gtaManager.getTasksDirectory(courseEnv, gtaNode);
 
@@ -263,41 +264,47 @@ public class GTAAvailableTaskController extends FormBasicController {
 			response = gtaManager.selectTask(assessedIdentity, taskList, gtaNode, task);
 		}
 		
-		if (response == null || response.getStatus() == AssignmentResponse.Status.error) {
+		if(response == null || response.getStatus() == AssignmentResponse.Status.error) {
 			showError("task.assignment.error");
-		} else if (response.getStatus() == AssignmentResponse.Status.alreadyAssigned) {
+		} else if(response.getStatus() == AssignmentResponse.Status.alreadyAssigned) {
 			showWarning("task.alreadyChosen");
-		} else if (response == null || response.getStatus() == AssignmentResponse.Status.ok) {
+		} else if(response.getStatus() == AssignmentResponse.Status.ok) {
 			showInfo("task.successfully.assigned");
-			selectedTask = response.getTask();
 			fireEvent(ureq, Event.DONE_EVENT);
-			gtaManager.log("Assignment", "task assigned", response.getTask(), getIdentity(), assessedIdentity, assessedGroup, courseEnv, gtaNode);
-			//doSendConfirmationEmail();
+			gtaManager.log("Assignment", "task assigned", response.getTask(), getIdentity(),
+					assessedIdentity, assessedGroup, courseEnv, gtaNode, Role.user);
+			doSendConfirmationEmail(response.getTask());
 		}
 	}
 	
-//	private void doSendConfirmationEmail() {
-//		MailContext context = new MailContextImpl(getWindowControl().getBusinessControl().getAsString());
-//
-//		MailBundle bundle = new MailBundle();
-//		bundle.setContext(context);
-//		ContactList contacts = new ContactList("participants");
-//		if(GTAType.group.name().equals(gtaNode.getModuleConfiguration().getStringValue(GTACourseNode.GTASK_TYPE))) {
-//			List<Identity> participants = businessGroupService.getMembers(assessedGroup, GroupRoles.participant.name());
-//			contacts.addAllIdentites(participants);
-//			bundle.setMetaId(UUID.randomUUID().toString());
-//		} else {
-//			contacts.add(assessedIdentity);
-//		}
-//		bundle.setContactList(contacts);
-//
-//		String subject = translate("mail.confirm.assignment.subject");
-//		String body = translate("mail.confirm.assignment.body");
-//		bundle.setContent(subject, body);
-//
-//		mailManager.sendMessage(bundle);
-//	}
+	private void doSendConfirmationEmail(Task assignedTask) {
+		MailContext context = new MailContextImpl(getWindowControl().getBusinessControl().getAsString());
+		
+		MailBundle bundle = new MailBundle();
+		bundle.setContext(context);
+		ContactList contacts = new ContactList("participants");
+		if(GTAType.group.name().equals(gtaNode.getModuleConfiguration().getStringValue(GTACourseNode.GTASK_TYPE))) {
+			List<Identity> participants = businessGroupService.getMembers(assessedGroup, GroupRoles.participant.name());
+			contacts.addAllIdentites(participants);
+			bundle.setMetaId(UUID.randomUUID().toString());
+		} else {
+			contacts.add(assessedIdentity);
+		}
+		bundle.setContactList(contacts);
+		
+		String[] args = new String[] {
+			getIdentity().getUser().getFirstName(),	//0 first name
+			getIdentity().getUser().getLastName(),	//1 last name
+			courseEnv.getCourseTitle(),				//2 course name
+			assignedTask.getTaskName()				//3 task
+		};
+		String subject = translate("mail.confirm.assignment.subject", args);
+		String body = translate("mail.confirm.assignment.body", args);
+		bundle.setContent(subject, body);
 
+		mailManager.sendMessage(bundle);
+	}
+	
 	private void doDescription(UserRequest ureq, AvailableTask row) {
 		removeAsListenerAndDispose(descriptionCalloutCtrl);
 		

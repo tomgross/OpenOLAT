@@ -19,9 +19,10 @@
  */
 package org.olat.core.commons.services.image;
 
+import java.io.File;
+import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.net.URL;
 import java.util.Iterator;
 
 import javax.imageio.ImageIO;
@@ -29,43 +30,39 @@ import javax.imageio.ImageReader;
 import javax.imageio.stream.ImageInputStream;
 import javax.imageio.stream.MemoryCacheImageInputStream;
 
-import org.apache.poi.util.IOUtils;
 import org.olat.core.logging.OLog;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.FileUtils;
 
 /**
- *
+ * 
  * Initial date: 04.09.2013<br>
  * @author srosse, stephane.rosse@frentix.com, http://www.frentix.com
  *
  */
 public class ImageUtils {
-
+	
 	private static final OLog log = Tracing.createLoggerFor(ImageUtils.class);
-
-
-	public static Size getImageSize(URL imageUrl) {
-		try {
-			String suffix = FileUtils.getFileSuffix(imageUrl.getFile());
-			InputStream in = imageUrl.openStream();
+	
+	
+	public static Size getImageSize(File image) {
+		try(InputStream in = new FileInputStream(image)) {
+			String suffix = FileUtils.getFileSuffix(image.getName());
 			return getImageSize(suffix, in);
 		} catch (IOException e) {
-			log.error("", e);
 			return null;
 		}
 	}
-
+	
 	public static Size getImageSize(String suffix, InputStream in) {
 		Size result = null;
 
 		Iterator<ImageReader> iter = ImageIO.getImageReadersBySuffix(suffix);
 		if (iter.hasNext()) {
 			ImageReader reader = iter.next();
-			try {
-				ImageInputStream stream = new MemoryCacheImageInputStream(in);
+			try(ImageInputStream stream = new MemoryCacheImageInputStream(in)) {
 				reader.setInput(stream);
-
+				
 				int imageIndex = reader.getMinIndex();
 				int width = reader.getWidth(imageIndex);
 				int height = reader.getHeight(imageIndex);
@@ -73,7 +70,6 @@ public class ImageUtils {
 			} catch (IOException e) {
 				log.error(e.getMessage());
 			} finally {
-				IOUtils.closeQuietly(in);
 				reader.dispose();
 			}
 		} else {

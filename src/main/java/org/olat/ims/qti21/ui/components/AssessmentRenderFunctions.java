@@ -46,7 +46,9 @@ import uk.ac.ed.ph.jqtiplus.node.QtiNode;
 import uk.ac.ed.ph.jqtiplus.node.content.basic.TextRun;
 import uk.ac.ed.ph.jqtiplus.node.item.AssessmentItem;
 import uk.ac.ed.ph.jqtiplus.node.item.CorrectResponse;
+import uk.ac.ed.ph.jqtiplus.node.item.interaction.MatchInteraction;
 import uk.ac.ed.ph.jqtiplus.node.item.interaction.choice.Choice;
+import uk.ac.ed.ph.jqtiplus.node.item.interaction.choice.SimpleAssociableChoice;
 import uk.ac.ed.ph.jqtiplus.node.item.response.declaration.ResponseDeclaration;
 import uk.ac.ed.ph.jqtiplus.node.item.template.declaration.TemplateDeclaration;
 import uk.ac.ed.ph.jqtiplus.node.test.TestFeedback;
@@ -63,6 +65,7 @@ import uk.ac.ed.ph.jqtiplus.value.Cardinality;
 import uk.ac.ed.ph.jqtiplus.value.DurationValue;
 import uk.ac.ed.ph.jqtiplus.value.FileValue;
 import uk.ac.ed.ph.jqtiplus.value.FloatValue;
+import uk.ac.ed.ph.jqtiplus.value.IdentifierValue;
 import uk.ac.ed.ph.jqtiplus.value.IntegerValue;
 import uk.ac.ed.ph.jqtiplus.value.ListValue;
 import uk.ac.ed.ph.jqtiplus.value.MultipleValue;
@@ -132,12 +135,13 @@ public class AssessmentRenderFunctions {
     // or not(@templateIdentifier)
     // or (qw:value-contains(qw:get-template-value(@templateIdentifier), @identifier) and not(@showHide='hide'))])"/>
 	public static boolean isVisible(Choice choice, ItemSessionState iSessionState) {
-		Value templateValue = choice.getTemplateIdentifier() == null ? null : iSessionState.getTemplateValue(choice.getTemplateIdentifier());
-
-		return choice.getTemplateIdentifier() != null 
-				//TODO the check must be checked
-				|| (templateValue != null && templateValue.toString().equals(choice.getIdentifier().toString()))
-				|| choice.getVisibilityMode() != VisibilityMode.HIDE_IF_MATCH;
+		if(choice.getTemplateIdentifier() == null) return true;
+		
+		Value templateValue = iSessionState.getTemplateValue(choice.getTemplateIdentifier());
+		boolean visible = templateValue instanceof IdentifierValue
+				&& ((IdentifierValue)templateValue).identifierValue().equals(choice.getIdentifier())
+				&& choice.getVisibilityMode() != VisibilityMode.HIDE_IF_MATCH;
+		return visible;
 	}
 	
 	//<xsl:if test="qw:is-invalid-response(@responseIdentifier)">
@@ -523,14 +527,20 @@ public class AssessmentRenderFunctions {
 	//value-contains
 	public static final boolean valueContains(Value value, Identifier identifier) {
 		if(value != null && !value.isNull()) {
-			//TODO mimic the XSLT
-			return value.toQtiString().contains(identifier.toString());
-			/*
 			if(value.hasBaseType(BaseType.IDENTIFIER)) {
-				IdentifierValue identifierValue = (IdentifierValue)value;
-				return identifierValue.identifierValue().equals(identifier);
+				if(value.getCardinality().isSingle()) {
+					IdentifierValue identifierValue = (IdentifierValue)value;
+					return identifierValue.identifierValue().equals(identifier);
+				} else if(value.getCardinality().isList()) {
+					boolean contains = false;
+					for(IdentifierValue identifierValue : ((ListValue) value).values(IdentifierValue.class)) {
+						if(identifierValue.identifierValue().equals(identifier)) {
+							contains = true;
+						}
+					}
+					return contains;
+				}
 			}
-			*/
 		}
 		return false;
 	}
@@ -538,9 +548,21 @@ public class AssessmentRenderFunctions {
 	public static boolean valueContains(Value value, String string) {
 		if(value == null || value.isNull() || value instanceof NullValue) {
 			return false;
-		} else {
-			return value.toQtiString().contains(string);//TODO qti perhaps must match closer for MultipleValue
 		}
+		return value.toQtiString().contains(string);//TODO qti perhaps must match closer for MultipleValue
+	}
+	
+	/**
+	 * Return true if the answer is not answered
+	 * @param response
+	 * @param string
+	 * @return
+	 */
+	public static boolean trueFalseDefault(Value response, String targetIdentifier, MatchInteraction interaction) {
+		//first target is "unanswered"
+		SimpleAssociableChoice unansweredChoice = interaction.getSimpleMatchSets().get(1).getSimpleAssociableChoices().get(0);
+		return (targetIdentifier.equals(unansweredChoice.getIdentifier().toString())
+				&& (response == null || response.isNull() || response instanceof NullValue));
 	}
 	
 	/**
@@ -571,6 +593,8 @@ public class AssessmentRenderFunctions {
 			case "class":
 			case "contextmenu":
 			case "dir":
+			case "display":
+			case "download":
 			case "hidden":
 			case "name":
 			case "id":
@@ -581,6 +605,7 @@ public class AssessmentRenderFunctions {
 			case "style":
 			case "width":
 			case "height":
+			case "xmlns":
 				value = getDomAttributeValue(attribute);
 				break;
 			case "href":
@@ -610,7 +635,7 @@ public class AssessmentRenderFunctions {
   <xsl:function name="qw:convert-link" as="xs:string">
     <xsl:param name="uri" as="xs:string"/>
     <xsl:choose>
-      <xsl:when test="starts-with($uri, 'http:') or starts-with($uri, 'https:') or starts-with($uri, 'mailto:')">
+      <xsl:when test="starts-with($uri, 'http:') or starts-with($uri, 'https:') or starts-with($uri, 'mailto:') or starts-with($uri, 'data:')">
         <xsl:sequence select="$uri"/>
       </xsl:when>
       <xsl:otherwise>
@@ -622,13 +647,18 @@ public class AssessmentRenderFunctions {
 	 */
 	
 	public static final String convertLink(AssessmentObjectComponent component, ResolvedAssessmentItem resolvedAssessmentItem, String uri) {
-		if(uri != null && (uri.startsWith("http:") || uri.startsWith("https:") || uri.startsWith("mailto:"))) {
+		if(uri != null && (uri.startsWith("http:") || uri.startsWith("https:") || uri.startsWith("mailto:") || uri.startsWith("data:"))) {
 			return uri;
 		}
 		
-		String filename = getLinkFilename(uri);
+		if(!StringHelper.containsNonWhitespace(uri)) {
+			uri = "file";
+		}
 		String relativePath = component.relativePathTo(resolvedAssessmentItem);
-		return component.getMapperUri() + "/" + filename + "?href=" + relativePath + (uri == null ? "" : uri);
+		if(uri != null) {
+			relativePath += uri;
+		}
+		return component.getMapperUri() + "/" + relativePath + "?href=" + relativePath;
 	}
 	
 	public static final String convertSubmissionLink(AssessmentObjectComponent component, ResolvedAssessmentItem resolvedAssessmentItem, String uri) {

@@ -20,6 +20,10 @@
 package org.olat.modules.webFeed.portfolio;
 
 import java.io.File;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
+import java.util.Locale;
 
 import org.olat.core.commons.services.image.Size;
 import org.olat.core.gui.UserRequest;
@@ -27,6 +31,7 @@ import org.olat.core.gui.control.Controller;
 import org.olat.core.gui.control.WindowControl;
 import org.olat.core.id.Identity;
 import org.olat.core.logging.activity.ThreadLocalUserActivityLogger;
+import org.olat.core.util.io.SystemFileFilter;
 import org.olat.core.util.vfs.VFSContainer;
 import org.olat.core.util.vfs.VFSLeaf;
 import org.olat.core.util.vfs.VFSManager;
@@ -34,16 +39,17 @@ import org.olat.fileresource.types.BlogFileResource;
 import org.olat.modules.portfolio.Media;
 import org.olat.modules.portfolio.MediaInformations;
 import org.olat.modules.portfolio.MediaLight;
+import org.olat.modules.portfolio.MediaRenderingHints;
 import org.olat.modules.portfolio.PortfolioLoggingAction;
 import org.olat.modules.portfolio.handler.AbstractMediaHandler;
 import org.olat.modules.portfolio.manager.MediaDAO;
 import org.olat.modules.portfolio.manager.PortfolioFileStorage;
 import org.olat.modules.portfolio.ui.media.StandardEditMediaController;
-import org.olat.modules.webFeed.managers.FeedManager;
-import org.olat.modules.webFeed.models.Feed;
-import org.olat.modules.webFeed.models.Item;
+import org.olat.modules.webFeed.Item;
+import org.olat.modules.webFeed.manager.FeedManager;
 import org.olat.portfolio.manager.EPFrontendManager;
 import org.olat.portfolio.model.artefacts.AbstractArtefact;
+import org.olat.user.manager.ManifestBuilder;
 import org.olat.util.logging.activity.LoggingResourceable;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -97,7 +103,6 @@ public class BlogEntryMediaHandler extends AbstractMediaHandler {
 	@Override
 	public Media createMedia(String title, String description, Object mediaObject, String businessPath, Identity author) {
 		BlogEntryMedia entry = (BlogEntryMedia)mediaObject;
-		Feed feed = entry.getFeed();
 		Item item = entry.getItem();
 		
 		Media media = mediaDao.createMedia(title, description, "", BLOG_ENTRY_HANDLER, businessPath, null, 70, author);
@@ -105,9 +110,11 @@ public class BlogEntryMediaHandler extends AbstractMediaHandler {
 		String storagePath = fileStorage.getRelativePath(mediaDir);
 		media = mediaDao.updateStoragePath(media, storagePath, BlogArtefact.BLOG_FILE_NAME);
 		VFSContainer mediaContainer = fileStorage.getMediaContainer(media);
-		VFSContainer itemContainer = feedManager.getItemContainer(item, feed);
+		VFSContainer itemContainer = feedManager.getItemContainer(item);
+		FeedManager.getInstance().saveItemAsXML(item);
 		VFSManager.copyContent(itemContainer, mediaContainer);
-
+		FeedManager.getInstance().deleteItemXML(item);
+		
 		return media;
 	}
 
@@ -137,14 +144,22 @@ public class BlogEntryMediaHandler extends AbstractMediaHandler {
 
 		return media;
 	}
-
+	
 	@Override
-	public Controller getMediaController(UserRequest ureq, WindowControl wControl, Media media) {
-		return new BlogEntryMediaController(ureq, wControl, media, true);
+	public Controller getMediaController(UserRequest ureq, WindowControl wControl, Media media, MediaRenderingHints hints) {
+		return new BlogEntryMediaController(ureq, wControl, media, hints);
 	}
 
 	@Override
 	public Controller getEditMediaController(UserRequest ureq, WindowControl wControl, Media media) {
 		return new StandardEditMediaController(ureq, wControl, media);
+	}
+	
+	@Override
+	public void export(Media media, ManifestBuilder manifest, File mediaArchiveDirectory, Locale locale) {
+		File mediaDir = fileStorage.getMediaDirectory(media);
+		File[] files = mediaDir.listFiles(new SystemFileFilter(true, false));
+		List<File> attachments = files == null ? Collections.emptyList() : Arrays.asList(files);
+		super.exportContent(media, null, attachments, mediaArchiveDirectory, locale);
 	}
 }

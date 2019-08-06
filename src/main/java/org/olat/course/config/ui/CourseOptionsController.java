@@ -49,7 +49,9 @@ import org.olat.core.logging.activity.LearningResourceLoggingAction;
 import org.olat.core.logging.activity.StringResourceableType;
 import org.olat.core.logging.activity.ThreadLocalUserActivityLogger;
 import org.olat.core.util.StringHelper;
+import org.olat.core.util.Util;
 import org.olat.core.util.coordinate.CoordinatorManager;
+import org.olat.core.util.coordinate.LockResult;
 import org.olat.core.util.nodes.INode;
 import org.olat.core.util.resource.OresHelper;
 import org.olat.core.util.tree.TreeVisitor;
@@ -61,6 +63,7 @@ import org.olat.course.config.CourseConfigEvent;
 import org.olat.course.config.CourseConfigEvent.CourseConfigType;
 import org.olat.course.nodes.BCCourseNode;
 import org.olat.course.nodes.CourseNode;
+import org.olat.course.run.RunMainController;
 import org.olat.course.tree.CourseEditorTreeNode;
 import org.olat.fileresource.types.GlossaryResource;
 import org.olat.fileresource.types.SharedFolderFileResource;
@@ -73,6 +76,7 @@ import org.olat.repository.controllers.ReferencableEntriesSearchController;
 import org.olat.repository.model.RepositoryEntrySecurity;
 import org.olat.resource.references.Reference;
 import org.olat.resource.references.ReferenceManager;
+import org.olat.user.UserManager;
 import org.olat.util.logging.activity.LoggingResourceable;
 import org.springframework.beans.factory.annotation.Autowired;
 
@@ -88,9 +92,9 @@ public class CourseOptionsController extends FormBasicController {
 	private static final String COMMAND_ADD = "command.glossary.add";
 	
 	private static final String[] onKeys = new String[] {"xx"};
-	private static final String[] onValues = new String[] {""};
+	private final String[] onValues;
 
-	private SelectionElement menuEl, toolbarEl, calendarEl, searchEl, chatEl;
+	private SelectionElement menuEl, toolbarEl, breadCrumbEl, calendarEl, searchEl, chatEl;
 	private FormLink addGlossaryCommand, removeGlossaryCommand;
 	private StaticTextElement glossaryNameEl;
 	private FormLink saveButton;
@@ -99,7 +103,8 @@ public class CourseOptionsController extends FormBasicController {
 	private FormLink addFolderCommand, removeFolderCommand;
 	private StaticTextElement folderNameEl;
 	private MultipleSelectionElement folderReadOnlyEl;
-	
+
+	private LockResult lockEntry;
 	private final boolean editable;
 	private CourseConfig courseConfig;
 	private final RepositoryEntry entry;
@@ -109,6 +114,8 @@ public class CourseOptionsController extends FormBasicController {
 	private CloseableModalController cmc;
 	private ReferencableEntriesSearchController glossarySearchCtr, folderSearchCtr;
 
+	@Autowired
+	private UserManager userManager;
 	@Autowired
 	private CalendarModule calendarModule;
 	@Autowired
@@ -122,12 +129,17 @@ public class CourseOptionsController extends FormBasicController {
 	 * @param chatEnabled
 	 */
 	public CourseOptionsController(UserRequest ureq, WindowControl wControl,
-			RepositoryEntry entry, CourseConfig courseConfig, boolean editable) {
+			RepositoryEntry entry, CourseConfig courseConfig, boolean canEdit) {
 		super(ureq, wControl, LAYOUT_BAREBONE);
+		setTranslator(Util.createPackageTranslator(RunMainController.class, getLocale(), getTranslator()));
 		this.courseConfig = courseConfig;
 		this.entry = entry;
+		this.onValues = new String[] {translate("on")};
 		
-		this.editable = editable;
+		lockEntry = CoordinatorManager.getInstance().getCoordinator().getLocker()
+				.acquireLock(entry.getOlatResource(), getIdentity(), CourseFactory.COURSE_EDITOR_LOCK);
+		editable = (lockEntry != null && lockEntry.isSuccess()) && canEdit;
+
 		initForm(ureq);
 		updateToolbar();
 
@@ -148,7 +160,7 @@ public class CourseOptionsController extends FormBasicController {
 			}
 		} else if(editable && !managedGlossary) {
 			removeGlossaryCommand.setVisible(false);
-			addGlossaryCommand.setVisible(true);
+			addGlossaryCommand.setVisible(editable);
 		}
 		
 		//shared folder
@@ -166,12 +178,28 @@ public class CourseOptionsController extends FormBasicController {
 				
 				RepositoryEntrySecurity reSecurity = repositoryService.isAllowed(ureq, repoEntry);
 				folderReadOnlyEl.setVisible(true);
-				folderReadOnlyEl.setEnabled(reSecurity.isEntryAdmin());
+				folderReadOnlyEl.setEnabled(editable && reSecurity.isEntryAdmin());
 			}
 		} else if(editable && !managedFolder) {
 			removeFolderCommand.setVisible(false);
-			addFolderCommand.setVisible(true);
+			addFolderCommand.setVisible(editable);
 			folderReadOnlyEl.setVisible(false);
+		}
+		
+		if(lockEntry != null && !lockEntry.isSuccess()) {
+			String lockerName = "???";
+			if(lockEntry.getOwner() != null) {
+				lockerName = userManager.getUserDisplayName(lockEntry.getOwner());
+			}
+			showWarning("error.editoralreadylocked", new String[] { lockerName });
+		}
+	}
+	
+	@Override
+	protected void doDispose() {
+		if (lockEntry != null && lockEntry.isSuccess()) {
+			CoordinatorManager.getInstance().getCoordinator().getLocker().releaseLock(lockEntry);
+			lockEntry = null;
 		}
 	}
 	
@@ -185,10 +213,15 @@ public class CourseOptionsController extends FormBasicController {
 		menuEl = uifactory.addCheckboxesHorizontal("menuIsOn", "chkbx.menu.onoff", menuCont, onKeys, onValues);
 		menuEl.select(onKeys[0], courseConfig.isMenuEnabled());
 		menuEl.addActionListener(FormEvent.ONCHANGE);
+		menuEl.setEnabled(editable);
 		
 		toolbarEl = uifactory.addCheckboxesHorizontal("toolbarIsOn", "chkbx.toolbar.onoff", menuCont, onKeys, onValues);
 		toolbarEl.select(onKeys[0], courseConfig.isToolbarEnabled());
 		toolbarEl.addActionListener(FormEvent.ONCHANGE);
+
+		breadCrumbEl = uifactory.addCheckboxesHorizontal("breadCrumbIsOn", "chkbx.breadcrumb.onoff", menuCont, onKeys, onValues);
+		breadCrumbEl.select(onKeys[0], courseConfig.isBreadCrumbEnabled());
+		breadCrumbEl.addActionListener(FormEvent.ONCHANGE);
 
 		boolean canHideToolbar = true;
 		if(calendarModule.isEnabled() && calendarModule.isEnableCourseToolCalendar()) {
@@ -261,7 +294,8 @@ public class CourseOptionsController extends FormBasicController {
 		if(managedGlossary && StringHelper.containsNonWhitespace(courseConfig.getGlossarySoftKey())) {
 			canHideToolbar &= false;
 		}
-		toolbarEl.setEnabled(canHideToolbar);
+		toolbarEl.setEnabled(editable && canHideToolbar);
+		breadCrumbEl.setEnabled(editable && canHideToolbar); //same rule as for toolbar
 		
 		//shared folder
 		boolean managedFolder = RepositoryEntryManagedFlag.isManaged(entry, RepositoryEntryManagedFlag.resourcefolder);
@@ -299,11 +333,6 @@ public class CourseOptionsController extends FormBasicController {
 			saveButton.setElementCssClass("o_sel_course_options_save");
 			saveButton.setPrimary(true);
 		}
-	}
-
-	@Override
-	protected void doDispose() {
-		//
 	}
 
 	@Override
@@ -380,6 +409,8 @@ public class CourseOptionsController extends FormBasicController {
 				showWarning("chkbx.toolbar.off.warning");
 			}
 			updateToolbar();
+			setSaveButtonDirty();
+		} else if(breadCrumbEl == source) {
 			setSaveButtonDirty();
 		} else if (source instanceof SelectionElement || source == folderReadOnlyEl || source == menuEl) {
 			setSaveButtonDirty();
@@ -468,6 +499,8 @@ public class CourseOptionsController extends FormBasicController {
 		courseConfig.setMenuEnabled(menuEnabled);
 		boolean toolbarEnabled = toolbarEl.isSelected(0);
 		courseConfig.setToolbarEnabled(toolbarEnabled);
+		boolean breadCrumbEnabled = breadCrumbEl.isSelected(0);
+		courseConfig.setBreadCrumbEnabled(breadCrumbEnabled);
 		
 		boolean enableSearch = searchEl.isSelected(0);
 		boolean updateSearch = courseConfig.isCourseSearchEnabled() != enableSearch;

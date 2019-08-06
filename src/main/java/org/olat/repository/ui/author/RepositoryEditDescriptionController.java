@@ -36,6 +36,12 @@ import java.util.Set;
 import java.util.UUID;
 
 import org.olat.NewControllerFactory;
+import org.olat.core.commons.services.license.LicenseModule;
+import org.olat.core.commons.services.license.LicenseService;
+import org.olat.core.commons.services.license.LicenseType;
+import org.olat.core.commons.services.license.ResourceLicense;
+import org.olat.core.commons.services.license.ui.LicenseSelectionConfig;
+import org.olat.core.commons.services.license.ui.LicenseUIFactory;
 import org.olat.core.gui.UserRequest;
 import org.olat.core.gui.components.form.flexible.FormItem;
 import org.olat.core.gui.components.form.flexible.FormItemContainer;
@@ -43,6 +49,7 @@ import org.olat.core.gui.components.form.flexible.elements.DateChooser;
 import org.olat.core.gui.components.form.flexible.elements.FileElement;
 import org.olat.core.gui.components.form.flexible.elements.RichTextElement;
 import org.olat.core.gui.components.form.flexible.elements.SingleSelection;
+import org.olat.core.gui.components.form.flexible.elements.TextAreaElement;
 import org.olat.core.gui.components.form.flexible.elements.TextElement;
 import org.olat.core.gui.components.form.flexible.impl.FormBasicController;
 import org.olat.core.gui.components.form.flexible.impl.FormEvent;
@@ -55,6 +62,8 @@ import org.olat.core.gui.control.WindowControl;
 import org.olat.core.util.FileUtils;
 import org.olat.core.util.StringHelper;
 import org.olat.core.util.WebappHelper;
+import org.olat.core.util.coordinate.CoordinatorManager;
+import org.olat.core.util.event.MultiUserEvent;
 import org.olat.core.util.vfs.LocalFileImpl;
 import org.olat.core.util.vfs.LocalFolderImpl;
 import org.olat.core.util.vfs.VFSContainer;
@@ -64,8 +73,11 @@ import org.olat.repository.RepositoryEntry;
 import org.olat.repository.RepositoryEntryManagedFlag;
 import org.olat.repository.RepositoryManager;
 import org.olat.repository.RepositoryService;
+import org.olat.repository.controllers.EntryChangedEvent;
+import org.olat.repository.controllers.EntryChangedEvent.Change;
 import org.olat.repository.handlers.RepositoryHandler;
 import org.olat.repository.handlers.RepositoryHandlerFactory;
+import org.olat.repository.manager.RepositoryEntryLicenseHandler;
 import org.olat.repository.manager.RepositoryEntryLifecycleDAO;
 import org.olat.repository.model.RepositoryEntryLifecycle;
 import org.olat.resource.OLATResource;
@@ -81,7 +93,7 @@ import org.springframework.beans.factory.annotation.Autowired;
  */
 public class RepositoryEditDescriptionController extends FormBasicController {
 	
-	private static final Set<String> imageMimeTypes = new HashSet<String>();
+	private static final Set<String> imageMimeTypes = new HashSet<>();
 	static {
 		imageMimeTypes.add("image/gif");
 		imageMimeTypes.add("image/jpg");
@@ -92,17 +104,19 @@ public class RepositoryEditDescriptionController extends FormBasicController {
 	private VFSContainer mediaContainer;
 	private RepositoryEntry repositoryEntry;
 	private final String repoEntryType;
+	private ResourceLicense license;
 
 	private static final int picUploadlimitKB = 5120;
 	private static final int movieUploadlimitKB = 102400;
 
 	private FileElement fileUpload, movieUpload;
-	private TextElement externalRef, displayName, authors, expenditureOfWork, language, location;
+	private TextElement externalRef, displayName, authors, expenditureOfWork, language, location, licensorEl;
+	private TextAreaElement licenseFreetextEl;
 	private RichTextElement description, objectives, requirements, credits;
-	private SingleSelection dateTypesEl, publicDatesEl;
+	private SingleSelection dateTypesEl, publicDatesEl, licenseEl;
 	private DateChooser startDateEl, endDateEl;
 	private FormSubmit submit;
-	private FormLayoutContainer descCont, privateDatesCont;
+	private FormLayoutContainer privateDatesCont;
 	
 	private static final String[] dateKeys = new String[]{ "none", "private", "public"};
 
@@ -116,6 +130,12 @@ public class RepositoryEditDescriptionController extends FormBasicController {
 	private RepositoryEntryLifecycleDAO lifecycleDao;
 	@Autowired
 	private RepositoryHandlerFactory repositoryHandlerFactory;
+	@Autowired
+	private LicenseService licenseService;
+	@Autowired
+	private LicenseModule licenseModule;
+	@Autowired
+	private RepositoryEntryLicenseHandler licenseHandler;
 
 	/**
 	 * Create a repository add controller that adds the given resourceable.
@@ -125,7 +145,7 @@ public class RepositoryEditDescriptionController extends FormBasicController {
 	 * @param sourceEntry
 	 */
 	public RepositoryEditDescriptionController(UserRequest ureq, WindowControl wControl, RepositoryEntry entry) {
-		super(ureq, wControl, "bgrep");
+		super(ureq, wControl);
 		setBasePackage(RepositoryService.class);
 		this.repositoryEntry = entry;
 		repoEntryType = repositoryEntry.getOlatResource().getResourceableTypeName();
@@ -138,27 +158,24 @@ public class RepositoryEditDescriptionController extends FormBasicController {
 
 	@Override
 	protected void initForm(FormItemContainer formLayout, Controller listener, UserRequest ureq) {
-		
-		descCont = FormLayoutContainer.createDefaultFormLayout("desc", getTranslator());
-		descCont.setFormContextHelp("Info Page: Add Meta Data");
-		descCont.setRootForm(mainForm);
-		formLayout.add("desc", descCont);
+		setFormContextHelp("Set up info page");
+		formLayout.setElementCssClass("o_sel_edit_repositoryentry");
 
 		String id = repositoryEntry.getResourceableId() == null ? "-" : repositoryEntry.getResourceableId().toString();
-		uifactory.addStaticTextElement("cif.id", id, descCont);
+		uifactory.addStaticTextElement("cif.id", id, formLayout);
 		
 		String externalId = repositoryEntry.getExternalId();
 		if(StringHelper.containsNonWhitespace(externalId)) {
-			uifactory.addStaticTextElement("cif.externalid", externalId, descCont);
+			uifactory.addStaticTextElement("cif.externalid", externalId, formLayout);
 		}
 		
 		String extRef = repositoryEntry.getExternalRef();
 		if(StringHelper.containsNonWhitespace(repositoryEntry.getManagedFlagsString())) {
 			if(StringHelper.containsNonWhitespace(extRef)) {
-				uifactory.addStaticTextElement("cif.externalref", extRef, descCont);
+				uifactory.addStaticTextElement("cif.externalref", extRef, formLayout);
 			}
 		} else {
-			externalRef = uifactory.addTextElement("cif.externalref", "cif.externalref", 100, extRef, descCont);
+			externalRef = uifactory.addTextElement("cif.externalref", "cif.externalref", 100, extRef, formLayout);
 			externalRef.setHelpText(translate("cif.externalref.hover"));
 			externalRef.setHelpUrlForManualPage("Info Page#_identification");
 			externalRef.setDisplaySize(30);
@@ -169,7 +186,7 @@ public class RepositoryEditDescriptionController extends FormBasicController {
 			initalAuthor = userManager.getUserDisplayName(initalAuthor);
 		}
 		initalAuthor = StringHelper.escapeHtml(initalAuthor);
-		uifactory.addStaticTextElement("cif.initialAuthor", initalAuthor, descCont);
+		uifactory.addStaticTextElement("cif.initialAuthor", initalAuthor, formLayout);
 		// Add resource type
 		String typeName = null;
 		OLATResource res = repositoryEntry.getOlatResource();
@@ -183,21 +200,43 @@ public class RepositoryEditDescriptionController extends FormBasicController {
 		} else {
 			typeDisplay = translate("cif.type.na");
 		}
-		uifactory.addStaticTextElement("cif.type", typeDisplay, descCont);
+		uifactory.addStaticTextElement("cif.type", typeDisplay, formLayout);
 		
-		uifactory.addSpacerElement("spacer1", descCont, false);
+		uifactory.addSpacerElement("spacer1", formLayout, false);
 
-		displayName = uifactory.addTextElement("cif.displayname", "cif.displayname", 100, repositoryEntry.getDisplayname(), descCont);
+		displayName = uifactory.addTextElement("cif.displayname", "cif.displayname", 100, repositoryEntry.getDisplayname(), formLayout);
 		displayName.setDisplaySize(30);
 		displayName.setMandatory(true);
 		displayName.setEnabled(!RepositoryEntryManagedFlag.isManaged(repositoryEntry, RepositoryEntryManagedFlag.title));
 
-		authors = uifactory.addTextElement("cif.authors", "cif.authors", 255, repositoryEntry.getAuthors(), descCont);
+		authors = uifactory.addTextElement("cif.authors", "cif.authors", 255, repositoryEntry.getAuthors(), formLayout);
 		authors.setDisplaySize(60);
 		
-		language = uifactory.addTextElement("cif.mainLanguage", "cif.mainLanguage", 16, repositoryEntry.getMainLanguage(), descCont);
+		if (licenseModule.isEnabled(licenseHandler)) {
+			license = licenseService.loadOrCreateLicense(res);
+
+			LicenseSelectionConfig licenseSelectionConfig = LicenseUIFactory
+					.createLicenseSelectionConfig(licenseHandler, license.getLicenseType());
+			licenseEl = uifactory.addDropdownSingleselect("cif.license", formLayout,
+					licenseSelectionConfig.getLicenseTypeKeys(),
+					licenseSelectionConfig.getLicenseTypeValues(getLocale()));
+			licenseEl.setElementCssClass("o_sel_repo_license");
+			licenseEl.setMandatory(licenseSelectionConfig.isLicenseMandatory());
+			if (licenseSelectionConfig.getSelectionLicenseTypeKey() != null) {
+				licenseEl.select(licenseSelectionConfig.getSelectionLicenseTypeKey(), true);
+			}
+			licenseEl.addActionListener(FormEvent.ONCHANGE);
+			
+			licensorEl = uifactory.addTextElement("cif.licensor", 1000, license.getLicensor(), formLayout);
+
+			String freetext = licenseService.isFreetext(license.getLicenseType()) ? license.getFreetext() : "";
+			licenseFreetextEl = uifactory.addTextAreaElement("cif.freetext", 4, 72, freetext, formLayout);
+			LicenseUIFactory.updateVisibility(licenseEl, licensorEl, licenseFreetextEl);
+		}
 		
-		location = uifactory.addTextElement("cif.location", "cif.location", 255, repositoryEntry.getLocation(), descCont);
+		language = uifactory.addTextElement("cif.mainLanguage", "cif.mainLanguage", 16, repositoryEntry.getMainLanguage(), formLayout);
+		
+		location = uifactory.addTextElement("cif.location", "cif.location", 255, repositoryEntry.getLocation(), formLayout);
 		location.setEnabled(!RepositoryEntryManagedFlag.isManaged(repositoryEntry, RepositoryEntryManagedFlag.location));
 		
 		RepositoryHandler handler = repositoryHandlerFactory.getRepositoryHandler(repositoryEntry);
@@ -209,11 +248,11 @@ public class RepositoryEditDescriptionController extends FormBasicController {
 		
 		String desc = (repositoryEntry.getDescription() != null ? repositoryEntry.getDescription() : " ");
 		description = uifactory.addRichTextElementForStringData("cif.description", "cif.description",
-				desc, 10, -1, false, mediaContainer, null, descCont, ureq.getUserSession(), getWindowControl());
+				desc, 10, -1, false, mediaContainer, null, formLayout, ureq.getUserSession(), getWindowControl());
 		description.setEnabled(!RepositoryEntryManagedFlag.isManaged(repositoryEntry, RepositoryEntryManagedFlag.description));
 		description.getEditorConfiguration().setFileBrowserUploadRelPath("media");
 
-		uifactory.addSpacerElement("spacer2", descCont, false);
+		uifactory.addSpacerElement("spacer2", formLayout, false);
 
 		if(CourseModule.getCourseTypeName().equals(repoEntryType)) {
 			String[] dateValues = new String[] {
@@ -221,7 +260,7 @@ public class RepositoryEditDescriptionController extends FormBasicController {
 					translate("cif.dates.private"),
 					translate("cif.dates.public")	
 			};
-			dateTypesEl = uifactory.addRadiosVertical("cif.dates", descCont, dateKeys, dateValues);
+			dateTypesEl = uifactory.addRadiosVertical("cif.dates", formLayout, dateKeys, dateValues);
 			dateTypesEl.setElementCssClass("o_sel_repo_lifecycle_type");
 			if(repositoryEntry.getLifecycle() == null) {
 				dateTypesEl.select("none", true);
@@ -261,13 +300,13 @@ public class RepositoryEditDescriptionController extends FormBasicController {
 					}
 					publicValues[count++] = sb.toString();
 			}
-			publicDatesEl = uifactory.addDropdownSingleselect("cif.public.dates", descCont, publicKeys, publicValues, null);
+			publicDatesEl = uifactory.addDropdownSingleselect("cif.public.dates", formLayout, publicKeys, publicValues, null);
 	
 			String privateDatePage = velocity_root + "/cycle_dates.html";
 			privateDatesCont = FormLayoutContainer.createCustomFormLayout("private.date", getTranslator(), privateDatePage);
 			privateDatesCont.setRootForm(mainForm);
 			privateDatesCont.setLabel("cif.private.dates", null);
-			descCont.add("private.date", privateDatesCont);
+			formLayout.add("private.date", privateDatesCont);
 			
 			startDateEl = uifactory.addDateChooser("date.start", "cif.date.start", null, privateDatesCont);
 			startDateEl.setElementCssClass("o_sel_repo_lifecycle_validfrom");
@@ -291,39 +330,39 @@ public class RepositoryEditDescriptionController extends FormBasicController {
 			}
 	
 			updateDatesVisibility();
-			uifactory.addSpacerElement("spacer3", descCont, false);
+			uifactory.addSpacerElement("spacer3", formLayout, false);
 			
-			expenditureOfWork = uifactory.addTextElement("cif.expenditureOfWork", "cif.expenditureOfWork", 100, repositoryEntry.getExpenditureOfWork(), descCont);
+			expenditureOfWork = uifactory.addTextElement("cif.expenditureOfWork", "cif.expenditureOfWork", 100, repositoryEntry.getExpenditureOfWork(), formLayout);
 			expenditureOfWork.setExampleKey("details.expenditureOfWork.example", null);
 
 			String obj = (repositoryEntry.getObjectives() != null ? repositoryEntry.getObjectives() : " ");
 			objectives = uifactory.addRichTextElementForStringData("cif.objectives", "cif.objectives",
-					obj, 10, -1, false, mediaContainer, null, descCont, ureq.getUserSession(), getWindowControl());
+					obj, 10, -1, false, mediaContainer, null, formLayout, ureq.getUserSession(), getWindowControl());
 			objectives.setEnabled(!RepositoryEntryManagedFlag.isManaged(repositoryEntry, RepositoryEntryManagedFlag.objectives));
 			objectives.getEditorConfiguration().setFileBrowserUploadRelPath("media");
 			
 			
 			String req = (repositoryEntry.getRequirements() != null ? repositoryEntry.getRequirements() : " ");
 			requirements = uifactory.addRichTextElementForStringData("cif.requirements", "cif.requirements",
-					req, 10, -1,  false, mediaContainer, null, descCont, ureq.getUserSession(), getWindowControl());
+					req, 10, -1,  false, mediaContainer, null, formLayout, ureq.getUserSession(), getWindowControl());
 			requirements.setEnabled(!RepositoryEntryManagedFlag.isManaged(repositoryEntry, RepositoryEntryManagedFlag.requirements));
 			requirements.getEditorConfiguration().setFileBrowserUploadRelPath("media");
 			requirements.setMaxLength(2000);
 			
 			String cred = (repositoryEntry.getCredits() != null ? repositoryEntry.getCredits() : " ");
 			credits = uifactory.addRichTextElementForStringData("cif.credits", "cif.credits",
-					cred, 10, -1,  false, mediaContainer, null, descCont, ureq.getUserSession(), getWindowControl());
+					cred, 10, -1,  false, mediaContainer, null, formLayout, ureq.getUserSession(), getWindowControl());
 			credits.setEnabled(!RepositoryEntryManagedFlag.isManaged(repositoryEntry, RepositoryEntryManagedFlag.credits));
 			credits.getEditorConfiguration().setFileBrowserUploadRelPath("media");
 			credits.setMaxLength(2000);
 			
-			uifactory.addSpacerElement("spacer4", descCont, false);
+			uifactory.addSpacerElement("spacer4", formLayout, false);
 		}
 		
 		boolean managed = RepositoryEntryManagedFlag.isManaged(repositoryEntry, RepositoryEntryManagedFlag.details);
 		
 		VFSLeaf img = repositoryManager.getImage(repositoryEntry);
-		fileUpload = uifactory.addFileElement(getWindowControl(), "rentry.pic", "rentry.pic", descCont);
+		fileUpload = uifactory.addFileElement(getWindowControl(), "rentry.pic", "rentry.pic", formLayout);
 		fileUpload.setExampleKey("rentry.pic.example", new String[] {RepositoryManager.PICTURE_WIDTH + "x" + (RepositoryManager.PICTURE_HEIGHT)});
 		fileUpload.setMaxUploadSizeKB(picUploadlimitKB, null, null);
 		fileUpload.setPreview(ureq.getUserSession(), true);
@@ -337,7 +376,7 @@ public class RepositoryEditDescriptionController extends FormBasicController {
 		fileUpload.limitToMimeType(imageMimeTypes, "cif.error.mimetype", new String[]{ imageMimeTypes.toString()} );
 
 		VFSLeaf movie = repositoryService.getIntroductionMovie(repositoryEntry);
-		movieUpload = uifactory.addFileElement(getWindowControl(), "rentry.movie", "rentry.movie", descCont);
+		movieUpload = uifactory.addFileElement(getWindowControl(), "rentry.movie", "rentry.movie", formLayout);
 		movieUpload.setExampleKey("rentry.movie.example", new String[] {"3:2"});
 		movieUpload.setMaxUploadSizeKB(movieUploadlimitKB, null, null);
 		movieUpload.setPreview(ureq.getUserSession(), true);
@@ -356,7 +395,7 @@ public class RepositoryEditDescriptionController extends FormBasicController {
 		submit.setVisible(!managed);
 		uifactory.addFormCancelButton("cancel", buttonContainer, ureq, getWindowControl());
 	}
-	
+
 	private void updateDatesVisibility() {
 		if(dateTypesEl.isOneSelected()) {
 			String type = dateTypesEl.getSelectedKey();
@@ -371,7 +410,6 @@ public class RepositoryEditDescriptionController extends FormBasicController {
 				privateDatesCont.setVisible(true);
 			}
 		}
-		descCont.setDirty(true);
 	}
 
 	@Override
@@ -381,8 +419,9 @@ public class RepositoryEditDescriptionController extends FormBasicController {
 
 	@Override
 	protected boolean validateFormLogic(UserRequest ureq) {
+		boolean allOk = super.validateFormLogic(ureq);
+		
 		// Check for empty display name
-		boolean allOk = true;
 		if (!StringHelper.containsNonWhitespace(displayName.getValue())) {
 			displayName.setErrorKey("cif.error.displayname.empty", new String[] {});
 			allOk = false;
@@ -410,8 +449,16 @@ public class RepositoryEditDescriptionController extends FormBasicController {
 				}	
 			}
 		}
+		
+		if (licenseEl != null) {
+			licenseEl.clearError();
+			if (LicenseUIFactory.validateLicenseTypeMandatoryButNonSelected(licenseEl)) {
+				licenseEl.setErrorKey("form.legende.mandatory", null);
+				allOk &= false;
+			}
+		}
 
-		return allOk & super.validateFormLogic(ureq);
+		return allOk;
 	}
 	
 	private boolean validateTextElement(TextElement el, int maxLength) {
@@ -435,6 +482,8 @@ public class RepositoryEditDescriptionController extends FormBasicController {
 	protected void formInnerEvent(UserRequest ureq, FormItem source, FormEvent event) {
 		if (source == dateTypesEl) {
 			updateDatesVisibility();
+		} else if (source == licenseEl) {
+			LicenseUIFactory.updateVisibility(licenseEl, licensorEl, licenseFreetextEl);;
 		} else if (source == fileUpload) {
 			if(FileElementEvent.DELETE.equals(event.getCommand())) {
 				fileUpload.clearError();
@@ -471,6 +520,27 @@ public class RepositoryEditDescriptionController extends FormBasicController {
 
 	@Override
 	protected void formOK(UserRequest ureq) {
+		if (licenseModule.isEnabled(licenseHandler)) {
+			if (licenseEl != null && licenseEl.isOneSelected()) {
+				String licenseTypeKey = licenseEl.getSelectedKey();
+				LicenseType licneseType = licenseService.loadLicenseTypeByKey(licenseTypeKey);
+				license.setLicenseType(licneseType);
+			}
+			String licensor = null;
+			String freetext = null;
+			if (licensorEl != null && licensorEl.isVisible()) {
+				licensor = StringHelper.containsNonWhitespace(licensorEl.getValue())? licensorEl.getValue(): null;
+			}
+			if (licenseFreetextEl != null && licenseFreetextEl.isVisible()) {
+				freetext = StringHelper.containsNonWhitespace(licenseFreetextEl.getValue())? licenseFreetextEl.getValue(): null;
+			}
+			license.setLicensor(licensor);
+			license.setFreetext(freetext);
+			license = licenseService.update(license);
+			licensorEl.setValue(license.getLicensor());
+			licenseFreetextEl.setValue(license.getFreetext());
+		}
+		
 		File uploadedImage = fileUpload.getUploadFile();
 		if(uploadedImage != null && uploadedImage.exists()) {
 			VFSContainer tmpHome = new LocalFolderImpl(new File(WebappHelper.getTmpDir()));
@@ -584,6 +654,9 @@ public class RepositoryEditDescriptionController extends FormBasicController {
 			fireEvent(ureq, Event.CLOSE_EVENT);
 		} else {
 			fireEvent(ureq, Event.CHANGED_EVENT);
+			MultiUserEvent modifiedEvent = new EntryChangedEvent(repositoryEntry, getIdentity(), Change.modifiedDescription, "authoring");
+			CoordinatorManager.getInstance().getCoordinator().getEventBus()
+				.fireEventToListenersOf(modifiedEvent, RepositoryService.REPOSITORY_EVENT_ORES);
 		}
 	}
 

@@ -20,7 +20,7 @@
 package org.olat.ims.qti21.model.xml;
 
 import java.io.ByteArrayInputStream;
-import java.io.IOException;
+import java.io.StringReader;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -33,24 +33,27 @@ import org.olat.core.gui.render.StringOutput;
 import org.olat.core.logging.OLog;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.StringHelper;
-import org.olat.core.util.filter.FilterFactory;
+import org.olat.core.util.filter.impl.NekoHTMLFilter;
 import org.w3c.dom.Attr;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
 import org.w3c.dom.Node;
 import org.xml.sax.Attributes;
 import org.xml.sax.InputSource;
-import org.xml.sax.SAXException;
+import org.xml.sax.helpers.DefaultHandler;
 
 import uk.ac.ed.ph.jqtiplus.JqtiExtensionManager;
 import uk.ac.ed.ph.jqtiplus.exception.QtiModelException;
 import uk.ac.ed.ph.jqtiplus.node.AbstractNode;
 import uk.ac.ed.ph.jqtiplus.node.LoadingContext;
+import uk.ac.ed.ph.jqtiplus.node.QtiNode;
 import uk.ac.ed.ph.jqtiplus.node.content.basic.Block;
 import uk.ac.ed.ph.jqtiplus.node.content.basic.FlowStatic;
 import uk.ac.ed.ph.jqtiplus.node.content.basic.InlineStatic;
 import uk.ac.ed.ph.jqtiplus.serialization.QtiSerializer;
+import uk.ac.ed.ph.jqtiplus.serialization.SaxFiringOptions;
 import uk.ac.ed.ph.jqtiplus.xmlutils.SimpleDomBuilderHandler;
+import uk.ac.ed.ph.jqtiplus.xmlutils.xslt.XsltSerializationOptions;
 
 /**
  * Do the ugly job to convert the Tiny MCE HTML code to the object model
@@ -76,14 +79,25 @@ public class AssessmentHtmlBuilder {
 	}
 	
 	public boolean containsSomething(String html) {
-		return StringHelper.containsNonWhitespace(FilterFactory.getHtmlTagsFilter().filter(html));
+		if(!StringHelper.containsNonWhitespace(html)) return false;
+
+		try {
+			SAXParser parser = new SAXParser();
+			ContentDetectionHandler contentHandler = new ContentDetectionHandler();
+			parser.setContentHandler(contentHandler);
+			parser.parse(new InputSource(new StringReader(html)));
+			return contentHandler.isContentAvailable();
+		} catch (Exception e) {
+			log.error("", e);
+			return false;
+		}
 	}
 	
 	public String flowStaticString(List<? extends FlowStatic> statics) {
 		StringOutput sb = new StringOutput();
-		if(statics != null && statics.size() > 0) {
+		if(statics != null && !statics.isEmpty()) {
 			for(FlowStatic flowStatic:statics) {
-				qtiSerializer.serializeJqtiObject(flowStatic, new StreamResult(sb));
+				serializeJqtiObject(flowStatic, sb);
 			}
 		}
 		return cleanUpNamespaces(sb);
@@ -91,9 +105,9 @@ public class AssessmentHtmlBuilder {
 	
 	public String blocksString(List<? extends Block> statics) {
 		StringOutput sb = new StringOutput();
-		if(statics != null && statics.size() > 0) {
+		if(statics != null && !statics.isEmpty()) {
 			for(Block flowStatic:statics) {
-				qtiSerializer.serializeJqtiObject(flowStatic, new StreamResult(sb));
+				serializeJqtiObject(flowStatic, sb);
 			}
 		}
 		
@@ -102,12 +116,18 @@ public class AssessmentHtmlBuilder {
 	
 	public String inlineStaticString(List<? extends InlineStatic> statics) {
 		StringOutput sb = new StringOutput();
-		if(statics != null && statics.size() > 0) {
+		if(statics != null && !statics.isEmpty()) {
 			for(InlineStatic inlineStatic:statics) {
-				qtiSerializer.serializeJqtiObject(inlineStatic, new StreamResult(sb));
+				serializeJqtiObject(inlineStatic, sb);
 			}
 		}
 		return cleanUpNamespaces(sb);
+	}
+	
+	private void serializeJqtiObject(QtiNode node, StringOutput sb) {
+		final XsltSerializationOptions xsltSerializationOptions = new XsltSerializationOptions();
+        xsltSerializationOptions.setIndenting(false);
+		qtiSerializer.serializeJqtiObject(node, new StreamResult(sb), new SaxFiringOptions(), xsltSerializationOptions);
 	}
 	
 	private String cleanUpNamespaces(StringOutput sb) {
@@ -115,8 +135,10 @@ public class AssessmentHtmlBuilder {
 		content = content.replace(" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\"", "");
 		content = content.replace("xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\"", "");
 		content = content.replace("\n   xmlns=\"http://www.imsglobal.org/xsd/imsqti_v2p1\"", "");
+		content = content.replace(" xmlns=\"http://www.imsglobal.org/xsd/imsqti_v2p1\"", "");
 		content = content.replace("xmlns=\"http://www.imsglobal.org/xsd/imsqti_v2p1\"", "");
 		content = content.replace("\n   xsi:schemaLocation=\"http://www.imsglobal.org/xsd/imsqti_v2p1 http://www.imsglobal.org/xsd/imsqti_v2p1.xsd\"", "");
+		content = content.replace(" xsi:schemaLocation=\"http://www.imsglobal.org/xsd/imsqti_v2p1 http://www.imsglobal.org/xsd/imsqti_v2p1.xsd\"", "");
 		content = content.replace("xsi:schemaLocation=\"http://www.imsglobal.org/xsd/imsqti_v2p1 http://www.imsglobal.org/xsd/imsqti_v2p1.xsd\"", "");
 		return content.trim();
 	}
@@ -134,9 +156,11 @@ public class AssessmentHtmlBuilder {
 			}
 			//wrap around <html> to have a root element for neko
 			Document document = filter("<html>" + htmlFragment + "</html>");
-			Element docElement = document.getDocumentElement();
-			cleanUpNamespaces(docElement);
-			parent.getNodeGroups().load(docElement, new HTMLLoadingContext());
+			if(document != null) {
+				Element docElement = document.getDocumentElement();
+				cleanUpNamespaces(docElement);
+				parent.getNodeGroups().load(docElement, new HTMLLoadingContext());
+			}
 		}
 	}
 	
@@ -171,19 +195,11 @@ public class AssessmentHtmlBuilder {
 			parser.setContentHandler(contentHandler);
 			parser.parse(new InputSource(new ByteArrayInputStream(content.getBytes())));
 			return document;
-		} catch (SAXException e) {
-			log.error("", e);
-			return null;
-		} catch (IOException e) {
-			log.error("", e);
-			return null;
 		} catch (Exception e) {
 			log.error("", e);
 			return null;
 		}
 	}
-	
-
 	
 	/**
 	 * Convert:<br>
@@ -214,7 +230,9 @@ public class AssessmentHtmlBuilder {
 				AttributesImpl attributesCleaned = new AttributesImpl("");
 				for(int i=0; i<attributes.getLength(); i++) {
 					String name = attributes.getLocalName(i);
-					if(!"openolattype".equalsIgnoreCase(name)) {
+					if(!"openolattype".equalsIgnoreCase(name)
+							&& !"data-qti-solution".equalsIgnoreCase(name)
+							&& !"data-qti-solution-empty".equalsIgnoreCase(name)) {
 						String value = attributes.getValue(i);
 						attributesCleaned.addAttribute(name, value);
 					}
@@ -227,6 +245,12 @@ public class AssessmentHtmlBuilder {
 					video = true;
 					return;
 				}
+			} else if("u".equals(localName)) {
+				qName = "span";
+				AttributesImpl underlineAttributes = new AttributesImpl("");
+				underlineAttributes.addAttributes(attributes);
+				underlineAttributes.addAttribute("style", "text-decoration: underline;");
+				attributes = underlineAttributes;
 			}
 			super.startElement(uri, localName, qName, attributes);
 		}
@@ -321,6 +345,14 @@ public class AssessmentHtmlBuilder {
 		
 		public AttributesImpl(String uri) {
 			this.attributesUri = uri;
+		}
+		
+		public void addAttributes(Attributes attributes) {
+			for(int i=0; i<attributes.getLength(); i++) {
+				String name = attributes.getLocalName(i);
+				String value = attributes.getValue(i);
+				addAttribute(name, value);
+			}
 		}
 		
 		public void addAttribute(String name, String value) {
@@ -493,6 +525,46 @@ public class AssessmentHtmlBuilder {
 		@Override
 		public void modelBuildingError(QtiModelException exception, Node badNode) {
 			//
+		}
+	}
+	
+	private static class ContentDetectionHandler extends DefaultHandler {
+		
+		private boolean collect = false;
+		private boolean content = false;
+		
+		public boolean isContentAvailable() {
+			return content;
+		}
+
+		@Override
+		public void startElement(String uri, String localName, String qName, Attributes attributes) {
+			String elem = localName.toLowerCase();
+			if("script".equals(elem)) {
+				collect = false;
+			} else if(!NekoHTMLFilter.blockTags.contains(localName)) {
+				content = true;
+			}
+		}
+		
+		@Override
+		public void characters(char[] chars, int offset, int length) {
+			if(!content && collect && offset >= 0 && length > 0) {
+				String text = new String(chars, offset, length);
+				if(text.trim().length() > 0) {
+					content = true;
+				}
+			}
+		}
+
+		@Override
+		public void endElement(String uri, String localName, String qName) {
+			String elem = localName.toLowerCase();
+			if("script".equals(elem)) {
+				collect = true;
+			} else if(!NekoHTMLFilter.blockTags.contains(localName)) {
+				content = true;
+			}
 		}
 	}
 }

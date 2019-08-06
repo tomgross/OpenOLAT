@@ -48,6 +48,7 @@ import org.olat.core.util.tree.TreeVisitor;
 import org.olat.core.util.tree.Visitor;
 import org.olat.course.ICourse;
 import org.olat.course.assessment.model.AssessmentNodeData;
+import org.olat.course.assessment.model.AssessmentNodesLastModified;
 import org.olat.course.nodes.AssessableCourseNode;
 import org.olat.course.nodes.CourseNode;
 import org.olat.course.nodes.CourseNodeConfiguration;
@@ -56,8 +57,6 @@ import org.olat.course.nodes.ProjectBrokerCourseNode;
 import org.olat.course.nodes.STCourseNode;
 import org.olat.course.nodes.ScormCourseNode;
 import org.olat.course.nodes.iq.IQEditController;
-import org.olat.course.nodes.ta.StatusManager;
-import org.olat.course.properties.CoursePropertyManager;
 import org.olat.course.run.environment.CourseEnvironment;
 import org.olat.course.run.scoring.AssessmentEvaluation;
 import org.olat.course.run.scoring.ScoreAccounting;
@@ -66,7 +65,6 @@ import org.olat.course.run.userview.UserCourseEnvironmentImpl;
 import org.olat.course.tree.CourseEditorTreeModel;
 import org.olat.course.tree.CourseEditorTreeNode;
 import org.olat.modules.ModuleConfiguration;
-import org.olat.properties.Property;
 
 /**
  * Description:<br>
@@ -78,15 +76,14 @@ import org.olat.properties.Property;
 public class AssessmentHelper {
 	
 	private static final OLog log = Tracing.createLoggerFor(AssessmentHelper.class);
-
+	
 	public static final String KEY_TYPE = "type";
 	public static final String KEY_IDENTIFYER = "identifyer";
 	public static final String KEY_INDENT = "indent";
 
 	public static final String KEY_TITLE_SHORT = "short.title";
 	public static final String KEY_TITLE_LONG = "long.title";
-    public static final String KEY_STATUS = "status";
-    public static final String KEY_PASSED = "passed";
+	public static final String KEY_PASSED = "passed";
 	public static final String KEY_SCORE = "score";
 	public static final String KEY_SCORE_F = "fscore";
 	public static final String KEY_ATTEMPTS = "attempts";
@@ -97,6 +94,8 @@ public class AssessmentHelper {
 	public static final String KEY_TOTAL_NODES = "totalNodes";
 	public static final String KEY_ATTEMPTED_NODES = "attemptedNodes";
 	public static final String KEY_PASSED_NODES = "attemptedNodes";
+	public static final String KEY_LAST_USER_MODIFIED = "lastUserModified";
+	public static final String KEY_LAST_COACH_MODIFIED = "lastCoachModified";
 
 	/**
 	 * String to symbolize 'not available' or 'not assigned' in assessments
@@ -109,7 +108,7 @@ public class AssessmentHelper {
 	/** Lowest score value supported by OLAT * */
 	public static final float MIN_SCORE_SUPPORTED = -10000f;
 
-	private final static DecimalFormat scoreFormat = new DecimalFormat("#0.###", new DecimalFormatSymbols(Locale.ENGLISH));
+	private static final DecimalFormat scoreFormat = new DecimalFormat("#0.###", new DecimalFormatSymbols(Locale.ENGLISH));
 
 	/**
 	 * Wraps an identity and it's score evaluation / attempts in a wrapper object
@@ -134,8 +133,7 @@ public class AssessmentHelper {
 				// add to cache for later usage
 				localUserCourseEnvironmentCache.put(identity.getKey(), uce);
 				if (log.isDebug()){
-					log.debug("localUserCourseEnvironmentCache hit failed, adding course environment for user::"
-						+ identity.getName());
+					log.debug("localUserCourseEnvironmentCache hit failed, adding course environment for user::" + identity.getKey());
 				}
 			}
 			
@@ -173,10 +171,10 @@ public class AssessmentHelper {
 		Date lastModified = uce.getCourseEnvironment().getAssessmentManager().getScoreLastModifiedDate(courseNode, identity);
 		return new AssessedIdentityWrapper(uce, attempts, details, initialLaunchDate, lastModified);
 	}
-
+	
 	public static UserCourseEnvironment createInitAndUpdateUserCourseEnvironment(Identity identity, ICourse course) {
 		// create an identenv with no roles, no attributes, no locale
-		IdentityEnvironment ienv = new IdentityEnvironment();
+		IdentityEnvironment ienv = new IdentityEnvironment(); 
 		ienv.setIdentity(identity);
 		UserCourseEnvironment uce = new UserCourseEnvironmentImpl(ienv, course.getCourseEnvironment());
 		// Fetch all score and passed and calculate score accounting for the entire
@@ -203,10 +201,10 @@ public class AssessmentHelper {
 		uce.getScoreAccounting().evaluateAll();
 		return uce;
 	}
-
+	
 	public static UserCourseEnvironment createAndInitUserCourseEnvironment(Identity identity, CourseEnvironment courseEnv) {
 		// create an identenv with no roles, no attributes, no locale
-		IdentityEnvironment ienv = new IdentityEnvironment();
+		IdentityEnvironment ienv = new IdentityEnvironment(); 
 		ienv.setIdentity(identity);
 		UserCourseEnvironment uce = new UserCourseEnvironmentImpl(ienv, courseEnv);
 		// Fetch all score and passed and calculate score accounting for the entire
@@ -264,7 +262,7 @@ public class AssessmentHelper {
 		}
 		return false;
 	}
-
+	
 	public static int countAssessableNodes(CourseNode node) {
 		int count = 0;
 		if(checkIfNodeIsAssessable(node)) {
@@ -310,12 +308,12 @@ public class AssessmentHelper {
 		tv.visitAll();
 		return nodes;
 	}
-
+	
 	public static String getRoundedScore(BigDecimal score) {
 		if (score == null) return null;
-
+		
 		Double fscore = score.doubleValue();
-		return getRoundedScore(fscore);
+		return getRoundedScore(fscore); 
 	}
 
 	/**
@@ -330,7 +328,7 @@ public class AssessmentHelper {
 			return scoreFormat.format(score);
 		}
 	}
-
+	
 	public static String getRoundedScore(Double score) {
 		if (score == null) return null;
 
@@ -353,9 +351,9 @@ public class AssessmentHelper {
 			}
 		}
 	}
-
+	
 	/**
-	 *
+	 * 
 	 * @param course
 	 * @return
 	 */
@@ -367,18 +365,18 @@ public class AssessmentHelper {
 		node.setUserObject(rootNode);
 		node.setIconCssClass(CourseNodeFactory.getInstance().getCourseNodeConfiguration(rootNode.getType()).getIconCSSClass());
 		gtm.setRootNode(node);
-
+		
 		List<GenericTreeNode> children = addAssessableNodesToList(rootNode);
 		children.forEach((child) -> node.addChild(child));
 		return gtm;
 	}
-
+	
 	private static List<GenericTreeNode> addAssessableNodesToList(CourseNode parentCourseNode) {
 		List<GenericTreeNode> result = new ArrayList<>();
 		for(int i=0; i<parentCourseNode.getChildCount(); i++) {
 			CourseNode courseNode = (CourseNode)parentCourseNode.getChildAt(i);
 			List<GenericTreeNode> assessableChildren = addAssessableNodesToList(courseNode);
-
+			
 			if (assessableChildren.size() > 0 || isAssessable(courseNode)) {
 				GenericTreeNode node = new GenericTreeNode();
 				node.setTitle(courseNode.getShortTitle());
@@ -391,7 +389,7 @@ public class AssessmentHelper {
 		}
 		return result;
 	}
-
+	
 	private static boolean isAssessable(CourseNode courseNode) {
 		boolean assessable = false;
 		if (courseNode instanceof AssessableCourseNode && !(courseNode instanceof ProjectBrokerCourseNode)) {
@@ -416,7 +414,7 @@ public class AssessmentHelper {
 		}
 		return maps;
 	}
-
+	
 	public static  List<AssessmentNodeData> assessmentNodeDataMapToList(List<Map<String,Object>> assessmentNodeData) {
 		List<AssessmentNodeData> list = new ArrayList<>(assessmentNodeData.size());
 		for(Map<String,Object> data:assessmentNodeData) {
@@ -424,7 +422,7 @@ public class AssessmentHelper {
 		}
 		return list;
 	}
-
+	
 	/**
 	 * Add all assessable nodes and the scoring data to a list. Each item in the list is an object array
 	 * that has the following data:
@@ -436,19 +434,20 @@ public class AssessmentHelper {
 	 * @return list of object arrays or null if empty
 	 */
 	public static List<AssessmentNodeData> getAssessmentNodeDataList(UserCourseEnvironment userCourseEnv,
+			AssessmentNodesLastModified lastModifications,
 			boolean followUserVisibility, boolean discardEmptyNodes, boolean discardComments) {
 		List<AssessmentNodeData> data = new ArrayList<AssessmentNodeData>(50);
 		ScoreAccounting scoreAccounting = userCourseEnv.getScoreAccounting();
 		scoreAccounting.evaluateAll();
 		getAssessmentNodeDataList(0, userCourseEnv.getCourseEnvironment().getRunStructure().getRootNode(),
-				scoreAccounting, userCourseEnv, followUserVisibility, discardEmptyNodes, discardComments, data);
+				scoreAccounting, userCourseEnv, followUserVisibility, discardEmptyNodes, discardComments, data, lastModifications);
 		return data;
 	}
-
+	
 	/**
-	 * Calculated
-	 *
-	 *
+	 * Calculated 
+	 * 
+	 * 
 	 * @param evaluatedScoreAccounting
 	 * @param userCourseEnv
 	 * @param discardEmptyNodes
@@ -459,22 +458,23 @@ public class AssessmentHelper {
 			boolean followUserVisibility, boolean discardEmptyNodes, boolean discardComments) {
 		List<AssessmentNodeData> data = new ArrayList<AssessmentNodeData>(50);
 		getAssessmentNodeDataList(0, userCourseEnv.getCourseEnvironment().getRunStructure().getRootNode(),
-				evaluatedScoreAccounting, userCourseEnv, followUserVisibility, discardEmptyNodes, discardComments, data);
+				evaluatedScoreAccounting, userCourseEnv, followUserVisibility, discardEmptyNodes, discardComments, data, null);
 		return data;
 	}
-
-
+	
+	
 	public static int getAssessmentNodeDataList(int recursionLevel, CourseNode courseNode, ScoreAccounting scoreAccounting,
-			UserCourseEnvironment userCourseEnv, boolean followUserVisibility, boolean discardEmptyNodes, boolean discardComments, List<AssessmentNodeData> data) {
+			UserCourseEnvironment userCourseEnv, boolean followUserVisibility, boolean discardEmptyNodes, boolean discardComments,
+			List<AssessmentNodeData> data, AssessmentNodesLastModified lastModifications) {
 		// 1) Get list of children data using recursion of this method
 		AssessmentNodeData assessmentNodeData = new AssessmentNodeData(recursionLevel, courseNode);
 		data.add(assessmentNodeData);
-
+		
 		int numOfChildren = 0;
 		for (int i = 0; i < courseNode.getChildCount(); i++) {
 			CourseNode child = (CourseNode) courseNode.getChildAt(i);
 			numOfChildren += getAssessmentNodeDataList(recursionLevel + 1,  child,  scoreAccounting,
-					userCourseEnv, followUserVisibility, discardEmptyNodes, discardComments, data);
+					userCourseEnv, followUserVisibility, discardEmptyNodes, discardComments, data, lastModifications);
 		}
 		
 		// 2) Get data of this node only if
@@ -491,11 +491,20 @@ public class AssessmentHelper {
 				AssessmentEvaluation scoreEvaluation = scoreAccounting.evalCourseNode(assessableCourseNode);
 				if(scoreEvaluation != null) {
 					assessmentNodeData.setAssessmentStatus(scoreEvaluation.getAssessmentStatus());
+					assessmentNodeData.setNumOfAssessmentDocs(scoreEvaluation.getNumOfAssessmentDocs());
 				}
 				assessmentNodeData.setUserVisibility(scoreEvaluation.getUserVisible());
-
+				assessmentNodeData.setLastModified(scoreEvaluation.getLastModified());
+				assessmentNodeData.setLastUserModified(scoreEvaluation.getLastUserModified());
+				assessmentNodeData.setLastCoachModified(scoreEvaluation.getLastCoachModified());
+				if(lastModifications != null) {
+					lastModifications.addLastModified(scoreEvaluation.getLastModified());
+					lastModifications.addLastUserModified(scoreEvaluation.getLastUserModified());
+					lastModifications.addLastCoachModified(scoreEvaluation.getLastCoachModified());
+				}
+				
 				if(!followUserVisibility || scoreEvaluation.getUserVisible() == null || scoreEvaluation.getUserVisible().booleanValue()) {
-					// details
+					// details 
 					if (assessableCourseNode.hasDetails()) {
 						hasDisplayableValuesConfigured = true;
 						String detailValue = assessableCourseNode.getDetailsListView(userCourseEnv);
@@ -510,7 +519,7 @@ public class AssessmentHelper {
 					// attempts
 					if (assessableCourseNode.hasAttemptsConfigured()) {
 						hasDisplayableValuesConfigured = true;
-						Integer attemptsValue = scoreEvaluation.getAttempts();
+						Integer attemptsValue = scoreEvaluation.getAttempts(); 
 						if (attemptsValue != null) {
 							assessmentNodeData.setAttempts(attemptsValue);
 							if (attemptsValue.intValue() > 0) {
@@ -533,18 +542,6 @@ public class AssessmentHelper {
 							assessmentNodeData.setMinScore(assessableCourseNode.getMinScoreConfiguration());
 						}
 					}
-                    // status
-                    if (assessableCourseNode.hasStatusConfigured()) {
-                        hasDisplayableValuesConfigured = true;
-                        Property status = null;
-                        Identity identity = userCourseEnv.getIdentityEnvironment().getIdentity();
-                        CoursePropertyManager cpm = userCourseEnv.getCourseEnvironment().getCoursePropertyManager();
-                        status = cpm.findCourseNodeProperty(assessableCourseNode, identity, null, StatusManager.PROPERTY_KEY_STATUS);
-                        if (status != null) {
-                            assessmentNodeData.setStatus(status.getStringValue());
-                            hasDisplayableUserValues = true;
-                        }
-                    }
 					// passed
 					if (assessableCourseNode.hasPassedConfigured()) {
 						hasDisplayableValuesConfigured = true;
@@ -565,7 +562,7 @@ public class AssessmentHelper {
 					// (e.g. a st node with no defined rule
 					assessmentNodeData.setSelectable(false);
 				}
-
+				
 				if (!hasDisplayableUserValues && assessableCourseNode.hasCommentConfigured() && !discardComments) {
 				  // comments are invisible in the table but if configured the node must be in the list
 					// for the efficiency statement this can be ignored, this is the case when discardComments is true
@@ -580,13 +577,13 @@ public class AssessmentHelper {
 				assessmentNodeData.setSelectable(false);
 			}
 		}
-
+		
 		// 3) Add data of this node to mast list if node assessable or children list has any data.
-		// Do only add nodes when they have any assessable element, otherwhise discard (e.g. empty course,
+		// Do only add nodes when they have any assessable element, otherwhise discard (e.g. empty course, 
 		// structure nodes without scoring rules)! When the discardEmptyNodes flag is set then only
 		// add this node when there is user data found for this node.
-
-		boolean addNode = (numOfChildren > 0
+		
+		boolean addNode = (numOfChildren > 0 
 				|| (discardEmptyNodes && hasDisplayableValuesConfigured && hasDisplayableUserValues)
 				|| (!discardEmptyNodes && hasDisplayableValuesConfigured));
 		if(!addNode) {

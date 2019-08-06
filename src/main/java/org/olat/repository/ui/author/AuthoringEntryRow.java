@@ -22,6 +22,7 @@ package org.olat.repository.ui.author;
 import java.util.Date;
 import java.util.List;
 
+import org.olat.core.commons.services.license.License;
 import org.olat.core.gui.components.form.flexible.elements.FormLink;
 import org.olat.core.id.OLATResourceable;
 import org.olat.core.util.filter.FilterFactory;
@@ -68,6 +69,8 @@ public class AuthoringEntryRow implements RepositoryEntryRef, RepositoryEntryLig
 	private Date lifecycleStart;
 	private Date lifecycleEnd;
 	
+	private int numOfReferences;
+	
 	private final String deletedByFullName;
 	private final Date deletionDate;
 	
@@ -75,8 +78,11 @@ public class AuthoringEntryRow implements RepositoryEntryRef, RepositoryEntryLig
 
 	private OLATResourceable olatResource;
 	
+	private License license;
+	
 	private FormLink markLink;
 	private FormLink toolsLink;
+	private FormLink referencesLink;
 	
 	public AuthoringEntryRow(RepositoryEntryAuthorView view, String fullnameAuthor) {
 		key = view.getKey();
@@ -118,6 +124,8 @@ public class AuthoringEntryRow implements RepositoryEntryRef, RepositoryEntryLig
 				lifecycleSoftKey = lifecycle.getSoftKey();
 			}
 		}
+		
+		numOfReferences = view.getNumOfReferences();
 		
 		deletedByFullName = view.getDeletedByFullName();
 		deletionDate = view.getDeletionDate();
@@ -212,6 +220,10 @@ public class AuthoringEntryRow implements RepositoryEntryRef, RepositoryEntryLig
 	public Date getLifecycleEnd() {
 		return lifecycleEnd;
 	}
+	
+	public int getNumOfReferences() {
+		return numOfReferences;
+	}
 
 	public String getDeletedByFullName() {
 		return deletedByFullName;
@@ -274,6 +286,14 @@ public class AuthoringEntryRow implements RepositoryEntryRef, RepositoryEntryLig
 		this.selected = selected;
 	}
 
+	public License getLicense() {
+		return license;
+	}
+
+	public void setLicense(License license) {
+		this.license = license;
+	}
+
 	public FormLink getMarkLink() {
 		return markLink;
 	}
@@ -290,6 +310,14 @@ public class AuthoringEntryRow implements RepositoryEntryRef, RepositoryEntryLig
 		this.toolsLink = toolsLink;
 	}
 	
+	public FormLink getReferencesLink() {
+		return referencesLink;
+	}
+
+	public void setReferencesLink(FormLink referencesLink) {
+		this.referencesLink = referencesLink;
+	}
+
 	@Override
 	public int hashCode() {
 		return key == null ? -79224867 : key.hashCode();

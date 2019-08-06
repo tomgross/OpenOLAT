@@ -76,7 +76,8 @@ import org.olat.resource.OLATResourceImpl;
 	@NamedQuery(name="filterRepositoryEntryMembership", query="select v.key, membership.identity.key from repositoryentry as v inner join v.groups as relGroup inner join relGroup.group as baseGroup inner join baseGroup.members as membership on membership.role in ('owner','coach','participant') where membership.identity.key=:identityKey and v.key in (:repositoryEntryKey)"),
 	@NamedQuery(name="loadRepositoryEntryByKey", query="select v from repositoryentry as v inner join fetch v.olatResource as ores inner join fetch v.statistics as statistics left join fetch v.lifecycle as lifecycle where v.key = :repoKey"),
 	@NamedQuery(name="loadRepositoryEntryByResourceKey", query="select v from repositoryentry as v inner join fetch v.olatResource as ores inner join fetch v.statistics as statistics left join fetch v.lifecycle as lifecycle where ores.key = :resourceKey"),
-	@NamedQuery(name="loadRepositoryEntryByResId", query="select v from repositoryentry as v inner join fetch v.olatResource as ores inner join fetch v.statistics as statistics left join fetch v.lifecycle as lifecycle where ores.resId = :resId"),
+	@NamedQuery(name="loadRepositoryEntryByResourceId", query="select v from repositoryentry as v inner join fetch v.olatResource as ores inner join fetch v.statistics as statistics left join fetch v.lifecycle as lifecycle where ores.resId=:resId and ores.resName=:resName"),
+	@NamedQuery(name="getDisplayNameByResourceKey", query="select v.displayname from repositoryentry v where v.olatResource.key=:resKey"),
 	@NamedQuery(name="getDisplayNameByOlatResourceRedId", query="select v.displayname from repositoryentry v inner join v.olatResource as ores where ores.resId=:resid"),
 	@NamedQuery(name="getDisplayNameByRepositoryEntryKey", query="select v.displayname from repositoryentry v where v.key=:reKey")
 
@@ -139,7 +140,7 @@ public class RepositoryEntry implements CreateInfo, Persistable , RepositoryEntr
 			orphanRemoval=true, cascade={CascadeType.PERSIST, CascadeType.REMOVE})
 	@JoinColumn(name="fk_entry_id")
 	private Set<RepositoryEntryToGroupRelation> groups;
-	
+
 	@Column(name="resourcename", nullable=false, insertable=true, updatable=true)
 	private String resourcename; // mandatory
 	@Column(name="displayname", nullable=false, insertable=true, updatable=true)
@@ -215,13 +216,6 @@ public class RepositoryEntry implements CreateInfo, Persistable , RepositoryEntr
 	@Override
 	public Long getKey() {
 		return key;
-	}
-
-	/**
-	 * Key means id.
-	 */
-	public void setKey(Long key) {
-		this.key = key;
 	}
 
 	@Override
@@ -372,13 +366,8 @@ public class RepositoryEntry implements CreateInfo, Persistable , RepositoryEntr
 	 * @param name The name to set.
 	 */
 	public void setResourcename(String name) {
-		/*
-		 * TODO sev26
-		 * The size is now equal to the actual reasonable/possible (see
-		 * varchar index issue of MySQL) database table attribute size.
-		 */
-		if (name.length() > 255)
-			throw new AssertException("resourcename is limited to 255 characters.");
+		if (name.length() > 100)
+			throw new AssertException("resourcename is limited to 100 characters.");
 		this.resourcename = name;
 	}
 
@@ -528,11 +517,8 @@ public class RepositoryEntry implements CreateInfo, Persistable , RepositoryEntr
 	 * @param displayname The displayname to set.
 	 */
 	public void setDisplayname(String displayname) {
-		/*
-		 * See comment of #setResourcename(String)
-		 */
-		if (displayname.length() > 255)
-			throw new AssertException("DisplayName is limited to 255 characters.");
+		if (displayname.length() > 100)
+			throw new AssertException("DisplayName is limited to 100 characters.");
 		this.displayname = displayname;
 	}
 
@@ -679,6 +665,12 @@ public class RepositoryEntry implements CreateInfo, Persistable , RepositoryEntr
 
 	@Override
 	public String toString() {
-		return super.toString()+" [resourcename="+resourcename+", version="+version+", description="+description+"]";
+		StringBuilder sb = new StringBuilder();
+		sb.append("repositoryEntry[id=").append(key == null ? "null" : key.toString()).append(";")
+		  .append("displayname=").append(displayname == null ? "null" : displayname).append(";")
+		  .append("externalId=").append(externalId == null ? "null" : externalId).append(";")
+		  .append("externalRef=").append(externalRef == null ? "null" : externalRef).append("]")
+		  .append(super.toString());
+		return sb.toString();
 	}
 }

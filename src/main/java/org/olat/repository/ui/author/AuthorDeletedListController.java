@@ -24,8 +24,6 @@ import java.util.Collections;
 import java.util.List;
 
 import org.olat.basesecurity.GroupRoles;
-import org.olat.core.commons.persistence.DB;
-import org.olat.core.commons.services.mark.MarkManager;
 import org.olat.core.gui.UserRequest;
 import org.olat.core.gui.components.Component;
 import org.olat.core.gui.components.form.flexible.FormItem;
@@ -47,13 +45,13 @@ import org.olat.core.gui.control.generic.closablewrapper.CloseableCalloutWindowC
 import org.olat.core.gui.control.generic.closablewrapper.CloseableModalController;
 import org.olat.core.id.Identity;
 import org.olat.core.id.Roles;
-import org.olat.repository.*;
+import org.olat.course.CourseModule;
+import org.olat.repository.RepositoryEntry;
+import org.olat.repository.RepositoryEntryManagedFlag;
 import org.olat.repository.handlers.RepositoryHandler;
-import org.olat.repository.handlers.RepositoryHandlerFactory;
 import org.olat.repository.model.SearchAuthorRepositoryEntryViewParams;
 import org.olat.repository.model.SearchAuthorRepositoryEntryViewParams.OrderBy;
 import org.olat.repository.ui.author.AuthoringEntryDataModel.Cols;
-import org.olat.user.UserManager;
 
 /**
  * 
@@ -70,33 +68,9 @@ public class AuthorDeletedListController extends AuthorListController {
 	private ConfirmRestoreController confirmRestoreCtrl;
 	private ConfirmDeletePermanentlyController confirmDeletePermanentlyCtrl;
 	
-	public AuthorDeletedListController(UserRequest ureq,
-									   WindowControl wControl,
-									   String i18nName,
-									   SearchAuthorRepositoryEntryViewParams searchParams,
-									   boolean withSearch,
-									   DB dbInstance,
-									   UserManager userManager,
-									   MarkManager markManager,
-									   RepositoryModule repositoryModule,
-									   RepositoryService repositoryService,
-									   RepositoryManager repositoryManager,
-									   RepositoryHandlerFactory repositoryHandlerFactory,
-									   AuthoringEntryRowFactory authoringEntryRowFactory) {
-		super(
-				ureq,
-				wControl,
-				i18nName,
-				searchParams,
-				withSearch,
-				dbInstance,
-				userManager,
-				markManager,
-				repositoryModule,
-				repositoryService,
-				repositoryManager,
-				repositoryHandlerFactory,
-				authoringEntryRowFactory);
+	public AuthorDeletedListController(UserRequest ureq, WindowControl wControl, String i18nName,
+			SearchAuthorRepositoryEntryViewParams searchParams, boolean withSearch) {
+		super(ureq, wControl, i18nName, searchParams, withSearch, false);
 	}
 
 	@Override
@@ -304,6 +278,29 @@ public class AuthorDeletedListController extends AuthorListController {
 			mainVC = createVelocityContainer("tools");
 			List<String> links = new ArrayList<>();
 
+			
+			boolean copyManaged = RepositoryEntryManagedFlag.isManaged(entry, RepositoryEntryManagedFlag.copy);
+			boolean canCopy = (isAuthor || isOwner) && (entry.getCanCopy() || isOwner) && !copyManaged;
+			
+			boolean canDownload = entry.getCanDownload() && handler.supportsDownload();
+			// disable download for courses if not author or owner
+			if (entry.getOlatResource().getResourceableTypeName().equals(CourseModule.getCourseTypeName()) && !(isOwner || isAuthor)) {
+				canDownload = false;
+			}
+			// always enable download for owners
+			if (isOwner && handler.supportsDownload()) {
+				canDownload = true;
+			}
+			
+			if(canCopy || canDownload) {
+				if (canCopy) {
+					addLink("details.copy", "copy", "o_icon o_icon-fw o_icon_copy", links);
+				}
+				if(canDownload) {
+					addLink("details.download", "download", "o_icon o_icon-fw o_icon_download", links);
+				}
+			}
+			
 			if(isOwner) {
 				addLink("tools.restore", "restore", "o_icon o_icon-fw o_icon_restore", links);
 			}
@@ -331,7 +328,11 @@ public class AuthorDeletedListController extends AuthorListController {
 			if(source instanceof Link) {
 				Link link = (Link)source;
 				String cmd = link.getCommand();
-				if("restore".equals(cmd)) {
+				if("copy".equals(cmd)) {
+					doCopy(ureq, row);
+				} else if("download".equals(cmd)) {
+					doDownload(ureq, row);
+				} else if("restore".equals(cmd)) {
 					doRestore(ureq, Collections.singletonList(row));
 				} else if("delete".equals(cmd)) {
 					doDeletePermanently(ureq, Collections.singletonList(row));

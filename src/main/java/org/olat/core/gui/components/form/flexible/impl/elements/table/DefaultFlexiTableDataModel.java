@@ -38,12 +38,12 @@ public abstract class DefaultFlexiTableDataModel<U> implements FlexiTableDataMod
 	private FlexiTableColumnModel columnModel;
 	
 	public DefaultFlexiTableDataModel(FlexiTableColumnModel columnModel) {
-		rows = new ArrayList<U>();
+		rows = new ArrayList<>();
 		this.columnModel = columnModel;
 	}
 	
 	public DefaultFlexiTableDataModel(List<U> rows, FlexiTableColumnModel columnModel) {
-		this.rows = new ArrayList<U>(rows);
+		this.rows = new ArrayList<>(rows);
 		this.columnModel = columnModel;
 	}
 	
@@ -54,21 +54,24 @@ public abstract class DefaultFlexiTableDataModel<U> implements FlexiTableDataMod
 	
 	@Override
 	public U getObject(int row) {
-		return rows.get(row);
+		if(row >= 0 && row < rows.size()) {
+			return rows.get(row);
+		}
+		return null;
 	}
 	
 	public List<U> getObjects() {
-		return new ArrayList<U>(rows);
+		return new ArrayList<>(rows);
 	}
 	
 	@Override
 	public void setObjects(List<U> objects) {
-		this.rows = new ArrayList<U>(objects);
+		this.rows = new ArrayList<>(objects);
 	}
 	
 	@Override
 	public boolean isSelectable(int row) {
-		return true;//TODO 11 remove
+		return true;
 	}
 
 	@Override
@@ -83,9 +86,6 @@ public abstract class DefaultFlexiTableDataModel<U> implements FlexiTableDataMod
 	public boolean isRowLoaded(int row) {
 		return rows == null ? false : (row >= 0 && row < rows.size());
 	}
-	
-	@Override
-	public abstract Object getValueAt(int row, int col);
 	
 	@Override
 	public FlexiTableColumnModel getTableColumnModel() {

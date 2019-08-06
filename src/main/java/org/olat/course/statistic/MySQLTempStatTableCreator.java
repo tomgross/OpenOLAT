@@ -28,8 +28,6 @@ import java.sql.Connection;
 import java.sql.SQLException;
 import java.util.Calendar;
 import java.util.Date;
-import java.util.List;
-import java.util.Map;
 
 import javax.sql.DataSource;
 
@@ -80,53 +78,28 @@ public class MySQLTempStatTableCreator implements IStatisticUpdater {
 			log_.info("updateStatistic: creating o_stat_temptable");
 			jdbcTemplate_.execute(
 					"create table o_stat_temptable (" +
-							"creationdate datetime not null," +
-							"businesspath varchar(2048) not null," +
-							"userproperty2 varchar(255)," +							// homeOrg
-							"userproperty4 varchar(255)," +							// orgType
-							"userproperty10 varchar(255)," +						// studyBranch3
-							"userproperty3 varchar(255)" +							// studyLevel
+						"creationdate datetime not null," +
+						"businesspath varchar(2048) not null" +
 					");");
 			
 			log_.info("updateStatistic: inserting logging actions from "+from+" until "+until);
 			
 			// same month optimization
-			String oLoggingTable = "o_loggingtable";
 			Calendar lastUpdatedCalendar = Calendar.getInstance();
 			lastUpdatedCalendar.setTime(from);
 			Calendar nowUpdatedCalendar = Calendar.getInstance();
 			nowUpdatedCalendar.setTime(until);
 			
-			if (lastUpdatedCalendar.get(Calendar.MONTH)==nowUpdatedCalendar.get(Calendar.MONTH)) {
-				// that means we are in the same month, so use the current month's o_loggingtable
-				// e.g. o_loggingtable_201002
-				String monthStr = String.valueOf(lastUpdatedCalendar.get(Calendar.MONTH)+1);
-				if (monthStr.length()==1) {
-					monthStr = "0"+monthStr;
-				}
-				String sameMonthTable = "o_loggingtable_"+String.valueOf(lastUpdatedCalendar.get(Calendar.YEAR))+monthStr;
-				List<Map<String,Object>> tables = jdbcTemplate_.queryForList("show tables like '"+sameMonthTable+"'");
-				if (tables!=null && tables.size()==1) {
-					log_.info("updateStatistic: using "+sameMonthTable+" instead of "+oLoggingTable);
-					oLoggingTable = sameMonthTable;
-				} else {
-					log_.info("updateStatistic: using "+oLoggingTable+" ("+sameMonthTable+" didn't exist)");
-				}
-			} else {
-				log_.info("updateStatistic: using "+oLoggingTable+" since from and to months are not the same");
-			}
-			
-			jdbcTemplate_.execute(
-					"insert into o_stat_temptable (creationdate,businesspath,userproperty2,userproperty4,userproperty10,userproperty3) " +
-						"select " +
-							"creationdate,businesspath,userproperty2,userproperty4,userproperty10,userproperty3 " +
-						"from " + 
-						oLoggingTable + 
-						" where " +
-							"actionverb='launch' and actionobject='node' and creationdate>from_unixtime('"+(from.getTime()/1000)+"') and creationdate<=from_unixtime('"+(until.getTime()/1000)+"');");
+			long fromSeconds = from.getTime() / 1000l;
+			long untilSeconds = until.getTime() / 1000l;
 
-			long numLoggingActions = jdbcTemplate_.queryForObject("select count(*) from o_stat_temptable;", Long.class);
-			log_.info("updateStatistic: insert done. number of logging actions: "+numLoggingActions);
+			long numLoggingActions = jdbcTemplate_.update(
+					"insert into o_stat_temptable (creationdate,businesspath) " +
+						"select creationdate,businesspath" +
+						" from o_loggingtable" + 
+						" where actionverb='launch' and actionobject='node' and creationdate>from_unixtime('"+ fromSeconds +"') and creationdate<=from_unixtime('"+ untilSeconds +"');");
+			
+			log_.info("updateStatistic: insert done. number of logging actions: " + numLoggingActions);
 		} catch(RuntimeException e) {
 			log_.warn("updateStatistic: ran into a RuntimeException: "+e, e);
 		} catch(Error er) {

@@ -25,14 +25,12 @@ import java.net.URISyntaxException;
 import java.net.URL;
 import java.util.UUID;
 
-import org.jboss.arquillian.container.test.api.Deployment;
 import org.jboss.arquillian.container.test.api.RunAsClient;
 import org.jboss.arquillian.drone.api.annotation.Drone;
 import org.jboss.arquillian.graphene.page.InitialPage;
 import org.jboss.arquillian.graphene.page.Page;
 import org.jboss.arquillian.junit.Arquillian;
 import org.jboss.arquillian.test.api.ArquillianResource;
-import org.jboss.shrinkwrap.api.spec.WebArchive;
 import org.junit.Assert;
 import org.junit.Ignore;
 import org.junit.Test;
@@ -41,14 +39,15 @@ import org.olat.ims.qti21.QTI21AssessmentResultsOptions;
 import org.olat.selenium.page.LoginPage;
 import org.olat.selenium.page.NavigationPage;
 import org.olat.selenium.page.User;
+import org.olat.selenium.page.course.AssessmentToolPage;
 import org.olat.selenium.page.course.CourseEditorPageFragment;
 import org.olat.selenium.page.course.CoursePageFragment;
+import org.olat.selenium.page.graphene.OOGraphene;
 import org.olat.selenium.page.qti.QTI21ConfigurationCEPage;
-import org.olat.selenium.page.qti.QTI21EditorPage;
+import org.olat.selenium.page.qti.QTI21CorrectionPage;
 import org.olat.selenium.page.qti.QTI21Page;
 import org.olat.selenium.page.repository.RepositoryAccessPage.UserAccess;
 import org.olat.selenium.page.user.UserToolsPage;
-import org.olat.test.ArquillianDeployments;
 import org.olat.test.JunitTestHelper;
 import org.olat.test.rest.UserRestClient;
 import org.olat.user.restapi.UserVO;
@@ -64,12 +63,7 @@ import org.openqa.selenium.WebElement;
  */
 @Ignore
 @RunWith(Arquillian.class)
-public class ImsQTI21Test {
-	
-	@Deployment(testable = false)
-	public static WebArchive createDeployment() {
-		return ArquillianDeployments.createDeployment();
-	}
+public class ImsQTI21Test extends Deployments {
 
 	@Drone
 	private WebDriver browser;
@@ -106,15 +100,15 @@ public class ImsQTI21Test {
 			.clickToolbarRootCrumb();
 		
 		QTI21Page qtiPage = QTI21Page
-				.getQTI12Page(browser);
+				.getQTI21Page(browser);
 		qtiPage
 			.assertOnAssessmentItem()
-			.answerSingleChoice("Incorrect response")
+			.answerSingleChoiceWithParagraph("Incorrect response")
 			.saveAnswer()
 			.assertOnAssessmentItem("Second question")
 			.selectItem("First question")
 			.assertOnAssessmentItem("First question")
-			.answerSingleChoice("Correct response")
+			.answerSingleChoiceWithParagraph("Correct response")
 			.saveAnswer()
 			.answerMultipleChoice("Correct response")
 			.saveAnswer()
@@ -148,13 +142,13 @@ public class ImsQTI21Test {
 			.clickToolbarRootCrumb();
 		
 		QTI21Page qtiPage = QTI21Page
-				.getQTI12Page(browser);
+				.getQTI21Page(browser);
 		qtiPage
 			.assertOnAssessmentItem()
-			.answerSingleChoice("Wrong answer")
+			.answerSingleChoiceWithParagraph("Wrong answer")
 			.saveAnswer()
 			.assertFeedback("Oooops")
-			.answerSingleChoice("Correct answer")
+			.answerSingleChoiceWithParagraph("Correct answer")
 			.saveAnswer()
 			.assertFeedback("Well done")
 			.nextAnswer()
@@ -197,7 +191,7 @@ public class ImsQTI21Test {
 			.uploadResource(qtiTestTitle, qtiTestFile);
 		
 		QTI21Page qtiPage = QTI21Page
-				.getQTI12Page(browser);
+				.getQTI21Page(browser);
 		qtiPage
 			.clickToolbarBack()
 			.options()
@@ -207,7 +201,7 @@ public class ImsQTI21Test {
 		qtiPage
 			.clickToolbarBack()
 			.assertOnAssessmentItem()
-			.answerSingleChoice("Wrong answer")
+			.answerSingleChoiceWithParagraph("Wrong answer")
 			.saveAnswer()
 			.assertFeedback("Oooops")
 			.nextAnswer()
@@ -249,7 +243,7 @@ public class ImsQTI21Test {
 			.uploadResource(qtiTestTitle, qtiTestFile);
 		
 		QTI21Page qtiPage = QTI21Page
-				.getQTI12Page(browser);
+				.getQTI21Page(browser);
 		qtiPage
 			.clickToolbarBack()
 			.options()
@@ -261,7 +255,7 @@ public class ImsQTI21Test {
 			.startTestPart()
 			.selectItem("First question")
 			.assertOnAssessmentItem("First question")
-			.answerSingleChoice("Correct")
+			.answerSingleChoiceWithParagraph("Correct")
 			.saveAnswer()
 			.assertOnAssessmentItem("Second question")
 			.answerMultipleChoice("True")
@@ -305,13 +299,13 @@ public class ImsQTI21Test {
 			.clickToolbarRootCrumb();
 		
 		QTI21Page qtiPage = QTI21Page
-				.getQTI12Page(browser);
+				.getQTI21Page(browser);
 
 		qtiPage
 			.startTestPart()
 			.selectItem("First question")
 			.assertOnAssessmentItem("First question")
-			.answerSingleChoice("Correct answer")
+			.answerSingleChoiceWithParagraph("Correct answer")
 			.saveAnswer()
 			.assertOnAssessmentItem("Second question")
 			.answerMultipleChoice("Valid answer")
@@ -319,9 +313,9 @@ public class ImsQTI21Test {
 			.endTestPart()
 			.selectItem("Third question")
 			.assertOnAssessmentItem("Third question")
-			.answerSingleChoice("Right")
+			.answerSingleChoiceWithParagraph("Right")
 			.saveAnswer()
-			.answerSingleChoice("Good")
+			.answerSingleChoiceWithParagraph("Good")
 			.saveAnswer()
 			.endTestPart()
 			.assertOnAssessmentTestFeedback("Well done")
@@ -354,14 +348,14 @@ public class ImsQTI21Test {
 			.clickToolbarRootCrumb();
 		
 		QTI21Page qtiPage = QTI21Page
-				.getQTI12Page(browser);
+				.getQTI21Page(browser);
 		//check simple time limit
 		qtiPage
 			.assertOnAssessmentItem("Single choice")
-			.answerSingleChoice("Correct answer")
+			.answerSingleChoiceWithParagraph("Correct answer")
 			.saveAnswer()
 			.assertOnAssessmentItem("Last choice")
-			.answerSingleChoice("True")
+			.answerSingleChoiceWithParagraph("True")
 			.saveAnswer()
 			.assertOnAssessmentTestTerminated(15);
 	}
@@ -391,20 +385,20 @@ public class ImsQTI21Test {
 			.clickToolbarRootCrumb();
 		
 		QTI21Page qtiPage = QTI21Page
-				.getQTI12Page(browser);
+				.getQTI21Page(browser);
 		qtiPage
 			.options()
-			.showResults(Boolean.TRUE, new QTI21AssessmentResultsOptions(true, true, false, false, false, false))
+			.showResults(Boolean.TRUE, new QTI21AssessmentResultsOptions(true, true, false, false, false))
 			.save();
 		
 		//check simple time limit
 		qtiPage
 			.clickToolbarBack()
 			.assertOnAssessmentItem("Single choice")
-			.answerSingleChoice("Correct answer")
+			.answerSingleChoiceWithParagraph("Correct answer")
 			.saveAnswer()
 			.assertOnAssessmentItem("Last choice")
-			.answerSingleChoice("True")
+			.answerSingleChoiceWithParagraph("True")
 			.saveAnswer()
 			.assertOnAssessmentResults(15)
 			.assertOnAssessmentTestPassed()
@@ -443,7 +437,7 @@ public class ImsQTI21Test {
 			.clickToolbarRootCrumb();
 		
 		QTI21Page qtiPage = QTI21Page
-				.getQTI12Page(browser);
+				.getQTI21Page(browser);
 		qtiPage
 			.options()
 			.showResults(Boolean.TRUE, QTI21AssessmentResultsOptions.allOptions())
@@ -459,7 +453,7 @@ public class ImsQTI21Test {
 		qtiPage
 			.assertOnAssessmentItem("Single choice");
 		
-		//a user search the content package
+		//a user search the test
 		LoginPage userLoginPage = LoginPage.getLoginPage(ryomouBrowser, deploymentUrl);
 		userLoginPage
 			.loginAs(ryomou.getLogin(), ryomou.getPassword())
@@ -473,7 +467,7 @@ public class ImsQTI21Test {
 			.start();
 		
 		QTI21Page userQtiPage = QTI21Page
-				.getQTI12Page(ryomouBrowser);
+				.getQTI21Page(ryomouBrowser);
 		userQtiPage
 			.assertOnAssessmentItem("Single choice")
 			.suspendTest();
@@ -486,10 +480,10 @@ public class ImsQTI21Test {
 			.loginAs(ryomou.getLogin(), ryomou.getPassword())
 			.resume();
 		userQtiPage = QTI21Page
-				.getQTI12Page(ryomouBrowser);
+				.getQTI21Page(ryomouBrowser);
 		userQtiPage
 			.assertOnAssessmentItem("Single choice")
-			.answerSingleChoice("Correct")
+			.answerSingleChoiceWithParagraph("Correct")
 			.saveAnswer()
 			.answerMultipleChoice("Correct")
 			.saveAnswer()
@@ -508,7 +502,7 @@ public class ImsQTI21Test {
 			.loginAs(ryomou.getLogin(), ryomou.getPassword())
 			.resume();
 		userQtiPage = QTI21Page
-				.getQTI12Page(ryomouBrowser);
+				.getQTI21Page(ryomouBrowser);
 		userQtiPage
 			.assertOnAssessmentItem("Numerical input")
 			.answerGapText("42", "_RESPONSE_1")
@@ -587,10 +581,10 @@ public class ImsQTI21Test {
 		Assert.assertEquals(testNodeTitle, testH2.getText().trim());
 		
 		QTI21Page qtiPage = QTI21Page
-				.getQTI12Page(browser);
+				.getQTI21Page(browser);
 		qtiPage
 			.start()
-			.answerSingleChoice("Right")
+			.answerSingleChoiceWithParagraph("Right")
 			.saveAnswer()
 			.endTest()
 			.assertOnCourseAttempts(1)
@@ -673,141 +667,18 @@ public class ImsQTI21Test {
 		Assert.assertEquals(testNodeTitle, testH2.getText().trim());
 		
 		QTI21Page qtiPage = QTI21Page
-				.getQTI12Page(browser);
+				.getQTI21Page(browser);
 		qtiPage
 			.start()
-			.answerSingleChoice("Right")
+			.answerSingleChoiceWithParagraph("Right")
 			.saveAnswer()
 			.endTest()
 			.assertOnAssessmentResults()
 			.closeAssessmentResults()
 			.assertOnCourseAttempts(1)
 			.assertOnCourseAssessmentTestScore(1)
-			.showAssessmentResults()
 			.assertOnAssessmentResults();
 	}
-	
-	/**
-	 * Check if the hotspot interaction send a "correct" feedback.
-	 * 
-	 * @param authorLoginPage
-	 * @throws IOException
-	 * @throws URISyntaxException
-	 */
-	@Test
-	@RunAsClient
-	public void qti21GraphicInteraction(@InitialPage LoginPage authorLoginPage)
-	throws IOException, URISyntaxException {
-		UserVO author = new UserRestClient(deploymentUrl).createAuthor();
-		authorLoginPage.loginAs(author.getLogin(), author.getPassword());
-		
-		//upload a test
-		String qtiTestTitle = "Simple QTI 2.1 " + UUID.randomUUID();
-		URL qtiTestUrl = JunitTestHelper.class.getResource("file_resources/qti21/simple_QTI_21_hotspot.zip");
-		File qtiTestFile = new File(qtiTestUrl.toURI());
-		navBar
-			.openAuthoringEnvironment()
-			.uploadResource(qtiTestTitle, qtiTestFile)
-			.clickToolbarRootCrumb();
-		
-		QTI21Page qtiPage = QTI21Page
-				.getQTI12Page(browser);
-		qtiPage
-			.options()
-			.showResults(Boolean.TRUE, QTI21AssessmentResultsOptions.allOptions())
-			.save();
-		// to the test and spot it
-		qtiPage
-			.clickToolbarBack()
-			.assertOnAssessmentItem()
-			.answerHotspot("circle")
-			.saveAnswer()
-			.assertFeedback("Correct!")
-			.endTest();
-		//check the results
-		qtiPage
-			.assertOnAssessmentResults()
-			.assertOnAssessmentTestScore(1)
-			.assertOnAssessmentTestMaxScore(1);
-	}
-	
-	/**
-	 * Create a test, import the CSV example, remove the
-	 * first single choice which come if someone create a
-	 * test. Change the delivery settings of the test to
-	 * show the detailled results.<br>
-	 * Run the test and check the results. 
-	 * 
-	 * @param loginPage
-	 * @throws IOException
-	 * @throws URISyntaxException
-	 */
-	@Test
-	@RunAsClient
-	public void importQuestionsCSV(@InitialPage LoginPage authorLoginPage)
-	throws IOException, URISyntaxException {
-		UserVO author = new UserRestClient(deploymentUrl).createAuthor();
-		authorLoginPage.loginAs(author.getLogin(), author.getPassword());
-		
-		//upload a test
-		String qtiTestTitle = "Excel QTI 2.1 " + UUID.randomUUID();
-		navBar
-			.openAuthoringEnvironment()
-			.createQTI21Test(qtiTestTitle)
-			.clickToolbarBack();
-
-		QTI21Page qtiPage = QTI21Page
-			.getQTI12Page(browser);
-		QTI21EditorPage qtiEditor = qtiPage
-			.edit();
-		
-		// import a single choice, a multiple and 2 gap texts
-		qtiEditor
-			.importTable()
-			.importFile("qti21/import_qti21_excel.txt")
-			.next()
-			.assertOnNumberOfQuestions(5)
-			.finish();
-		
-		//remove the single choice which come from the creation
-		// of the test
-		qtiEditor
-			.selectNode("Single choice")
-			.deleteNode();
-		
-		// go to options and show the results
-		qtiPage
-			.clickToolbarBack()
-			.options()
-			.showResults(Boolean.TRUE, QTI21AssessmentResultsOptions.allOptions())
-			.save();
-		
-		//go to the test
-		qtiPage
-			.clickToolbarBack()
-			.assertOnAssessmentItem()
-			.answerGapText("verbannen", "_RESPONSE_1")
-			.saveAnswer().nextAnswer()
-			.answerGapText(",", "_RESPONSE_1")
-			.answerGapText("", "_RESPONSE_2")
-			.answerGapText("", "_RESPONSE_3")
-			.saveAnswer()
-			.answerMultipleChoice("Deutschland", "Brasilien", "S\u00FCdafrika")
-			.saveAnswer()
-			.answerSingleChoice("Italien")
-			.saveAnswer()
-			.answerCorrectKPrim("Deutschland", "Uruguay")
-			.answerIncorrectKPrim("Frankreich", "Spanien")
-			.saveAnswer()
-			.endTest();
-		
-		//check the results
-		qtiPage
-			.assertOnAssessmentResults()
-			.assertOnAssessmentTestScore(9)
-			.assertOnAssessmentTestMaxScore(9);
-	}
-	
 
 	/**
 	 * Upload a test in QTI 2.1 format, create a course, bind
@@ -891,10 +762,10 @@ public class ImsQTI21Test {
 		Assert.assertEquals(testNodeTitle, testH2.getText().trim());
 		
 		QTI21Page qtiPage = QTI21Page
-				.getQTI12Page(browser);
+				.getQTI21Page(browser);
 		qtiPage
 			.start()
-			.answerSingleChoice("Correct")
+			.answerSingleChoiceWithParagraph("Correct")
 			.saveAnswer()
 			.answerMultipleChoice("Correct")
 			.saveAnswer()
@@ -909,7 +780,7 @@ public class ImsQTI21Test {
 			.resume();
 		//resume the course, resume the test
 		qtiPage = QTI21Page
-				.getQTI12Page(browser);
+				.getQTI21Page(browser);
 		qtiPage
 			.start()
 			.assertOnAssessmentItem("Kprim")
@@ -928,5 +799,257 @@ public class ImsQTI21Test {
 		qtiPage
 			.assertOnCourseAssessmentTestScore(4)
 			.assertOnCourseAttempts(1);
+	}
+	
+	/**
+	 * An author create a course with a test to overview
+	 * the progress of a participant doing a test.
+	 * 
+	 * @param loginPage
+	 * @param participantBrowser
+	 * @throws IOException
+	 * @throws URISyntaxException
+	 */
+	@Test
+	@RunAsClient
+	public void qti21CourseTestCockpitProgress(@InitialPage LoginPage loginPage,
+			@Drone @User WebDriver participantBrowser)
+	throws IOException, URISyntaxException {
+		
+		UserVO author = new UserRestClient(deploymentUrl).createAuthor();
+		UserVO participant = new UserRestClient(deploymentUrl).createRandomUser("Ryomou");
+		
+		loginPage.loginAs(author.getLogin(), author.getPassword());
+		//upload a test
+		String qtiTestTitle = "Cockpit 2.1 " + UUID.randomUUID();
+		URL qtiTestUrl = JunitTestHelper.class.getResource("file_resources/qti21/test_without_feedbacks.zip");
+		File qtiTestFile = new File(qtiTestUrl.toURI());
+		navBar
+			.openAuthoringEnvironment()
+			.uploadResource(qtiTestTitle, qtiTestFile);
+		
+		//create a course
+		String courseTitle = "Cockpit QTI 2.1 " + UUID.randomUUID();
+		navBar
+			.openAuthoringEnvironment()
+			.createCourse(courseTitle)
+			.clickToolbarBack();
+		
+		String testNodeTitle = "QTI21Cockpit-1";
+		
+		//create a course element of type CP with the CP that we create above
+		CourseEditorPageFragment courseEditor = CoursePageFragment.getCourse(browser)
+			.edit();
+		courseEditor
+			.createNode("iqtest")
+			.nodeTitle(testNodeTitle)
+			.selectTabLearnContent()
+			.chooseTest(qtiTestTitle);
+		
+		QTI21ConfigurationCEPage configPage = new QTI21ConfigurationCEPage(browser);
+		configPage
+			.selectConfiguration()
+			.showScoreOnHomepage(true)
+			.saveConfiguration();
+
+		//publish the course
+		courseEditor
+			.autoPublish()
+			.accessConfiguration()
+			.setUserAccess(UserAccess.membersOnly);
+		
+		//add a participant
+		CoursePageFragment courseRuntime = courseEditor
+			.clickToolbarBack();
+		courseRuntime
+			.members()
+			.quickAdd(participant);
+		//open the assessment tool
+		AssessmentToolPage assessmentTool = courseRuntime
+			.assessmentTool();
+		assessmentTool
+			.courseElements()
+		// test cockpit
+			.selectElementsCourseNode(testNodeTitle);
+		
+		
+		//a user search the content package
+		LoginPage userLoginPage = LoginPage.getLoginPage(participantBrowser, deploymentUrl);
+		userLoginPage
+			.loginAs(participant.getLogin(), participant.getPassword())
+			.resume();
+		NavigationPage userNavBar = new NavigationPage(participantBrowser);
+		userNavBar
+			.openMyCourses()
+			.openSearch()
+			.extendedSearch(courseTitle)
+			.select(courseTitle);
+		
+		// open the course and see the test
+		CoursePageFragment course = CoursePageFragment.getCourse(participantBrowser);		
+		course
+			.clickTree()
+			.selectWithTitle(testNodeTitle);
+		QTI21Page qtiPage = QTI21Page
+				.getQTI21Page(participantBrowser);
+		qtiPage
+			.start()
+			.assertOnAssessmentItem()
+			.answerSingleChoiceWithParagraph("Correct response")
+			.saveAnswer()
+			.assertOnAssessmentItem("Second question");
+		
+		// author wait the progress
+		assessmentTool
+			.assertProgress(participant, 50);
+		
+		// answer the last question
+		qtiPage
+			.answerMultipleChoice("Correct response")
+			.saveAnswer();
+		
+		// author wait the progress
+		assessmentTool
+			.assertProgress(participant, 100);
+		
+		// participant ends the test
+		qtiPage
+			.endTest()//auto close because 1 part, no feedbacks
+			.assertOnCourseAssessmentTestScore(2);
+		
+		// author wait the status changes
+		assessmentTool
+			.assertStatusDone(participant)
+			.assertProgressEnded(participant);
+	}
+	
+	/**
+	 * An author create a course with a test with essay
+	 * and single choice. A user make it. The author
+	 * correct the test and the participant reload
+	 * the page to see its result.
+	 * 
+	 * @param loginPage
+	 * @param participantBrowser
+	 * @throws IOException
+	 * @throws URISyntaxException
+	 */
+	@Test
+	@RunAsClient
+	public void qti21CourseTestCorrectionWorkflow(@InitialPage LoginPage loginPage,
+			@Drone @User WebDriver participantBrowser)
+	throws IOException, URISyntaxException {
+		
+		UserVO author = new UserRestClient(deploymentUrl).createAuthor();
+		UserVO participant = new UserRestClient(deploymentUrl).createRandomUser("Hakufu");
+		
+		loginPage.loginAs(author.getLogin(), author.getPassword());
+		//upload a test
+		String qtiTestTitle = "Correction 2.1 " + UUID.randomUUID();
+		URL qtiTestUrl = JunitTestHelper.class.getResource("file_resources/qti21/test_sc_essay_mc.zip");
+		File qtiTestFile = new File(qtiTestUrl.toURI());
+		navBar
+			.openAuthoringEnvironment()
+			.uploadResource(qtiTestTitle, qtiTestFile);
+		
+		//create a course
+		String courseTitle = "Correction QTI 2.1 " + UUID.randomUUID();
+		navBar
+			.openAuthoringEnvironment()
+			.createCourse(courseTitle)
+			.clickToolbarBack();
+		
+		String testNodeTitle = "QTI21Correction-1";
+		
+		//create a course element of type CP with the CP that we create above
+		CourseEditorPageFragment courseEditor = CoursePageFragment.getCourse(browser)
+			.edit();
+		courseEditor
+			.createNode("iqtest")
+			.nodeTitle(testNodeTitle)
+			.selectTabLearnContent()
+			.chooseTest(qtiTestTitle);
+		OOGraphene.closeWarningBox(browser);//close the warning
+		
+		QTI21ConfigurationCEPage configPage = new QTI21ConfigurationCEPage(browser);
+		configPage
+			.selectConfiguration()
+			.showScoreOnHomepage(true)
+			.saveConfiguration();
+
+		//publish the course
+		courseEditor
+			.autoPublish()
+			.accessConfiguration()
+			.setUserAccess(UserAccess.membersOnly);
+		
+		//add a participant
+		CoursePageFragment courseRuntime = courseEditor
+			.clickToolbarBack();
+		courseRuntime
+			.members()
+			.quickAdd(participant);
+		
+		//a user search the content package
+		LoginPage userLoginPage = LoginPage.getLoginPage(participantBrowser, deploymentUrl);
+		userLoginPage
+			.loginAs(participant.getLogin(), participant.getPassword())
+			.resume();
+		NavigationPage userNavBar = new NavigationPage(participantBrowser);
+		userNavBar
+			.openMyCourses()
+			.openSearch()
+			.extendedSearch(courseTitle)
+			.select(courseTitle);
+		
+		// open the course and see the test
+		CoursePageFragment course = CoursePageFragment.getCourse(participantBrowser);		
+		course
+			.clickTree()
+			.selectWithTitle(testNodeTitle);
+		QTI21Page qtiPage = QTI21Page
+				.getQTI21Page(participantBrowser);
+		qtiPage
+			.start()
+			.assertOnAssessmentItem()
+			.answerSingleChoiceWithParagraph("Correct answer")
+			.saveAnswer()
+			.assertOnAssessmentItem("Essay")
+			.answerEssay("Bla bla bla")
+			.saveAnswer()
+			.answerMultipleChoice("Good choice", "Bad choice")
+			.saveAnswer()
+			.endTest()
+			.assertOnCourseAssessmentTestWaitingCorrection();
+		
+		//the author open the assessment tool
+		AssessmentToolPage assessmentTool = courseRuntime
+			.assessmentTool();
+		assessmentTool
+			.courseElements()
+			.selectElementsCourseNode(testNodeTitle);
+		// correction
+		QTI21CorrectionPage correction = new QTI21CorrectionPage(browser);
+		correction
+			.startTestCorrection()
+			.assertOnAssessmentItemError("Essay", 1)
+			.selectAssessmentItem("Essay")
+			.setScore("1.0")
+			.save()
+			.assertOnStatusOk()
+			.back()
+			.publishAll()
+			.confirmDialog();
+		//make all results visible
+		assessmentTool
+			.makeAllVisible();
+		
+		// the participant check its result
+		course
+			.clickTree()
+			.selectWithTitle(testNodeTitle);
+		qtiPage = QTI21Page
+			.getQTI21Page(participantBrowser)
+			.assertOnCourseAssessmentTestScore(2);
 	}
 }

@@ -20,7 +20,15 @@
 
 package org.olat.core.util.filter;
 
-import org.olat.core.util.filter.impl.*;
+import org.olat.core.util.filter.impl.AddBaseURLToMediaRelativeURLFilter;
+import org.olat.core.util.filter.impl.ConditionalHTMLCommentsFilter;
+import org.olat.core.util.filter.impl.NekoHTMLFilter;
+import org.olat.core.util.filter.impl.OWASPAntiSamyXSSFilter;
+import org.olat.core.util.filter.impl.SimpleHTMLTagsFilter;
+import org.olat.core.util.filter.impl.SmileysCssToDataUriFilter;
+import org.olat.core.util.filter.impl.XMLValidCharacterFilter;
+import org.olat.core.util.filter.impl.XMLValidEntityFilter;
+import org.olat.core.util.filter.impl.OWASPAntiSamyXSSFilter.Variant;
 
 /**
  * Description:<br>
@@ -35,12 +43,12 @@ import org.olat.core.util.filter.impl.*;
  */
 public class FilterFactory {
 	// the html tag filter is static, not stateful
-	private static final Filter stripHtmlTagsFilter = new StripHTMLTagsFilter();
 	private static final Filter htmlTagsFilter = new SimpleHTMLTagsFilter();
 	private static final Filter htmlTagsAndDesescapingFilter = new NekoHTMLFilter();
 	private static final Filter conditionalCommentsFilter = new ConditionalHTMLCommentsFilter();
 	private static final Filter xmlValidCharacterFilter = new XMLValidCharacterFilter();
 	private static final Filter smileysCssToDataUriFilter = new SmileysCssToDataUriFilter();
+	private static final Filter xmlValidEntityFilter = new XMLValidEntityFilter();
 
 	/**
 	 * Get an instance of the HTML tag filter
@@ -51,10 +59,6 @@ public class FilterFactory {
 		return htmlTagsFilter;
 	}
 	
-	public static Filter getStripHtmlTagsFilter() {
-		return stripHtmlTagsFilter;
-	}
-
 	public static Filter getHtmlTagAndDescapingFilter() {
 		return htmlTagsAndDesescapingFilter;
 	}
@@ -68,8 +72,24 @@ public class FilterFactory {
 		return conditionalCommentsFilter;
 	}
 	
+	/**
+	 * The filter remove characters which are not valid in a
+	 * XML 1.0 document.
+	 * 
+	 * @return A filter implementation
+	 */
 	public static Filter getXMLValidCharacterFilter() {
 		return xmlValidCharacterFilter;
+	}
+	
+	/**
+	 * The filter remove entities which are not valid in a
+	 * XML 1.0 document like &amp;#25;.
+	 * 
+	 * @return A filter implementation
+	 */
+	public static Filter getXMLValidEntityFilter() {
+		return xmlValidEntityFilter;
 	}
 	
 	/**
@@ -89,7 +109,12 @@ public class FilterFactory {
 	 */
 	public static Filter getXSSFilterForTextField(int maxLength) {
 		// currently the XSS filter is statefull
-		return new OWASPAntiSamyXSSFilter(maxLength, false);
+		return new OWASPAntiSamyXSSFilter(maxLength, false, Variant.tinyMce, false);
+	}
+	
+	public static Filter getXSSFilterForWiki(int maxLength) {
+		// currently the XSS filter is statefull
+		return new OWASPAntiSamyXSSFilter(maxLength, false, Variant.wiki, false);
 	}
 
 	/**

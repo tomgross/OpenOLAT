@@ -30,10 +30,11 @@ import org.olat.core.gui.components.form.flexible.impl.FormLayoutContainer;
 import org.olat.core.gui.control.Controller;
 import org.olat.core.gui.control.Event;
 import org.olat.core.gui.control.WindowControl;
+import org.olat.core.util.FileUtils;
 import org.olat.course.nodes.gta.ui.SubmitDocumentsController.SubmittedSolution;
 
 /**
- * 
+ *
  * Initial date: 27.02.2015<br>
  * @author srosse, stephane.rosse@frentix.com, http://www.frentix.com
  *
@@ -43,11 +44,11 @@ public class DocumentUploadController extends FormBasicController {
 	private FileElement fileEl;
 	private final File fileToReplace;
 	private final SubmittedSolution solution;
-	
+
 	public DocumentUploadController(UserRequest ureq, WindowControl wControl) {
 		this(ureq, wControl, null, null);
 	}
-	
+
 	public DocumentUploadController(UserRequest ureq, WindowControl wControl, SubmittedSolution solution, File fileToReplace) {
 		super(ureq, wControl);
 		this.solution = solution;
@@ -62,29 +63,29 @@ public class DocumentUploadController extends FormBasicController {
 	@Override
 	protected void initForm(FormItemContainer formLayout, Controller listener, UserRequest ureq) {
 		formLayout.setElementCssClass("o_sel_course_gta_upload_form");
-		
+
 		fileEl = uifactory.addFileElement(getWindowControl(), "file", "solution.file", formLayout);
 		fileEl.setMandatory(true);
 		fileEl.addActionListener(FormEvent.ONCHANGE);
 		if(fileToReplace != null) {
 			fileEl.setInitialFile(fileToReplace);
 		}
-		
+
 		FormLayoutContainer buttonCont = FormLayoutContainer.createButtonLayout("buttons", getTranslator());
 		buttonCont.setRootForm(mainForm);
 		formLayout.add(buttonCont);
 		uifactory.addFormSubmitButton("save", buttonCont);
 		uifactory.addFormCancelButton("cancel", buttonCont, ureq, getWindowControl());
 	}
-	
+
 	public String getUploadedFilename() {
 		return fileEl.getUploadFileName();
 	}
-	
+
 	public File getUploadedFile() {
 		return fileEl.getUploadFile();
 	}
-	
+
 	@Override
 	protected void doDispose() {
 		//
@@ -92,15 +93,21 @@ public class DocumentUploadController extends FormBasicController {
 
 	@Override
 	protected boolean validateFormLogic(UserRequest ureq) {
-		boolean allOk = true;
-		
+		boolean allOk = super.validateFormLogic(ureq);
+
 		fileEl.clearError();
 		if(fileEl.getUploadFile() == null) {
 			fileEl.setErrorKey("form.mandatory.hover", null);
 			allOk &= false;
+		} else if (!FileUtils.validateFilename(fileEl.getUploadFileName())) {
+			fileEl.setErrorKey("error.file.invalid", null);
+			allOk = false;
+		} else if (fileEl.getUploadFile() != null && fileEl.getUploadFile().length() == 0) {
+			fileEl.setErrorKey("error.file.empty", null);
+			allOk = false;
 		}
-		
-		return allOk & super.validateFormLogic(ureq);
+
+		return allOk;
 	}
 
 	@Override

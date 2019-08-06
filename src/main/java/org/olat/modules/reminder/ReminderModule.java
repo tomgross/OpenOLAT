@@ -19,6 +19,8 @@
  */
 package org.olat.modules.reminder;
 
+import static org.quartz.CronScheduleBuilder.cronSchedule;
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.TimeZone;
@@ -34,11 +36,8 @@ import org.quartz.Scheduler;
 import org.quartz.Trigger;
 import org.quartz.TriggerKey;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
-
-import static org.quartz.CronScheduleBuilder.cronSchedule;
 
 /**
  * 
@@ -74,7 +73,6 @@ public class ReminderModule extends AbstractSpringModule {
 	
 	@Autowired
 	private List<RuleSPI> ruleSpies;
-	
 	@Autowired
 	private Scheduler scheduler;
 	
@@ -134,6 +132,7 @@ public class ReminderModule extends AbstractSpringModule {
 		}
 		return selectedSpi;
 	}
+	
 	/**
 	 * Default 0 0 9/1 * * ?
 	 * 
@@ -147,10 +146,10 @@ public class ReminderModule extends AbstractSpringModule {
 				String cronExpression = getCronExpression();
 				if(!cronExpression.equals(currentCronExpression)) {
 					log.info("Start reminder with this cron expression: " + cronExpression);
-
+					
 					Trigger newTrigger = cronTrigger.getTriggerBuilder()
 							.withSchedule(cronSchedule(cronExpression))
-							.build();
+						    .build();
 					scheduler.rescheduleJob(reminderTriggerKey, newTrigger);
 				}
 			}

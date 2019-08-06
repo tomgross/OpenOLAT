@@ -24,7 +24,6 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.InputStream;
-import java.text.Normalizer;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
@@ -54,6 +53,7 @@ import org.olat.core.logging.OLog;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.CodeHelper;
 import org.olat.core.util.FileUtils;
+import org.olat.core.util.StringHelper;
 import org.olat.core.util.UserSession;
 import org.olat.core.util.Util;
 import org.olat.core.util.ValidationStatus;
@@ -93,6 +93,7 @@ public class FileElementImpl extends FormItemImpl
 	private String uploadFilename;
 	private String uploadMimeType;
 
+	private boolean buttonsEnabled = true;
 	private boolean deleteEnabled;
 	private boolean confirmDelete;
 
@@ -122,11 +123,9 @@ public class FileElementImpl extends FormItemImpl
 		super(name);
 		this.wControl = wControl;
 		component = new FileElementComponent(this);
+		setElementCssClass(null); // trigger default css 
 	}
 
-	/**
-	 * @see org.olat.core.gui.components.form.flexible.impl.FormItemImpl#evalFormRequest(org.olat.core.gui.UserRequest)
-	 */
 	@Override
 	public void evalFormRequest(UserRequest ureq) {
 		Form form = getRootForm();
@@ -163,8 +162,8 @@ public class FileElementImpl extends FormItemImpl
 			}
 
 			uploadFilename = form.getRequestMultipartFileName(component.getFormDispatchId());
-			// prevent an issue with Firefox
-			uploadFilename = Normalizer.normalize(uploadFilename, Normalizer.Form.NFKC);
+			// prevent an issue with different operation systems and .
+			uploadFilename = FileUtils.cleanFilename(uploadFilename);
 			// use mime-type from file name to have deterministic mime types
 			uploadMimeType = WebappHelper.getMimeType(uploadFilename);
 			if (uploadMimeType == null) {
@@ -183,6 +182,8 @@ public class FileElementImpl extends FormItemImpl
 				previewEl.setCropSelectionEnabled(cropSelectionEnabled);
 				previewEl.setMaxWithAndHeightToFitWithin(300, 200);
 				previewEl.setVisible(true);
+			} else if(previewEl != null) {
+				previewEl.setVisible(false);
 			}
 			// Mark associated component dirty, that it gets rerendered
 			component.setDirty(true);
@@ -197,7 +198,8 @@ public class FileElementImpl extends FormItemImpl
 	}
 
 	private void doConfirmDelete(UserRequest ureq) {
-		Translator fileTranslator = Util.createPackageTranslator(FileElementImpl.class, ureq.getLocale(), getTranslator());
+		Translator fileTranslator = Util.createPackageTranslator(FileElementImpl.class, ureq.getLocale(),
+				getTranslator());
 		String title = fileTranslator.translate("confirm.delete.file.title");
 		String text = fileTranslator.translate("confirm.delete.file");
 		dialogCtr = DialogBoxUIFactory.createOkCancelDialog(ureq, wControl, title, text);
@@ -208,7 +210,7 @@ public class FileElementImpl extends FormItemImpl
 	@Override
 	public Iterable<FormItem> getFormItems() {
 		if (previewEl != null) {
-			return Collections.<FormItem> singletonList(previewEl);
+			return Collections.<FormItem>singletonList(previewEl);
 		}
 		return Collections.emptyList();
 	}
@@ -221,9 +223,6 @@ public class FileElementImpl extends FormItemImpl
 		return null;
 	}
 
-	/**
-	 * @see org.olat.core.gui.components.form.flexible.impl.FormItemImpl#getFormItemComponent()
-	 */
 	@Override
 	protected Component getFormItemComponent() {
 		return component;
@@ -233,9 +232,6 @@ public class FileElementImpl extends FormItemImpl
 		return previewEl;
 	}
 
-	/**
-	 * @see org.olat.core.gui.components.form.flexible.impl.FormItemImpl#reset()
-	 */
 	@Override
 	public void reset() {
 		if (tempUploadFile != null && tempUploadFile.exists()) {
@@ -256,9 +252,6 @@ public class FileElementImpl extends FormItemImpl
 		uploadMimeType = null;
 	}
 
-	/**
-	 * @see org.olat.core.gui.components.form.flexible.impl.FormItemImpl#rootFormAvailable()
-	 */
 	@Override
 	protected void rootFormAvailable() {
 		if (previewEl != null && previewEl.getRootForm() != getRootForm()) {
@@ -266,19 +259,12 @@ public class FileElementImpl extends FormItemImpl
 		}
 	}
 
-	/**
-	 * @see org.olat.core.gui.components.form.flexible.elements.FileElement#setMandatory(boolean,
-	 *      java.lang.String)
-	 */
 	@Override
 	public void setMandatory(boolean mandatory, String i18nErrKey) {
 		super.setMandatory(mandatory);
 		this.i18nErrMandatory = i18nErrKey;
 	}
 
-	/**
-	 * @see org.olat.core.gui.components.form.flexible.impl.FormItemImpl#validate(java.util.List)
-	 */
 	@Override
 	public void validate(List<ValidationStatus> validationResults) {
 		int lastFormError = getRootForm().getLastRequestError();
@@ -312,7 +298,7 @@ public class FileElementImpl extends FormItemImpl
 		} else if (checkForMimeTypes && tempUploadFile != null && tempUploadFile.exists()) {
 			boolean found = false;
 			if (uploadMimeType != null) {
-				for (String validType : mimeTypes) {
+				for (String validType : getMimeTypeLimitations()) {
 					if (validType.equals(uploadMimeType)) {
 						// exact match: image/jpg
 						found = true;
@@ -339,15 +325,15 @@ public class FileElementImpl extends FormItemImpl
 
 	@Override
 	public String getExampleText() {
-		if(fileExampleKey != null) {
-			if(fileExampleParams != null) {
+		if (fileExampleKey != null) {
+			if (fileExampleParams != null) {
 				return translator.translate(fileExampleKey, fileExampleParams);
 			}
 			return translator.translate(fileExampleKey);
 		}
 		return null;
 	}
-	
+
 	@Override
 	public void setExampleKey(String exampleKey, String[] params) {
 		this.fileExampleKey = exampleKey;
@@ -364,14 +350,20 @@ public class FileElementImpl extends FormItemImpl
 		}
 	}
 
+	public boolean isButtonsEnabled() {
+		return buttonsEnabled;
+	}
+
+	@Override
+	public void setButtonsEnabled(boolean buttonsEnabled) {
+		this.buttonsEnabled = buttonsEnabled;
+	}
+
 	@Override
 	public void setCropSelectionEnabled(boolean enable) {
 		this.cropSelectionEnabled = enable;
 	}
 
-	/**
-	 * @see org.olat.core.gui.components.form.flexible.elements.FileElement#setInitialFile(java.io.File)
-	 */
 	@Override
 	public void setInitialFile(File initialFile) {
 		this.initialFile = initialFile;
@@ -385,37 +377,32 @@ public class FileElementImpl extends FormItemImpl
 		}
 	}
 
-	/**
-	 * @see org.olat.core.gui.components.form.flexible.elements.FileElement#getInitialFile()
-	 */
+	@Override
 	public File getInitialFile() {
 		return initialFile;
 	}
 
-	/**
-	 * @see org.olat.core.gui.components.form.flexible.elements.FileElement#limitToMimeType(java.util.Set,
-	 *      java.lang.String, java.lang.String[])
-	 */
+	@Override
 	public void limitToMimeType(Set<String> mimeTypes, String i18nErrKey, String[] i18nArgs) {
-		this.mimeTypes = mimeTypes;
-		this.checkForMimeTypes = true;
+		if (mimeTypes != null) {
+			this.mimeTypes = mimeTypes;
+			this.checkForMimeTypes = true;
+		} else {
+			this.mimeTypes = new HashSet<>();
+			this.checkForMimeTypes = false;
+		}
 		this.i18nErrMimeType = i18nErrKey;
 		this.i18nErrMimeTypeArgs = i18nArgs;
 	}
 
-	/**
-	 * @see org.olat.core.gui.components.form.flexible.elements.FileElement#getMimeTypeLimitations()
-	 */
+	@Override
 	public Set<String> getMimeTypeLimitations() {
 		if (mimeTypes == null)
-			mimeTypes = new HashSet<String>();
+			mimeTypes = new HashSet<>();
 		return mimeTypes;
 	}
 
-	/**
-	 * @see org.olat.core.gui.components.form.flexible.elements.FileElement#setMaxUploadSizeKB(int,
-	 *      java.lang.String, java.lang.String[])
-	 */
+	@Override
 	public void setMaxUploadSizeKB(long maxUploadSizeKB, String i18nErrKey, String[] i18nArgs) {
 		this.maxUploadSizeKB = maxUploadSizeKB;
 		this.checkForMaxFileSize = (maxUploadSizeKB == UPLOAD_UNLIMITED ? false : true);
@@ -423,9 +410,7 @@ public class FileElementImpl extends FormItemImpl
 		this.i18nErrMaxSizeArgs = i18nArgs;
 	}
 
-	/**
-	 * @see org.olat.core.gui.components.form.flexible.FormMultipartItem#getMaxUploadSizeKB()
-	 */
+	@Override
 	public long getMaxUploadSizeKB() {
 		return maxUploadSizeKB;
 	}
@@ -448,9 +433,7 @@ public class FileElementImpl extends FormItemImpl
 		this.confirmDelete = confirmDelete;
 	}
 
-	/**
-	 * @see org.olat.core.gui.components.form.flexible.elements.FileElement#isUploadSuccess()
-	 */
+	@Override
 	public boolean isUploadSuccess() {
 		if (tempUploadFile != null && tempUploadFile.exists()) {
 			return true;
@@ -458,36 +441,28 @@ public class FileElementImpl extends FormItemImpl
 		return false;
 	}
 
-	/**
-	 * @see org.olat.core.gui.components.form.flexible.elements.FileElement#getUploadFileName()
-	 */
+	@Override
 	public String getUploadFileName() {
 		return uploadFilename;
 	}
-	
+
 	@Override
 	public void setUploadFileName(String uploadFileName) {
 		this.uploadFilename = uploadFileName;
 		this.uploadMimeType = WebappHelper.getMimeType(uploadFilename);
 	}
 
-	/**
-	 * @see org.olat.core.gui.components.form.flexible.elements.FileElement#getUploadMimeType()
-	 */
+	@Override
 	public String getUploadMimeType() {
 		return uploadMimeType;
 	}
 
-	/**
-	 * @see org.olat.core.gui.components.form.flexible.elements.FileElement#getUploadFile()
-	 */
+	@Override
 	public File getUploadFile() {
 		return tempUploadFile;
 	}
 
-	/**
-	 * @see org.olat.core.gui.components.form.flexible.elements.FileElement#getUploadInputStream()
-	 */
+	@Override
 	public InputStream getUploadInputStream() {
 		if (tempUploadFile == null)
 			return null;
@@ -499,9 +474,7 @@ public class FileElementImpl extends FormItemImpl
 		return null;
 	}
 
-	/**
-	 * @see org.olat.core.gui.components.form.flexible.elements.FileElement#getUploadSize()
-	 */
+	@Override
 	public long getUploadSize() {
 		if (tempUploadFile != null && tempUploadFile.exists()) {
 			return tempUploadFile.length();
@@ -512,9 +485,7 @@ public class FileElementImpl extends FormItemImpl
 		}
 	}
 
-	/**
-	 * @see org.olat.core.gui.components.form.flexible.elements.FileElement#moveUploadFileTo(java.io.File)
-	 */
+	@Override
 	public File moveUploadFileTo(File destinationDir) {
 		if (tempUploadFile != null && tempUploadFile.exists()) {
 			destinationDir.mkdirs();
@@ -534,9 +505,6 @@ public class FileElementImpl extends FormItemImpl
 		return null;
 	}
 
-	/**
-	 * @see org.olat.core.gui.components.form.flexible.elements.FileElement#moveUploadFileTo(org.olat.core.util.vfs.VFSContainer)
-	 */
 	@Override
 	public VFSLeaf moveUploadFileTo(VFSContainer destinationContainer) {
 		return moveUploadFileTo(destinationContainer, false);
@@ -601,9 +569,18 @@ public class FileElementImpl extends FormItemImpl
 
 	}
 
-	/**
-	 * @see org.olat.core.gui.control.Disposable#dispose()
-	 */
+	@Override
+	public void setElementCssClass(String elementCssClass) {
+		// make sure the o_fileElement class is always set to trigger special
+		// rendering for all file elements (error handling)
+		if (StringHelper.containsNonWhitespace(elementCssClass)) {
+			super.setElementCssClass(elementCssClass + " o_fileElement");
+		} else {
+			super.setElementCssClass("o_fileElement");
+		}
+	}
+
+	@Override
 	public void dispose() {
 		if (tempUploadFile != null && tempUploadFile.exists()) {
 			tempUploadFile.delete();

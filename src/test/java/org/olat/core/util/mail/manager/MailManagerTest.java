@@ -29,16 +29,22 @@ import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
+import javax.mail.Address;
+import javax.mail.MessagingException;
+import javax.mail.internet.InternetAddress;
+import javax.mail.internet.MimeMessage;
+
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.olat.core.commons.persistence.DB;
 import org.olat.core.id.Identity;
 import org.olat.core.logging.OLog;
 import org.olat.core.logging.Tracing;
+import org.olat.core.util.WebappHelper;
 import org.olat.core.util.mail.ContactList;
-import org.olat.core.util.mail.MailBoxExtension;
 import org.olat.core.util.mail.MailBundle;
 import org.olat.core.util.mail.MailManager;
 import org.olat.core.util.mail.MailModule;
@@ -59,8 +65,6 @@ public class MailManagerTest extends OlatTestCase {
 
 	@Autowired
 	private MailManager mailManager;
-	@Autowired
-	private MailBoxExtension mailBoxExtension;
 	@Autowired
 	private MailModule mailModule;
 	@Autowired
@@ -231,112 +235,8 @@ public class MailManagerTest extends OlatTestCase {
 		Assert.assertEquals(incomingMail, incomingsMails_3.get(0));
 	}
 	
-	@Test
-	public void testDeleteUserData_groupedMail() {
-		//send a mail to three ids
-		String metaId = UUID.randomUUID().toString();
-		Identity fromId = JunitTestHelper.createAndPersistIdentityAsUser("mail-7-" + UUID.randomUUID().toString());
-		Identity toId_1 = JunitTestHelper.createAndPersistIdentityAsUser("mail-8-" + UUID.randomUUID().toString());
-		Identity toId_2 = JunitTestHelper.createAndPersistIdentityAsUser("mail-9-" + UUID.randomUUID().toString());
-		Identity toId_3 = JunitTestHelper.createAndPersistIdentityAsUser("mail-10-" + UUID.randomUUID().toString());
-		
-		ContactList ccs = new ContactList("unit-test-cc");
-		ccs.add(toId_1);
-		ccs.add(toId_2);
-		ccs.add(toId_3);
-		ccs.add(fromId);
-		
-		MailBundle bundle = new MailBundle();
-		bundle.setFromId(fromId);
-		bundle.setContactList(ccs);
-		bundle.setMetaId(metaId);
-		bundle.setContent("Hello delList", "Content of delList");
-		
-		MailerResult result = mailManager.sendMessage(bundle);
-		Assert.assertNotNull(result);
-		Assert.assertEquals(MailerResult.OK, result.getReturnCode());
-		dbInstance.commitAndCloseSession();
-
-		//delete the 4 users datas
-		mailBoxExtension.deleteUserData(toId_1, "lalala", null);
-		mailBoxExtension.deleteUserData(toId_2, "lalala", null);
-		mailBoxExtension.deleteUserData(toId_3, "lalala", null);
-		mailBoxExtension.deleteUserData(fromId, "lalala", null);
-		dbInstance.commitAndCloseSession();
-		
-		//check inbox / outbox
-		List<DBMailLight> deletedMails_1 = mailManager.getInbox(toId_1, null, null, null, 0, -1);
-		Assert.assertNotNull(deletedMails_1);
-		Assert.assertTrue(deletedMails_1.isEmpty());
-		List<DBMailLight> deletedMails_2 = mailManager.getInbox(toId_2, null, null, null, 0, -1);
-		Assert.assertNotNull(deletedMails_2);
-		Assert.assertTrue(deletedMails_2.isEmpty());
-		List<DBMailLight> deletedMails_3 = mailManager.getInbox(toId_3, null, null, null, 0, -1);
-		Assert.assertNotNull(deletedMails_3);
-		Assert.assertTrue(deletedMails_3.isEmpty());
-		List<DBMailLight> deletedMails_4 = mailManager.getOutbox(fromId, 0, -1, true);
-		Assert.assertNotNull(deletedMails_4);
-		Assert.assertTrue(deletedMails_4.isEmpty());
-		//check mail by meta id
-		List<DBMailLight> deletedMails = mailManager.getEmailsByMetaId(metaId);
-		Assert.assertNotNull(deletedMails);
-		Assert.assertTrue(deletedMails.isEmpty());
-	}
 	
-	@Test
-	public void testDeleteUserData_separatedMail() {
-		//send a mail as separated e-mails to three ids
-		String metaId = UUID.randomUUID().toString();
-		Identity fromId = JunitTestHelper.createAndPersistIdentityAsUser("mail-7-" + UUID.randomUUID().toString());
-		Identity toId_1 = JunitTestHelper.createAndPersistIdentityAsUser("mail-8-" + UUID.randomUUID().toString());
-		Identity toId_2 = JunitTestHelper.createAndPersistIdentityAsUser("mail-9-" + UUID.randomUUID().toString());
-		Identity toId_3 = JunitTestHelper.createAndPersistIdentityAsUser("mail-10-" + UUID.randomUUID().toString());
-		
-		MailBundle bundle_1 = new MailBundle();
-		bundle_1.setFromId(fromId);
-		bundle_1.setToId(toId_1);
-		bundle_1.setMetaId(metaId);
-		bundle_1.setContent("Hello ccList", "Content of ccList");
-		
-		MailerResult result1 = mailManager.sendMessage(bundle_1);
-		Assert.assertNotNull(result1);
-		Assert.assertEquals(MailerResult.OK, result1.getReturnCode());
-		
-		MailBundle bundle_2 = new MailBundle();
-		bundle_2.setFromId(fromId);
-		bundle_2.setToId(toId_2);
-		bundle_2.setMetaId(metaId);
-		bundle_2.setContent("Hello ccList", "Content of ccList");
-		
-		MailerResult result2 = mailManager.sendMessage(bundle_2);
-		Assert.assertNotNull(result2);
-		Assert.assertEquals(MailerResult.OK, result2.getReturnCode());
-		
-		MailBundle bundle_3 = new MailBundle();
-		bundle_3.setFromId(fromId);
-		bundle_3.setToId(toId_3);
-		bundle_3.setMetaId(metaId);
-		bundle_3.setContent("Hello ccList", "Content of ccList");
-		
-		MailerResult result3 = mailManager.sendMessage(bundle_3);
-		Assert.assertNotNull(result3);
-		Assert.assertEquals(MailerResult.OK, result3.getReturnCode());
-		dbInstance.commitAndCloseSession();
-
-		//delete the 4 users datas
-		mailBoxExtension.deleteUserData(fromId, "lalala", null);
-		mailBoxExtension.deleteUserData(toId_1, "lalala", null);
-		mailBoxExtension.deleteUserData(toId_2, "lalala", null);
-		mailBoxExtension.deleteUserData(toId_3, "lalala", null);
-		dbInstance.commitAndCloseSession();
-
-		//check mail by meta id
-		List<DBMailLight> deletedMails = mailManager.getEmailsByMetaId(metaId);
-		Assert.assertNotNull(deletedMails);
-		Assert.assertTrue(deletedMails.isEmpty());
-	}
-	
-	@Test
+	@Test @Ignore // not really needed anymore, the subscribe process is asynchrone and serial
 	public void testParalellSubscribers() {
 		final int NUM_OF_THREADS = 10;
 		final int NUM_OF_USERS = 10;
@@ -366,6 +266,7 @@ public class MailManagerTest extends OlatTestCase {
 		
 		// sleep until threads should have terminated/excepted
 		try {
+			Thread.sleep(30000);// eat all JMS events
 			finishCount.await(120, TimeUnit.SECONDS);
 		} catch (InterruptedException e) {
 			log.error("", e);
@@ -374,6 +275,46 @@ public class MailManagerTest extends OlatTestCase {
 
 		assertTrue("It throws an exception in test", exceptionHolder.isEmpty());	
 		assertEquals("Thread(s) did not finish", NUM_OF_THREADS, statusList.size());
+	}
+
+	@Test
+	public void testFromHeaderOverride() throws MessagingException {
+		WebappHelper.setMailConfig("mailFromDomain","internal.com");
+		
+		Address fromx = new InternetAddress("External Sender <test1@external.com>");
+		Address fromi = new InternetAddress("Internal Sender <test1@internal.com>");
+
+		Address gr1 = new InternetAddress("group1:;");
+		Address gr2 = new InternetAddress("group2:;");
+
+		Address tox1 = new InternetAddress("External Recipient 1 <test1@external.com>");
+		Address tox2 = new InternetAddress("External Recipient 2 <test1@external.com>");
+		Address toi1 = new InternetAddress("Internal Recipient 1 <test1@internal.com>");
+		Address toi2 = new InternetAddress("Internal Recipient 2 <test1@internal.com>");
+
+		Address mailFrom = new InternetAddress(WebappHelper.getMailConfig("mailFrom"));
+		
+		Address[] groupRecipients = {gr1, gr2};
+		Address[] mixedRecipients = {tox1, tox2, toi1, toi2};
+		Address[] internalRecipients = {toi1, toi2};
+
+		MailerResult result1 = new MailerResult();
+		MimeMessage msg1 = mailManager.createMimeMessage(fromx, groupRecipients, groupRecipients, mixedRecipients, "Testsubject", "Testbody", null, result1);
+		Assert.assertTrue("From header is set to admin address for external maildomain in from and recipients",
+				msg1.getFrom()[0].equals(mailFrom));
+		Assert.assertNotNull(result1);
+
+		MailerResult result2 = new MailerResult();
+		MimeMessage msg2 = mailManager.createMimeMessage(fromi, groupRecipients, groupRecipients, mixedRecipients, "Testsubject", "Testbody", null, result2);
+		Assert.assertTrue("From header is set to real user address for internal maildomain in from and external recipients",
+				msg2.getFrom()[0].equals(fromi));
+		Assert.assertNotNull(result2);
+
+		MailerResult result3 = new MailerResult();
+		MimeMessage msg3 = mailManager.createMimeMessage(fromx, groupRecipients, groupRecipients, internalRecipients, "Testsubject", "Testbody", null, result3);
+		Assert.assertTrue("From header is set to real user address for external maildomain in from and only internal recipients",
+				msg3.getFrom()[0].equals(fromx));
+		Assert.assertNotNull(result3);
 	}
 
 	private class SubscribeThread extends Thread {

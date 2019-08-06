@@ -109,7 +109,7 @@ public class NGramProfile {
    */
   public NGramProfile(String name, int minlen, int maxlen) {
     // TODO: Compute the initial capacity using minlen and maxlen.
-    this.ngrams = new HashMap<CharSequence, NGramEntry>(4000);
+    this.ngrams = new HashMap<>(4000);
     this.minLength = minlen;
     this.maxLength = maxlen;
     this.name = name;
@@ -127,7 +127,7 @@ public class NGramProfile {
    * 
    * @param w is the word to add
    */
-  public void add(StringBuffer w) {
+  public void add(StringBuilder w) {
     for (int i=minLength; (i <= maxLength) && (i < w.length()); i++) {
       add(w, i);
     }
@@ -203,7 +203,7 @@ public class NGramProfile {
    * @param w
    * @param n sequence length
    */
-  private void add(StringBuffer w, int n) {
+  private void add(StringBuilder w, int n) {
     for (int i=0; i <= w.length()-n; i++) {
       add(w.subSequence(i, i + n));
     }
@@ -254,9 +254,10 @@ public class NGramProfile {
   }
   
   // Inherited JavaDoc
+  @Override
   public String toString() {
 
-    StringBuffer s = new StringBuffer().append("NGramProfile: ")
+    StringBuilder s = new StringBuilder().append("NGramProfile: ")
                                        .append(name).append("\n");
 
     Iterator<NGramEntry> i = getSorted().iterator();
@@ -360,7 +361,7 @@ public class NGramProfile {
         text.append(new String(buffer, 0, len, encoding));
       }
     } catch (IOException e) {
-      e.printStackTrace();
+      log.error("", e);
     }
 
     newProfile.analyze(text);
@@ -385,8 +386,8 @@ public class NGramProfile {
     // First dispatch ngrams in many lists depending on their size
     // (one list for each size, in order to store MAX_SIZE ngrams for each
     // size of ngram)
-    List<NGramEntry> list = new ArrayList<NGramEntry>();
-    List<NGramEntry> sublist = new ArrayList<NGramEntry>();
+    List<NGramEntry> list = new ArrayList<>();
+    List<NGramEntry> sublist = new ArrayList<>();
     NGramEntry[] entries = ngrams.values().toArray(new NGramEntry[ngrams.size()]);
     for (int i=minLength; i<=maxLength; i++) {
       for (int j=0; j<entries.length; j++) {
@@ -506,7 +507,7 @@ public class NGramProfile {
       }
 
     } catch (Exception e) {
-      e.printStackTrace();
+      log.error("", e);
     }
   }
 
@@ -543,7 +544,7 @@ public class NGramProfile {
      * @param count is the number of occurences of this ngram
      */
     public NGramEntry(String seq, int count) {
-      this.seq = new StringBuffer(seq).subSequence(0, seq.length());
+      this.seq = new StringBuilder(seq).subSequence(0, seq.length());
       this.count = count;
     }
 

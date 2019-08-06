@@ -27,6 +27,7 @@ import java.util.Map;
 import org.olat.core.commons.persistence.DefaultResultInfos;
 import org.olat.core.commons.persistence.ResultInfos;
 import org.olat.core.commons.persistence.SortKey;
+import org.olat.core.gui.components.form.flexible.elements.FlexiTableElement;
 import org.olat.core.gui.components.form.flexible.elements.FlexiTableFilter;
 import org.olat.core.gui.components.table.TableDataModel;
 
@@ -63,7 +64,7 @@ public abstract class DefaultFlexiTableDataSourceModel<U> implements FlexiTableD
 	 * removed.
 	 */
 	public DefaultFlexiTableDataSourceModel(FlexiTableDataSourceDelegate<U> sourceDelegate, FlexiTableColumnModel columnModel) {
-		this.rows = new ArrayList<U>(100);
+		this.rows = new ArrayList<>(100);
 		this.sourceDelegate = sourceDelegate;
 		this.columnModel = columnModel;
 	}
@@ -86,10 +87,13 @@ public abstract class DefaultFlexiTableDataSourceModel<U> implements FlexiTableD
 		return null;
 	}
 	
-	public U getPreviousObject(U refObject) {
+	public U getPreviousObject(U refObject, FlexiTableElement tableEl) {
 		int  index = getIndexOfObject(refObject);
 		U previousObject = null;
-		if(index > 0 && rows.size() > 0) {
+		if(index > 0 && !rows.isEmpty()) {
+			if(!isRowLoaded(index - 1)) {
+				tableEl.preloadPageOfObjectIndex(index - 1);
+			}
 			if(index - 1 < 0) {
 				previousObject = rows.get(rows.size() - 1);
 			} else {
@@ -99,10 +103,13 @@ public abstract class DefaultFlexiTableDataSourceModel<U> implements FlexiTableD
 		return previousObject;
 	}
 	
-	public U getNextObject(U refObject) {
+	public U getNextObject(U refObject, FlexiTableElement tableEl) {
 		int  index = getIndexOfObject(refObject);
 		U nextObject = null;
-		if(index >= 0 && rows.size() > 0) {
+		if(index >= 0 && !rows.isEmpty()) {
+			if(!isRowLoaded(index + 1)) {
+				tableEl.preloadPageOfObjectIndex(index + 1);
+			}
 			if((index + 1) < rows.size()) {
 				nextObject = rows.get(index + 1);
 			} else {
@@ -133,7 +140,7 @@ public abstract class DefaultFlexiTableDataSourceModel<U> implements FlexiTableD
 	
 	@Override
 	public void setObjects(List<U> objects) {
-		this.rows = new ArrayList<U>(objects);
+		this.rows = new ArrayList<>(objects);
 	}
 	
 	@Override
@@ -146,7 +153,7 @@ public abstract class DefaultFlexiTableDataSourceModel<U> implements FlexiTableD
 	
 	@Override
 	public boolean isRowLoaded(int row) {
-		return rows != null && row >= 0 && row < rows.size();
+		return rows != null && row >= 0 && row < rows.size() && rows.get(row) != null;
 	}
 
 	@Override
@@ -161,7 +168,7 @@ public abstract class DefaultFlexiTableDataSourceModel<U> implements FlexiTableD
 	public void reload(List<Integer> rowIndex) {
 		if(rowIndex == null || rowIndex.isEmpty()) return;
 		
-		List<U> rowToUpdate = new ArrayList<U>(rowIndex.size());
+		List<U> rowToUpdate = new ArrayList<>(rowIndex.size());
 		for(Integer index:rowIndex) {
 			int row = index.intValue();
 			if(isRowLoaded(row)) {
@@ -173,7 +180,7 @@ public abstract class DefaultFlexiTableDataSourceModel<U> implements FlexiTableD
 		}
 	
 		List<U> updatedRows = sourceDelegate.reload(rowToUpdate);
-		Map<U,U> updatedRowsMap = new HashMap<U,U>();
+		Map<U,U> updatedRowsMap = new HashMap<>();
 		for(U updatedRow:updatedRows) {
 			updatedRowsMap.put(updatedRow, updatedRow);
 		}
@@ -192,7 +199,7 @@ public abstract class DefaultFlexiTableDataSourceModel<U> implements FlexiTableD
 	
 	private ResultInfos<U> loadDatas(String query, List<FlexiTableFilter> filters, List<String> addQueries, final boolean force, final int firstResult, final int maxResults, SortKey... orderBy) {
 		if(rows == null) {
-			rows = new ArrayList<U>();
+			rows = new ArrayList<>();
 		}
 		for(int i=rows.size(); i<firstResult; i++) {
 			rows.add(null);
@@ -201,7 +208,7 @@ public abstract class DefaultFlexiTableDataSourceModel<U> implements FlexiTableD
 		int correctedFirstResult = firstResult;
 		int correctMaxResults = maxResults;
 
-		if(!force && rows.size() > 0) {
+		if(!force && !rows.isEmpty()) {
 			correctMaxResults = maxResults <= 0 ? rowCount : maxResults;
 			int maxRowsResults = maxResults <= 0 ? (rowCount - firstResult) : maxResults;
 			for(int i=firstResult; i<maxRowsResults && i<rows.size(); i++) {
@@ -214,7 +221,7 @@ public abstract class DefaultFlexiTableDataSourceModel<U> implements FlexiTableD
 			}
 			//check if all datas are loaded
 			if(correctMaxResults == 0) {
-				return new DefaultResultInfos<U>(rowCount, rowCount, rows); 
+				return new DefaultResultInfos<>(rowCount, rowCount, rows); 
 			}
 		}
 		
@@ -229,7 +236,7 @@ public abstract class DefaultFlexiTableDataSourceModel<U> implements FlexiTableD
 			}
 		} else if(newRows.getCorrectedRowCount() >= 0) {
 			rowCount = newRows.getCorrectedRowCount();
-		} else if(rowCount == 0 && newRows.getObjects().size() > 0) {
+		} else if(rowCount == 0 && !newRows.getObjects().isEmpty()) {
 			rowCount = sourceDelegate.getRowCount();
 		}
 		
@@ -242,11 +249,8 @@ public abstract class DefaultFlexiTableDataSourceModel<U> implements FlexiTableD
 				rows.add(newRows.getObjects().get(i));
 			}
 		}
-		return new DefaultResultInfos<U>(newRows.getNextFirstResult(), newRows.getCorrectedRowCount(), rows);
+		return new DefaultResultInfos<>(newRows.getNextFirstResult(), newRows.getCorrectedRowCount(), rows);
 	}
-
-	@Override
-	public abstract Object getValueAt(int row, int col);
 	
 	@Override
 	public FlexiTableColumnModel getTableColumnModel() {

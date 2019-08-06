@@ -7,6 +7,9 @@
 		$r.contextHelpWithWrapper("Portfolio task and assignment: Collecting and editing")			
 	#end
 	<h2>$r.translate("table.of.contents", $binderTitle) #if($owners && !$owners.isEmpty())<small>$r.translate("binder.by",$owners)</small>#end</h2>
+	#if($r.available("summary"))
+		$r.render("summary")
+	#end
 		
 	<div class="o_portfolio_toc #if($timelineSwitch) o_portfolio_withtimeline #end clearfix">
 		<ul class="list-unstyled">
@@ -52,7 +55,8 @@
 				#if($r.isNotEmpty(${section.getPages()}))
 				<ul class="list-unstyled">
 					#foreach($page in $section.pages)
-						<li><i class="o_icon $page.cssClassStatus o_icon-fw"> </i> $r.render($page.openLink) #if($r.isNotNull($page.commentLink)) $r.render($page.commentLink) #end</li>
+						<li><i class="o_icon $page.cssClassStatus o_icon-fw"> </i> $r.render($page.openLink) #if($r.isNotNull($page.commentLink)) $r.render($page.commentLink) #end
+						#if($r.isTrue($userInfos)) $userInfosRenderer.renderPageRow($page)#end</li>
 					#end
 				</ul>
 				#end

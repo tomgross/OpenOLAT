@@ -24,10 +24,6 @@
 */
 package org.olat.core.util.coordinate;
 
-import java.io.File;
-
-import org.hibernate.type.StandardBasicTypes;
-import org.hibernate.type.Type;
 import org.olat.basesecurity.BaseSecurityManager;
 import org.olat.core.commons.persistence.DBFactory;
 import org.olat.core.id.Identity;
@@ -41,9 +37,7 @@ import org.olat.properties.PropertyManager;
 import org.olat.user.UserDataDeletable;
 
 /**
- * Description:<br>
- * TODO: patrickb Class Description for DBPersistentLockManager
- * <P>
+ * 
  * Initial Date: 21.06.2006 <br>
  * 
  * @author patrickb
@@ -114,7 +108,7 @@ public class DBPersistentLockManager implements PersistentLockManager, UserDataD
 		if (p == null) throw new AssertException("could not release lock: no lock in db, " + derivedLockString);
 		Identity ident = le.getOwner();
 		Long ownerKey = p.getLongValue();
-		if (!ownerKey.equals(ident.getKey())) throw new AssertException("user " + ident.getName()
+		if (!ownerKey.equals(ident.getKey())) throw new AssertException("user " + ident.getKey()
 				+ " cannot release lock belonging to user with key " + ownerKey + " on resourcestring " + derivedLockString);
 		pm.deleteProperty(p);
 	}
@@ -124,10 +118,14 @@ public class DBPersistentLockManager implements PersistentLockManager, UserDataD
 	 * @see org.olat.user.UserDataDeletable#deleteUserData(org.olat.core.id.Identity)
 	 */
 	@Override
-	public void deleteUserData(Identity identity, String newDeletedUserName, File archivePath) {		
-		String query = "from v in class org.olat.properties.Property where v.category = ? and v.longValue = ?";
-		DBFactory.getInstance().delete(query, new Object[] { CATEGORY_PERSISTENTLOCK, identity.getKey() },
-				new Type[] { StandardBasicTypes.STRING, StandardBasicTypes.LONG });
+	public void deleteUserData(Identity identity, String newDeletedUserName) {		
+		String query = "delete from org.olat.properties.Property where category=:category and longValue=:val";
+		
+		DBFactory.getInstance().getCurrentEntityManager()
+			.createQuery(query)
+			.setParameter("category", CATEGORY_PERSISTENTLOCK)
+			.setParameter("val", identity.getKey())
+			.executeUpdate();
 		log.debug("All db-persisting-locks deleted for identity=" + identity);
 	}
 

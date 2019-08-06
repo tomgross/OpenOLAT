@@ -21,7 +21,6 @@ package org.olat.modules.portfolio.ui.media;
 
 import org.olat.core.gui.UserRequest;
 import org.olat.core.gui.components.Component;
-import org.olat.core.gui.components.download.DownloadComponent;
 import org.olat.core.gui.components.velocity.VelocityContainer;
 import org.olat.core.gui.control.Event;
 import org.olat.core.gui.control.WindowControl;
@@ -33,8 +32,11 @@ import org.olat.core.util.Util;
 import org.olat.core.util.vfs.VFSContainer;
 import org.olat.core.util.vfs.VFSItem;
 import org.olat.core.util.vfs.VFSLeaf;
+import org.olat.core.util.vfs.VFSMediaMapper;
 import org.olat.modules.portfolio.Media;
+import org.olat.modules.portfolio.MediaRenderingHints;
 import org.olat.modules.portfolio.manager.PortfolioFileStorage;
+import org.olat.modules.portfolio.ui.MediaMetadataController;
 import org.olat.modules.portfolio.ui.PortfolioHomeController;
 import org.olat.user.UserManager;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -53,7 +55,7 @@ public class FileMediaController extends BasicController {
 	@Autowired
 	private UserManager userManager;
 	
-	public FileMediaController(UserRequest ureq, WindowControl wControl, Media media) {
+	public FileMediaController(UserRequest ureq, WindowControl wControl, Media media, MediaRenderingHints hints) {
 		super(ureq, wControl);
 		setTranslator(Util.createPackageTranslator(PortfolioHomeController.class, getLocale(), getTranslator()));
 		
@@ -70,8 +72,12 @@ public class FileMediaController extends BasicController {
 		VFSContainer container = fileStorage.getMediaContainer(media);
 		VFSItem item = container.resolve(media.getRootFilename());
 		if(item instanceof VFSLeaf) {
-			DownloadComponent downloadCmp = new DownloadComponent("download", (VFSLeaf)item);
-			mainVC.put("download", downloadCmp);
+			VFSLeaf leaf = (VFSLeaf)item;
+			String mapperUri = registerCacheableMapper(ureq, "File-Media-" + media.getKey() + "-" + leaf.getLastModified(), new VFSMediaMapper(leaf));
+			mainVC.contextPut("mapperUri", mapperUri);
+			String iconCss = CSSHelper.createFiletypeIconCssClassFor(leaf.getName());
+			mainVC.contextPut("fileIconCss", iconCss);
+			mainVC.contextPut("filename", leaf.getName());
 			mainVC.contextPut("size", Formatter.formatBytes(((VFSLeaf) item).getSize()));
 			
 			String cssClass = CSSHelper.createFiletypeIconCssClassFor(item.getName());
@@ -79,6 +85,12 @@ public class FileMediaController extends BasicController {
 				cssClass = "o_filetype_file";
 			}
 			mainVC.contextPut("cssClass", cssClass);
+		}
+		
+		if(hints.isExtendedMetadata()) {
+			MediaMetadataController metaCtrl = new MediaMetadataController(ureq, wControl, media);
+			listenTo(metaCtrl);
+			mainVC.put("meta", metaCtrl.getInitialComponent());
 		}
 		
 		mainVC.setDomReplacementWrapperRequired(false);
@@ -94,4 +106,5 @@ public class FileMediaController extends BasicController {
 	protected void doDispose() {
 		//
 	}
+	
 }

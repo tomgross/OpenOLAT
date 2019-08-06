@@ -25,11 +25,17 @@
 
 package org.olat.registration;
 
+import java.io.File;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.io.Writer;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Date;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
+import java.util.UUID;
 
 import javax.mail.Address;
 import javax.mail.internet.AddressException;
@@ -37,6 +43,7 @@ import javax.mail.internet.InternetAddress;
 import javax.mail.internet.MimeMessage;
 
 import org.olat.basesecurity.BaseSecurity;
+import org.olat.core.CoreSpringFactory;
 import org.olat.core.commons.persistence.DB;
 import org.olat.core.gui.translator.Translator;
 import org.olat.core.helpers.Settings;
@@ -46,16 +53,26 @@ import org.olat.core.id.UserConstants;
 import org.olat.core.logging.OLog;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.Encoder;
+import org.olat.core.util.Formatter;
 import org.olat.core.util.StringHelper;
 import org.olat.core.util.Util;
 import org.olat.core.util.WebappHelper;
+import org.olat.core.util.filter.FilterFactory;
+import org.olat.core.util.filter.impl.NekoHTMLFilter;
 import org.olat.core.util.i18n.I18nModule;
 import org.olat.core.util.mail.MailManager;
 import org.olat.core.util.mail.MailerResult;
+import org.olat.core.util.xml.XStreamHelper;
 import org.olat.properties.Property;
 import org.olat.properties.PropertyManager;
+import org.olat.user.UserDataDeletable;
+import org.olat.user.UserDataExportable;
+import org.olat.user.UserManager;
+import org.olat.user.manager.ManifestBuilder;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+
+import com.thoughtworks.xstream.XStream;
 
 /**
  * Description:
@@ -63,14 +80,13 @@ import org.springframework.stereotype.Service;
  * @author Sabina Jeger
  */
 @Service("selfRegistrationManager")
-public class RegistrationManager {
+public class RegistrationManager implements UserDataDeletable, UserDataExportable {
 	
 	private static final OLog log = Tracing.createLoggerFor(RegistrationManager.class);
 
 	public static final String PW_CHANGE = "PW_CHANGE";
 	public static final String REGISTRATION = "REGISTRATION";
 	public static final String EMAIL_CHANGE = "EMAIL_CHANGE";
-	protected static final int REG_WORKFLOW_STEPS = 5;
 	
 	@Autowired
 	private DB dbInstance;
@@ -125,7 +141,7 @@ public class RegistrationManager {
 		}
 		
 		String emailDomain = "openolat.org";
-		List<String> errors = new ArrayList<String>();
+		List<String> errors = new ArrayList<>();
 		for(String domain:list) {
 			try {
 				String pattern = convertDomainPattern(domain);
@@ -182,8 +198,13 @@ public class RegistrationManager {
 		MailerResult result = new MailerResult();
 		User user = newIdentity.getUser();
 		Locale loc = I18nModule.getDefaultLocale();
-		String[] userParams = new  String[] {newIdentity.getName(), user.getProperty(UserConstants.FIRSTNAME, loc), user.getProperty(UserConstants.LASTNAME, loc), user.getProperty(UserConstants.EMAIL, loc),
-				user.getPreferences().getLanguage(), Settings.getServerDomainName() + WebappHelper.getServletContextPath() };
+		String[] userParams = new  String[] {
+				newIdentity.getName(), 
+				user.getProperty(UserConstants.FIRSTNAME, loc), 
+				user.getProperty(UserConstants.LASTNAME, loc), 
+				UserManager.getInstance().getUserDisplayEmail(user, loc),
+				user.getPreferences().getLanguage(), 
+				Settings.getServerDomainName() + WebappHelper.getServletContextPath() };
 		Translator trans = Util.createPackageTranslator(RegistrationManager.class, loc);
 		String subject = trans.translate("reg.notiEmail.subject", userParams);
 		String body = trans.translate("reg.notiEmail.body", userParams);
@@ -196,12 +217,68 @@ public class RegistrationManager {
 	}
 	
 	/**
-	 * A temporary key is created
+	 * A temporary key is loaded or created.
 	 * 
 	 * @param email address of new user
 	 * @param ip address of new user
-	 * @param action REGISTRATION or PWCHANGE
+	 * @param action
 	 * 
+	 * @return 
+	 */
+	public TemporaryKey loadOrCreateTemporaryKeyByEmail(String email, String ip, String action) {
+		List<TemporaryKey> tks = dbInstance.getCurrentEntityManager()
+				.createNamedQuery("loadTemporaryKeyByEmailAddress", TemporaryKey.class)
+				.setParameter("email", email)
+				.getResultList();
+		TemporaryKey tk;
+		if ((tks == null) || (tks.size() != 1)) { // no user found, create a new one
+			tk = createAndPersistTemporaryKey(email, ip, action);
+		} else {
+			tk = tks.get(0);
+		}
+		return tk;
+	}
+	
+	/**
+	 * An identity is allowed to only have one temporary key for an action. So this
+	 * method first deletes the old temporary key and afterwards it creates and
+	 * persists a new temporary key. This mechanism guarantees to have an updated
+	 * expiration of the temporary key.
+	 * 
+	 * @param identityKey
+	 * @param email
+	 * @param ip
+	 * @param action
+	 * @return
+	 */
+	public TemporaryKey createAndDeleteOldTemporaryKey(Long identityKey, String email, String ip, String action) {
+		deleteTemporaryKeys(identityKey, action);
+		return createAndPersistTemporaryKey(identityKey, email, ip, action);
+	}
+
+	private TemporaryKey createAndPersistTemporaryKey(String emailaddress, String ipaddress, String action) {
+		return createAndPersistTemporaryKey(null, emailaddress, ipaddress, action);
+	}
+
+	private TemporaryKey createAndPersistTemporaryKey(Long identityKey, String email, String ip, String action) {
+		TemporaryKeyImpl tk = new TemporaryKeyImpl();
+		tk.setCreationDate(new Date());
+		tk.setIdentityKey(identityKey);
+		tk.setEmailAddress(email);
+		tk.setIpAddress(ip);
+		tk.setRegistrationKey(createRegistrationKey(email, ip));
+		tk.setRegAction(action);
+		dbInstance.getCurrentEntityManager().persist(tk);
+		return tk;
+	}
+
+	/**
+	 * A temporary key is created
+	 *
+	 * @param email address of new user
+	 * @param ip address of new user
+	 * @param action REGISTRATION or PWCHANGE
+	 *
 	 * @return TemporaryKey
 	 */
 	public TemporaryKey createTemporaryKeyByEmail(String email, String ip, String action) {
@@ -221,18 +298,52 @@ public class RegistrationManager {
 	}
 
 	/**
-	 * deletes a TemporaryKey
-	 * 
-	 * @param key the temporary key to be deleted
-	 * 
-	 * @return true if successfully deleted
+	 * Creates a TemporaryKey and saves it permanently
+	 *
+	 * @param emailaddress
+	 * @param ipaddress
+	 * @param action REGISTRATION or PWCHANGE
+	 *
+	 * @return newly created temporary key
 	 */
+	public TemporaryKey register(String emailaddress, String ipaddress, String action) {
+		String today = new Date().toString();
+		String encryptMe = Encoder.md5hash(emailaddress + ipaddress + today);
+		TemporaryKeyImpl tk = new TemporaryKeyImpl();
+		tk.setCreationDate(new Date());
+		tk.setEmailAddress(emailaddress);
+		tk.setIpAddress(ipaddress);
+		tk.setRegistrationKey(encryptMe);
+		tk.setRegAction(action);
+		dbInstance.getCurrentEntityManager().persist(tk);
+		return tk;
+	}
+
 	public void deleteTemporaryKey(TemporaryKey key) {
 		TemporaryKeyImpl reloadedKey = dbInstance.getCurrentEntityManager()
 				.getReference(TemporaryKeyImpl.class, key.getKey());
 		dbInstance.getCurrentEntityManager().remove(reloadedKey);
 	}
 
+	private void deleteTemporaryKeys(Long identityKey, String action) {
+		if (identityKey == null || action == null) return;
+		
+		dbInstance.getCurrentEntityManager()
+				.createNamedQuery("deleteTemporaryKeyByIdentityAndAction") 
+				.setParameter("identityKey", identityKey)
+				.setParameter("action", action)
+				.executeUpdate();
+	}
+
+	private void deleteAllTemporaryKeys(Long identityKey) {
+		if (identityKey == null) return;		
+		dbInstance.getCurrentEntityManager()
+				.createNamedQuery("deleteTemporaryKeyByIdentity") 
+				.setParameter("identityKey", identityKey)
+				.executeUpdate();
+	}
+
+	
 	/**
 	 * returns an existing TemporaryKey by a given email address or null if none
 	 * found
@@ -291,26 +402,12 @@ public class RegistrationManager {
 		return null;
 	}
 
-	/**
-	 * Creates a TemporaryKey and saves it permanently
-	 * 
-	 * @param emailaddress
-	 * @param ipaddress
-	 * @param action REGISTRATION or PWCHANGE
-	 * 
-	 * @return newly created temporary key
-	 */
-	public TemporaryKey register(String emailaddress, String ipaddress, String action) {
-		String today = new Date().toString();
-		String encryptMe = Encoder.md5hash(emailaddress + ipaddress + today);
-		TemporaryKeyImpl tk = new TemporaryKeyImpl();
-		tk.setCreationDate(new Date());
-		tk.setEmailAddress(emailaddress);
-		tk.setIpAddress(ipaddress);
-		tk.setRegistrationKey(encryptMe);
-		tk.setRegAction(action);
-		dbInstance.getCurrentEntityManager().persist(tk);
-		return tk;
+	public List<TemporaryKey> loadTemporaryKeyByIdentity(Long identityKey, String action) {
+		return dbInstance.getCurrentEntityManager()
+				.createNamedQuery("loadTemporaryKeyByIdentity", TemporaryKey.class)
+				.setParameter("identityKey", identityKey)
+				.setParameter("action", action)
+				.getResultList();
 	}
 
 	/**
@@ -323,7 +420,37 @@ public class RegistrationManager {
 			deleteTemporaryKey(tKey);
 		}
 	}
+	
+	public boolean isEmailReserved(String emailAddress) {
+		if (!StringHelper.containsNonWhitespace(emailAddress)) return false;
+		
+		RegistrationManager rm = CoreSpringFactory.getImpl(RegistrationManager.class);
+		List<TemporaryKey> tk = rm.loadTemporaryKeyByAction(RegistrationManager.EMAIL_CHANGE);
+		if (tk != null) {
+			for (TemporaryKey temporaryKey : tk) {
+				XStream xml = XStreamHelper.createXStreamInstance();
+				@SuppressWarnings("unchecked")
+				Map<String, String> mails = (Map<String, String>) xml.fromXML(temporaryKey.getEmailAddress());
+				if (emailAddress.equalsIgnoreCase(mails.get("changedEMail"))) {
+					return true;
+				}
+			}
+		}
+		return isRegistrationPending(emailAddress);
+	}
 
+	public boolean isRegistrationPending(String emailAddress) {
+		List<TemporaryKey> temporaryKeys = loadTemporaryKeyByAction(RegistrationManager.REGISTRATION);
+		if (temporaryKeys != null) {
+			for (TemporaryKey temporaryKey : temporaryKeys) {
+				if (emailAddress.equalsIgnoreCase(temporaryKey.getEmailAddress())) {
+					return true;
+				}
+			}
+		}
+		return false;
+	}
+	
 	/**
 	 * Evaluates whether the given identity needs to accept a disclaimer before
 	 * logging in or not.
@@ -338,7 +465,7 @@ public class RegistrationManager {
 			// don't use the discrete method to be more robust in case that more than one
 			// property is found
 			List<Property> disclaimerProperties = propertyManager.listProperties(identity, null, null, "user", "dislaimer_accepted");
-			needsToConfirm = ( disclaimerProperties.size() == 0);
+			needsToConfirm = disclaimerProperties.isEmpty();
 		}
 		return needsToConfirm;
 	}
@@ -371,5 +498,48 @@ public class RegistrationManager {
 	 */
 	public void revokeConfirmedDisclaimer(Identity identity) {
 		propertyManager.deleteProperties(identity, null, null, "user", "dislaimer_accepted");		
+	}
+
+	private String createRegistrationKey(String email, String ip) {
+		String random = UUID.randomUUID().toString();
+		return Encoder.md5hash(email + ip + random);
+	}
+
+	@Override
+	public void deleteUserData(Identity identity, String newDeletedUserName) {
+		// Delete temporary keys used in change email or password workflow 
+		deleteAllTemporaryKeys(identity.getKey());
+	}
+
+	@Override
+	public String getExporterID() {
+		return "disclaimer";
+	}
+
+	@Override
+	public void export(Identity identity, ManifestBuilder manifest, File archiveDirectory, Locale locale) {
+		List<Property> disclaimerProperties = propertyManager.listProperties(identity, null, null, "user", "dislaimer_accepted");
+		if(disclaimerProperties.isEmpty()) return;
+		
+		Translator translator = Util.createPackageTranslator(RegistrationManager.class, locale);
+		File disclaimerArchive = new File(archiveDirectory, "Disclaimer.txt");
+		try(Writer out = new FileWriter(disclaimerArchive)) {
+			for(Property disclaimerProperty:disclaimerProperties) {
+				out.write(FilterFactory.getHtmlTagsFilter().filter(translator.translate("disclaimer.terms.of.usage")));
+				out.write('\n');
+				out.write("Accepted: " + Formatter.getInstance(locale).formatDateAndTime(disclaimerProperty.getCreationDate()));
+				out.write('\n');
+
+				StringBuilder sb = new StringBuilder();
+				sb.append(translator.translate("disclaimer.paragraph1"))
+				  .append("\n")
+				  .append(translator.translate("disclaimer.paragraph2"));
+				String disclaimer = new NekoHTMLFilter().filter(sb.toString(), true);
+				out.write(disclaimer);
+			}
+		} catch (IOException e) {
+			log.error("Unable to export xlsx", e);
+		}
+		manifest.appendFile(disclaimerArchive.getName());
 	}
 }

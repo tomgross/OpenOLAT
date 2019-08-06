@@ -48,11 +48,13 @@ public class ItemBodyResultComponent extends AssessmentObjectComponent  {
 	
 	private ItemSessionState itemSessionState;
 	private boolean showSolution;
+	private boolean report;
 	
 	public ItemBodyResultComponent(String name, ResolvedAssessmentItem resolvedAssessmentItem, ItemBodyResultFormItem qtiItem) {
 		super(name);
 		this.qtiItem = qtiItem;
 		this.resolvedAssessmentItem = resolvedAssessmentItem;
+		setDomReplacementWrapperRequired(false);
 	}
 
 	public boolean isShowSolution() {
@@ -61,6 +63,14 @@ public class ItemBodyResultComponent extends AssessmentObjectComponent  {
 
 	public void setShowSolution(boolean showSolution) {
 		this.showSolution = showSolution;
+	}
+
+	public boolean isReport() {
+		return report;
+	}
+
+	public void setReport(boolean report) {
+		this.report = report;
 	}
 
 	public ResolvedAssessmentTest getResolvedAssessmentTest() {

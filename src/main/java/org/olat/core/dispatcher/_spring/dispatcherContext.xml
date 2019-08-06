@@ -14,6 +14,9 @@
 				<entry key="/dmz/">
 					<ref bean="dmzbean" />
 				</entry>
+				<entry key="/robots.txt">
+					<ref bean="robotsdispatcher" />
+				</entry>
 				<entry key="/maintenance/">
 					<ref bean="maintenancebean" />
 				</entry>
@@ -31,9 +34,6 @@
 				<entry key="/shib/">
 					<ref bean="shibbean" />
 				</entry>
-				<entry key="/mshib/">
-					<ref bean="shibmobilebean" />
-				</entry>
 				<entry key="/admin.html">
 					<ref bean="adminbean" />
 				</entry>
@@ -46,8 +46,14 @@
 				<entry key="/error/">
 					<ref bean="errorMailBean" />
 				</entry>
+				<entry key="/errors/">
+					<ref bean="errorsBean" />
+				</entry>
 				<entry key="/math/">
 					<ref bean="mathwebbean" />
+				</entry>
+				<entry key="/tiny/">
+					<ref bean="tinywebbean" />
 				</entry>
 				<entry key="/podcast/">
 					<ref bean="podcastMediaBean" />
@@ -61,6 +67,9 @@
 				<entry key="/oauthcallback">
 					<ref bean="oauthcallback" />
 				</entry>
+				<entry key="/csp/">
+					<ref bean="cspDispatcher" />
+				</entry>
 			</map>
 		</property>
 	</bean>
@@ -70,11 +79,15 @@
 	
 	<bean id="oauthcallback" class="org.olat.login.oauth.OAuthDispatcher" />
 	
+	<bean id="robotsdispatcher" class="org.olat.dispatcher.RobotsDispatcher" />
+	
 	<!-- send bug report dispatcher -->
 	<bean id="errorMailBean" class="org.olat.core.dispatcher.ErrorFeedbackMailer">
 		<property name="mailManager" ref="mailManager"/>
 		<property name="securityManager" ref="baseSecurityManager"/>
 	</bean>
+	
+	<bean id="errorsBean" class="org.olat.core.dispatcher.ErrorsDispatcher" />
 
 	<!--  all olat dispatchers -->
 	<bean id="dmzbean" class="org.olat.dispatcher.DMZDispatcher">
@@ -127,11 +140,29 @@
 						</property>
 					</bean>
 				</entry>
+				<entry key="/shibdisclaimer/">
+					<bean
+						class="org.olat.core.gui.control.ChiefControllerCreator">
+						<property name="contentControllerCreator">
+							<!-- creates a BasicFullWebappController with DMZ content -->
+							<bean
+								class="org.olat.shibboleth.ShibDisclaimerCreator" />
+						</property>
+					</bean>
+				</entry>
 				<!-- triggers oauth registration workflow -->
 				<entry key="/oauthregister/">
 					<bean class="org.olat.core.gui.control.ChiefControllerCreator">
 						<property name="contentControllerCreator">
 							<bean class="org.olat.login.oauth.ui.OAuthRegistrationCreator" />
+						</property>
+					</bean>
+				</entry>
+				<!-- triggers oauth registration workflow -->
+				<entry key="/oauthdisclaimer/">
+					<bean class="org.olat.core.gui.control.ChiefControllerCreator">
+						<property name="contentControllerCreator">
+							<bean class="org.olat.login.oauth.ui.OAuthDisclaimerCreator" />
 						</property>
 					</bean>
 				</entry>
@@ -184,15 +215,6 @@
 
 	<bean id="shibbean" class="org.olat.shibboleth.ShibbolethDispatcher">
 		<property name="shibbolethModule" ref="shibbolethModule"/>
-		<property name="restSecurityBean" ref="restSecurityBean"/>
-		<property name="securityManager" ref="baseSecurityManager"/>
-		<property name="userDeletionManager" ref="userDeletionManager"/>
-	</bean>
-	
-	<bean id="shibmobilebean" class="org.olat.shibboleth.ShibbolethDispatcher">
-		<property name="mobile" value="true"/>
-		<property name="shibbolethModule" ref="shibbolethModule"/>
-		<property name="restSecurityBean" ref="restSecurityBean"/>
 		<property name="securityManager" ref="baseSecurityManager"/>
 		<property name="userDeletionManager" ref="userDeletionManager"/>
 	</bean>
@@ -213,11 +235,28 @@
 		
 	<bean id="mathwebbean"
 		class="org.olat.ims.qti21.restapi.MathWebDispatcher" />
+		
+	<bean id="tinywebbean"
+		class="org.olat.core.gui.components.form.flexible.impl.elements.richText.plugins.olatmovieviewer.TinyDispatcher" />
 
 	<!-- podcast media dispatcher -->
-	<bean id="podcastMediaBean" class="org.olat.modules.webFeed.dispatching.FeedMediaDispatcher" />
+	<bean id="podcastMediaBean" class="org.olat.modules.webFeed.dispatching.FeedMediaDispatcher">
+		<property name="feedManager" ref="feedManager"/>
+		<property name="coordinatorManager" ref="coordinatorManager"/>
+		<property name="securityManager" ref="baseSecurityManager"/>
+		<property name="repositoryManager" ref="repositoryManager"/>
+		<property name="dbInstance" ref="database"/>
+		<property name="resourceManager" ref="resourceManager"/>
+	</bean>
 
 	<!-- blog media dispatcher -->
-	<bean id="blogMediaBean" class="org.olat.modules.webFeed.dispatching.FeedMediaDispatcher" />
-
+	<bean id="blogMediaBean" class="org.olat.modules.webFeed.dispatching.FeedMediaDispatcher">
+		<property name="feedManager" ref="feedManager"/>
+		<property name="coordinatorManager" ref="coordinatorManager"/>
+		<property name="securityManager" ref="baseSecurityManager"/>
+		<property name="repositoryManager" ref="repositoryManager"/>
+		<property name="dbInstance" ref="database"/>
+		<property name="resourceManager" ref="resourceManager"/>
+	</bean>
+	
 </beans>

@@ -44,8 +44,7 @@ public class AssessmentToolPage {
 	
 	public AssessmentToolPage users() {
 		By usersBy = By.cssSelector("a.o_sel_assessment_tool_assessed_users");
-		WebElement usersLink = browser.findElement(usersBy);
-		usersLink.click();
+		browser.findElement(usersBy).click();
 		OOGraphene.waitBusy(browser);
 		return this;
 	}
@@ -71,8 +70,18 @@ public class AssessmentToolPage {
 	 */
 	public AssessmentToolPage selectUser(UserVO user) {
 		By userLinksBy = By.xpath("//div[contains(@class,'o_table_flexi')]//table//tr//td//a[text()[contains(.,'" + user.getFirstName() + "')]]");
-		WebElement userLink = browser.findElement(userLinksBy);
-		userLink.click();
+		browser.findElement(userLinksBy).click();
+		OOGraphene.waitBusy(browser);
+		return this;
+	}
+	
+	/**
+	 * To see the list of course elements
+	 * @return Itself
+	 */
+	public AssessmentToolPage courseElements() {
+		By elementsBy = By.cssSelector("a.o_sel_assessment_tool_assessable_course_nodes");
+		browser.findElement(elementsBy).click();
 		OOGraphene.waitBusy(browser);
 		return this;
 	}
@@ -80,14 +89,28 @@ public class AssessmentToolPage {
 	/**
 	 * Select the course node in "Users" > "Course nodes".
 	 * 
-	 * @param nodeTitle
-	 * @return
+	 * @param nodeTitle The title of the course node
+	 * @return Itself
 	 */
-	public AssessmentToolPage selectCourseNode(String nodeTitle) {
+	public AssessmentToolPage selectUsersCourseNode(String nodeTitle) {
 		By rowsBy = By.xpath("//div[contains(@class,'o_table_wrapper')]//table//tr[td/span[contains(text(),'" + nodeTitle + "')]]/td/a[contains(@href,'cmd.select.node')]");
 		List<WebElement> rowEls = browser.findElements(rowsBy);
 		Assert.assertEquals(1, rowEls.size());
 		rowEls.get(0).click();
+		OOGraphene.waitBusy(browser);
+		return this;
+	}
+	
+	/**
+	 * Select the course node in the tree > "Course nodes".
+	 * 
+	 * @param nodeTitle The title of the course node
+	 * @return Itself
+	 */
+	public AssessmentToolPage selectElementsCourseNode(String nodeTitle) {
+		By elementBy = By.xpath("//div[contains(@class,'o_tree')]//ul//li[div/span/a/span[@class='o_tree_item'][contains(text(),'" + nodeTitle + "')]]/div/span/a[contains(@onclick,'nidle')]");
+		OOGraphene.waitElement(elementBy, browser);
+		browser.findElement(elementBy).click();
 		OOGraphene.waitBusy(browser);
 		return this;
 	}
@@ -141,6 +164,30 @@ public class AssessmentToolPage {
 		return this;
 	}
 	
+	/**
+	 * 
+	 * @param user The user to overview
+	 * @param progress The progress in percent
+	 * @return Itself
+	 */
+	public AssessmentToolPage assertProgress(UserVO user, int progress) {
+		By progressBy = By.xpath("//div[contains(@class,'o_table_wrapper')]/table//tr[td/a[contains(.,'" + user.getFirstName() + "')]]/td/div[@class='progress']/div[@title='" + progress + "%']");
+		OOGraphene.waitElement(progressBy, 10, browser);
+		return this;
+	}
+	
+	public AssessmentToolPage assertStatusDone(UserVO user) {
+		By doneBy = By.xpath("//div[contains(@class,'o_table_wrapper')]/table//tr[td/a[contains(.,'" + user.getFirstName() + "')]]/td/i[contains(@class,'o_icon_status_done')]");
+		OOGraphene.waitElement(doneBy, 10, browser);
+		return this;
+	}
+	
+	public AssessmentToolPage assertProgressEnded(UserVO user) {
+		By progressBy = By.xpath("//div[contains(@class,'o_table_wrapper')]/table//tr[td/a[contains(.,'" + user.getFirstName() + "')]]/td/div[@class='o_sel_ended']");
+		OOGraphene.waitElement(progressBy, 10, browser);
+		return this;
+	}
+	
 	public AssessmentToolPage generateCertificate() {
 		By userLinksBy = By.className("o_sel_certificate_generate");
 		browser.findElement(userLinksBy).click();
@@ -160,7 +207,25 @@ public class AssessmentToolPage {
 		By newBy = By.cssSelector("a.o_sel_assessment_tool_new_bulk_assessment");
 		browser.findElement(newBy).click();
 		OOGraphene.waitBusy(browser);
+		OOGraphene.waitElement(By.cssSelector("fieldset.o_sel_bulk_assessment_data"), browser);
 		return new BulkAssessmentPage(browser);
+	}
+	
+	public AssessmentToolPage makeAllVisible() {
+		OOGraphene.flexiTableSelectAll(browser);
+		
+		By bulkBy = By.cssSelector("a.btn.o_sel_assessment_bulk_visible");
+		browser.findElement(bulkBy).click();
+		OOGraphene.waitModalDialog(browser);
+		
+		By visibleBy = By.xpath("//div[contains(@class,'modal-body')]//input[@name='user.visibility'][@value='visible']");
+		browser.findElement(visibleBy).click();
+		
+		By saveBy = By.cssSelector("div.modal-body button.btn-primary");
+		browser.findElement(saveBy).click();
+		OOGraphene.waitBusy(browser);
+		
+		return this;
 	}
 	
 	/**

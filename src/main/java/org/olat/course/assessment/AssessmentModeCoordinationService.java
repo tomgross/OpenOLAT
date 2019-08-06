@@ -22,6 +22,7 @@ package org.olat.course.assessment;
 import java.util.Date;
 
 import org.olat.course.assessment.AssessmentMode.Status;
+import org.olat.repository.RepositoryEntry;
 
 /**
  * 
@@ -45,6 +46,9 @@ public interface AssessmentModeCoordinationService {
 	 * @return
 	 */
 	public boolean canStop(AssessmentMode assessmentMode);
+	
+	
+	public void processRepositoryEntryChangedStatus(RepositoryEntry entry);
 	
 	public Status evaluateStatus(Date begin, int leadtime, Date end, int followup);
 	

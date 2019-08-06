@@ -30,7 +30,9 @@ import org.olat.core.gui.translator.Translator;
 import org.olat.core.logging.OLATRuntimeException;
 import org.olat.core.logging.OLog;
 import org.olat.core.logging.Tracing;
+import org.olat.core.util.Formatter;
 import org.olat.core.util.StringHelper;
+import org.olat.core.util.WebappHelper;
 import org.olat.ims.qti21.AssessmentTestSession;
 import org.olat.ims.qti21.model.audit.CandidateEvent;
 import org.olat.ims.qti21.model.audit.CandidateItemEventType;
@@ -76,10 +78,10 @@ public class AssessmentItemComponentRenderer extends AssessmentObjectComponentRe
             renderTerminated(sb, translator);
         } else {
             /* Look up most recent event */
-            final CandidateEvent latestEvent = candidateSessionContext.getLastEvent();// assertSessionEntered(candidateSession);
+            final CandidateEvent latestEvent = candidateSessionContext.getLastEvent();
 
             /* Load the ItemSessionState */
-            final ItemSessionState itemSessionState = cmp.getItemSessionController().getItemSessionState();// candidateDataService.loadItemSessionState(latestEvent);
+            final ItemSessionState itemSessionState = cmp.getItemSessionController().getItemSessionState();
 
             /* Touch the session's duration state if appropriate */
             if (itemSessionState.isEntered() && !itemSessionState.isEnded() && !itemSessionState.isSuspended()) {
@@ -90,6 +92,11 @@ public class AssessmentItemComponentRenderer extends AssessmentObjectComponentRe
             /* Render event */
             AssessmentRenderer renderHints = new AssessmentRenderer(renderer);
             renderItemEvent(renderHints, sb, cmp, latestEvent, itemSessionState, ubu, translator);
+            
+            if(renderHints.isMathJax()
+            		|| (WebappHelper.isMathJaxMarkers() && (sb.contains("\\(") || sb.contains("\\[") || sb.contains("$$")))) {
+				sb.append(Formatter.elementLatexFormattingScript("o_c".concat(cmp.getDispatchID())));
+			}
         }
 		
 		sb.append("</div>");
@@ -162,7 +169,7 @@ public class AssessmentItemComponentRenderer extends AssessmentObjectComponentRe
 		sb.append("<h4 class='itemTitle'>");
 		renderItemStatus(renderer, sb, itemSessionState, translator);
 		sb.append(StringHelper.escapeHtml(assessmentItem.getTitle())).append("</h4>")
-		  .append("<div id='itemBody' class='clearfix'>");
+		  .append("<div id='itemBody' class='o_qti_item_body clearfix'>");
 		
 		//TODO prompt
 		

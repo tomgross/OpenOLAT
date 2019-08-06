@@ -56,6 +56,7 @@ import org.olat.core.gui.render.StringOutput;
 import org.olat.core.gui.render.URLBuilder;
 import org.olat.core.gui.translator.Translator;
 import org.olat.core.id.Identity;
+import org.olat.core.util.StringHelper;
 import org.olat.core.util.Util;
 import org.olat.core.util.coordinate.CoordinatorManager;
 import org.olat.core.util.event.GenericEventListener;
@@ -190,7 +191,8 @@ public class CertificateAndEfficiencyStatementListController extends FormBasicCo
 		tableColumnModel.addFlexiColumnModel(new DefaultFlexiColumnModel("table.header.show",
 				translate("table.header.show"), CMD_SHOW));
 		tableColumnModel.addFlexiColumnModel(new DefaultFlexiColumnModel(Cols.lastModified));
-		tableColumnModel.addFlexiColumnModel(new DefaultFlexiColumnModel(Cols.certificate, new DownloadCertificateCellRenderer(assessedIdentity)));
+		tableColumnModel.addFlexiColumnModel(new DefaultFlexiColumnModel(Cols.lastUserUpdate));
+		tableColumnModel.addFlexiColumnModel(new DefaultFlexiColumnModel(Cols.certificate, new DownloadCertificateCellRenderer(assessedIdentity, getLocale())));
 		tableColumnModel.addFlexiColumnModel(new DefaultFlexiColumnModel(Cols.recertification, new DateFlexiCellRenderer(getLocale())));
 		tableColumnModel.addFlexiColumnModel(new DefaultFlexiColumnModel("table.header.launchcourse",
 				translate("table.header.launchcourse"), CMD_LAUNCH_COURSE));
@@ -231,7 +233,7 @@ public class CertificateAndEfficiencyStatementListController extends FormBasicCo
 			wrapper.setEfficiencyStatementKey(efficiencyStatement.getKey());
 			wrapper.setResourceKey(efficiencyStatement.getArchivedResourceKey());
 			wrapper.setLastModified(efficiencyStatement.getLastModified());
-			
+			wrapper.setLastUserModified(efficiencyStatement.getLastUserModified());
 			statments.add(wrapper);
 			resourceKeyToStatments.put(efficiencyStatement.getArchivedResourceKey(), wrapper);
 		}
@@ -246,12 +248,22 @@ public class CertificateAndEfficiencyStatementListController extends FormBasicCo
 				resourceKeyToStatments.put(resourceKey, wrapper);
 				statments.add(wrapper);
 			} else {
+				if(!StringHelper.containsNonWhitespace(wrapper.getDisplayName())) {
+					wrapper.setDisplayName(certificate.getCourseTitle());
+				}
 				wrapper.setResourceKey(resourceKey);
 			}
 			if(resourceKey != null && wrapper.getResourceKey() == null) {
 				wrapper.setResourceKey(resourceKey);
 			}
 			wrapper.setCertificate(certificate);
+		}
+		
+		for(CertificateAndEfficiencyStatement statment:statments) {
+			if(!StringHelper.containsNonWhitespace(statment.getDisplayName()) && statment.getResourceKey() != null) {
+				String displayName = repositoryManager.lookupDisplayNameByResourceKey(statment.getResourceKey());
+				statment.setDisplayName(displayName);
+			}
 		}
 		
 		tableModel.setObjects(statments);

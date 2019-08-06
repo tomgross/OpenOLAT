@@ -32,6 +32,7 @@ import org.olat.core.gui.render.URLBuilder;
 public class AssessmentRenderer {
 
 	private Renderer renderer;
+	private boolean mathJax;
 	private boolean mathXsltDisabled;
 	private boolean solutionMode;
 	private boolean reviewMode;
@@ -41,6 +42,7 @@ public class AssessmentRenderer {
 	private boolean solutionAllowed;
 	private boolean candidateCommentAllowed;
 	private boolean showTitles;
+	private boolean report;
 	
 	public AssessmentRenderer(Renderer renderer) {
 		this.renderer = renderer;
@@ -58,6 +60,7 @@ public class AssessmentRenderer {
 		clone.setSolutionAllowed(solutionAllowed);
 		clone.setCandidateCommentAllowed(candidateCommentAllowed);
 		clone.setShowTitles(showTitles);
+		clone.setReport(report);
 		return clone;
 	}
 	
@@ -143,6 +146,22 @@ public class AssessmentRenderer {
 
 	public void setShowTitles(boolean showTitles) {
 		this.showTitles = showTitles;
+	}
+
+	public boolean isMathJax() {
+		return mathJax;
+	}
+
+	public void setMathJax(boolean mathJax) {
+		this.mathJax = mathJax;
+	}
+
+	public boolean isReport() {
+		return report;
+	}
+
+	public void setReport(boolean report) {
+		this.report = report;
 	}
 
 	public void setRenderer(Renderer renderer) {

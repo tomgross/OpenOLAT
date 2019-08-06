@@ -71,7 +71,7 @@ public class HomePageContextEntryControllerCreator extends DefaultContextEntryCo
 	public String getTabName(ContextEntry ce, UserRequest ureq) {
 		Identity identity = extractIdentity(ce);
 		if (identity == null) return null;
-		return UserManagerImpl.getInstance().getUserDisplayName(identity);
+		return UserManager.getInstance().getUserDisplayName(identity);
 	}
 
 	/**
@@ -83,7 +83,7 @@ public class HomePageContextEntryControllerCreator extends DefaultContextEntryCo
 	private Identity extractIdentity(ContextEntry ce) {
 		OLATResourceable resource = ce.getOLATResourceable();
 		Long key = resource.getResourceableId();
-		if (key == null || key.equals(0)) {
+		if (key == null || key.equals(0l)) {
 			log.error("Can not load identity with key::" + key);
 			return null;
 		}

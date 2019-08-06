@@ -72,6 +72,7 @@ import uk.ac.ed.ph.jqtiplus.running.ItemSessionController;
 import uk.ac.ed.ph.jqtiplus.running.ItemSessionControllerSettings;
 import uk.ac.ed.ph.jqtiplus.state.ItemProcessingMap;
 import uk.ac.ed.ph.jqtiplus.state.ItemSessionState;
+import uk.ac.ed.ph.jqtiplus.state.TestPlanNode;
 import uk.ac.ed.ph.jqtiplus.types.FileResponseData;
 import uk.ac.ed.ph.jqtiplus.types.Identifier;
 import uk.ac.ed.ph.jqtiplus.types.ResponseData;
@@ -141,7 +142,7 @@ public class AssessmentItemDisplayController extends BasicController implements 
 			mainVC = createVelocityContainer("end");
 		} else {
 			mainVC = createVelocityContainer("run");
-        	initQtiWorks(ureq);
+			initQtiWorks(ureq);
 		}
 		putInitialPanel(mainVC);
 	}
@@ -169,7 +170,7 @@ public class AssessmentItemDisplayController extends BasicController implements 
 			mainVC = createVelocityContainer("end");
 		} else {
 			mainVC = createVelocityContainer("run");
-        	initQtiWorks(ureq);
+			initQtiWorks(ureq);
 		}
 		putInitialPanel(mainVC);
 	}
@@ -193,11 +194,13 @@ public class AssessmentItemDisplayController extends BasicController implements 
 		
 		itemSessionController = enterSession(ureq);
 		
-		if (itemSessionController.getItemSessionState().isEnded()) {
+		if(itemSessionController == null) {
+			mainVC = createVelocityContainer("error");
+		} else if (itemSessionController.getItemSessionState().isEnded()) {
 			mainVC = createVelocityContainer("end");
 		} else {
 			mainVC = createVelocityContainer("run");
-        	initQtiWorks(ureq);
+			initQtiWorks(ureq);
 		}
 		putInitialPanel(mainVC);
 	}
@@ -205,8 +208,8 @@ public class AssessmentItemDisplayController extends BasicController implements 
 	private void initQtiWorks(UserRequest ureq) {
 		String filename = itemFileRef.getName();
 		qtiWorksCtrl = new QtiWorksController(ureq, getWindowControl(), filename);
-    	listenTo(qtiWorksCtrl);
-    	mainVC.put("qtirun", qtiWorksCtrl.getInitialComponent());
+		listenTo(qtiWorksCtrl);
+		mainVC.put("qtirun", qtiWorksCtrl.getInitialComponent());
 	}
 
 	@Override
@@ -214,6 +217,10 @@ public class AssessmentItemDisplayController extends BasicController implements 
 		if(submissionDirToDispose != null) {
 			FileUtils.deleteDirsAndFiles(submissionDirToDispose, true, true);
 		}
+	}
+	
+	public boolean isExploded() {
+		return itemSessionController == null;
 	}
 
 	@Override
@@ -242,9 +249,18 @@ public class AssessmentItemDisplayController extends BasicController implements 
 	}
 
 	@Override
+	public boolean isRubricHidden(Identifier sectionKey) {
+		return false;
+	}
+
+	@Override
+	public int getNumber(TestPlanNode node) {
+		return 1;
+	}
+
+	@Override
 	protected void event(UserRequest ureq, Component source, Event event) {
 		currentRequestTimestamp = ureq.getRequestTimestamp();
-		//
 	}
 	
 	@Override
@@ -304,9 +320,9 @@ public class AssessmentItemDisplayController extends BasicController implements 
 
         /* Create fresh JQTI+ state Object and try to create controller */
         itemSessionController = createNewItemSessionStateAndController(notificationRecorder);
-        if (itemSessionController==null) {
-        	logError("", null);
-            return null;//handleExplosion(null, candidateSession);
+        if (itemSessionController == null) {
+        		logError("Cannot create item session controller for:" + itemFileRef, null);
+            return null;
         }
 
         /* Try to Initialise JQTI+ state */
@@ -316,10 +332,9 @@ public class AssessmentItemDisplayController extends BasicController implements 
             itemSessionController.initialize(timestamp);
             itemSessionController.performTemplateProcessing(timestamp);
             itemSessionController.enterItem(timestamp);
-        }
-        catch (final RuntimeException e) {
-        	logError("", e);
-            return null;//handleExplosion(null, candidateSession);
+        }  catch (final RuntimeException e) {
+        		logError("", e);
+            return null;
         }
 
         /* Record and log entry event */
@@ -364,8 +379,8 @@ public class AssessmentItemDisplayController extends BasicController implements 
     }
     
     public ItemProcessingMap getItemProcessingMap() {
-        ItemProcessingMap result = new ItemProcessingInitializer(resolvedAssessmentItem, true).initialize();
-        return result;
+        return new ItemProcessingInitializer(resolvedAssessmentItem, true).initialize();
+
     }
     
 	public int computeTemplateProcessingLimit() {
@@ -412,7 +427,8 @@ public class AssessmentItemDisplayController extends BasicController implements 
 
 
 		/* Attempt to bind responses */
-		boolean allResponsesValid = false, allResponsesBound = false;
+		boolean allResponsesValid = false;
+		boolean allResponsesBound = false;
 		try {
 			itemSessionController.bindResponses(timestamp, responseDataMap);
 		} catch (final QtiCandidateStateException e) {
@@ -421,7 +437,7 @@ public class AssessmentItemDisplayController extends BasicController implements 
 			return;
 		} catch (final RuntimeException e) {
 			logError("", e);
-			return;// handleExplosion(e, candidateSession);
+			return;
 		}
 
 		/* Record resulting attempt and event */

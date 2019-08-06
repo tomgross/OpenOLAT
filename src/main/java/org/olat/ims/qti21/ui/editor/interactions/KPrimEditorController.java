@@ -33,18 +33,23 @@ import org.olat.core.gui.components.form.flexible.elements.TextElement;
 import org.olat.core.gui.components.form.flexible.impl.FormBasicController;
 import org.olat.core.gui.components.form.flexible.impl.FormEvent;
 import org.olat.core.gui.components.form.flexible.impl.FormLayoutContainer;
+import org.olat.core.gui.components.form.flexible.impl.elements.richText.TextMode;
 import org.olat.core.gui.components.link.Link;
 import org.olat.core.gui.control.Controller;
 import org.olat.core.gui.control.WindowControl;
+import org.olat.core.util.CodeHelper;
 import org.olat.core.util.StringHelper;
 import org.olat.core.util.Util;
 import org.olat.core.util.vfs.VFSContainer;
 import org.olat.ims.qti21.QTI21Constants;
 import org.olat.ims.qti21.model.QTI21QuestionType;
 import org.olat.ims.qti21.model.xml.interactions.KPrimAssessmentItemBuilder;
+import org.olat.ims.qti21.ui.ResourcesMapper;
+import org.olat.ims.qti21.ui.components.FlowFormItem;
 import org.olat.ims.qti21.ui.editor.AssessmentTestEditorController;
 import org.olat.ims.qti21.ui.editor.events.AssessmentItemEvent;
 
+import uk.ac.ed.ph.jqtiplus.node.content.basic.FlowStatic;
 import uk.ac.ed.ph.jqtiplus.node.item.interaction.MatchInteraction;
 import uk.ac.ed.ph.jqtiplus.node.item.interaction.choice.SimpleAssociableChoice;
 import uk.ac.ed.ph.jqtiplus.types.Identifier;
@@ -68,18 +73,25 @@ public class KPrimEditorController extends FormBasicController {
 	private final List<KprimWrapper> choiceWrappers = new ArrayList<>();
 
 	private int count = 0;
+	private final File itemFile;
 	private final VFSContainer itemContainer;
 	
+	private final String mapperUri;
+	private final boolean readOnly;
 	private final boolean restrictedEdit;
 	private final KPrimAssessmentItemBuilder itemBuilder;
 	
 	public KPrimEditorController(UserRequest ureq, WindowControl wControl, KPrimAssessmentItemBuilder itemBuilder,
-			File rootDirectory, VFSContainer rootContainer, File itemFile, boolean restrictedEdit) {
+			File rootDirectory, VFSContainer rootContainer, File itemFile, boolean restrictedEdit, boolean readOnly) {
 		super(ureq, wControl, "simple_choices_editor");
 		setTranslator(Util.createPackageTranslator(AssessmentTestEditorController.class, getLocale()));
 		this.itemBuilder = itemBuilder;
+		this.readOnly = readOnly;
+		this.itemFile = itemFile;
 		this.restrictedEdit = restrictedEdit;
 		
+		mapperUri = registerCacheableMapper(null, "KPrimEditorController::" + CodeHelper.getRAMUniqueID(),
+				new ResourcesMapper(itemFile.toURI()));
 		String relativePath = rootDirectory.toPath().relativize(itemFile.toPath().getParent()).toString();
 		itemContainer = (VFSContainer)rootContainer.resolve(relativePath);
 		
@@ -95,16 +107,27 @@ public class KPrimEditorController extends FormBasicController {
 		formLayout.add("metadata", metadata);
 		
 		titleEl = uifactory.addTextElement("title", "form.imd.title", -1, itemBuilder.getTitle(), metadata);
+		titleEl.setElementCssClass("o_sel_assessment_item_title");
 		titleEl.setMandatory(true);
+		titleEl.setEnabled(!readOnly);
 
 		String description = itemBuilder.getQuestion();
 		textEl = uifactory.addRichTextElementForQTI21("desc", "form.imd.descr", description, 8, -1, itemContainer,
 				metadata, ureq.getUserSession(), getWindowControl());
+		textEl.setEnabled(!readOnly);
+		textEl.setVisible(!readOnly);
+		if(readOnly) {
+			FlowFormItem textReadOnlyEl = new FlowFormItem("descro", itemFile);
+			textReadOnlyEl.setLabel("form.imd.descr", null);
+			textReadOnlyEl.setBlocks(itemBuilder.getQuestionBlocks());
+			textReadOnlyEl.setMapperUri(mapperUri);
+			metadata.add(textReadOnlyEl);
+		}
 		
 		//shuffle
 		String[] yesnoValues = new String[]{ translate("yes"), translate("no") };
 		shuffleEl = uifactory.addRadiosHorizontal("shuffle", "form.imd.shuffle", metadata, yesnoKeys, yesnoValues);
-		shuffleEl.setEnabled(!restrictedEdit);
+		shuffleEl.setEnabled(!restrictedEdit && !readOnly);
 		if (itemBuilder.isShuffle()) {
 			shuffleEl.select("y", true);
 		} else {
@@ -114,7 +137,7 @@ public class KPrimEditorController extends FormBasicController {
 		//layout
 		String[] alignmentValues = new String[]{ translate("form.imd.alignment.left"), translate("form.imd.alignment.right") };
 		alignmentEl = uifactory.addRadiosHorizontal("alignment", "form.imd.alignment", metadata, alignmentKeys, alignmentValues);
-		alignmentEl.setEnabled(!restrictedEdit);
+		alignmentEl.setEnabled(!restrictedEdit && !readOnly);
 		if (itemBuilder.hasClassAttr(QTI21Constants.CHOICE_ALIGN_RIGHT)) {
 			alignmentEl.select(alignmentKeys[1], true);
 		} else {
@@ -136,38 +159,50 @@ public class KPrimEditorController extends FormBasicController {
 			}
 		}
 		answersCont.contextPut("choices", choiceWrappers);
-		answersCont.contextPut("restrictedEdit", restrictedEdit);
+		answersCont.contextPut("restrictedEdit", restrictedEdit || readOnly);
 		recalculateUpDownLinks();
 
 		// Submit Button
 		FormLayoutContainer buttonsContainer = FormLayoutContainer.createDefaultFormLayout("buttons", getTranslator());
+		buttonsContainer.setElementCssClass("o_sel_choices_save");
 		buttonsContainer.setRootForm(mainForm);
+		buttonsContainer.setVisible(!readOnly);
 		formLayout.add(buttonsContainer);
 		formLayout.add("buttons", buttonsContainer);
 		uifactory.addFormSubmitButton("submit", buttonsContainer);
 	}
 	
 	private void wrapAnswer(UserRequest ureq, SimpleAssociableChoice choice) {
-		String choiceContent =  itemBuilder.getHtmlHelper().flowStaticString(choice.getFlowStatics());
+		List<FlowStatic> choiceFlow = choice.getFlowStatics();
+		String choiceContent =  itemBuilder.getHtmlHelper().flowStaticString(choiceFlow);
 		String choiceId = "answer" + count++;
 		RichTextElement choiceEl = uifactory.addRichTextElementForQTI21(choiceId, "form.imd.answer", choiceContent, 8, -1, itemContainer,
 				answersCont, ureq.getUserSession(), getWindowControl());
+		choiceEl.getEditorConfiguration().setSimplestTextModeAllowed(TextMode.oneLine);
 		choiceEl.setUserObject(choice);
+		choiceEl.setEnabled(!readOnly);
+		choiceEl.setVisible(!readOnly);
 		answersCont.add("choiceId", choiceEl);
+		
+		String choiceRoId = "answerro" + count++;
+		FlowFormItem choiceReadOnlyEl = new FlowFormItem(choiceRoId, itemFile);
+		choiceReadOnlyEl.setFlowStatics(choiceFlow);
+		choiceReadOnlyEl.setMapperUri(mapperUri);
+		answersCont.add(choiceRoId, choiceReadOnlyEl);
 		
 		FormLink upLink = uifactory.addFormLink("up-".concat(choiceId), "up", "", null, answersCont, Link.NONTRANSLATED);
 		upLink.setIconLeftCSS("o_icon o_icon-lg o_icon_move_up");
-		upLink.setEnabled(!restrictedEdit);
+		upLink.setEnabled(!restrictedEdit && !readOnly);
 		answersCont.add(upLink);
 		answersCont.add("up-".concat(choiceId), upLink);
 		
 		FormLink downLink = uifactory.addFormLink("down-".concat(choiceId), "down", "", null, answersCont, Link.NONTRANSLATED);
 		downLink.setIconLeftCSS("o_icon o_icon-lg o_icon_move_down");
-		downLink.setEnabled(!restrictedEdit);
+		downLink.setEnabled(!restrictedEdit && !readOnly);
 		answersCont.add(downLink);
 		answersCont.add("down-".concat(choiceId), downLink);
 		
-		choiceWrappers.add(new KprimWrapper(choice, choiceEl, upLink, downLink));
+		choiceWrappers.add(new KprimWrapper(choice, choiceEl, choiceReadOnlyEl, upLink, downLink));
 	}
 	
 	@Override
@@ -177,6 +212,7 @@ public class KPrimEditorController extends FormBasicController {
 	
 	@Override
 	protected void formOK(UserRequest ureq) {
+		if(readOnly) return;
 		//title
 		itemBuilder.setTitle(titleEl.getValue());
 		//question
@@ -203,6 +239,7 @@ public class KPrimEditorController extends FormBasicController {
 		
 		//set associations
 		if(!restrictedEdit) {
+			List<SimpleAssociableChoice> choices = new ArrayList<>();
 			for(KprimWrapper choiceWrapper:choiceWrappers) {
 				SimpleAssociableChoice choice = choiceWrapper.getSimpleChoice();
 				Identifier choiceIdentifier = choice.getIdentifier();
@@ -212,7 +249,9 @@ public class KPrimEditorController extends FormBasicController {
 				} else if("wrong".equals(association)) {
 					itemBuilder.setAssociation(choiceIdentifier, QTI21Constants.WRONG_IDENTIFIER);
 				}
+				choices.add(choice);
 			}
+			itemBuilder.setKprimChoices(choices);
 		}
 
 		fireEvent(ureq, new AssessmentItemEvent(AssessmentItemEvent.ASSESSMENT_ITEM_CHANGED, itemBuilder.getAssessmentItem(), QTI21QuestionType.kprim));
@@ -273,8 +312,8 @@ public class KPrimEditorController extends FormBasicController {
 		int numOfChoices = choiceWrappers.size();
 		for(int i=0; i<numOfChoices; i++) {
 			KprimWrapper choiceWrapper = choiceWrappers.get(i);
-			choiceWrapper.getUp().setEnabled(i != 0 && !restrictedEdit);
-			choiceWrapper.getDown().setEnabled(i < (numOfChoices - 1) && !restrictedEdit);
+			choiceWrapper.getUp().setEnabled(i != 0 && !restrictedEdit && !readOnly);
+			choiceWrapper.getDown().setEnabled(i < (numOfChoices - 1) && !restrictedEdit && !readOnly);
 		}
 	}
 
@@ -282,14 +321,16 @@ public class KPrimEditorController extends FormBasicController {
 		
 		private final SimpleAssociableChoice choice;
 		private final RichTextElement answerEl;
+		private final FlowFormItem answerReadOnlyEl;
 		private final FormLink upLink, downLink;
 		private final Identifier choiceIdentifier;
 		
-		public KprimWrapper(SimpleAssociableChoice choice, RichTextElement answerEl,
+		public KprimWrapper(SimpleAssociableChoice choice, RichTextElement answerEl, FlowFormItem answerReadOnlyEl,
 				FormLink upLink, FormLink downLink) {
 			this.choice = choice;
 			this.choiceIdentifier = choice.getIdentifier();
 			this.answerEl = answerEl;
+			this.answerReadOnlyEl = answerReadOnlyEl;
 			answerEl.setUserObject(this);
 			this.upLink = upLink;
 			upLink.setUserObject(this);
@@ -319,6 +360,10 @@ public class KPrimEditorController extends FormBasicController {
 		
 		public RichTextElement getAnswer() {
 			return answerEl;
+		}
+		
+		public FlowFormItem getAnswerReadOnly() {
+			return answerReadOnlyEl;
 		}
 
 		public FormLink getUp() {

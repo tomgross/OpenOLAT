@@ -1,4 +1,5 @@
 /**
+
 * OLAT - Online Learning and Training<br>
 * http://www.olat.org
 * <p>
@@ -26,6 +27,7 @@
 package org.olat.basesecurity;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Date;
@@ -40,18 +42,18 @@ import javax.persistence.LockModeType;
 import javax.persistence.TemporalType;
 import javax.persistence.TypedQuery;
 
-import org.hibernate.type.StandardBasicTypes;
-import org.hibernate.type.Type;
 import org.olat.admin.quota.GenericQuotaEditController;
 import org.olat.admin.sysinfo.SysinfoController;
 import org.olat.admin.user.UserAdminController;
 import org.olat.admin.user.UserChangePasswordController;
 import org.olat.admin.user.UserCreateController;
 import org.olat.basesecurity.events.NewIdentityCreatedEvent;
+import org.olat.basesecurity.manager.AuthenticationHistoryDAO;
 import org.olat.core.commons.persistence.DB;
 import org.olat.core.commons.persistence.DBFactory;
 import org.olat.core.commons.persistence.DBQuery;
 import org.olat.core.commons.persistence.PersistenceHelper;
+import org.olat.core.commons.services.webdav.manager.WebDAVAuthManager;
 import org.olat.core.gui.translator.Translator;
 import org.olat.core.id.Identity;
 import org.olat.core.id.ModifiedInfo;
@@ -64,6 +66,7 @@ import org.olat.core.logging.OLog;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.Encoder;
 import org.olat.core.util.Encoder.Algorithm;
+import org.olat.core.util.StringHelper;
 import org.olat.core.util.Util;
 import org.olat.core.util.coordinate.CoordinatorManager;
 import org.olat.core.util.coordinate.SyncerCallback;
@@ -73,6 +76,7 @@ import org.olat.portfolio.manager.InvitationDAO;
 import org.olat.resource.OLATResource;
 import org.olat.resource.OLATResourceManager;
 import org.olat.user.ChangePasswordController;
+import org.olat.user.UserDataDeletable;
 import org.olat.user.UserImpl;
 import org.olat.user.UserManager;
 
@@ -85,7 +89,7 @@ import org.olat.user.UserManager;
  * 
  * @author Felix Jost, Florian Gnaegi
  */
-public class BaseSecurityManager implements BaseSecurity {
+public class BaseSecurityManager implements BaseSecurity, UserDataDeletable {
 	
 	private static final OLog log = Tracing.createLoggerFor(BaseSecurityManager.class);
 	
@@ -93,6 +97,7 @@ public class BaseSecurityManager implements BaseSecurity {
 	private LoginModule loginModule;
 	private OLATResourceManager orm;
 	private InvitationDAO invitationDao;
+	private AuthenticationHistoryDAO authenticationHistoryDao;
 	private String dbVendor = "";
 	private static BaseSecurityManager INSTANCE;
 	private static String GUEST_USERNAME_PREFIX = "guest_";
@@ -139,6 +144,14 @@ public class BaseSecurityManager implements BaseSecurity {
 	 */
 	public void setInvitationDao(InvitationDAO invitationDao) {
 		this.invitationDao = invitationDao;
+	}
+	
+	/**
+	 * [used by Spring]
+	 * @param authenticationHistoryDao
+	 */
+	public void setAuthenticationHistoryDao(AuthenticationHistoryDAO authenticationHistoryDao) {
+		this.authenticationHistoryDao = authenticationHistoryDao;
 	}
 
 	/**
@@ -328,7 +341,7 @@ public class BaseSecurityManager implements BaseSecurity {
 	}
 
 	@Override
-	public boolean isIdentityPermittedOnResourceable(Identity identity, String permission, OLATResourceable olatResourceable) {
+	public boolean isIdentityPermittedOnResourceable(IdentityRef identity, String permission, OLATResourceable olatResourceable) {
 		return isIdentityPermittedOnResourceable(identity, permission, olatResourceable, true);
 	}
 
@@ -336,7 +349,7 @@ public class BaseSecurityManager implements BaseSecurity {
 	 * @see org.olat.basesecurity.Manager#isIdentityPermittedOnResourceable(org.olat.core.id.Identity, java.lang.String, org.olat.core.id.OLATResourceable boolean)
 	 */
 	@Override
-	public boolean isIdentityPermittedOnResourceable(Identity identity, String permission, OLATResourceable olatResourceable, boolean checkTypeRight) {
+	public boolean isIdentityPermittedOnResourceable(IdentityRef identity, String permission, OLATResourceable olatResourceable, boolean checkTypeRight) {
 		if(identity == null || identity.getKey() == null) return false;//no identity, no permission
 
 		Long oresid = olatResourceable.getResourceableId();
@@ -368,7 +381,7 @@ public class BaseSecurityManager implements BaseSecurity {
 	 * @see org.olat.basesecurity.Manager#getRoles(org.olat.core.id.Identity)
 	 */
 	@Override
-	public Roles getRoles(Identity identity) {
+	public Roles getRoles(IdentityRef identity) {
 		boolean isGuestOnly = false;
 		boolean isInvitee = false;
 
@@ -389,7 +402,7 @@ public class BaseSecurityManager implements BaseSecurity {
 	}
 
 	@Override
-	public List<String> getRolesAsString(Identity identity) {
+	public List<String> getRolesAsString(IdentityRef identity) {
 		StringBuilder sb = new StringBuilder();
 		sb.append("select ngroup.groupName from ").append(NamedGroupImpl.class.getName()).append(" as ngroup ")
 		  .append(" where exists (")
@@ -458,12 +471,54 @@ public class BaseSecurityManager implements BaseSecurity {
 		if (!hasBeenInGroup && isNowInGroup) {
 			// user not yet in security group, add him
 			addIdentityToSecurityGroup(updatedIdentity, securityGroup);
-			log.audit("User::" + (actingIdentity == null ? "unkown" : actingIdentity.getName()) + " added system role::" + groupName + " to user::" + updatedIdentity.getName(), null);
+			log.audit("User::" + (actingIdentity == null ? "unkown" : actingIdentity.getKey()) + " added system role::" + groupName + " to user::" + updatedIdentity.getKey(), null);
 		} else if (hasBeenInGroup && !isNowInGroup) {
 			// user not anymore in security group, remove him
 			removeIdentityFromSecurityGroup(updatedIdentity, securityGroup);
-			log.audit("User::" + (actingIdentity == null ? "unkown" : actingIdentity.getName()) + " removed system role::" + groupName + " from user::" + updatedIdentity.getName(), null);
+			log.audit("User::" + (actingIdentity == null ? "unkown" : actingIdentity.getKey()) + " removed system role::" + groupName + " from user::" + updatedIdentity.getKey(), null);
 		}
+	}
+
+	@Override
+	public List<String> getRolesSummaryWithResources(IdentityRef identity) {
+		List<String> openolatRoles = getRolesAsString(identity);
+		
+		//repository
+		StringBuilder sb = new StringBuilder();
+		sb.append("select distinct membership.role from repositoryentry v ")
+		  .append(" inner join v.groups as relGroup")
+		  .append(" inner join relGroup.group as baseGroup")
+		  .append(" inner join baseGroup.members as membership")
+		  .append(" where membership.identity.key=:identityKey");
+		List<String> repositoryRoles = dbInstance.getCurrentEntityManager()
+				.createQuery(sb.toString(), String.class)
+				.setParameter("identityKey", identity.getKey())
+				.getResultList();
+		for(String repositoryRole:repositoryRoles) {
+			if(repositoryRole.equals("owner")) {
+				openolatRoles.add(repositoryRole);
+			} else if(repositoryRole.equals("coach")) {
+				openolatRoles.add("repocoach");
+			}
+		}
+		
+		// business groups
+		StringBuilder gsb = new StringBuilder();
+		gsb.append("select distinct membership.role from businessgroup as bgroup ")
+		   .append(" inner join bgroup.baseGroup as baseGroup")
+		   .append(" inner join baseGroup.members as membership")
+		   .append(" where membership.identity.key=:identityKey");
+		List<String> groupRoles = dbInstance.getCurrentEntityManager()
+				.createQuery(gsb.toString(), String.class)
+				.setParameter("identityKey", identity.getKey())
+				.getResultList();
+		for(String groupRole:groupRoles) {
+			if(groupRole.equals("coach")) {
+				openolatRoles.add("bgroupcoach");
+			}
+		}
+
+		return openolatRoles;
 	}
 
 	/**
@@ -488,17 +543,20 @@ public class BaseSecurityManager implements BaseSecurity {
 	/**
 	 * @see org.olat.basesecurity.Manager#isIdentityInSecurityGroup(org.olat.core.id.Identity, org.olat.basesecurity.SecurityGroup)
 	 */
-	public boolean isIdentityInSecurityGroup(Identity identity, SecurityGroup secGroup) {
+	@Override
+	public boolean isIdentityInSecurityGroup(IdentityRef identity, SecurityGroup secGroup) {
 		if (secGroup == null || identity == null) return false;
-		String queryString = "select count(sgmsi) from  org.olat.basesecurity.SecurityGroupMembershipImpl as sgmsi where sgmsi.identity = :identitykey and sgmsi.securityGroup = :securityGroup";
-		DBQuery query = DBFactory.getInstance().createQuery(queryString);
-		query.setLong("identitykey", identity.getKey());
-		query.setLong("securityGroup", secGroup.getKey());
-		query.setCacheable(true);
-		List res = query.list();
-		Long cntL = (Long) res.get(0);
-		if (cntL.longValue() != 0 && cntL.longValue() != 1) throw new AssertException("unique n-to-n must always yield 0 or 1");
-		return (cntL.longValue() == 1);
+		String queryString = "select sgmsi.key from org.olat.basesecurity.SecurityGroupMembershipImpl as sgmsi where sgmsi.identity.key=:identitykey and sgmsi.securityGroup.key=:securityGroupKey";
+
+		List<Long> membership = dbInstance.getCurrentEntityManager()
+			.createQuery(queryString, Long.class)
+			.setParameter("identitykey", identity.getKey())
+			.setParameter("securityGroupKey", secGroup.getKey())
+			.setHint("org.hibernate.cacheable", Boolean.TRUE)
+			.setFirstResult(0)
+			.setMaxResults(1)
+			.getResultList();
+		return membership != null && !membership.isEmpty() && membership.get(0) != null;
 	}
 
 	@Override
@@ -533,32 +591,37 @@ public class BaseSecurityManager implements BaseSecurity {
 	/**
 	 * @see org.olat.basesecurity.Manager#deleteSecurityGroup(org.olat.basesecurity.SecurityGroup)
 	 */
+	@Override
 	public void deleteSecurityGroup(SecurityGroup secGroup) {
 		// we do not use hibernate cascade="delete", but implement our own (to be
 		// sure to understand our code)
-		DB db = DBFactory.getInstance();
-		//FIXME: fj: Please review: Create rep entry, restart olat, delete the rep
-		// entry. previous implementation resulted in orange screen
-		// secGroup = (SecurityGroup)db.loadObject(secGroup); // so we can later
-		// delete it (hibernate needs an associated session)
-		secGroup = (SecurityGroup) db.loadObject(secGroup);
-		//o_clusterREVIEW
-		//db.reputInHibernateSessionCache(secGroup);
-
-		/*
-		 * if (!db.contains(secGroup)) { secGroup = (SecurityGroupImpl)
-		 * db.loadObject(SecurityGroupImpl.class, secGroup.getKey()); }
-		 */
-		// 1) delete associated users (need to do it manually, hibernate knows
-		// nothing about
-		// the membership, modeled manually via many-to-one and not via set)
-		db.delete("from org.olat.basesecurity.SecurityGroupMembershipImpl as msi where msi.securityGroup.key = ?", new Object[] { secGroup
-				.getKey() }, new Type[] { StandardBasicTypes.LONG });
-		// 2) delete all policies
-		db.delete("from org.olat.basesecurity.PolicyImpl as poi where poi.securityGroup = ?", new Object[] { secGroup.getKey() },
-				new Type[] { StandardBasicTypes.LONG });
-		// 3) delete security group
-		db.deleteObject(secGroup);
+		StringBuilder sb = new StringBuilder();
+		sb.append("select secGroup from ").append(SecurityGroupImpl.class.getName()).append(" as secGroup ")
+		  .append("where secGroup.key=:securityGroupKey");
+		List<SecurityGroup> reloadedSecGroups = dbInstance.getCurrentEntityManager()
+				.createQuery(sb.toString(), SecurityGroup.class)
+				.setParameter("securityGroupKey", secGroup.getKey())
+				.getResultList();
+		if(reloadedSecGroups.size() == 1) {
+			secGroup = reloadedSecGroups.get(0);
+			
+			// 1) delete associated users (need to do it manually, hibernate knows
+			// nothing about
+			// the membership, modeled manually via many-to-one and not via set)
+			dbInstance.getCurrentEntityManager()
+				.createQuery("delete from org.olat.basesecurity.SecurityGroupMembershipImpl where securityGroup=:securityGroup")
+				.setParameter("securityGroup", secGroup)
+				.executeUpdate();
+			// 2) delete all policies
+	
+			dbInstance.getCurrentEntityManager()
+				.createQuery("delete from org.olat.basesecurity.PolicyImpl where securityGroup=:securityGroup")
+				.setParameter("securityGroup", secGroup)
+				.executeUpdate();
+			// 3) delete security group
+			dbInstance.getCurrentEntityManager()
+				.remove(secGroup);
+		}
 	}
 
 	/**
@@ -1345,7 +1408,7 @@ public class BaseSecurityManager implements BaseSecurity {
 	 */
 	private Authentication createAndPersistAuthenticationIntern(final Identity ident, final String provider, final String authUserName,
 			final String credentials, final Encoder.Algorithm algorithm) {
-		Authentication auth;
+		AuthenticationImpl auth;
 		if(algorithm != null && credentials != null) {
 			String salt = algorithm.isSalted() ? Encoder.getSalt() : null;
 			String hash = Encoder.encrypt(credentials, salt, algorithm);
@@ -1353,10 +1416,32 @@ public class BaseSecurityManager implements BaseSecurity {
 		} else {
 			auth = new AuthenticationImpl(ident, provider, authUserName, credentials);
 		}
+		auth.setCreationDate(new Date());
+		auth.setLastModified(auth.getCreationDate());
 		dbInstance.getCurrentEntityManager().persist(auth);
+		updateAuthenticationHistory(auth, ident);
 		dbInstance.commit();
-		log.audit("Create " + provider + " authentication (login=" + ident.getName() + ",authusername=" + authUserName + ")");
+		log.audit("Create " + provider + " authentication (identity=" + ident.getKey() + ",authusername=" + authUserName + ")");
 		return auth;
+	}
+	
+	/**
+	 * Archive the password and clean the history. The method
+	 * will let at least one entry per authentication.
+	 * 
+	 * @param auth The new authentication to archive
+	 * @param ident The identity
+	 */
+	private void updateAuthenticationHistory(Authentication auth, Identity ident) {
+		if(BaseSecurityModule.getDefaultAuthProviderIdentifier().equals(auth.getProvider())) {
+			authenticationHistoryDao.createHistory(auth, ident);
+			int historyLength = loginModule.getPasswordHistory() < 1 ? 1 : loginModule.getPasswordHistory();
+			List<AuthenticationHistory> historyToDelete = authenticationHistoryDao
+					.loadHistory(ident, auth.getProvider(), historyLength, 5000);
+			for(AuthenticationHistory historyPoint:historyToDelete) {
+				authenticationHistoryDao.deleteAuthenticationHistory(historyPoint);
+			}
+		}
 	}
 
 	/**
@@ -1384,6 +1469,18 @@ public class BaseSecurityManager implements BaseSecurity {
 		return results.get(0);
 	}
 	
+	@Override
+	public List<Authentication> findAuthentications(IdentityRef identity, List<String> providers) {
+		StringBuilder sb = new StringBuilder();
+		sb.append("select auth from ").append(AuthenticationImpl.class.getName())
+		  .append(" as auth where auth.identity.key=:identityKey and auth.provider in (:providers)");
+		return dbInstance.getCurrentEntityManager()
+				.createQuery(sb.toString(), Authentication.class)
+				.setParameter("identityKey", identity.getKey())
+				.setParameter("providers", providers)
+				.getResultList();
+	}
+
 	@Override
 	public String findAuthenticationName(IdentityRef identity, String provider) {
 		if (identity==null) {
@@ -1447,7 +1544,29 @@ public class BaseSecurityManager implements BaseSecurity {
 
 	@Override
 	public Authentication updateAuthentication(Authentication authentication) {
-		return dbInstance.getCurrentEntityManager().merge(authentication);
+		((AuthenticationImpl)authentication).setLastModified(new Date());
+		authentication = dbInstance.getCurrentEntityManager().merge(authentication);
+		updateAuthenticationHistory(authentication, authentication.getIdentity());
+		return authentication;
+	}
+
+	@Override
+	public boolean checkCredentialHistory(Identity identity, String provider, String password) {
+		boolean ok = true;
+		int historyLength = loginModule.getPasswordHistory();
+		if(historyLength > 0) {
+			List<AuthenticationHistory> credentialHistory = authenticationHistoryDao
+					.loadHistory(identity, provider, 0, historyLength);
+			for(AuthenticationHistory oldCredential:credentialHistory) {
+				Algorithm algorithm = Algorithm.find(oldCredential.getAlgorithm());
+				String hash = Encoder.encrypt(password, oldCredential.getSalt(), algorithm);
+				if(oldCredential.getCredential().equals(hash)) {
+					ok = false;
+					break;
+				}
+			}
+		}
+		return ok;
 	}
 
 	@Override
@@ -1465,6 +1584,9 @@ public class BaseSecurityManager implements BaseSecurity {
 			String newCredentials = Encoder.encrypt(password, currentSalt, algorithm);
 			if(newCredentials.equals(authentication.getCredential())) {
 				//same credentials
+				if(BaseSecurityModule.getDefaultAuthProviderIdentifier().equals(authentication.getProvider())) {
+					authentication = updateAuthentication(authentication);
+				}
 				return authentication;
 			}
 		}
@@ -1496,6 +1618,32 @@ public class BaseSecurityManager implements BaseSecurity {
 			log.error("", e);
 		}
 	}
+	
+	@Override
+	public void deleteInvalidAuthenticationsByEmail(String email) {
+		if (!StringHelper.containsNonWhitespace(email)) return;
+		
+		// If a user with this email exists the email is valid.
+		Identity identity = UserManager.getInstance().findUniqueIdentityByEmail(email);
+		if (identity != null) return;
+		
+		StringBuilder sb = new StringBuilder();
+		sb.append("delete from ").append(AuthenticationImpl.class.getName()).append(" as auth");
+		sb.append(" where auth.authusername=:authusername");
+		sb.append("   and auth.provider in (:providers)");
+		
+		List<String> providers = Arrays.asList(
+				WebDAVAuthManager.PROVIDER_HA1_EMAIL,
+				WebDAVAuthManager.PROVIDER_HA1_INSTITUTIONAL_EMAIL,
+				WebDAVAuthManager.PROVIDER_WEBDAV_EMAIL,
+				WebDAVAuthManager.PROVIDER_WEBDAV_INSTITUTIONAL_EMAIL);
+		
+		dbInstance.getCurrentEntityManager()
+				.createQuery(sb.toString())
+				.setParameter("authusername", email)
+				.setParameter("providers", providers)
+				.executeUpdate();
+	}
 
 	/**
 	 * @see org.olat.basesecurity.Manager#findAuthenticationByAuthusername(java.lang.String, java.lang.String)
@@ -1517,6 +1665,19 @@ public class BaseSecurityManager implements BaseSecurity {
 			throw new AssertException("more than one entry for the a given authusername and provider, should never happen (even db has a unique constraint on those columns combined) ");
 		}
 		return results.get(0);
+	}
+	
+	@Override
+	public List<Authentication> findAuthenticationByAuthusername(String authusername, List<String> providers) {
+		StringBuilder sb = new StringBuilder();
+		sb.append("select auth from ").append(AuthenticationImpl.class.getName()).append(" as auth")
+		  .append(" inner join fetch auth.identity ident")
+		  .append(" where auth.provider in (:providers) and auth.authusername=:authusername");
+		return dbInstance.getCurrentEntityManager()
+				.createQuery(sb.toString(), Authentication.class)
+				.setParameter("providers", providers)
+				.setParameter("authusername", authusername)
+				.getResultList();
 	}
 
 	/**
@@ -1950,18 +2111,61 @@ public class BaseSecurityManager implements BaseSecurity {
 		return string;
 	}
 
-	/**
-	 * @see org.olat.basesecurity.Manager#saveIdentityStatus(org.olat.core.id.Identity)
-	 */
 	@Override
-	public Identity saveIdentityStatus(Identity identity, Integer status) {
-		IdentityImpl reloadedIdentity = loadForUpdate(identity); 
-		reloadedIdentity.setStatus(status);
-		reloadedIdentity = dbInstance.getCurrentEntityManager().merge(reloadedIdentity);
-		dbInstance.commit();
+	public Identity saveIdentityStatus(Identity identity, Integer status, Identity doer) {
+		IdentityImpl reloadedIdentity = loadForUpdate(identity);
+		if(reloadedIdentity != null) {
+			reloadedIdentity.setStatus(status);
+			if(status.equals(Identity.STATUS_DELETED)) {
+				if(doer != null && reloadedIdentity.getDeletedBy() == null) {
+					reloadedIdentity.setDeletedBy(getDeletedByName(doer));
+				}
+				reloadedIdentity.setDeletedDate(new Date());
+			}
+			reloadedIdentity = dbInstance.getCurrentEntityManager().merge(reloadedIdentity);
+			dbInstance.commit();
+		}
+		return reloadedIdentity;
+	}
+
+	@Override
+	public Identity saveDeletedByData(Identity identity, Identity doer) {
+		IdentityImpl reloadedIdentity = loadForUpdate(identity);
+		if(reloadedIdentity != null) {
+			reloadedIdentity.setDeletedBy(getDeletedByName(doer));
+			reloadedIdentity.setDeletedDate(new Date());
+			
+			List<String> deletedRoles = getRolesSummaryWithResources(reloadedIdentity);
+			StringBuilder deletedRoleBuffer = new StringBuilder();
+			for(String deletedRole:deletedRoles) {
+				if(deletedRoleBuffer.length() > 0) deletedRoleBuffer.append(",");
+				deletedRoleBuffer.append(deletedRole);
+			}
+
+			reloadedIdentity.setDeletedRoles(deletedRoleBuffer.toString());
+			reloadedIdentity = dbInstance.getCurrentEntityManager().merge(reloadedIdentity);
+			dbInstance.commit();
+		}
 		return reloadedIdentity;
 	}
 	
+	private String getDeletedByName(Identity doer) {
+		StringBuilder sb = new StringBuilder(128);
+		if(doer != null) {
+			if(StringHelper.containsNonWhitespace(doer.getUser().getLastName())) {
+				sb.append(doer.getUser().getLastName());
+			}
+			if(StringHelper.containsNonWhitespace(doer.getUser().getFirstName())) {
+				if(sb.length() > 0) sb.append(", ");
+				sb.append(doer.getUser().getFirstName());
+			}
+		}
+		if(sb.length() > 128) {
+			sb.delete(128, sb.length());
+		}
+		return sb.toString();
+	}
+
 	@Override
 	public void setIdentityLastLogin(IdentityRef identity) {
 		dbInstance.getCurrentEntityManager()
@@ -1975,19 +2179,23 @@ public class BaseSecurityManager implements BaseSecurity {
 	@Override
 	public Identity saveIdentityName(Identity identity, String newName, String newExternalId) {
 		IdentityImpl reloadedIdentity = loadForUpdate(identity); 
-		reloadedIdentity.setName(newName);
-		reloadedIdentity.setExternalId(newExternalId);
-		reloadedIdentity = dbInstance.getCurrentEntityManager().merge(reloadedIdentity);
-		dbInstance.commit();
+		if(reloadedIdentity != null) {
+			reloadedIdentity.setName(newName);
+			reloadedIdentity.setExternalId(newExternalId);
+			reloadedIdentity = dbInstance.getCurrentEntityManager().merge(reloadedIdentity);
+			dbInstance.commit();
+		}
 		return reloadedIdentity;
 	}
 	
 	@Override
 	public Identity setExternalId(Identity identity, String externalId) {
-		IdentityImpl reloadedIdentity = loadForUpdate(identity); 
-		reloadedIdentity.setExternalId(externalId);
-		reloadedIdentity = dbInstance.getCurrentEntityManager().merge(reloadedIdentity);
-		dbInstance.commit();
+		IdentityImpl reloadedIdentity = loadForUpdate(identity);
+		if(reloadedIdentity != null) {
+			reloadedIdentity.setExternalId(externalId);
+			reloadedIdentity = dbInstance.getCurrentEntityManager().merge(reloadedIdentity);
+			dbInstance.commit();
+		}
 		return reloadedIdentity;
 	}
 	
@@ -2051,5 +2259,34 @@ public class BaseSecurityManager implements BaseSecurity {
 			guestIdentity = dbInstance.getCurrentEntityManager().merge(guestIdentity);
 		}
 		return guestIdentity;
+	}	
+	
+	@Override
+	public int deleteUserDataPriority() {
+		// delete with low priority at the end of the deletion process
+		return 10;
+	}
+
+	@Override
+	public void deleteUserData(Identity identity, String newDeletedUserName) {
+		// 1) delete all authentication tokens
+		List<Authentication> authentications = getAuthentications(identity);
+		for (Authentication auth:authentications) {
+			deleteAuthentication(auth);
+			log.info("Delete authentication provider::" + auth.getProvider() + "  of identity="  + identity);
+		}
+		
+		// 2) Delete the authentication history
+		authenticationHistoryDao.deleteAuthenticationHistory(identity);		
+
+		// 3) Remove legacy security group memberships
+		List<SecurityGroup> securityGroups = getSecurityGroupsForIdentity(identity);
+		for (SecurityGroup secGroup : securityGroups) {
+			removeIdentityFromSecurityGroup(identity, secGroup);
+			log.info("Removing identity::" + identity.getKey() + " from security group::" + secGroup.getKey()
+					+ ", resourceableTypeName::" + secGroup.getResourceableTypeName() + ", resourceableId"
+					+ secGroup.getResourceableId());
+		}
+		// new security groups / memberships are deleted in UserDeletionManager
 	}
 }

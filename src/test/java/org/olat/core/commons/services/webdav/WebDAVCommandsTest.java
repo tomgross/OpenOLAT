@@ -30,6 +30,7 @@ import java.util.UUID;
 
 import javax.ws.rs.core.UriBuilder;
 
+import org.apache.commons.io.IOUtils;
 import org.apache.http.Header;
 import org.apache.http.HttpResponse;
 import org.apache.http.client.methods.HttpDelete;
@@ -39,7 +40,6 @@ import org.apache.http.client.methods.HttpPut;
 import org.apache.http.entity.InputStreamEntity;
 import org.apache.http.entity.StringEntity;
 import org.apache.http.util.EntityUtils;
-import org.apache.poi.util.IOUtils;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Ignore;
@@ -674,8 +674,8 @@ public class WebDAVCommandsTest extends WebDAVTestCase {
 				.path("_other").path("WebDAV%20course").path("_courseelementdata").build();
 		String publicElementXml = conn.propfind(courseElementUri, 2);
 		Assert.assertTrue(publicElementXml.contains("<D:href>/webdav/coursefolders/_other/WebDAV%20course/_courseelementdata/Folder%20for%20all/</D:href>"));
-		Assert.assertFalse(publicElementXml.contains("<D:href>/webdav/coursefolders/_other/WebDAV%20course/_courseelementdata/Student%20read-only%20%2890600786058954%29/Readonly%20students/</D:href>"));
-		Assert.assertFalse(publicElementXml.contains("<D:href>/webdav/coursefolders/_other/WebDAV%20course/_courseelementdata/Not%20for%20students%20%2890600786058958%29/Not%20for%20students/</D:href>"));
+		Assert.assertFalse(publicElementXml.contains("<D:href>/webdav/coursefolders/_other/WebDAV%20course/_courseelementdata/Student%20read-only/Readonly%20students/</D:href>"));
+		Assert.assertFalse(publicElementXml.contains("<D:href>/webdav/coursefolders/_other/WebDAV%20course/_courseelementdata/Not%20for%20students/Not%20for%20students/</D:href>"));
 
 		conn.close();
 	}
@@ -706,8 +706,8 @@ public class WebDAVCommandsTest extends WebDAVTestCase {
 		String publicElementXml = conn.propfind(courseElementUri, 2);
 		//can access all 3 course nodes
 		Assert.assertTrue(publicElementXml.contains("<D:href>/webdav/coursefolders/_other/WebDAV%20course/_courseelementdata/Folder%20for%20all/</D:href>"));
-		Assert.assertTrue(publicElementXml.contains("<D:href>/webdav/coursefolders/_other/WebDAV%20course/_courseelementdata/Student%20read-only%20%2890600786058954%29/Readonly%20students/</D:href>"));
-		Assert.assertTrue(publicElementXml.contains("<D:href>/webdav/coursefolders/_other/WebDAV%20course/_courseelementdata/Not%20for%20students%20%2890600786058958%29/Not%20for%20students/</D:href>"));
+		Assert.assertTrue(publicElementXml.contains("<D:href>/webdav/coursefolders/_other/WebDAV%20course/_courseelementdata/Student%20read-only/Readonly%20students/</D:href>"));
+		Assert.assertTrue(publicElementXml.contains("<D:href>/webdav/coursefolders/_other/WebDAV%20course/_courseelementdata/Not%20for%20students/Not%20for%20students/</D:href>"));
 
 		conn.close();
 	}

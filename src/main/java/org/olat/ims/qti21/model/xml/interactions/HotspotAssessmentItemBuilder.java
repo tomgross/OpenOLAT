@@ -27,19 +27,23 @@ import static org.olat.ims.qti21.model.xml.AssessmentItemFactory.createHotspotEn
 import static org.olat.ims.qti21.model.xml.AssessmentItemFactory.createResponseProcessing;
 import static org.olat.ims.qti21.model.xml.QtiNodesExtractor.extractIdentifiersFromCorrectResponse;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 
-import javax.xml.transform.stream.StreamResult;
-
 import org.olat.core.gui.render.StringOutput;
+import org.olat.core.logging.OLog;
+import org.olat.core.logging.Tracing;
+import org.olat.core.util.StringHelper;
 import org.olat.ims.qti21.QTI21Constants;
 import org.olat.ims.qti21.model.IdentifierGenerator;
 import org.olat.ims.qti21.model.QTI21QuestionType;
 import org.olat.ims.qti21.model.xml.AssessmentItemBuilder;
 import org.olat.ims.qti21.model.xml.AssessmentItemFactory;
+import org.olat.ims.qti21.model.xml.ResponseIdentifierForFeedback;
 import org.olat.ims.qti21.model.xml.interactions.SimpleChoiceAssessmentItemBuilder.ScoreEvaluation;
 
 import uk.ac.ed.ph.jqtiplus.node.content.ItemBody;
@@ -73,6 +77,7 @@ import uk.ac.ed.ph.jqtiplus.serialization.QtiSerializer;
 import uk.ac.ed.ph.jqtiplus.types.ComplexReferenceIdentifier;
 import uk.ac.ed.ph.jqtiplus.types.Identifier;
 import uk.ac.ed.ph.jqtiplus.value.BaseType;
+import uk.ac.ed.ph.jqtiplus.value.Cardinality;
 import uk.ac.ed.ph.jqtiplus.value.IdentifierValue;
 import uk.ac.ed.ph.jqtiplus.value.SingleValue;
 
@@ -82,9 +87,12 @@ import uk.ac.ed.ph.jqtiplus.value.SingleValue;
  * @author srosse, stephane.rosse@frentix.com, http://www.frentix.com
  *
  */
-public class HotspotAssessmentItemBuilder extends AssessmentItemBuilder {
+public class HotspotAssessmentItemBuilder extends AssessmentItemBuilder implements ResponseIdentifierForFeedback {
+	
+	private static final OLog log = Tracing.createLoggerFor(HotspotAssessmentItemBuilder.class);
 	
 	private String question;
+	private Cardinality cardinality;
 	private Identifier responseIdentifier;
 	private List<Identifier> correctAnswers;
 	protected ScoreEvaluation scoreEvaluation;
@@ -131,18 +139,21 @@ public class HotspotAssessmentItemBuilder extends AssessmentItemBuilder {
 	}
 	
 	private void extractHotspotInteraction() {
-		StringOutput sb = new StringOutput();
-		List<Block> blocks = assessmentItem.getItemBody().getBlocks();
-		for(Block block:blocks) {
-			if(block instanceof HotspotInteraction) {
-				hotspotInteraction = (HotspotInteraction)block;
-				responseIdentifier = hotspotInteraction.getResponseIdentifier();
-				break;
-			} else {
-				qtiSerializer.serializeJqtiObject(block, new StreamResult(sb));
+		try(StringOutput sb = new StringOutput()) {
+			List<Block> blocks = assessmentItem.getItemBody().getBlocks();
+			for(Block block:blocks) {
+				if(block instanceof HotspotInteraction) {
+					hotspotInteraction = (HotspotInteraction)block;
+					responseIdentifier = hotspotInteraction.getResponseIdentifier();
+					break;
+				} else {
+					serializeJqtiObject(block, sb);
+				}
 			}
+			question = sb.toString();
+		} catch(IOException e) {
+			log.error("", e);
 		}
-		question = sb.toString();
 	}
 	
 	private void extractCorrectAnswers() {
@@ -151,9 +162,12 @@ public class HotspotAssessmentItemBuilder extends AssessmentItemBuilder {
 		if(hotspotInteraction != null) {
 			ResponseDeclaration responseDeclaration = assessmentItem
 					.getResponseDeclaration(hotspotInteraction.getResponseIdentifier());
-			if(responseDeclaration != null && responseDeclaration.getCorrectResponse() != null) {
-				CorrectResponse correctResponse = responseDeclaration.getCorrectResponse();
-				extractIdentifiersFromCorrectResponse(correctResponse, correctAnswers);
+			if(responseDeclaration != null) {
+				if(responseDeclaration.getCorrectResponse() != null) {
+					CorrectResponse correctResponse = responseDeclaration.getCorrectResponse();
+					extractIdentifiersFromCorrectResponse(correctResponse, correctAnswers);
+				}
+				cardinality = responseDeclaration.getCardinality();
 			}
 		}
 	}
@@ -182,6 +196,30 @@ public class HotspotAssessmentItemBuilder extends AssessmentItemBuilder {
 		scoreEvaluation = hasMapping ? ScoreEvaluation.perAnswer : ScoreEvaluation.allCorrectAnswers;
 	}
 	
+	@Override
+	public Identifier getResponseIdentifier() {
+		return responseIdentifier;
+	}
+	
+	public boolean isSingleChoice() {
+		return cardinality == Cardinality.SINGLE;
+	}
+	
+	public void setCardinality(Cardinality cardinality) {
+		this.cardinality = cardinality;
+	}
+	
+	@Override
+	public List<Answer> getAnswers() {
+		List<HotspotChoice> hotspotChoices = getHotspotChoices();
+		List<Answer> answers = new ArrayList<>(hotspotChoices.size());
+		int count = 0;
+		for(HotspotChoice choice:hotspotChoices) {
+			answers.add(new Answer(choice.getIdentifier(), Integer.toString(++count)));
+		}
+		return answers;
+	}
+
 	public String getBackground() {
 		Object graphichObject = hotspotInteraction.getObject();
 		if(graphichObject != null) {
@@ -208,6 +246,32 @@ public class HotspotAssessmentItemBuilder extends AssessmentItemBuilder {
 		} else {
 			graphichObject.setWidth(null);
 		}
+	}
+	
+	public boolean hasHotspotInteractionClass(String cssClass) {
+		List<String> cssClassses = hotspotInteraction.getClassAttr();
+		return cssClassses != null && cssClassses.contains(cssClass);
+	}
+	
+	public void addHotspotInteractionClass(String cssClass) {
+		if(!StringHelper.containsNonWhitespace(cssClass)) return;
+		
+		List<String> cssClassses = hotspotInteraction.getClassAttr();
+		cssClassses = cssClassses == null ? new ArrayList<>() : new ArrayList<>(cssClassses);
+		cssClassses.add(cssClass);
+		hotspotInteraction.setClassAttr(cssClassses);
+	}
+	
+	public void removeHotspotInteractionClass(String cssClass) {
+		if(cssClass == null || hotspotInteraction.getClassAttr() == null) return;
+
+		List<String> cssClassList = new ArrayList<>(hotspotInteraction.getClassAttr());
+		for(Iterator<String> cssClassIt= cssClassList.iterator(); cssClassIt.hasNext(); ) {
+			if(cssClass.equals(cssClassIt.next())) {
+				cssClassIt.remove();
+			}
+		}
+		hotspotInteraction.setClassAttr(cssClassList);
 	}
 	
 	public boolean isCorrect(HotspotChoice choice) {
@@ -264,6 +328,23 @@ public class HotspotAssessmentItemBuilder extends AssessmentItemBuilder {
 	public QTI21QuestionType getQuestionType() {
 		return QTI21QuestionType.hotspot;
 	}
+	
+	/**
+	 * @return A copy of the list of blocks which make the question.
+	 * 		The list is a copy and modification will not be persisted.
+	 */
+	public List<Block> getQuestionBlocks() {
+		List<Block> blocks = assessmentItem.getItemBody().getBlocks();
+		List<Block> questionBlocks = new ArrayList<>(blocks.size());
+		for(Block block:blocks) {
+			if(block instanceof HotspotInteraction) {
+				break;
+			} else {
+				questionBlocks.add(block);
+			}
+		}
+		return questionBlocks;
+	}
 
 	@Override
 	public String getQuestion() {
@@ -273,6 +354,27 @@ public class HotspotAssessmentItemBuilder extends AssessmentItemBuilder {
 	@Override
 	public void setQuestion(String question) {
 		this.question = question;
+	}
+	
+	public boolean isResponsive() {
+		List<String> cssClasses = hotspotInteraction.getClassAttr();
+		return cssClasses != null && cssClasses.size() > 0
+				&& cssClasses.contains(QTI21Constants.CSS_INTERACTION_RESPONSIVE); 
+	}
+	
+	public void setResponsive(boolean responsive) {
+		List<String> cssClasses = hotspotInteraction.getClassAttr();
+		if(cssClasses == null) {
+			cssClasses = new ArrayList<>();
+		}
+		if(responsive) {
+			if(!cssClasses.contains(QTI21Constants.CSS_INTERACTION_RESPONSIVE)) {
+				cssClasses.add(QTI21Constants.CSS_INTERACTION_RESPONSIVE);
+			}
+		} else {
+			cssClasses.remove(QTI21Constants.CSS_INTERACTION_RESPONSIVE);
+		}
+		hotspotInteraction.setClassAttr(cssClasses);
 	}
 	
 	public HotspotChoice getHotspotChoice(String identifier) {
@@ -307,7 +409,7 @@ public class HotspotAssessmentItemBuilder extends AssessmentItemBuilder {
 	@Override
 	protected void buildResponseAndOutcomeDeclarations() {
 		ResponseDeclaration responseDeclaration = AssessmentItemFactory
-				.createHotspotCorrectResponseDeclaration(assessmentItem, responseIdentifier, correctAnswers);
+				.createHotspotCorrectResponseDeclaration(assessmentItem, responseIdentifier, correctAnswers, cardinality);
 		if(scoreEvaluation == ScoreEvaluation.perAnswer) {
 			AssessmentItemFactory.appendMapping(responseDeclaration, scoreMapping);
 		}
@@ -324,9 +426,9 @@ public class HotspotAssessmentItemBuilder extends AssessmentItemBuilder {
 		getHtmlHelper().appendHtml(assessmentItem.getItemBody(), question);
 		
 		//add interaction
-		if(correctAnswers.size() == 1) {
+		if(correctAnswers.size() == 1 && cardinality == Cardinality.SINGLE) {
 			hotspotInteraction.setMaxChoices(1);
-		} else if(correctAnswers.size() > 1) {
+		} else {
 			hotspotInteraction.setMaxChoices(0);
 		}
 		

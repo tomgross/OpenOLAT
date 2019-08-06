@@ -81,6 +81,11 @@ public class MyPageListController extends AbstractPageListController {
 		newEntryLink.setElementCssClass("o_sel_pf_new_entry");
 		stackPanel.addTool(newEntryLink, Align.right);
 	}
+	
+	@Override
+	protected String getTimelineSwitchPreferencesName() {
+		return "entries-timeline-switch";
+	}
 
 	@Override
 	protected void loadModel(UserRequest ureq, String searchString) {
@@ -123,7 +128,7 @@ public class MyPageListController extends AbstractPageListController {
 			}
 			
 			List<Assignment> assignmentList = pageToAssignments.get(page);
-			PortfolioElementRow row = forgePageRow(ureq, page, null, assignmentList, categorizedElementMap, numberOfCommentsMap);
+			PortfolioElementRow row = forgePageRow(ureq, page, null, assignmentList, categorizedElementMap, numberOfCommentsMap, true);
 			rows.add(row);
 			if(page.getSection() != null) {
 				Section section = page.getSection();
@@ -141,6 +146,7 @@ public class MyPageListController extends AbstractPageListController {
 
 		timelineEl.setPoints(points);
 		disposeRows();//clean up the posters
+		model.setFlat(true);
 		model.setObjects(rows);
 		tableEl.reset();
 		tableEl.reloadData();

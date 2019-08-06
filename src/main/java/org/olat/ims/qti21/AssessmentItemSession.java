@@ -30,9 +30,8 @@ import org.olat.core.id.ModifiedInfo;
  * @author srosse, stephane.rosse@frentix.com, http://www.frentix.com
  *
  */
-public interface AssessmentItemSession extends CreateInfo, ModifiedInfo {
-	
-	public Long getKey();
+public interface AssessmentItemSession extends CreateInfo, ModifiedInfo, AssessmentItemSessionRef {
+
 	
 	/**
 	 * @return The identifier of the assessmentItemRef of the session
@@ -66,6 +65,14 @@ public interface AssessmentItemSession extends CreateInfo, ModifiedInfo {
 	public BigDecimal getManualScore();
 	
 	public void setManualScore(BigDecimal score);
+	
+	public String getCoachComment();
+	
+	public void setCoachComment(String comment);
+	
+	public boolean isToReview();
+	
+	public void setToReview(boolean toReview);
 	
 	public AssessmentTestSession getAssessmentTestSession();
 

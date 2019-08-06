@@ -92,8 +92,8 @@ public class UserAdminPage {
 		
 		//search
 		By searchBy = By.cssSelector("fieldset.o_sel_user_search_form a.o_sel_user_search_button");
-		browser.findElement(searchBy).click();
-		OOGraphene.waitBusy(browser);	
+		OOGraphene.clickAndWait(searchBy, browser);
+		OOGraphene.scrollTop(browser);	
 		return this;
 	}
 	
@@ -106,21 +106,25 @@ public class UserAdminPage {
 	public UserAdminPage selectAndDeleteUser(String lastName) {
 		By checkBy = By.cssSelector("fieldset.o_sel_usersearch_searchform table input[type='checkbox']");
 		browser.findElement(checkBy).click();
+		OOGraphene.waitBusy(browser);
 		
 		//select
 		By selectBy = By.cssSelector("fieldset.o_sel_usersearch_searchform div.o_table_wrapper div.o_table_buttons button.btn.btn-default");
 		browser.findElement(selectBy).click();
 		OOGraphene.waitBusy(browser);
+		OOGraphene.waitModalDialog(browser);
 		
 		//confirm
-		By usernameBy = By.xpath("//div[contains(@class,'modal-dialog')]//p[text()[contains(.,'" + lastName + "')]]");
+		By usernameBy = By.xpath("//div[contains(@class,'modal-dialog')]//div[@class='o_error']/strong[text()[contains(.,'" + lastName + "')]]");
 		List<WebElement> confirmUserEls = browser.findElements(usernameBy);
 		Assert.assertFalse(confirmUserEls.isEmpty());
 		
-		By buttonsBy = By.cssSelector("div.modal-dialog div.modal-footer a.btn.btn-default");
-		List<WebElement> buttonEls = browser.findElements(buttonsBy);
-		Assert.assertEquals(2, buttonEls.size());
-		buttonEls.get(0).click();
+		By confirmCheckBy = By.cssSelector("div.o_sel_confirm_delete_user input[type='checkbox']");
+		WebElement confirmCheckEl = browser.findElement(confirmCheckBy);
+		OOGraphene.check(confirmCheckEl, Boolean.TRUE);
+		
+		By buttonsBy = By.cssSelector("div.modal-dialog div.modal-body a.btn.o_sel_delete_user");
+		browser.findElement(buttonsBy).click();
 		OOGraphene.waitBusy(browser);
 		OOGraphene.waitAndCloseBlueMessageWindow(browser);
 		return this;
@@ -137,6 +141,8 @@ public class UserAdminPage {
 		By importBy = By.cssSelector("a.o_sel_id_start_import_user_button.btn-primary");
 		browser.findElement(importBy).click();
 		OOGraphene.waitBusy(browser);
+		By dataBy = By.cssSelector("fieldset.o_sel_import_users_data");
+		OOGraphene.waitElement(dataBy, browser);
 		return new ImportUserPage(browser);
 	}
 	
@@ -182,7 +188,7 @@ public class UserAdminPage {
 		
 		By saveBy = By.cssSelector(".o_sel_id_create button.btn-primary");
 		browser.findElement(saveBy).click();
-		OOGraphene.waitBusy(browser);
+		OOGraphene.waitBusyAndScrollTop(browser);
 		OOGraphene.waitAndCloseBlueMessageWindow(browser);
 		return this;
 	}
@@ -208,8 +214,7 @@ public class UserAdminPage {
 		usernameEl.sendKeys(username);
 		
 		By searchBy = By.cssSelector(".o_sel_user_search_form a.btn-default");
-		browser.findElement(searchBy).click();
-		OOGraphene.waitBusy(browser);
+		OOGraphene.clickAndWait(searchBy, browser);
 		
 		return this;
 	}

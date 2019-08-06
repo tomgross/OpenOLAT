@@ -166,7 +166,7 @@ public class QTI21StatisticsManagerImpl implements QTI21StatisticsManager {
 	}
 
 	@Override
-	public StatisticAssessment getAssessmentStatistics(QTI21StatisticSearchParams searchParams) {
+	public StatisticAssessment getAssessmentStatistics(QTI21StatisticSearchParams searchParams, Double cutValue) {
 		StringBuilder sb = new StringBuilder();
 		sb.append("select asession.score, asession.manualScore, asession.passed, asession.duration from qtiassessmenttestsession asession ");
 		decorateRSet(sb, searchParams, true);
@@ -188,6 +188,8 @@ public class QTI21StatisticsManagerImpl implements QTI21StatisticsManager {
 		double minDuration = Double.MAX_VALUE;
 		double maxDuration = 0d;
 		
+		BigDecimal cutBigValue = cutValue == null ? null : BigDecimal.valueOf(cutValue.doubleValue());
+		
 		int dataPos = 0;
 		boolean hasScore = false;
 		for(Object[] rawData:rawDatas) {
@@ -208,6 +210,9 @@ public class QTI21StatisticsManagerImpl implements QTI21StatisticsManager {
 			}
 			
 			Boolean passed = (Boolean)rawData[pos++];
+			if(cutBigValue != null && score != null) {
+				passed = score.compareTo(cutBigValue) >= 0;
+			}
 			if(passed != null) {
 				if(passed.booleanValue()) {
 					numOfPassed++;
@@ -659,7 +664,8 @@ public class QTI21StatisticsManagerImpl implements QTI21StatisticsManager {
 		}
 		
 		Map<String,AssessmentItemRef> itemMap = new HashMap<>();
-		for(AssessmentItemRef itemRef:resolvedAssessmentTest.getAssessmentItemRefs()) {
+		List<AssessmentItemRef> itemRefs = new ArrayList<>(resolvedAssessmentTest.getAssessmentItemRefs());
+		for(AssessmentItemRef itemRef:itemRefs) {
 			itemMap.put(itemRef.getIdentifier().toString(), itemRef);
 		}
 
@@ -704,12 +710,20 @@ public class QTI21StatisticsManagerImpl implements QTI21StatisticsManager {
 		}
 		
 		List<AssessmentItemStatistic> statistics = new ArrayList<>(identifierToHelpers.size());
-		for(AssessmentItemHelper helper:identifierToHelpers.values()) {
-			long numOfAnswersItem = helper.count;
-			long numOfCorrectAnswers = helper.countCorrectAnswers;
-			double average = (helper.totalScore / helper.count);
-			double averageParticipants = (helper.totalScore / numOfParticipants);
-			statistics.add(new AssessmentItemStatistic(helper.getAssessmentItem(), average, averageParticipants, numOfAnswersItem, numOfCorrectAnswers));
+		for(AssessmentItemRef itemRef:itemRefs) {
+			AssessmentItemHelper helper = identifierToHelpers.get(itemRef.getIdentifier().toString());
+			if(helper != null) {
+				long numOfAnswersItem = helper.count;
+				long numOfCorrectAnswers = helper.countCorrectAnswers;
+				double average = (helper.totalScore / helper.count);
+				double averageParticipants = (helper.totalScore / numOfParticipants);
+				statistics.add(new AssessmentItemStatistic(helper.getAssessmentItem(), average, averageParticipants, numOfAnswersItem, numOfCorrectAnswers));
+			} else {
+				ResolvedAssessmentItem item = resolvedAssessmentTest.getResolvedAssessmentItem(itemRef);
+				if(item != null) {
+					statistics.add(new AssessmentItemStatistic(item.getRootNodeLookup().extractIfSuccessful(), 0.0d, 0.0d, 0l, 0l));
+				}
+			}
 		}
 		return statistics;
 	}

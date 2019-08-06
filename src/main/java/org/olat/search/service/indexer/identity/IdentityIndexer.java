@@ -26,6 +26,9 @@ import org.olat.basesecurity.BaseSecurity;
 import org.olat.basesecurity.BaseSecurityManager;
 import org.olat.core.commons.persistence.DBFactory;
 import org.olat.core.id.Identity;
+import org.olat.core.id.Roles;
+import org.olat.core.id.context.BusinessControl;
+import org.olat.core.id.context.ContextEntry;
 import org.olat.core.util.resource.OresHelper;
 import org.olat.search.service.SearchResourceContext;
 import org.olat.search.service.indexer.AbstractHierarchicalIndexer;
@@ -71,7 +74,7 @@ public class IdentityIndexer extends AbstractHierarchicalIndexer {
 					continue;
 				}
 
-				if (isLogDebugEnabled()) logDebug("Indexing identity::" + identity.getName() + " and counter::" + counter);  	  	
+				if (isLogDebugEnabled()) logDebug("Indexing identity::" + identity.getKey() + " and counter::" + counter);  	  	
 				// Create a search context for this identity. The search context will open the users visiting card in a new tab
 				SearchResourceContext searchResourceContext = new SearchResourceContext(parentResourceContext);
 				searchResourceContext.setBusinessControlFor(OresHelper.createOLATResourceableInstance(Identity.class, identity.getKey()));
@@ -90,5 +93,13 @@ public class IdentityIndexer extends AbstractHierarchicalIndexer {
 			DBFactory.getInstance().commitAndCloseSession();
 		}
 		if (isLogDebugEnabled()) logDebug("IdentityIndexer finished with counter::" + counter);
+	}
+	
+	@Override
+	public boolean checkAccess(ContextEntry contextEntry, BusinessControl businessControl, Identity identity, Roles roles) {
+		if(roles.isGuestOnly()) {
+			return false;
+		}
+		return true;
 	}
 }

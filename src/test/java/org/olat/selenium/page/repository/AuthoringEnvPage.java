@@ -152,7 +152,7 @@ public class AuthoringEnvPage {
 		By createBy = By.cssSelector("div.modal.o_sel_author_create_popup .o_sel_author_create_wizard");
 		browser.findElement(createBy).click();
 		OOGraphene.waitBusy(browser);
-		return CourseWizardPage.getWizard(browser);
+		return new CourseWizardPage(browser);
 	}
 	
 	/**
@@ -170,10 +170,17 @@ public class AuthoringEnvPage {
 			.clickToolbarBack();
 	}
 	
+	/**
+	 * Try to upload a resource if the type is recognized.
+	 * 
+	 * @param title The title of the learning resource
+	 * @param resource The zip file to import
+	 * @return Itself
+	 */
 	public AuthoringEnvPage uploadResource(String title, File resource) {
-		WebElement importLink = browser.findElement(By.className("o_sel_author_import"));
-		Assert.assertTrue(importLink.isDisplayed());
-		importLink.click();
+		By importBy = By.className("o_sel_author_import");
+		OOGraphene.waitElement(importBy, browser);
+		browser.findElement(importBy).click();
 		OOGraphene.waitBusy(browser);
 		
 		By inputBy = By.cssSelector(".o_fileinput input[type='file']");
@@ -187,8 +194,12 @@ public class AuthoringEnvPage {
 		//save
 		By saveBy = By.cssSelector("div.o_sel_repo_save_details button.btn-primary");
 		WebElement saveButton = browser.findElement(saveBy);
-		saveButton.click();
-		OOGraphene.waitBusy(browser);
+		if(saveButton.isEnabled()) {
+			saveButton.click();
+			OOGraphene.waitBusy(browser);
+			OOGraphene.waitModalDialogDisappears(browser);
+			OOGraphene.waitElement(RepositoryEditDescriptionPage.generaltabBy, browser);
+		}
 		return this;
 	}
 	
@@ -200,6 +211,7 @@ public class AuthoringEnvPage {
 	
 	public void selectResource(String title) {
 		By selectBy = By.xpath("//div[contains(@class,'o_coursetable')]//a[contains(text(),'" + title + "')]");
+		OOGraphene.waitElement(selectBy, browser);
 		browser.findElement(selectBy).click();
 		OOGraphene.waitBusy(browser);
 	}
@@ -216,8 +228,8 @@ public class AuthoringEnvPage {
 	 * @return
 	 */
 	public CoursePageFragment clickToolbarRootCrumb() {
-		OOGraphene.closeBlueMessageWindow(browser);
-		By toolbarBackBy = By.xpath("//li[contains(@class,'o_breadcrumb_back')]/following-sibling::li/a");
+		By toolbarBackBy = By.xpath("//div[contains(@class,'o_breadcrumb')]/ol[contains(@class,'breadcrumb')]/li/a[contains(@onclick,'crumb_0')]");
+		OOGraphene.waitingALittleBit();// firefox will click the button without effect
 		browser.findElement(toolbarBackBy).click();
 		OOGraphene.waitBusy(browser);
 		return new CoursePageFragment(browser);

@@ -53,11 +53,14 @@ class RichTextElementComponent extends FormBaseComponentImpl {
 	private static final String CMD_IMAGEBROWSER = "image";
 	private static final String CMD_FLASHPLAYERBROWSER = "flashplayer";
 	private static final String CMD_FILEBROWSER = "file";
+	private static final String CMD_MEDIABROWSER = "media";
 	private static final ComponentRenderer RENDERER = new RichTextElementRenderer();
 
 	private final RichTextElementImpl element;
 	private int cols;
 	private int rows;
+	private Integer currentHeight;
+	private TextMode currentTextMode;
 
 	/**
 	 * Constructor for a text area element
@@ -81,9 +84,6 @@ class RichTextElementComponent extends FormBaseComponentImpl {
 		return element;
 	}
 
-	/**
-	 * @see org.olat.core.gui.components.Component#getHTMLRendererSingleton()
-	 */
 	@Override
 	public ComponentRenderer getHTMLRendererSingleton() {
 		return RENDERER;
@@ -104,6 +104,22 @@ class RichTextElementComponent extends FormBaseComponentImpl {
 	public void setRows(int rows) {
 		this.rows = rows;
 	}
+	
+	protected Integer getCurrentHeight() {
+		return currentHeight;
+	}
+
+	protected void setCurrentHeight(Integer currentHeight) {
+		this.currentHeight = currentHeight;
+	}
+
+	protected TextMode getCurrentTextMode() {
+		return currentTextMode;
+	}
+
+	protected void setCurrentTextMode(TextMode currentTextMode) {
+		this.currentTextMode = currentTextMode;
+	}
 
 	@Override
 	public void validate(UserRequest ureq, ValidationResult vr) {
@@ -118,7 +134,8 @@ class RichTextElementComponent extends FormBaseComponentImpl {
 		// element we make an exception since we have the media and link chooser
 		// events that must be dispatched by this code.		
 		String moduleUri = ureq.getModuleURI();
-		if (moduleUri != null && (moduleUri.startsWith(CMD_FILEBROWSER) || moduleUri.startsWith(CMD_IMAGEBROWSER) || moduleUri.startsWith(CMD_FLASHPLAYERBROWSER))) {
+		if (CMD_FILEBROWSER.equals(moduleUri) || CMD_IMAGEBROWSER.equals(moduleUri)
+				|| CMD_FLASHPLAYERBROWSER.equals(moduleUri) || CMD_MEDIABROWSER.equals(moduleUri)) {
 			// Get currently edited relative file path
 			String fileName = getRichTextElementImpl().getEditorConfiguration().getLinkBrowserRelativeFilePath();
 			createFileSelectorPopupWindow(ureq, moduleUri, fileName);
@@ -138,11 +155,11 @@ class RichTextElementComponent extends FormBaseComponentImpl {
 		final boolean allowCustomMediaFactory = config.isAllowCustomMediaFactory();
 		final boolean uriValidation = config.isFilenameUriValidation();
 		final String[] suffixes;
-		if(type.startsWith(CMD_FILEBROWSER)) {
+		if(type.equals(CMD_FILEBROWSER)) {
 			suffixes = null;
-		} else if(type.startsWith(CMD_IMAGEBROWSER)) {
+		} else if(type.equals(CMD_IMAGEBROWSER)) {
 			suffixes = config.getLinkBrowserImageSuffixes();
-		} else if (type.startsWith(CMD_FLASHPLAYERBROWSER)) {
+		} else if (type.equals(CMD_FLASHPLAYERBROWSER)) {
 			suffixes = config.getLinkBrowserFlashPlayerSuffixes();
 		} else {
 			suffixes = config.getLinkBrowserMediaSuffixes();
@@ -161,7 +178,7 @@ class RichTextElementComponent extends FormBaseComponentImpl {
 				String uploadRelPath = config.getLinkBrowserUploadRelPath();
 				String absolutePath = config.getLinkBrowserAbsolutFilePath();
 				CustomLinkTreeModel linkBrowserCustomTreeModel = config.getLinkBrowserCustomLinkTreeModel();
-				if (type.startsWith(CMD_FILEBROWSER)) {
+				if (type.equals(CMD_FILEBROWSER)) {
 					// when in file mode we include the internal links to the selection
 					myLinkChooserController = new LinkChooserController(lureq, lwControl, baseContainer, uploadRelPath, absolutePath, suffixes, uriValidation, fileName, linkBrowserCustomTreeModel, allowCustomMediaFactory);			
 				} else {

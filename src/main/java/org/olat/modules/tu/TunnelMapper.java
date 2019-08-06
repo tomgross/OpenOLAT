@@ -110,7 +110,7 @@ public class TunnelMapper implements Mapper {
 			} else if (method.equals("POST")) {
 				Map<String,String[]> params = hreq.getParameterMap();
 				HttpPost pmeth = new HttpPost(builder.build());
-				List<BasicNameValuePair> pairs = new ArrayList<BasicNameValuePair>();
+				List<BasicNameValuePair> pairs = new ArrayList<>();
 				for (String key: params.keySet()) {
 					String vals[] = params.get(key);
 					for(String val:vals) {
@@ -138,7 +138,7 @@ public class TunnelMapper implements Mapper {
 			HttpResponse response = httpClient.execute(meth);
 			if (response == null) {
 				// error
-				return new NotFoundMediaResource(relPath);
+				return new NotFoundMediaResource();
 			}
 
 			// get or post successfully
@@ -146,13 +146,10 @@ public class TunnelMapper implements Mapper {
 			if (responseHeader == null) {
 				// error
 				EntityUtils.consumeQuietly(response.getEntity());
-				return new NotFoundMediaResource(relPath);
+				return new NotFoundMediaResource();
 			}
 			return new HttpRequestMediaResource(response);
-		} catch (ClientProtocolException e) {
-			log.error("", e);
-			return null;
-		} catch (URISyntaxException e) {
+		} catch (ClientProtocolException | URISyntaxException e) {
 			log.error("", e);
 			return null;
 		} catch (IOException e) {

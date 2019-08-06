@@ -21,6 +21,7 @@ package org.olat.repository.model;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 
 import org.olat.basesecurity.IdentityRef;
 import org.olat.core.id.Roles;
@@ -36,8 +37,10 @@ public class SearchAuthorRepositoryEntryViewParams {
 	private final Roles roles;
 	
 	private Boolean marked;
+	private Boolean closed;
 	private boolean deleted = false;
 	private boolean ownedResourcesOnly;
+	private ResourceUsage resourceUsage = ResourceUsage.all;
 	
 	private String idAndRefs;
 	private String idRefsAndTitle;
@@ -49,6 +52,7 @@ public class SearchAuthorRepositoryEntryViewParams {
 	private boolean orderByAsc;
 	private List<String> resourceTypes;
 	private List<Long> repoEntryKeys;
+	private Set<Long> licenseTypeKeys;
 	
 	public SearchAuthorRepositoryEntryViewParams(IdentityRef identity, Roles roles) {
 		this.identity = identity;
@@ -174,6 +178,34 @@ public class SearchAuthorRepositoryEntryViewParams {
 		this.marked = marked;
 	}
 	
+	public ResourceUsage getResourceUsage() {
+		return resourceUsage;
+	}
+
+	public void setResourceUsage(ResourceUsage resourceUsage) {
+		this.resourceUsage = resourceUsage;
+	}
+
+	public Boolean getClosed() {
+		return closed;
+	}
+
+	public void setClosed(Boolean closed) {
+		this.closed = closed;
+	}
+	
+	public boolean isLicenseTypeDefined() {
+		return licenseTypeKeys != null && !licenseTypeKeys.isEmpty();
+	}
+ 
+	public Set<Long> getLicenseTypeKeys() {
+		return licenseTypeKeys;
+	}
+
+	public void setLicneseTypeKeys(Set<Long> licneseTypeKeys) {
+		this.licenseTypeKeys = licneseTypeKeys;
+	}
+
 	public enum OrderBy {
 		key,
 		favorit,
@@ -181,6 +213,7 @@ public class SearchAuthorRepositoryEntryViewParams {
 		displayname,
 		authors,
 		author,
+		license,
 		location,
 		access,
 		ac,
@@ -192,7 +225,14 @@ public class SearchAuthorRepositoryEntryViewParams {
 		lifecycleSoftkey,
 		lifecycleStart,
 		lifecycleEnd,
+		references,
 		deletionDate,
 		deletedBy
+	}
+	
+	public enum ResourceUsage {
+		all,
+		used,
+		notUsed
 	}
 }

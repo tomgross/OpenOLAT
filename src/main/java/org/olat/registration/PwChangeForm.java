@@ -25,9 +25,7 @@
 
 package org.olat.registration;
 
-import java.util.Collections;
-import java.util.List;
-
+import org.olat.basesecurity.BaseSecurityManager;
 import org.olat.core.gui.UserRequest;
 import org.olat.core.gui.components.form.flexible.FormItemContainer;
 import org.olat.core.gui.components.form.flexible.elements.TextElement;
@@ -52,7 +50,7 @@ public class PwChangeForm extends FormBasicController {
 	private TextElement newpass1;
 	private TextElement newpass2; // confirm
 	
-	private TemporaryKey tempKey;
+	private final TemporaryKey tempKey;
 	private Identity identityToChange;
 	
 	@Autowired
@@ -60,12 +58,10 @@ public class PwChangeForm extends FormBasicController {
 	@Autowired
 	private UserManager userManager;
 	@Autowired
+	private BaseSecurityManager securityManager;
+	@Autowired
 	private OLATAuthManager olatAuthenticationSpi;
 	
-	/**
-	 * Password change form.
-	 * @param name
-	 */
 	public PwChangeForm(UserRequest ureq, WindowControl wControl, Identity identityToChange, TemporaryKey tempKey) {
 		super(ureq, wControl, null, Util.createPackageTranslator(ChangePasswordForm.class, ureq.getLocale()));
 		this.identityToChange = identityToChange;
@@ -73,10 +69,6 @@ public class PwChangeForm extends FormBasicController {
 		initForm(ureq);
 	}
 	
-	/**
-	 * Password change form.
-	 * @param name
-	 */
 	public PwChangeForm(UserRequest ureq, WindowControl wControl, TemporaryKey tempKey) {
 		super(ureq, wControl, null, Util.createPackageTranslator(ChangePasswordForm.class, ureq.getLocale()));
 		this.tempKey = tempKey;
@@ -85,57 +77,67 @@ public class PwChangeForm extends FormBasicController {
 
 	@Override
 	public boolean validateFormLogic(UserRequest ureq) {
+		boolean allOk = super.validateFormLogic(ureq);
 		
-		boolean newIsValid = userManager.syntaxCheckOlatPassword(newpass1.getValue());
-		if (!newIsValid) {
+		newpass1.clearError();
+		if (!userManager.syntaxCheckOlatPassword(newpass1.getValue())) {
 			newpass1.setErrorKey("form.checkPassword", null);
+			allOk &= false;
+		} else if(!olatAuthenticationSpi.checkCredentialHistory(getIdentityToChange(), newpass1.getValue())) {
+			newpass1.setErrorKey("form.checkPassword.history", null);
+			allOk &= false;
 		}
+		
 		// validate that both passwords are the same
-		boolean newDoesMatch = newpass1.getValue().equals(newpass2.getValue());
-		if (!newDoesMatch) {
+		newpass2.clearError();
+		if (!newpass1.getValue().equals(newpass2.getValue())) {
 			newpass2.setErrorKey("form.password.error.nomatch", null);
+			allOk &= false;
 		}
-		return newIsValid && newDoesMatch;
+		
+		return allOk;
+	}
+
+	@Override
+	protected void formOK(UserRequest ureq) {
+		Identity identToChange = getIdentityToChange();
+		changeIdentity(identToChange);
+		fireEvent (ureq, Event.DONE_EVENT);
+	}
+
+	private Identity getIdentityToChange() {
+		Identity identToChange;
+		if(tempKey != null) {
+			identToChange = securityManager.loadIdentityByKey(tempKey.getIdentityKey());
+			rm.deleteTemporaryKeyWithId(tempKey.getRegistrationKey());	
+		} else {
+			identToChange = identityToChange;
+		}
+		return identToChange;
+	}
+
+	private void changeIdentity(Identity identToChange) {
+		if(identToChange != null && !saveFormData(identToChange)) {
+			showError("password.failed");
+		}
 	}
 
 	/**
 	 * Saves the form data in the user object and the database
 	 * 
-	 * @param doer The current identity.
 	 * @param s The identity to change the password.
 	 */
-	public boolean saveFormData(Identity s) {
+	private boolean saveFormData(Identity s) {
 		return olatAuthenticationSpi.changePasswordByPasswordForgottenLink(s, newpass1.getValue());	
-	}
-
-	@Override
-	protected void formOK(UserRequest ureq) {
-		if(tempKey != null) {
-			List<Identity> identToChanges = userManager.findIdentitiesByEmail(Collections.singletonList(tempKey.getEmailAddress()));
-			if(identToChanges == null || identToChanges.size() == 0 || identToChanges.size() > 1) {
-				showError("password.failed");
-			} else {
-				Identity identToChange = identToChanges.get(0);
-				if(!saveFormData(identToChange)) {
-					showError("password.failed");
-				}
-			}
-		} else if(identityToChange != null) {
-			if(!saveFormData(identityToChange)) {
-				showError("password.failed");
-			}
-		}
-		if(tempKey != null) {
-			rm.deleteTemporaryKeyWithId(tempKey.getRegistrationKey());	
-		}
-		fireEvent (ureq, Event.DONE_EVENT);
 	}
 
 	@Override
 	protected void initForm(FormItemContainer formLayout, Controller listener, UserRequest ureq) {
 		setFormTitle("form.password.enter.new");
 		newpass1 = uifactory.addPasswordElement("newpass1",  "form.password.new1", 128, "", formLayout);
+		newpass1.setAutocomplete("new-password");
 		newpass2 = uifactory.addPasswordElement("newpass2",  "form.password.new2", 128, "", formLayout);
+		newpass2.setAutocomplete("new-password");
 		uifactory.addFormSubmitButton("submit", formLayout);
 	}
 

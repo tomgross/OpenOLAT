@@ -33,8 +33,15 @@ import java.util.List;
 import org.olat.core.CoreSpringFactory;
 import org.olat.core.commons.modules.bc.FileSelection;
 import org.olat.core.commons.modules.bc.FolderConfig;
+import org.olat.core.commons.modules.bc.FolderLicenseHandler;
+import org.olat.core.commons.modules.bc.FolderManager;
 import org.olat.core.commons.modules.bc.meta.MetaInfo;
+import org.olat.core.commons.modules.bc.meta.MetaInfoFactory;
 import org.olat.core.commons.modules.bc.meta.tagged.MetaTagged;
+import org.olat.core.commons.services.license.License;
+import org.olat.core.commons.services.license.LicenseHandler;
+import org.olat.core.commons.services.license.LicenseModule;
+import org.olat.core.commons.services.license.ui.LicenseRenderer;
 import org.olat.core.gui.components.form.flexible.impl.NameValuePair;
 import org.olat.core.gui.control.winmgr.AJAXFlags;
 import org.olat.core.gui.render.StringOutput;
@@ -54,6 +61,7 @@ import org.olat.core.util.vfs.VFSItem;
 import org.olat.core.util.vfs.VFSLeaf;
 import org.olat.core.util.vfs.VFSLockManager;
 import org.olat.core.util.vfs.VirtualContainer;
+import org.olat.core.util.vfs.filters.SystemItemFilter;
 import org.olat.core.util.vfs.lock.LockInfo;
 import org.olat.core.util.vfs.version.Versionable;
 import org.olat.core.util.vfs.version.Versions;
@@ -85,6 +93,7 @@ public class ListRenderer {
 
 	private VFSLockManager lockManager;
 	private UserManager userManager;
+	boolean licensesEnabled ;
  	
 	/**
 	 * Default constructor.
@@ -110,6 +119,9 @@ public class ListRenderer {
 		if(userManager == null) {
 			userManager = CoreSpringFactory.getImpl(UserManager.class);
 		}
+		LicenseModule licenseModule = CoreSpringFactory.getImpl(LicenseModule.class);
+		LicenseHandler licenseHandler = CoreSpringFactory.getImpl(FolderLicenseHandler.class);
+		licensesEnabled = licenseModule.isEnabled(licenseHandler);
 
 		List<VFSItem> children = fc.getCurrentContainerChildren();
 		// folder empty?
@@ -128,14 +140,16 @@ public class ListRenderer {
 		sb.append("<table class=\"table table-condensed table-striped table-hover o_bc_table\">")
 		  .append("<thead><tr><th><a class='o_orderby ").append(sortCss,FolderComponent.SORT_NAME.equals(sortOrder)).append("' ");
 		ubu.buildHrefAndOnclick(sb, null, iframePostEnabled, false, false, new NameValuePair(PARAM_SORTID, FolderComponent.SORT_NAME))
-		   .append(">").append(translator.translate("header.Name")).append("</a>")
-		   .append("</th><th><a class='o_orderby ").append(sortCss,FolderComponent.SORT_SIZE.equals(sortOrder)).append("' ");
+		   .append(">").append(translator.translate("header.Name")).append("</a>").append("</th>");
+		sb.append("<th><a class='o_orderby ").append(sortCss,FolderComponent.SORT_SIZE.equals(sortOrder)).append("' ");
 		ubu.buildHrefAndOnclick(sb, null, iframePostEnabled, false, false, new NameValuePair(PARAM_SORTID, FolderComponent.SORT_SIZE))
 		   .append(">").append(translator.translate("header.Size")).append("</a>")
 		   .append("</th><th><a class='o_orderby ").append(sortCss,FolderComponent.SORT_DATE.equals(sortOrder)).append("' ");	
 		ubu.buildHrefAndOnclick(sb, null, iframePostEnabled, false, false, new NameValuePair(PARAM_SORTID, FolderComponent.SORT_DATE))
 		   .append(">").append(translator.translate("header.Modified")).append("</a>");
-
+		if (licensesEnabled) {
+			sb.append("<th>").append(translator.translate("header.license")).append("</th>");
+		}
 		if(canVersion) {
 			sb.append("</th><th><a class='o_orderby ").append(sortCss,FolderComponent.SORT_REV.equals(sortOrder)).append("' ");		
 			ubu.buildHrefAndOnclick(sb, null, iframePostEnabled, false, false, new NameValuePair(PARAM_SORTID, FolderComponent.SORT_REV))																																					// file size column
@@ -225,13 +239,13 @@ public class ListRenderer {
 		  .append("<input type=\"checkbox\" name=\"")
 		  .append(FileSelection.FORM_ID)
 		  .append("\" value=\"");
-		// add escaped folder name
-		sb.append(StringHelper.escapeHtml(name));
-		sb.append("\"");
 		if(xssErrors) {
-			sb.append(" disabled=\"disabled\"");
+			sb.append(StringHelper.escapeHtml(name))
+			  .append("\" disabled=\"disabled\"");
+		} else {
+			sb.append(name).append("\" ");
 		}
-		sb.append("/>");
+		sb.append("/> ");
 		// browse link pre
 		if(xssErrors) {
 			sb.append("<i class='o_icon o_icon-fw o_icon_banned'> </i> ");
@@ -241,11 +255,21 @@ public class ListRenderer {
 			sb.append("<a id='o_sel_doc_").append(pos).append("'");
 		
 			if (isContainer) { // for directories... normal module URIs
-				ubu.buildHrefAndOnclick(sb, pathAndName, iframePostEnabled, false, true);
+				// needs encoding, not done in buildHrefAndOnclick!
+				//FIXME: SR: refactor encode: move to ubu.buildHrefAndOnclick
+				String pathAndNameEncoded = ubu.encodeUrl(pathAndName);
+				ubu.buildHrefAndOnclick(sb, pathAndNameEncoded, iframePostEnabled, false, true);
 			} else { // for files, add PARAM_SERV command
 				sb.append(" href=\"");
 				ubu.buildURI(sb, new String[] { PARAM_SERV }, new String[] { "x" }, pathAndName, AJAXFlags.MODE_NORMAL);
-				sb.append("\" target=\"_blank\" download=\"").append(name).append("\"");
+				sb.append("\"");
+
+				boolean download = FolderManager.isDownloadForcedFileType(name);
+				if (download) {
+					sb.append(" download=\"").append(StringHelper.escapeHtml(name)).append("\"");					
+				} else {					
+					sb.append(" target=\"_blank\"");
+				}
 			}
 			sb.append(">");
 
@@ -278,21 +302,19 @@ public class ListRenderer {
 				sb.append("</div>");
 				hasMeta = true;
 			}
-			//boolean hasThumbnail = false;
+			
 			if(metaInfo.isThumbnailAvailable() && !xssErrors) {
 				sb.append("<div class='o_thumbnail' style='background-image:url("); 
 				ubu.buildURI(sb, new String[] { PARAM_SERV_THUMBNAIL}, new String[] { "x" }, pathAndName, AJAXFlags.MODE_NORMAL);
 				sb.append("); background-repeat:no-repeat; background-position:50% 50%;'></div>");
 				hasMeta = true;
-				//hasThumbnail = true;
 			}
 
 			// first try author info from metadata (creator)
-			//boolean hasMetaAuthor = false;
 			String author = metaInfo.getCreator();
 			// fallback use file author (uploader)
-			if (StringHelper.containsNonWhitespace(author)) {
-				//hasMetaAuthor = true;
+			if(StringHelper.containsNonWhitespace(author)) {
+				//
 			} else {
 				author = metaInfo.getAuthor();
 				if(!"-".equals(author)) {
@@ -327,13 +349,20 @@ public class ListRenderer {
 			}
 		}
 		sb.append("</td><td>");
-		
 		// filesize
 		if (!isContainer) {
 			// append filesize
-			sb.append("<span class='text-muted small'>");
-			sb.append(Formatter.formatBytes(leaf.getSize()));
-			sb.append("</span>");
+			sb.append("<span class='text-muted small'>")
+			  .append(Formatter.formatBytes(leaf.getSize()))
+			  .append("</span>");
+		} else if (child instanceof VFSContainer) {
+			try {
+				sb.append("<span class='text-muted small'>")
+				  .append(((VFSContainer) child).getItems(new SystemItemFilter()).size())
+				  .append(" ").append(translator.translate("mf.elements")).append("</span>");
+			} catch (Exception e) {
+				log.error("", e);
+			}
 		}
 		sb.append("</td><td>");
 		
@@ -345,6 +374,15 @@ public class ListRenderer {
 		else
 			sb.append("-");
 		sb.append("</span></td><td>");
+		
+		// license
+		if (licensesEnabled) {
+			MetaInfoFactory metaInfoFactory = CoreSpringFactory.getImpl(MetaInfoFactory.class);
+			License license = metaInfoFactory.getLicense(metaInfo);
+			LicenseRenderer licenseRenderer = new LicenseRenderer(translator.getLocale());
+			licenseRenderer.render(sb, license, true);
+			sb.append("</td><td>");
+		}
 
 		if(canContainerVersion) {
 			if (canVersion)

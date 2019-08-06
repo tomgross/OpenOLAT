@@ -64,12 +64,12 @@ class GlossaryDefinitionMapper extends LogDelegator implements Mapper {
 		File glossaryFolderFile = new File(glossaryFolderString);
 		if (!glossaryFolderFile.isDirectory()) {
 			logWarn("GlossaryDefinition delivery failed; path to glossaryFolder not existing: " + relPath, null);
-			return new NotFoundMediaResource(relPath);
+			return new NotFoundMediaResource();
 		}
 		VFSContainer glossaryFolder = new LocalFolderImpl(glossaryFolderFile);
 		if (!gIM.isFolderContainingGlossary(glossaryFolder)) {
 			logWarn("GlossaryDefinition delivery failed; glossaryFolder doesn't contain a valid Glossary: " + glossaryFolder, null);
-			return new NotFoundMediaResource(relPath);
+			return new NotFoundMediaResource();
 		}
 
 		String glossaryMainTerm = parts[2];
@@ -84,7 +84,7 @@ class GlossaryDefinitionMapper extends LogDelegator implements Mapper {
 		}
 		glossaryMainTerm = glossaryMainTerm.toLowerCase();
 		
-		Set<String> alternatives = new HashSet<String>();
+		Set<String> alternatives = new HashSet<>();
 		prepareAlternatives(glossaryMainTerm, alternatives);
 
 		// Create a media resource
@@ -108,7 +108,7 @@ class GlossaryDefinitionMapper extends LogDelegator implements Mapper {
 			}
 		}
 		if (foundItem == null) {
-			return new NotFoundMediaResource(relPath);
+			return new NotFoundMediaResource();
 		}
 		
 		StringBuilder sb = new StringBuilder();

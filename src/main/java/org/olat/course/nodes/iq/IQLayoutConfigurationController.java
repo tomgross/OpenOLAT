@@ -19,16 +19,24 @@
  */
 package org.olat.course.nodes.iq;
 
-import org.olat.commons.file.filechooser.FileChooseCreateEditController;
-import org.olat.commons.file.filechooser.LinkChooseCreateEditController;
+import org.olat.core.commons.controllers.filechooser.FileRemoveEvent;
+import org.olat.core.commons.controllers.filechooser.LinkFileCombiCalloutController;
 import org.olat.core.gui.UserRequest;
 import org.olat.core.gui.components.Component;
+import org.olat.core.gui.components.form.flexible.FormItem;
+import org.olat.core.gui.components.form.flexible.FormItemContainer;
+import org.olat.core.gui.components.form.flexible.elements.SelectionElement;
+import org.olat.core.gui.components.form.flexible.impl.FormBasicController;
+import org.olat.core.gui.components.form.flexible.impl.FormEvent;
 import org.olat.core.gui.components.velocity.VelocityContainer;
 import org.olat.core.gui.control.Controller;
 import org.olat.core.gui.control.Event;
 import org.olat.core.gui.control.WindowControl;
 import org.olat.core.gui.control.controller.BasicController;
+import org.olat.core.util.vfs.VFSContainer;
+import org.olat.core.util.vfs.VFSManager;
 import org.olat.course.ICourse;
+import org.olat.course.editor.CourseEditorHelper;
 import org.olat.course.editor.NodeEditController;
 import org.olat.course.nodes.AbstractAccessableCourseNode;
 import org.olat.course.tree.CourseInternalLinkTreeModel;
@@ -40,8 +48,6 @@ import org.olat.modules.ModuleConfiguration;
 import org.olat.repository.RepositoryEntry;
 import org.olat.repository.RepositoryManager;
 import org.springframework.beans.factory.annotation.Autowired;
-
-import de.bps.onyx.plugin.OnyxModule;
 
 /**
  * 
@@ -55,9 +61,10 @@ public class IQLayoutConfigurationController extends BasicController {
 
 	private IQ12LayoutEditForm mod12ConfigForm;
 	private QTI21EditLayoutForm mod21ConfigForm;
-	private FileChooseCreateEditController fccecontr;
+	private SecuritySettingsForm pageSecurityCtrl;
+	private LinkFileCombiCalloutController combiLinkCtr;
 	
-	private Boolean allowRelativeLinks;
+	private VFSContainer courseFolderBaseContainer;
 	private ModuleConfiguration moduleConfiguration;
 	private AbstractAccessableCourseNode courseNode;
 
@@ -83,22 +90,30 @@ public class IQLayoutConfigurationController extends BasicController {
 		//o_clusterOk by guido: save to hold reference to course inside editor
 		this.courseNode = courseNode;
 		
-		myContent = createVelocityContainer("edit_layout");		
+		myContent = createVelocityContainer("edit_layout");
+		courseFolderBaseContainer = course.getCourseFolderContainer();	
 
 		String disclaimer = (String) moduleConfiguration.get(IQEditController.CONFIG_KEY_DISCLAIMER);
-		String legend = translate("fieldset.chosecreateeditfile");
-	
-		allowRelativeLinks = moduleConfiguration.getBooleanEntry(IQEditController.CONFIG_KEY_ALLOW_RELATIVE_LINKS);
-		if(allowRelativeLinks == null) {
-			allowRelativeLinks=Boolean.FALSE;
+		boolean allowRelativeLinks = moduleConfiguration.getBooleanSafe(IQEditController.CONFIG_KEY_ALLOW_RELATIVE_LINKS);
+
+		boolean relFilPathIsProposal = false;
+		if(disclaimer == null) {
+			// Use calculated file and folder name as default when not yet configured
+			disclaimer = CourseEditorHelper.createUniqueRelFilePathFromShortTitle(courseNode, courseFolderBaseContainer);
+			relFilPathIsProposal = true;
 		}
-		fccecontr = new LinkChooseCreateEditController(ureq, wControl, disclaimer, allowRelativeLinks, course.getCourseFolderContainer(),
-				type, legend, new CourseInternalLinkTreeModel(course.getEditorTreeModel()));		
-		listenTo(fccecontr);
-		
-		Component fcContent = fccecontr.getInitialComponent();
-		myContent.put("filechoosecreateedit", fcContent);
+		combiLinkCtr = new LinkFileCombiCalloutController(ureq, wControl, courseFolderBaseContainer,
+				disclaimer, relFilPathIsProposal, allowRelativeLinks, true,
+				new CourseInternalLinkTreeModel(course.getEditorTreeModel()));
+		listenTo(combiLinkCtr);
+		myContent.put("combiCtr", combiLinkCtr.getInitialComponent());
+		myContent.contextPut("editorEnabled", combiLinkCtr.isEditorEnabled());
 		myContent.contextPut("type", type);
+		
+		// Security configuration form
+		pageSecurityCtrl = new SecuritySettingsForm(ureq, wControl, allowRelativeLinks);
+		listenTo(pageSecurityCtrl);
+		myContent.put("allowRelativeLinksForm", pageSecurityCtrl.getInitialComponent());
 		
 		putInitialPanel(myContent);	
 		updateEditController(ureq);
@@ -130,7 +145,7 @@ public class IQLayoutConfigurationController extends BasicController {
 			mod21ConfigForm = new QTI21EditLayoutForm(ureq, getWindowControl(), moduleConfiguration, re, deliveryOptions);
 			listenTo(mod21ConfigForm);
 			myContent.put("iqeditform", mod21ConfigForm.getInitialComponent());
-		} else if(OnyxModule.isOnyxTest(re.getOlatResource())) {
+		} else if(QTIResourceTypeModule.isOnyxTest(re.getOlatResource())) {
 			myContent.remove("iqeditform");
 		} else {
 			mod12ConfigForm = new IQ12LayoutEditForm(ureq, getWindowControl(), moduleConfiguration);
@@ -146,18 +161,25 @@ public class IQLayoutConfigurationController extends BasicController {
 	
 	@Override
 	public void event(UserRequest urequest, Controller source, Event event) {
-		if (source == fccecontr) {
-			if (event == FileChooseCreateEditController.FILE_CHANGED_EVENT) {
-			    String chosenFile = fccecontr.getChosenFile();
+		if (source == combiLinkCtr) {
+			if (event == Event.DONE_EVENT) {
+				String chosenFile = VFSManager.getRelativeItemPath(combiLinkCtr.getFile(), courseFolderBaseContainer, null);
 			    if (chosenFile != null){
-			        moduleConfiguration.set(IQEditController.CONFIG_KEY_DISCLAIMER, fccecontr.getChosenFile());
+			        moduleConfiguration.set(IQEditController.CONFIG_KEY_DISCLAIMER, chosenFile);
 			    }  else {
 			        moduleConfiguration.remove(IQEditController.CONFIG_KEY_DISCLAIMER);
 			    }
+				fireEvent(urequest, NodeEditController.NODECONFIG_CHANGED_EVENT);	
+			} else if(event instanceof FileRemoveEvent) {
+				moduleConfiguration.remove(IQEditController.CONFIG_KEY_DISCLAIMER);
 				fireEvent(urequest, NodeEditController.NODECONFIG_CHANGED_EVENT);
-			} else if (event == FileChooseCreateEditController.ALLOW_RELATIVE_LINKS_CHANGED_EVENT) {
-				allowRelativeLinks = fccecontr.getAllowRelativeLinks();
-				courseNode.getModuleConfiguration().setBooleanEntry(IQEditController.CONFIG_KEY_ALLOW_RELATIVE_LINKS, allowRelativeLinks.booleanValue());
+			}
+			myContent.contextPut("editorEnabled", combiLinkCtr.isEditorEnabled());
+		} else if(source == pageSecurityCtrl){
+			if(event == Event.DONE_EVENT){
+				boolean allowRelativeLinks = pageSecurityCtrl.getAllowRelativeLinksConfig();
+				courseNode.getModuleConfiguration().setBooleanEntry(IQEditController.CONFIG_KEY_ALLOW_RELATIVE_LINKS, allowRelativeLinks);
+				combiLinkCtr.setAllowEditorRelativeLinks(allowRelativeLinks);
 				fireEvent(urequest, NodeEditController.NODECONFIG_CHANGED_EVENT);
 			}
 		} else if (source == mod12ConfigForm || source == mod21ConfigForm) {
@@ -183,5 +205,57 @@ public class IQLayoutConfigurationController extends BasicController {
 	@Override
 	protected void doDispose() {
 		//
+	}
+	
+	public class SecuritySettingsForm extends FormBasicController {
+
+		private boolean allow;
+		private SelectionElement allowRelativeLinksEl;
+
+
+		/**
+		 * @param ureq
+		 * @param wControl
+		 * @param allowRelativeLinksConfig
+		 *            true: page is link relative to course root folder; false: page
+		 *            is relative to base directory
+		 */
+		public SecuritySettingsForm(UserRequest ureq, WindowControl wControl, boolean allowRelativeLinks) {
+				super(ureq, wControl);
+				this.allow = allowRelativeLinks;
+				initForm (ureq);
+		}
+
+		/**
+		 * @return Boolean new configuration
+		 */
+		public boolean getAllowRelativeLinksConfig(){
+			return allowRelativeLinksEl.isSelected(0);
+		}
+
+		@Override
+		protected void formInnerEvent(UserRequest ureq, FormItem source, FormEvent event) {
+			fireEvent (ureq, Event.DONE_EVENT);
+		}
+
+		@Override
+		protected void formOK(UserRequest ureq) {
+			// no explicit submit button, DONE event fired every time the checkbox is clicked
+		}
+
+		@Override
+		protected void initForm(FormItemContainer formLayout, Controller listener, UserRequest ureq) {
+			setFormTitle("fieldset.allowRelativeLinksForm");
+			allowRelativeLinksEl = uifactory.addCheckboxesHorizontal("allowRelativeLinks", "allowRelativeLinks", formLayout, new String[] {"xx"}, new String[] {null});
+			if(allow) {
+				allowRelativeLinksEl.select("xx", true);
+			}
+			allowRelativeLinksEl.addActionListener(FormEvent.ONCLICK);
+		}
+
+		@Override
+		protected void doDispose() {
+			//	
+		}
 	}
 }

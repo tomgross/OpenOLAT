@@ -19,6 +19,8 @@
  */
 package org.olat.core.util.openxml;
 
+import java.io.File;
+import java.net.MalformedURLException;
 import java.net.URL;
 
 /**
@@ -34,11 +36,28 @@ public class DocReference {
 	private final URL url;
 	private final OpenXMLSize emuSize;
 
+	public DocReference(String id, String filename, OpenXMLSize emuSize, File file) {
+		this.id = id;
+		this.url = fileToURL(file);
+		this.emuSize = emuSize;
+		this.filename = filename;
+	}
+
 	public DocReference(String id, String filename, OpenXMLSize emuSize, URL url) {
 		this.id = id;
 		this.url = url;
 		this.emuSize = emuSize;
 		this.filename = filename;
+	}
+
+	private URL fileToURL(File file) {
+		URL tmp_url = null;
+		try {
+			tmp_url  = file.toURI().toURL();
+		} catch (MalformedURLException e) {
+			//
+		}
+		return tmp_url;
 	}
 
 	public String getId() {

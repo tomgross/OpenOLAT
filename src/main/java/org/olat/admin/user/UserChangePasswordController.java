@@ -38,6 +38,7 @@ import org.olat.core.id.Identity;
 import org.olat.core.logging.OLATSecurityException;
 import org.olat.core.util.resource.OresHelper;
 import org.olat.login.auth.OLATAuthManager;
+import org.olat.user.UserModule;
 import org.springframework.beans.factory.annotation.Autowired;
 
 /**
@@ -59,6 +60,8 @@ public class UserChangePasswordController extends BasicController {
 	private Identity user;
 	
 	@Autowired
+	private UserModule userModule;
+	@Autowired
 	private BaseSecurity securityManager;
 	@Autowired
 	private OLATAuthManager olatAuthenticationSpi;
@@ -78,15 +81,16 @@ public class UserChangePasswordController extends BasicController {
 			throw new OLATSecurityException("Insufficient permissions to access UserChangePasswordController");
 
 		user = changeableUser;
+		mainVC = createVelocityContainer("pwd");
 		chPwdForm = new ChangeUserPasswordForm(ureq, wControl, user);
 		listenTo(chPwdForm);
-		tokenForm = new SendTokenToUserForm(ureq, wControl, user);
-		listenTo(tokenForm);
-
-		mainVC = createVelocityContainer("pwd");
 		mainVC.put("chPwdForm", chPwdForm.getInitialComponent());
-		mainVC.put("tokenForm", tokenForm.getInitialComponent());
-		
+		if (userModule.isAnyPasswordChangeAllowed()) {
+			tokenForm = new SendTokenToUserForm(ureq, wControl, user);
+			listenTo(tokenForm);
+			mainVC.put("tokenForm", tokenForm.getInitialComponent());
+		}
+
 		putInitialPanel(mainVC);
 	}
 
@@ -100,7 +104,7 @@ public class UserChangePasswordController extends BasicController {
 		if (source == chPwdForm && event.equals(Event.DONE_EVENT)) {
 			if (olatAuthenticationSpi.changePassword(ureq.getIdentity(), user, chPwdForm.getNewPassword())) {
 				showInfo("changeuserpwd.successful");
-				logAudit ("user password changed successfully of " +user.getName(), this.getClass().getName());
+				logAudit ("user password changed successfully of " +user.getKey(), this.getClass().getName());
 			} else {
 				showError("changeuserpwd.failed");
 			}

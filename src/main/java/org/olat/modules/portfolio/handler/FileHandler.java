@@ -20,6 +20,9 @@
 package org.olat.modules.portfolio.handler;
 
 import java.io.File;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Locale;
 
 import org.olat.core.commons.modules.bc.meta.MetaInfo;
 import org.olat.core.commons.modules.bc.meta.tagged.MetaTagged;
@@ -39,6 +42,7 @@ import org.olat.core.util.vfs.VFSManager;
 import org.olat.modules.portfolio.Media;
 import org.olat.modules.portfolio.MediaInformations;
 import org.olat.modules.portfolio.MediaLight;
+import org.olat.modules.portfolio.MediaRenderingHints;
 import org.olat.modules.portfolio.PortfolioLoggingAction;
 import org.olat.modules.portfolio.manager.MediaDAO;
 import org.olat.modules.portfolio.manager.PortfolioFileStorage;
@@ -50,6 +54,7 @@ import org.olat.modules.portfolio.ui.media.UploadMedia;
 import org.olat.portfolio.manager.EPFrontendManager;
 import org.olat.portfolio.model.artefacts.AbstractArtefact;
 import org.olat.portfolio.model.artefacts.FileArtefact;
+import org.olat.user.manager.ManifestBuilder;
 import org.olat.util.logging.activity.LoggingResourceable;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -184,8 +189,8 @@ public class FileHandler extends AbstractMediaHandler implements InteractiveAddP
 	}
 
 	@Override
-	public Controller getMediaController(UserRequest ureq, WindowControl wControl, Media media) {
-		return new FileMediaController(ureq, wControl, media);
+	public Controller getMediaController(UserRequest ureq, WindowControl wControl, Media media, MediaRenderingHints hints) {
+		return new FileMediaController(ureq, wControl, media, hints);
 	}
 
 	@Override
@@ -196,5 +201,15 @@ public class FileHandler extends AbstractMediaHandler implements InteractiveAddP
 	@Override
 	public PageElementAddController getAddPageElementController(UserRequest ureq, WindowControl wControl) {
 		return new CollectFileMediaController(ureq, wControl);
+	}
+	
+	@Override
+	public void export(Media media, ManifestBuilder manifest, File mediaArchiveDirectory, Locale locale) {
+		List<File> files = new ArrayList<>();
+		if(StringHelper.containsNonWhitespace(media.getStoragePath()) && StringHelper.containsNonWhitespace(media.getRootFilename())) {
+			File mediaDir = fileStorage.getMediaDirectory(media);
+			files.add(new File(mediaDir, media.getRootFilename()));
+		}
+		super.exportContent(media, null, files, mediaArchiveDirectory, locale);
 	}
 }

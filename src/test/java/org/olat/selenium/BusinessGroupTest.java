@@ -26,14 +26,12 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
-import org.jboss.arquillian.container.test.api.Deployment;
 import org.jboss.arquillian.container.test.api.RunAsClient;
 import org.jboss.arquillian.drone.api.annotation.Drone;
 import org.jboss.arquillian.graphene.page.InitialPage;
 import org.jboss.arquillian.graphene.page.Page;
 import org.jboss.arquillian.junit.Arquillian;
 import org.jboss.arquillian.test.api.ArquillianResource;
-import org.jboss.shrinkwrap.api.spec.WebArchive;
 import org.junit.Assert;
 import org.junit.Ignore;
 import org.junit.Test;
@@ -52,11 +50,10 @@ import org.olat.selenium.page.course.CoursePageFragment;
 import org.olat.selenium.page.course.EnrollmentConfigurationPage;
 import org.olat.selenium.page.course.EnrollmentPage;
 import org.olat.selenium.page.course.MembersPage;
-import org.olat.selenium.page.course.PublisherPageFragment.Access;
 import org.olat.selenium.page.graphene.OOGraphene;
 import org.olat.selenium.page.group.GroupPage;
 import org.olat.selenium.page.group.MembersWizardPage;
-import org.olat.test.ArquillianDeployments;
+import org.olat.selenium.page.repository.RepositoryAccessPage.UserAccess;
 import org.olat.test.rest.UserRestClient;
 import org.olat.user.restapi.UserVO;
 import org.openqa.selenium.By;
@@ -71,12 +68,7 @@ import org.openqa.selenium.WebElement;
  */
 @Ignore
 @RunWith(Arquillian.class)
-public class BusinessGroupTest {
-	
-	@Deployment(testable = false)
-	public static WebArchive createDeployment() {
-		return ArquillianDeployments.createDeployment();
-	}
+public class BusinessGroupTest extends Deployments {
 
 	@Drone
 	private WebDriver browser;
@@ -152,9 +144,9 @@ public class BusinessGroupTest {
 			.addMember();
 		
 		members.searchMember(participant, false)
-			.next()
-			.next()
-			.next()
+			.nextUsers()
+			.nextOverview()
+			.nextPermissions()
 			.finish();
 		
 		LoginPage participantLoginPage = LoginPage.getLoginPage(participantBrowser, deploymentUrl);
@@ -321,8 +313,7 @@ public class BusinessGroupTest {
 			.openAddDropMenu()
 			.addTokenMethod()
 			.configureTokenMethod(token, description)
-			.assertOnToken(token)
-			.save();
+			.assertOnToken(token);
 		
 		//members see members
 		group = GroupPage.getGroup(browser)
@@ -433,16 +424,16 @@ public class BusinessGroupTest {
 		group.openAdminMembers()
 			.addMember()
 			.searchMember(participant, false)
-			.next()
-			.next()
-			.next()
+			.nextUsers()
+			.nextOverview()
+			.nextPermissions()
 			.finish();
 		
 		group.addMember()
 			.searchMember(rei, false)
-			.next()
-			.next()
-			.next()
+			.nextUsers()
+			.nextOverview()
+			.nextPermissions()
 			.finish();
 		
 		//participant login
@@ -515,11 +506,17 @@ public class BusinessGroupTest {
 			.openAdminMembers()
 			.addMember()
 			.searchMember(kanu, true)
-			.next().next().next().finish();
+			.nextUsers()
+			.nextOverview()
+			.nextPermissions()
+			.finish();
 		//add Ryomou
 		group.addMember()
 			.searchMember(ryomou, true)
-			.next().next().next().finish();
+			.nextUsers()
+			.nextOverview()
+			.nextPermissions()
+			.finish();
 		
 		//Kanu open the group
 		LoginPage kanuLoginPage = LoginPage.getLoginPage(kanuBrowser, deploymentUrl);
@@ -740,7 +737,7 @@ public class BusinessGroupTest {
 		//publish the course
 		courseEditor
 			.publish()
-			.quickPublish(Access.users);
+			.quickPublish(UserAccess.registred);
 		courseEditor.clickToolbarBack();
 		
 		GroupPage authorGroup = navBar
@@ -805,6 +802,7 @@ public class BusinessGroupTest {
 		Assert.assertEquals(1, participants);
 		Assert.assertEquals(2, waitingList);
 	}
+	
 	/**
 	 * An author create a course, with an enrollment course element. It
 	 * configure it and create 3 groups and set the maximum enrollment counter to 2<br>
@@ -817,7 +815,6 @@ public class BusinessGroupTest {
 	 * @throws IOException
 	 * @throws URISyntaxException
 	 */
-
 	@Test
 	@RunAsClient
 	public void enrollmentWithMultiEnrollment(@InitialPage LoginPage authorLoginPage,
@@ -858,7 +855,7 @@ public class BusinessGroupTest {
 		//publish the course
 		courseEditor
 			.publish()
-			.quickPublish(Access.users);
+			.quickPublish(UserAccess.registred);
 		courseEditor.clickToolbarBack();
 		
 
@@ -969,7 +966,7 @@ public class BusinessGroupTest {
 		//publish the course
 		courseEditor
 			.publish()
-			.quickPublish(Access.users);
+			.quickPublish(UserAccess.registred);
 		
 		GroupPage authorGroup = navBar
 			.openGroups(browser)
@@ -1101,7 +1098,7 @@ public class BusinessGroupTest {
 		//publish the course
 		courseEditor
 			.publish()
-			.quickPublish(Access.users);
+			.quickPublish(UserAccess.registred);
 		
 		GroupPage authorGroup = navBar
 			.openGroups(browser)

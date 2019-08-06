@@ -42,10 +42,11 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.zip.ZipOutputStream;
 
-import org.apache.poi.util.IOUtils;
+import org.apache.commons.io.IOUtils;
 import org.olat.admin.quota.QuotaConstants;
 import org.olat.commons.calendar.CalendarManager;
 import org.olat.commons.calendar.CalendarNotificationManager;
+import org.olat.commons.calendar.manager.ImportToCalendarManager;
 import org.olat.commons.calendar.ui.components.KalendarRenderWrapper;
 import org.olat.core.CoreSpringFactory;
 import org.olat.core.commons.fullWebApp.LayoutMain3ColsController;
@@ -383,8 +384,9 @@ public class CourseFactory {
 		CoursePropertyManager propertyManager = PersistingCoursePropertyManager.getInstance(res);
 		propertyManager.deleteAllCourseProperties();
 		// delete course calendar
-		CalendarManager calManager = CoreSpringFactory.getImpl(CalendarManager.class);
-		calManager.deleteCourseCalendar(res);
+		CoreSpringFactory.getImpl(ImportToCalendarManager.class).deleteCourseImportedCalendars(res);
+		CoreSpringFactory.getImpl(CalendarManager.class).deleteCourseCalendar(res);
+		
 		// delete IM messages
 		CoreSpringFactory.getImpl(InstantMessagingService.class).deleteMessages(res);
 		//delete tasks
@@ -499,7 +501,7 @@ public class CourseFactory {
 			int count = 0;
 			for (Reference ref: refs) {
 				referenceManager.addReference(targetCourse, ref.getTarget(), ref.getUserdata());
-				if(count % 20 == 0) {
+				if(count++ % 20 == 0) {
 					DBFactory.getInstance().intermediateCommit();
 				}
 			}
@@ -784,9 +786,10 @@ public class CourseFactory {
 		List<Identity> users = ScoreAccountingHelper.loadUsers(course.getCourseEnvironment());
 		List<AssessableCourseNode> nodes = ScoreAccountingHelper.loadAssessableNodes(course.getCourseEnvironment());
 		
-		String fileName = ExportUtil.createFileNameWithTimeStamp(course.getCourseTitle(), "xlsx");
-		try(OutputStream out = new FileOutputStream(new File(exportDirectory, fileName))) {
-			ScoreAccountingHelper.createCourseResultsOverviewXMLTable(users, nodes, course, locale, out);
+		String fileName = ExportUtil.createFileNameWithTimeStamp(course.getCourseTitle(), "zip");
+		try(OutputStream out = new FileOutputStream(new File(exportDirectory, fileName));
+				ZipOutputStream zout = new ZipOutputStream(out)) {
+			ScoreAccountingHelper.createCourseResultsOverview(users, nodes, course, locale, zout);
 		} catch(IOException e) {
 			log.error("", e);
 		}
@@ -806,14 +809,10 @@ public class CourseFactory {
 
 		// make an intermediate commit here to make sure long running course log export doesn't
 		// cause db connection timeout to be triggered
-		//@TODO transactions/backgroundjob:
 		// rework when backgroundjob infrastructure exists
 		DBFactory.getInstance().intermediateCommit();
-		AsyncExportManager.getInstance().asyncArchiveCourseLogFiles(archiveOnBehalfOf, new Runnable() {
-			public void run() {
-				// that's fine, I dont need to do anything here
-			};
-		}, course.getResourceableId(), exportDirectory.getPath(), null, null, aLogV, uLogV, sLogV, charset, null, null);
+		CoreSpringFactory.getImpl(AsyncExportManager.class).asyncArchiveCourseLogFiles(archiveOnBehalfOf, () -> { /* nothing to do */ },
+				course.getResourceableId(), exportDirectory.getPath(), null, null, aLogV, uLogV, sLogV, null, null);
 
 		course.getCourseEnvironment().getCourseGroupManager().archiveCourseGroups(exportDirectory);
 

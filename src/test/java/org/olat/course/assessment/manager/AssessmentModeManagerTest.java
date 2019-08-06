@@ -29,6 +29,7 @@ import org.junit.Test;
 import org.olat.basesecurity.GroupRoles;
 import org.olat.core.commons.persistence.DB;
 import org.olat.core.id.Identity;
+import org.olat.core.util.Encoder;
 import org.olat.course.assessment.AssessmentMode;
 import org.olat.course.assessment.AssessmentMode.Target;
 import org.olat.course.assessment.AssessmentModeManager;
@@ -44,6 +45,7 @@ import org.olat.repository.manager.RepositoryEntryRelationDAO;
 import org.olat.test.JunitTestHelper;
 import org.olat.test.OlatTestCase;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.mock.web.MockHttpServletRequest;
 
 /**
  * 
@@ -270,6 +272,142 @@ public class AssessmentModeManagerTest extends OlatTestCase {
 		Assert.assertTrue(currentModes.contains(mode));
 	}
 	
+	/**
+	 * Manual without lead time -> not in the current list
+	 */
+	@Test
+	public void loadCurrentAssessmentModes_manualNow() {
+		RepositoryEntry entry = JunitTestHelper.createAndPersistRepositoryEntry();
+		
+		//manual now
+		AssessmentMode mode = assessmentModeMgr.createAssessmentMode(entry);
+		mode.setName("Assessment to load");
+		Calendar cal = Calendar.getInstance();
+		cal.set(Calendar.SECOND, 0);
+		cal.set(Calendar.MILLISECOND, 0);
+		cal.add(Calendar.HOUR_OF_DAY, -1);
+		mode.setBegin(cal.getTime());
+		cal.add(Calendar.HOUR_OF_DAY, 2);
+		mode.setEnd(cal.getTime());
+		mode.setTargetAudience(Target.course);
+		mode.setManualBeginEnd(true);
+		mode = assessmentModeMgr.persist(mode);
+		dbInstance.commitAndCloseSession();
+		
+		//check
+		Date now = new Date();
+		List<AssessmentMode> currentModes = assessmentModeMgr.getAssessmentModes(now);
+		Assert.assertNotNull(currentModes);
+		Assert.assertFalse(currentModes.contains(mode));
+	}
+	
+	/**
+	 * Manual with lead time -> in the current list
+	 */
+	@Test
+	public void loadCurrentAssessmentModes_manualNowLeadingTime() {
+		RepositoryEntry entry = JunitTestHelper.createAndPersistRepositoryEntry();
+		
+		//manual now
+		AssessmentMode mode = assessmentModeMgr.createAssessmentMode(entry);
+		mode.setName("Assessment to load");
+		Calendar cal = Calendar.getInstance();
+		cal.set(Calendar.SECOND, 0);
+		cal.set(Calendar.MILLISECOND, 0);
+		cal.add(Calendar.HOUR_OF_DAY, 1);
+		mode.setBegin(cal.getTime());
+		cal.add(Calendar.HOUR_OF_DAY, 2);
+		mode.setEnd(cal.getTime());
+		mode.setTargetAudience(Target.course);
+		mode.setManualBeginEnd(true);
+		mode.setLeadTime(120);
+		mode = assessmentModeMgr.persist(mode);
+		dbInstance.commitAndCloseSession();
+		
+		//check
+		Date now = new Date();
+		List<AssessmentMode> currentModes = assessmentModeMgr.getAssessmentModes(now);
+		Assert.assertNotNull(currentModes);
+		Assert.assertTrue(currentModes.contains(mode));
+	}
+	
+	@Test
+	public void getCurrentAssessmentMode() {
+		RepositoryEntry entry = JunitTestHelper.createAndPersistRepositoryEntry();
+		AssessmentMode mode = createMinimalAssessmentmode(entry);
+		mode = assessmentModeMgr.persist(mode);
+		dbInstance.commitAndCloseSession();
+		Assert.assertNotNull(mode);
+		
+		//check
+		Date now = new Date();
+		List<AssessmentMode> currentModes = assessmentModeMgr.getCurrentAssessmentMode(entry, now);
+		Assert.assertNotNull(currentModes);
+		Assert.assertEquals(1, currentModes.size());
+		Assert.assertTrue(currentModes.contains(mode));
+	}
+	
+	/**
+	 * Manual without lead time -> not in the current list
+	 */
+	@Test
+	public void getCurrentAssessmentMode_manualNow() {
+		RepositoryEntry entry = JunitTestHelper.createAndPersistRepositoryEntry();
+		
+		//manual now
+		AssessmentMode mode = assessmentModeMgr.createAssessmentMode(entry);
+		mode.setName("Assessment to load");
+		Calendar cal = Calendar.getInstance();
+		cal.set(Calendar.SECOND, 0);
+		cal.set(Calendar.MILLISECOND, 0);
+		cal.add(Calendar.HOUR_OF_DAY, -1);
+		mode.setBegin(cal.getTime());
+		cal.add(Calendar.HOUR_OF_DAY, 2);
+		mode.setEnd(cal.getTime());
+		mode.setTargetAudience(Target.course);
+		mode.setManualBeginEnd(true);
+		mode = assessmentModeMgr.persist(mode);
+		dbInstance.commitAndCloseSession();
+		
+		//check
+		Date now = new Date();
+		List<AssessmentMode> currentModes = assessmentModeMgr.getCurrentAssessmentMode(entry, now);
+		Assert.assertNotNull(currentModes);
+		Assert.assertTrue(currentModes.isEmpty());
+	}
+	
+	/**
+	 * Manual with lead time -> in the current list
+	 */
+	@Test
+	public void getCurrentAssessmentMode_manualNowLeadingTime() {
+		RepositoryEntry entry = JunitTestHelper.createAndPersistRepositoryEntry();
+		
+		//manual now
+		AssessmentMode mode = assessmentModeMgr.createAssessmentMode(entry);
+		mode.setName("Assessment to load");
+		Calendar cal = Calendar.getInstance();
+		cal.set(Calendar.SECOND, 0);
+		cal.set(Calendar.MILLISECOND, 0);
+		cal.add(Calendar.HOUR_OF_DAY, 1);
+		mode.setBegin(cal.getTime());
+		cal.add(Calendar.HOUR_OF_DAY, 2);
+		mode.setEnd(cal.getTime());
+		mode.setTargetAudience(Target.course);
+		mode.setManualBeginEnd(true);
+		mode.setLeadTime(120);
+		mode = assessmentModeMgr.persist(mode);
+		dbInstance.commitAndCloseSession();
+		
+		//check
+		Date now = new Date();
+		List<AssessmentMode> currentModes = assessmentModeMgr.getCurrentAssessmentMode(entry, now);
+		Assert.assertNotNull(currentModes);
+		Assert.assertEquals(1, currentModes.size());
+		Assert.assertTrue(currentModes.contains(mode));
+	}
+	
+	
 	@Test
 	public void isInAssessmentMode() {
 		RepositoryEntry entry = JunitTestHelper.createAndPersistRepositoryEntry();
@@ -296,6 +434,52 @@ public class AssessmentModeManagerTest extends OlatTestCase {
 		boolean entryReferencePast = assessmentModeMgr.isInAssessmentMode(entryReference, aDayBefore);
 		Assert.assertFalse(entryReferencePast);
 	}
+	
+	/**
+	 * Manual without leading time -> not in assessment mode
+	 */
+	@Test
+	public void isInAssessmentMode_manual() {
+		RepositoryEntry entry = JunitTestHelper.createAndPersistRepositoryEntry();
+		AssessmentMode mode = createMinimalAssessmentmode(entry);
+		mode.setManualBeginEnd(true);
+		mode = assessmentModeMgr.persist(mode);
+		dbInstance.commitAndCloseSession();
+		Assert.assertNotNull(mode);
+		
+		//check
+		Date now = new Date();
+		boolean entryNow = assessmentModeMgr.isInAssessmentMode(entry, now);
+		Assert.assertFalse(entryNow);
+	}
+
+	/**
+	 * Manual with leading time -> in assessment mode
+	 */
+	@Test
+	public void isInAssessmentMode_manualLeadingTime() {
+		RepositoryEntry entry = JunitTestHelper.createAndPersistRepositoryEntry();
+		AssessmentMode mode = assessmentModeMgr.createAssessmentMode(entry);
+		mode.setName("Assessment to load");
+		Calendar cal = Calendar.getInstance();
+		cal.set(Calendar.SECOND, 0);
+		cal.set(Calendar.MILLISECOND, 0);
+		cal.add(Calendar.HOUR_OF_DAY, 1);
+		mode.setBegin(cal.getTime());
+		cal.add(Calendar.HOUR_OF_DAY, 2);
+		mode.setEnd(cal.getTime());
+		mode.setTargetAudience(Target.course);
+		mode.setManualBeginEnd(true);
+		mode.setLeadTime(120);
+		mode = assessmentModeMgr.persist(mode);
+		dbInstance.commitAndCloseSession();
+		
+		//check
+		Date now = new Date();
+		boolean entryNow = assessmentModeMgr.isInAssessmentMode(entry, now);
+		Assert.assertTrue(entryNow);
+	}
+	
 	
 	/**
 	 * Check an assessment linked to a group with one participant
@@ -834,6 +1018,59 @@ public class AssessmentModeManagerTest extends OlatTestCase {
 		List<AssessmentMode> afterDeleteModes = assessmentModeMgr.getAssessmentModeFor(participant);
 		Assert.assertNotNull(afterDeleteModes);
 		Assert.assertEquals(0, afterDeleteModes.size());
+	}
+	
+	@Test
+	public void isSafelyAllowed() {
+		String safeExamBrowserKey = "gdfkhjsduzezrutuzsf";
+		String url = "http://localhost";
+		String hash = Encoder.sha256Exam(url + safeExamBrowserKey);
+
+		MockHttpServletRequest request = new MockHttpServletRequest();
+		request.setServerName("localhost");
+		request.setScheme("http");
+		request.addHeader("x-safeexambrowser-requesthash", hash);
+		request.setRequestURI("");
+		
+		boolean allowed = assessmentModeMgr.isSafelyAllowed(request, safeExamBrowserKey);
+		Assert.assertTrue(allowed);
+	}
+	
+	/**
+	 * SEB 2.1 and SEB 2.2 use slightly different URLs to calculate
+	 * the hash. The first use the raw URL, the second remove the
+	 * trailing /.
+	 */
+	@Test
+	public void isSafelyAllowed_seb22() {
+		String safeExamBrowserKey = "a3fa755508fa1ed69de26840012fb397bb0a527b55ca35f299fa89cb4da232c6";
+		String url = "http://kivik.frentix.com";
+		String hash = Encoder.sha256Exam(url + safeExamBrowserKey);
+
+		MockHttpServletRequest request = new MockHttpServletRequest();
+		request.setServerName("kivik.frentix.com");
+		request.setScheme("http");
+		request.addHeader("x-safeexambrowser-requesthash", hash);
+		request.setRequestURI("/");
+		
+		boolean allowed = assessmentModeMgr.isSafelyAllowed(request, safeExamBrowserKey);
+		Assert.assertTrue(allowed);
+	}
+	
+	@Test
+	public void isSafelyAllowed_fail() {
+		String safeExamBrowserKey = "gdfkhjsduzezrutuzsf";
+		String url = "http://localhost";
+		String hash = Encoder.sha256Exam(url + safeExamBrowserKey);
+
+		MockHttpServletRequest request = new MockHttpServletRequest();
+		request.setServerName("localhost");
+		request.setScheme("http");
+		request.addHeader("x-safeexambrowser-requesthash", hash);
+		request.setRequestURI("/unauthorized/url");
+		
+		boolean allowed = assessmentModeMgr.isSafelyAllowed(request, safeExamBrowserKey);
+		Assert.assertFalse(allowed);
 	}
 
 	/**

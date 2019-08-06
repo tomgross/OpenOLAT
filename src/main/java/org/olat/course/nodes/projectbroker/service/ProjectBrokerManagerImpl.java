@@ -34,7 +34,6 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.StringTokenizer;
 
-import org.hibernate.type.StandardBasicTypes;
 import org.olat.basesecurity.BaseSecurity;
 import org.olat.basesecurity.GroupRoles;
 import org.olat.basesecurity.SecurityGroup;
@@ -162,7 +161,7 @@ public class ProjectBrokerManagerImpl extends BasicManager implements ProjectBro
 	
 	@Override
 	public boolean existsProject(Long projectKey) {
-		return dbInstance.findObject(ProjectImpl.class, projectKey) != null;
+		return dbInstance. getCurrentEntityManager().find(ProjectImpl.class, projectKey) != null;
 	}
 
 	@Override
@@ -255,31 +254,33 @@ public class ProjectBrokerManagerImpl extends BasicManager implements ProjectBro
 	 * This method is cluster-save.
 	 * @see org.olat.course.nodes.projectbroker.service.ProjectBrokerManager#deleteProject(org.olat.course.nodes.projectbroker.datamodel.Project)
 	 */
+	@Override
 	public void deleteProject(final Project project, final boolean deleteGroup, final CourseEnvironment courseEnv, final CourseNode cNode) {
 		logDebug("start deleteProject project=" + project);
-		final Long projectBrokerId = project.getProjectBroker().getKey();
-		OLATResourceable projectBrokerOres = OresHelper.createOLATResourceableInstance(this.getClass(),projectBrokerId);
-		CoordinatorManager.getInstance().getCoordinator().getSyncer().doInSync( projectBrokerOres, new SyncerExecutor() {
-			public void execute() {
-				Project reloadedProject = (Project) dbInstance.loadObject(project, true);
-				// delete first candidate-group, project-group will be deleted after deleting project
-				SecurityGroup candidateGroup = reloadedProject.getCandidateGroup();
-				if ( (courseEnv != null) && (cNode != null) ) {
-					deleteAllAttachmentFilesOfProject(reloadedProject, courseEnv, cNode);
-					deleteAllDropboxFilesOfProject(reloadedProject, courseEnv, cNode);
-					deleteAllReturnboxFilesOfProject(reloadedProject, courseEnv, cNode);
-				}
-				dbInstance.deleteObject(reloadedProject);
-				logInfo("deleteSecurityGroup(project.getCandidateGroup())=" + candidateGroup.getKey());
-				securityManager.deleteSecurityGroup(candidateGroup);
-				// invalide with removing from cache
-				projectCache.remove(projectBrokerId.toString());
+		Long projectBrokerId = project.getProjectBroker().getKey();
+		OLATResourceable projectBrokerOres = OresHelper.createOLATResourceableInstance(this.getClass(), projectBrokerId);
+
+		CoordinatorManager.getInstance().getCoordinator().getSyncer().doInSync( projectBrokerOres, () -> {
+			Project reloadedProject = (Project) dbInstance.loadObject(project, true);
+			BusinessGroup projectGroup = reloadedProject.getProjectGroup();
+			// delete first candidate-group, project-group will be deleted after deleting project
+			SecurityGroup candidateGroup = reloadedProject.getCandidateGroup();
+			if ( (courseEnv != null) && (cNode != null) ) {
+				deleteAllAttachmentFilesOfProject(reloadedProject, courseEnv, cNode);
+				deleteAllDropboxFilesOfProject(reloadedProject, courseEnv, cNode);
+				deleteAllReturnboxFilesOfProject(reloadedProject, courseEnv, cNode);
+			}
+			dbInstance.deleteObject(reloadedProject);
+			logInfo("deleteSecurityGroup(project.getCandidateGroup())=" + candidateGroup.getKey());
+			securityManager.deleteSecurityGroup(candidateGroup);
+			// invalide with removing from cache
+			projectCache.remove(projectBrokerId.toString());
+			if (deleteGroup) {
+				logDebug("start deleteProjectGroupFor project group=" + projectGroup);
+				businessGroupService.deleteBusinessGroup(projectGroup);
 			}
 		});
-		if (deleteGroup) {
-			logDebug("start deleteProjectGroupFor project=" + project);
-			projectGroupManager.deleteProjectGroupFor(project);
-		}
+		
 		logDebug("DONE deleteProjectGroupFor project=" + project);
 	}
 
@@ -536,8 +537,9 @@ public class ProjectBrokerManagerImpl extends BasicManager implements ProjectBro
 		return projectBroker;
 	}
 
+	@Override
 	public ProjectBroker getProjectBroker(Long projectBrokerId) {
-		return dbInstance.loadObject(ProjectBrokerImpl.class, projectBrokerId);
+		return dbInstance.getCurrentEntityManager().find(ProjectBrokerImpl.class, projectBrokerId);
 	}
 
 	private boolean isEnrollmentDateOk(Project project, ProjectBrokerModuleConfiguration moduleConfig) {
@@ -568,6 +570,7 @@ public class ProjectBrokerManagerImpl extends BasicManager implements ProjectBro
 	 * @param projectList
 	 * @return
 	 */
+	@Override
 	public boolean isParticipantInAnyProject(Identity identity, List<Project> projectList) {
 		for (Iterator<Project> iterator = projectList.iterator(); iterator.hasNext();) {
 			Project project = iterator.next();
@@ -578,12 +581,15 @@ public class ProjectBrokerManagerImpl extends BasicManager implements ProjectBro
 		return false;
 	}
 
-	@SuppressWarnings("unchecked")
+	@Override
 	public List<Project> getProjectsWith(BusinessGroup group) {
-		List<Project> projectList = dbInstance.find(
-				"select project from org.olat.course.nodes.projectbroker.datamodel.ProjectImpl as project" +
-				" where project.projectGroup.key = ?", group.getKey(),	StandardBasicTypes.LONG);
-		return projectList;
+		StringBuilder sb = new StringBuilder();
+		sb.append("select project from ").append(ProjectImpl.class.getName()).append(" as project")
+		  .append(" where project.projectGroup.key=:groupKey");
+		return dbInstance.getCurrentEntityManager()
+				.createQuery(sb.toString(), Project.class)
+				.setParameter("groupKey", group.getKey())
+				.getResultList();
 	}
 
 	@Override
@@ -591,6 +597,7 @@ public class ProjectBrokerManagerImpl extends BasicManager implements ProjectBro
 		final Long projectBrokerId = project.getProjectBroker().getKey();
 		OLATResourceable projectBrokerOres = OresHelper.createOLATResourceableInstance(this.getClass(),projectBrokerId);
 		CoordinatorManager.getInstance().getCoordinator().getSyncer().doInSync( projectBrokerOres, new SyncerExecutor() {
+			@Override
 			public void execute() {
 				// For cluster-safe : reload project object here another node might have changed this in the meantime
 				Project reloadedProject = (Project) dbInstance.loadObject(project, true);		
@@ -599,13 +606,13 @@ public class ProjectBrokerManagerImpl extends BasicManager implements ProjectBro
 			}
 		});	
 	}
-	
+
+	@Override
 	public Long getProjectBrokerId(CoursePropertyManager cpm, CourseNode courseNode) {
   	Property projectBrokerKeyProperty = cpm.findCourseNodeProperty(courseNode, null, null, ProjectBrokerCourseNode.CONF_PROJECTBROKER_KEY);
 		// Check if forum-property exist
 		if (projectBrokerKeyProperty != null) {
-		  Long projectBrokerId = projectBrokerKeyProperty.getLongValue();
-		  return projectBrokerId;
+		  return projectBrokerKeyProperty.getLongValue();
 		}
 		return null;
 	}
@@ -642,7 +649,7 @@ public class ProjectBrokerManagerImpl extends BasicManager implements ProjectBro
 
 	@Override
 	public Project getProject(Long resourceableId) {
-		return dbInstance.findObject(ProjectImpl.class, resourceableId);
+		return dbInstance.getCurrentEntityManager().find(ProjectImpl.class, resourceableId);
 	}
 
 	@Override

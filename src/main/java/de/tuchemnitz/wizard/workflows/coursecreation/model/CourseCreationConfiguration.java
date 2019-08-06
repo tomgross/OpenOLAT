@@ -32,18 +32,22 @@
 
 package de.tuchemnitz.wizard.workflows.coursecreation.model;
 
-import org.apache.commons.io.IOUtils;
+import java.io.IOException;
+
 import org.apache.velocity.context.Context;
 import org.olat.core.commons.editor.htmleditor.WysiwygFactory;
+import org.olat.core.gui.DefaultGlobalSettings;
 import org.olat.core.gui.GlobalSettings;
 import org.olat.core.gui.components.velocity.VelocityContainer;
-import org.olat.core.gui.control.winmgr.AJAXFlags;
 import org.olat.core.gui.render.RenderResult;
 import org.olat.core.gui.render.Renderer;
 import org.olat.core.gui.render.StringOutput;
 import org.olat.core.gui.render.velocity.VelocityHelper;
 import org.olat.core.gui.render.velocity.VelocityRenderDecorator;
 import org.olat.core.gui.translator.Translator;
+import org.olat.core.logging.OLog;
+import org.olat.core.logging.Tracing;
+import org.olat.course.editor.CourseAccessAndProperties;
 import org.olat.repository.CatalogEntry;
 
 import de.tuchemnitz.wizard.workflows.coursecreation.CourseCreationHelper;
@@ -61,6 +65,8 @@ import de.tuchemnitz.wizard.workflows.coursecreation.CourseCreationHelper;
  * @author Sebastian Fritzsche (seb.fritzsche@googlemail.com)
  */
 public class CourseCreationConfiguration {
+	
+	private static final OLog log = Tracing.createLoggerFor(CourseCreationConfiguration.class);
 
 	public static final String ACL_GUEST = "acl_guest";
 	public static final String ACL_OLAT = "acl_olat";
@@ -103,10 +109,20 @@ public class CourseCreationConfiguration {
 	private Boolean publish = true;
 	// selected catalog entry
 	private CatalogEntry selectedParent = null;
+	
+	private CourseAccessAndProperties accessAndProperties;
 
 	public CourseCreationConfiguration(final String courseTitle, final String extLink) {
 		this.courseTitle = courseTitle;
 		this.extLink = extLink;
+	}
+	
+	public CourseAccessAndProperties getAccessAndProperties() {
+		return accessAndProperties;
+	}
+
+	public void setAccessAndProperties(CourseAccessAndProperties accessAndProperties) {
+		this.accessAndProperties = accessAndProperties;
 	}
 
 	/**
@@ -349,28 +365,20 @@ public class CourseCreationConfiguration {
 		vc.contextPut("coursetitle", courseTitle);
 		
 		//prepare rendering of velocity page for the content of the single page node
-		GlobalSettings globalSettings = new GlobalSettings() {
-			public int getFontSize() { return 100;}
-			public AJAXFlags getAjaxFlags() { return new EmptyAJAXFlags();}
-			public boolean isIdDivsForced() { return false; }
-		};
+		GlobalSettings globalSettings = new DefaultGlobalSettings();
 		
 		Context context = vc.getContext();
 		Renderer fr = Renderer.getInstance(vc, translator, null, new RenderResult(), globalSettings);
 		StringOutput wOut = new StringOutput(10000);
-		VelocityRenderDecorator vrdec = new VelocityRenderDecorator(fr, vc, wOut);			
-		context.put("r", vrdec);
-		VelocityHelper.getInstance().mergeContent(vc.getPage(), context, wOut, null);
-		//free the decorator
-		context.remove("r");
-		IOUtils.closeQuietly(vrdec);
+		try(VelocityRenderDecorator vrdec = new VelocityRenderDecorator(fr, vc, wOut)) {
+			context.put("r", vrdec);
+			VelocityHelper.getInstance().mergeContent(vc.getPage(), context, wOut, null);
+			//free the decorator
+			context.remove("r");
+		} catch(IOException e) {
+			log.error("", e);
+		}
 		return WysiwygFactory.createXHtmlFileContent(wOut.toString(), courseTitle);
-	}
-	
-	private static class EmptyAJAXFlags extends AJAXFlags {
-		public EmptyAJAXFlags() { super(null); }
-		@Override
-		public boolean isIframePostEnabled() { return false; }
 	}
 
 	/**

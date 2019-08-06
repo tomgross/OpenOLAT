@@ -17,9 +17,47 @@ How to add a new job:
 1. Create you class which extends from QuartzJobBean see ChangePresenceJob as example
 2. Create a file called "olatextconfig.xml" with your own beans and place it in the same directory as this file. It will be loaded automatically.
 3. Add a bean definition where your job is created like ="<bean id="changePresenceJob" class="org.springframework.scheduling.quartz.JobDetailFactoryBean">"
-4. Create a scheduler for your defined bean: Either an SimpleTriggerBean or an CronTriggerBean
-5. Add your trigger to TriggerListFactoryImpl.
+4. Create a scheduler for your definded bean: Either an SimpleTriggerFactoryBean or an CronTriggerFactoryBean
+5. Add your trigger bean to the SchedulerFactoryBean list.
 -->
+
+
+<!-- this tells spring to create the quartz scheduler -->
+<bean id="schedulerFactoryBean" class="org.springframework.scheduling.quartz.SchedulerFactoryBean" depends-on="database">
+	<property name="waitForJobsToCompleteOnShutdown" value="true" />
+	<property name="quartzProperties">
+		<props>
+			<prop key="org.quartz.threadPool.threadCount">5</prop>
+			<prop key="org.quartz.scheduler.skipUpdateCheck">true</prop>
+		</props>
+	</property>
+	<property name="triggers">
+        <list>
+        	<!-- Include every bean here that should be scheduled -->
+            <ref bean="sendNotificationsEmailTrigger" />
+            <ref bean="adobeCleanupJob"/>
+            <ref bean="updateStatisticsTrigger"/>
+            <ref bean="searchIndexingTrigger"/>
+            <ref bean="invitationCleanupTrigger" />
+            <ref bean="epDeadlineTrigger" />
+            <ref bean="restTokenTrigger" />
+            <ref bean="taskExecutorTrigger" />
+            <ref bean="procSamplerTrigger"/>
+            <ref bean="systemSamplerTrigger"/>
+            <ref bean="acReservationCleanupJob"/>
+            <ref bean="mapperSlayerTrigger"/>
+            <ref bean="assessmentNotificationsTrigger"/>
+            <ref bean="reminderTrigger"/>
+            <ref bean="videoTranscodingTrigger"/>
+            <ref bean="automaticLifecycleTrigger"/>
+            <ref bean="calendarImportTrigger"/>
+            <ref bean="autoCloseLecturesTrigger"/>
+            <ref bean="reminderLecturesTrigger"/>
+            <ref bean="deleteUserDataExportTrigger"/>
+            <ref bean="cspCleanupJob"/>
+        </list>
+    </property>
+</bean>
 
 <!-- add referenced schedulers here -->
 

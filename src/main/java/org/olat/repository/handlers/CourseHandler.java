@@ -26,14 +26,19 @@
 package org.olat.repository.handlers;
 
 import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileNotFoundException;
 import java.io.IOException;
-import java.nio.file.*;
+import java.nio.file.DirectoryStream;
+import java.nio.file.FileVisitResult;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.SimpleFileVisitor;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
 
-import org.olat.commons.fileutil.FileSizeLimitExceededException;
 import org.olat.core.CoreSpringFactory;
 import org.olat.core.commons.modules.bc.vfs.OlatRootFolderImpl;
 import org.olat.core.commons.persistence.DBFactory;
@@ -78,8 +83,8 @@ import org.olat.course.ICourse;
 import org.olat.course.PersistingCourseImpl;
 import org.olat.course.Structure;
 import org.olat.course.assessment.AssessmentMode;
-import org.olat.course.cleanup.CourseCleanupJob;
 import org.olat.course.config.CourseConfig;
+import org.olat.course.editor.CourseAccessAndProperties;
 import org.olat.course.export.CourseEnvironmentMapper;
 import org.olat.course.groupsandrights.CourseGroupManager;
 import org.olat.course.groupsandrights.PersistingCourseGroupManager;
@@ -90,6 +95,7 @@ import org.olat.fileresource.types.GlossaryResource;
 import org.olat.fileresource.types.ResourceEvaluation;
 import org.olat.fileresource.types.SharedFolderFileResource;
 import org.olat.modules.glossary.GlossaryManager;
+import org.olat.modules.lecture.LectureService;
 import org.olat.modules.reminder.Reminder;
 import org.olat.modules.reminder.ReminderModule;
 import org.olat.modules.reminder.ReminderRule;
@@ -119,21 +125,21 @@ import de.tuchemnitz.wizard.workflows.coursecreation.steps.CcStep00;
 /**
  * Initial Date: Apr 15, 2004
  *
- * @author
- *
+ * @author 
+ * 
  * Comment: Mike Stock
- *
+ * 
  */
 public class CourseHandler implements RepositoryHandler {
 
 	public static final String EDITOR_XML = "editortreemodel.xml";
 	private static final OLog log = Tracing.createLoggerFor(CourseHandler.class);
-
+	
 	@Override
 	public boolean isCreate() {
 		return true;
 	}
-
+	
 	@Override
 	public RepositoryEntry createResource(Identity initialAuthor, String displayname, String description, Object createObject, Locale locale) {
 		RepositoryService repositoryService = CoreSpringFactory.getImpl(RepositoryService.class);
@@ -146,7 +152,7 @@ public class CourseHandler implements RepositoryHandler {
 		log.audit("Course created: " + course.getCourseTitle());
 		return re;
 	}
-
+	
 	@Override
 	public boolean isPostCreateWizardAvailable() {
 		return true;
@@ -163,28 +169,30 @@ public class CourseHandler implements RepositoryHandler {
 		try {
 			IndexFileFilter visitor = new IndexFileFilter();
 			Path fPath = PathUtils.visit(file, filename, visitor);
-
+			
 			if(visitor.isValid()) {
 				Path repoXml = fPath.resolve("export/repo.xml");
 				if(repoXml != null) {
 					eval.setValid(true);
-
+					
 					RepositoryEntryImport re = RepositoryEntryImportExport.getConfiguration(repoXml);
 					if(re != null) {
 						eval.setDisplayname(re.getDisplayname());
 						eval.setDescription(re.getDescription());
 					}
-
+					
 					eval.setReferences(hasReferences(fPath));
 				}
 			}
 			eval.setValid(visitor.isValid());
+			
+			PathUtils.closeSubsequentFS(fPath);
 		} catch (IOException | IllegalArgumentException e) {
 			log.error("", e);
 		}
 		return eval;
 	}
-
+	
 	/**
 	 * Find references in the export folder with the repo.xml.
 	 * @param fPath
@@ -208,7 +216,7 @@ public class CourseHandler implements RepositoryHandler {
 		}
 		return hasReferences;
 	}
-
+	
 	@Override
 	public RepositoryEntry importResource(Identity initialAuthor, String initialAuthorAlt, String displayname,
 			String description, boolean withReferences, Locale locale, File file, String filename) {
@@ -230,7 +238,7 @@ public class CourseHandler implements RepositoryHandler {
 		Structure runStructure = course.getRunStructure();
 		runStructure.getRootNode().removeAllChildren();
 		CourseFactory.saveCourse(course.getResourceableId());
-
+		
 		//import references
 		CourseEditorTreeNode rootNode = (CourseEditorTreeNode)course.getEditorTreeModel().getRootNode();
 		importReferences(rootNode, course, initialAuthor, locale, withReferences);
@@ -249,55 +257,62 @@ public class CourseHandler implements RepositoryHandler {
 		//upgrade course
 		course = CourseFactory.loadCourse(cgm.getCourseResource());
 		course.postImport(fImportBaseDirectory, envMapper);
-
-		//rename root nodes
-		course.getRunStructure().getRootNode().setShortTitle(Formatter.truncateOnly(displayname, 25)); //do not use truncate!
-		course.getRunStructure().getRootNode().setLongTitle(displayname);
+		
+		//rename root nodes, but only when user modified the course title
+		boolean doUpdateTitle = true;
+		File repoConfigXml = new File(fImportBaseDirectory, "repo.xml");
+		if (repoConfigXml.exists()) {
+			RepositoryEntryImport importConfig;
+			try {
+				importConfig = RepositoryEntryImportExport.getConfiguration(new FileInputStream(repoConfigXml));
+				if(importConfig != null) {
+					if (displayname.equals(importConfig.getDisplayname())) {					
+						// do not update if title was not modified during import
+						// user does not expect to have an updated title and there is a chance
+						// the root node title is not the same as the course title
+						doUpdateTitle = false;
+					}
+				}
+			} catch (FileNotFoundException e) {
+				// ignore
+			}
+		}
+		if (doUpdateTitle) {
+			course.getRunStructure().getRootNode().setShortTitle(Formatter.truncateOnly(displayname, 25)); //do not use truncate!
+			course.getRunStructure().getRootNode().setLongTitle(displayname);
+		}
 		//course.saveRunStructure();
 		CourseEditorTreeNode editorRootNode = ((CourseEditorTreeNode)course.getEditorTreeModel().getRootNode());
 		editorRootNode.getCourseNode().setShortTitle(Formatter.truncateOnly(displayname, 25)); //do not use truncate!
 		editorRootNode.getCourseNode().setLongTitle(displayname);
-
+	
 		// mark entire structure as dirty/new so the user can re-publish
 		markDirtyNewRecursively(editorRootNode);
 		// root has already been created during export. Unmark it.
-		editorRootNode.setNewnode(false);
-
+		editorRootNode.setNewnode(false);		
+		
 		//save and close edit session
 		CourseFactory.saveCourse(course.getResourceableId());
 		CourseFactory.closeCourseEditSession(course.getResourceableId(), true);
-
+		
 		RepositoryEntryImportExport imp = new RepositoryEntryImportExport(fImportBaseDirectory);
 		if(imp.anyExportedPropertiesAvailable()) {
 			re = imp.importContent(re, getMediaContainer(re));
 		}
-
+		
 		//import reminders
 		importReminders(re, fImportBaseDirectory, envMapper, initialAuthor);
-
+		
 		//clean up export folder
 		cleanExportAfterImport(fImportBaseDirectory);
-
+		
 		return re;
 	}
-
+	
 	private void cleanExportAfterImport(File fImportBaseDirectory) {
 		try {
-			// prepare cleanup folder
-			String courseId = fImportBaseDirectory.getParentFile().getName();
-			File bcRoot = fImportBaseDirectory.getParentFile().getParentFile().getParentFile();
-			// LMSUZH-436: make sure that cleanup root folder exists before making any subfolders
-			File cleanupRoot = new File(bcRoot.getPath() + File.separator + CourseCleanupJob.CLEANUP_ROOT_DIR_NAME);
-			if (!cleanupRoot.exists() && !cleanupRoot.mkdir()) {
-				throw new IOException("Could not create cleanup folder");
-			}
-			File dir = new File(cleanupRoot.getPath() + File.separator + courseId);
-			if (!dir.mkdir()) {
-				throw new IOException("Could not move export to cleanup");
-			}
-			// move export folder to cleanup folder
 			Path exportDir = fImportBaseDirectory.toPath();
-			Files.move(exportDir, dir.toPath(), StandardCopyOption.REPLACE_EXISTING);
+			FileUtils.deleteDirsAndFiles(exportDir);
 		} catch (Exception e) {
 			log.error("", e);
 		}
@@ -324,7 +339,7 @@ public class CourseHandler implements RepositoryHandler {
 		RepositoryService repositoryService = CoreSpringFactory.getImpl(RepositoryService.class);
 		OLATResource ores = OLATResourceManager.getInstance().findOrPersistResourceable(resource);
 		RepositoryEntry importedRepositoryEntry = repositoryService.create(owner, null,
-				importExport.getResourceName(), importExport.getDisplayName(), importExport.getDescription(), ores, 0);
+				importExport.getResourceName(), importExport.getDisplayName(), importExport.getDescription(), ores, RepositoryEntry.ACC_OWNERS);
 
 		// set the new shared folder reference
 		CourseConfig courseConfig = course.getCourseEnvironment().getCourseConfig();
@@ -358,7 +373,7 @@ public class CourseHandler implements RepositoryHandler {
 		OLATResource ores = OLATResourceManager.getInstance().findOrPersistResourceable(resource);
 		
 		RepositoryEntry importedRepositoryEntry = repositoryService.create(owner,
-				null, importExport.getResourceName(), importExport.getDisplayName(), importExport.getDescription(), ores, 0);
+				null, importExport.getResourceName(), importExport.getDisplayName(), importExport.getDescription(), ores, RepositoryEntry.ACC_OWNERS);
 
 			// set the new glossary reference
 		CourseConfig courseConfig = course.getCourseEnvironment().getCourseConfig();
@@ -415,8 +430,8 @@ public class CourseHandler implements RepositoryHandler {
 	public RepositoryEntry copy(Identity author, RepositoryEntry source, RepositoryEntry target) {
 		final OLATResource sourceResource = source.getOlatResource();
 		final OLATResource targetResource = target.getOlatResource();
-
-		copyCourse(sourceResource, targetResource);
+		
+		CourseFactory.copyCourse(sourceResource, targetResource);
 		 
 		//transaction copied
 		ICourse sourceCourse = CourseFactory.loadCourse(source);
@@ -437,12 +452,14 @@ public class CourseHandler implements RepositoryHandler {
 		course.postCopy(envMapper, sourceCourse);
 		
 		cloneReminders(author, envMapper, source, target);
+		cloneLectureConfig(source, target);
 		
 		return target;
 	}
-
-	protected void copyCourse(OLATResourceable sourceResource, OLATResource targetResource) {
-		CourseFactory.copyCourse(sourceResource, targetResource);
+	
+	private void cloneLectureConfig(RepositoryEntry source, RepositoryEntry target) {
+		LectureService lectureService = CoreSpringFactory.getImpl(LectureService.class);
+		lectureService.copyRepositoryEntryLectureConfiguration(source, target);
 	}
 	
 	private void cloneReminders(Identity author, CourseEnvironmentMapper envMapper, RepositoryEntry source, RepositoryEntry target) {
@@ -458,13 +475,14 @@ public class CourseHandler implements RepositoryHandler {
 				RuleSPI ruleSpi = reminderModule.getRuleSPIByType(rule.getType());
 				if(ruleSpi != null) {
 					ReminderRule clonedRule = ruleSpi.clone(rule, envMapper);
-					if (clonedRule != null)
+					if (clonedRule != null) 
 						clonedRules.getRules().add(clonedRule);
 				}
 			}
 
 			Reminder clonedReminder = reminderService.createReminder(target, author);
 			clonedReminder.setDescription(reminder.getDescription());
+			clonedReminder.setEmailSubject(reminder.getEmailSubject());
 			clonedReminder.setEmailBody(reminder.getEmailBody());
 			clonedReminder.setConfiguration(reminderService.toXML(clonedRules));
 			reminderService.save(clonedReminder);
@@ -552,12 +570,16 @@ public class CourseHandler implements RepositoryHandler {
 		final CourseCreationHelper ccHelper = new CourseCreationHelper(ureq.getLocale(), repoEntry, courseConfig , course);
 		StepRunnerCallback finishCallback = new StepRunnerCallback() {
 			public Step execute(UserRequest uureq, WindowControl control, StepsRunContext runContext) {
+				// retrieve access and properties
+				CourseAccessAndProperties accessAndProps = (CourseAccessAndProperties) runContext.get("accessAndProperties");
+				courseConfig.setAccessAndProperties(accessAndProps);
+				
 				// here goes the code which reads out the wizards data from the runContext and then does some wizardry
 				ccHelper.finalizeWorkflow(uureq);
 				control.setInfo(CourseCreationMailHelper.getSuccessMessageString(uureq));
 				// send notification mail
 				final MailerResult mr = CourseCreationMailHelper.sentNotificationMail(uureq, ccHelper.getConfiguration());
-				MailHelper.printErrorsAndWarnings(mr, control, uureq.getLocale());
+				MailHelper.printErrorsAndWarnings(mr, control, uureq.getUserSession().getRoles().isOLATAdmin(), uureq.getLocale());
 				return StepsMainRunController.DONE_MODIFIED;
 			}
 		};

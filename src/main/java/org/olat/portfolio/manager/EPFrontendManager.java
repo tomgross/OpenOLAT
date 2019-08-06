@@ -19,7 +19,6 @@
  */
 package org.olat.portfolio.manager;
 
-import java.io.File;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Date;
@@ -54,6 +53,7 @@ import org.olat.course.run.userview.UserCourseEnvironmentImpl;
 import org.olat.group.BusinessGroup;
 import org.olat.group.DeletableGroupData;
 import org.olat.modules.assessment.AssessmentService;
+import org.olat.modules.assessment.Role;
 import org.olat.modules.assessment.model.AssessmentEntryStatus;
 import org.olat.modules.webFeed.portfolio.LiveBlogArtefactHandler;
 import org.olat.portfolio.PortfolioModule;
@@ -172,7 +172,7 @@ public class EPFrontendManager implements UserDataDeletable, DeletableGroupData 
 	}
 	
 	@Override
-	public void deleteUserData(Identity identity, String newDeletedUserName, File archivePath) {
+	public void deleteUserData(Identity identity, String newDeletedUserName) {
 		deleteUsersArtefacts(identity);
 
 		List<PortfolioStructure> userPersonalMaps = getStructureElementsForUser(identity, ElementType.DEFAULT_MAP, ElementType.STRUCTURED_MAP);
@@ -1148,10 +1148,10 @@ public class EPFrontendManager implements UserDataDeletable, DeletableGroupData 
 	 * @param map
 	 */
 	public void submitMap(PortfolioStructureMap map) {
-		submitMap(map, true);
+		submitMap(map, true, Role.user);
 	}
 	
-	private void submitMap(PortfolioStructureMap map, boolean logActivity) {
+	private void submitMap(PortfolioStructureMap map, boolean logActivity, Role by) {
 		if(!(map instanceof EPStructuredMap)) return;//add an exception
 		
 		EPStructuredMap submittedMap = (EPStructuredMap)map;
@@ -1170,7 +1170,7 @@ public class EPFrontendManager implements UserDataDeletable, DeletableGroupData 
 				ienv.setIdentity(owner);
 				UserCourseEnvironment uce = new UserCourseEnvironmentImpl(ienv, course.getCourseEnvironment());
 				if(logActivity) {
-					am.incrementNodeAttempts(courseNode, owner, uce);
+					am.incrementNodeAttempts(courseNode, owner, uce, by);
 				} else {
 					am.incrementNodeAttemptsInBackground(courseNode, owner, uce);
 				}
@@ -1180,7 +1180,7 @@ public class EPFrontendManager implements UserDataDeletable, DeletableGroupData 
 				assessmentService.updateAssessmentEntry(owner, courseEntry, courseNode.getIdent(), referenceEntry, AssessmentEntryStatus.inReview);
 			}
 			assessmentNotificationsHandler.markPublisherNews(owner, course.getResourceableId());
-			log.audit("Map " + map + " from " + owner.getName() + " has been submitted.");
+			log.audit("Map " + map + " from " + owner.getKey() + " has been submitted.");
 		}
 	}
 	
@@ -1192,7 +1192,7 @@ public class EPFrontendManager implements UserDataDeletable, DeletableGroupData 
 		List<PortfolioStructureMap> mapsToClose = structureManager.getOpenStructuredMapAfterDeadline();
 		int count = 0;
 		for(PortfolioStructureMap mapToClose:mapsToClose) {
-			submitMap(mapToClose, false);
+			submitMap(mapToClose, false, Role.auto);
 			if(count % 5 == 0) {
 				// this possibly takes longer than connection timeout, so do intermediatecommits.
 				dbInstance.intermediateCommit();

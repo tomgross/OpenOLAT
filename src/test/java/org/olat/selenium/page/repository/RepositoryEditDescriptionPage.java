@@ -30,6 +30,7 @@ import org.olat.selenium.page.graphene.OOGraphene;
 import org.openqa.selenium.By;
 import org.openqa.selenium.WebDriver;
 import org.openqa.selenium.WebElement;
+import org.openqa.selenium.support.ui.Select;
 
 /**
  * 
@@ -73,10 +74,21 @@ public class RepositoryEditDescriptionPage {
 		return this;
 	}
 	
+	/**
+	 * Set a license
+	 * 
+	 * @return Itself
+	 */
+	public RepositoryEditDescriptionPage setLicense() {
+		By licenseBy = By.cssSelector("div.o_sel_repo_license select");
+		WebElement licenseEl = browser.findElement(licenseBy);
+		new Select(licenseEl).selectByIndex(1);
+		return this;
+	}
+	
 	public RepositoryEditDescriptionPage save() {
 		By saveBy = By.cssSelector("div.o_sel_repo_save_details button.btn-primary");
-		WebElement saveButton = browser.findElement(saveBy);
-		saveButton.click();
+		OOGraphene.click(saveBy, browser);
 		OOGraphene.waitBusy(browser);
 		return this;
 	}

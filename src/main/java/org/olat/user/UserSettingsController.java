@@ -21,7 +21,6 @@ package org.olat.user;
 
 import java.util.List;
 
-import org.olat.core.CoreSpringFactory;
 import org.olat.core.commons.services.webdav.WebDAVModule;
 import org.olat.core.gui.UserRequest;
 import org.olat.core.gui.components.Component;
@@ -35,12 +34,17 @@ import org.olat.core.gui.control.Event;
 import org.olat.core.gui.control.WindowControl;
 import org.olat.core.gui.control.controller.BasicController;
 import org.olat.core.gui.control.generic.dtabs.Activateable2;
+import org.olat.core.id.OLATResourceable;
+import org.olat.core.id.context.BusinessControlFactory;
 import org.olat.core.id.context.ContextEntry;
 import org.olat.core.id.context.StateEntry;
+import org.olat.core.util.resource.OresHelper;
 import org.olat.instantMessaging.InstantMessagingModule;
 import org.olat.instantMessaging.ui.IMPreferenceController;
 import org.olat.registration.DisclaimerController;
 import org.olat.registration.RegistrationModule;
+import org.olat.user.ui.data.UserDataController;
+import org.springframework.beans.factory.annotation.Autowired;
 
 /**
  * 
@@ -52,9 +56,11 @@ import org.olat.registration.RegistrationModule;
  */
 public class UserSettingsController extends BasicController implements Activateable2 {
 	
-
+	private Link webdavLink;
+	private Link imLink;
+	private Link disclaimerLink;
+	private final Link userDataLink;
 	private final Link preferencesLink;
-	private Link webdavLink, imLink, disclaimerLink;
 	private final SegmentViewComponent segmentView;
 	private final VelocityContainer mainVC;
 
@@ -62,6 +68,14 @@ public class UserSettingsController extends BasicController implements Activatea
 	private DisclaimerController disclaimerCtrl;
 	private WebDAVPasswordController webdavCtrl;
 	private ChangePrefsController preferencesCtrl;
+	private UserDataController userDataCtrl;
+	
+	@Autowired
+	private WebDAVModule webDAVModule;
+	@Autowired
+	private InstantMessagingModule imModule;
+	@Autowired
+	private RegistrationModule registrationModule;
 
 	/**
 	 * @param ureq
@@ -76,21 +90,26 @@ public class UserSettingsController extends BasicController implements Activatea
 		preferencesLink = LinkFactory.createLink("tab.prefs", mainVC, this);
 		preferencesLink.setElementCssClass("o_sel_user_settings_prefs");
 		segmentView.addSegment(preferencesLink, true);
-		if(CoreSpringFactory.getImpl(WebDAVModule.class).isEnabled()) {
+		if(webDAVModule.isEnabled()) {
 			webdavLink = LinkFactory.createLink("tab.pwdav", mainVC, this);
 			webdavLink.setElementCssClass("o_sel_user_settings_webdav");
 			segmentView.addSegment(webdavLink, false);
 		}
-		if(CoreSpringFactory.getImpl(InstantMessagingModule.class).isEnabled()){
+		if(imModule.isEnabled()) {
 			imLink = LinkFactory.createLink("tab.im", mainVC, this);
 			imLink.setElementCssClass("o_sel_user_settings_im");
 			segmentView.addSegment(imLink, false);
 		}
-		if (CoreSpringFactory.getImpl(RegistrationModule.class).isDisclaimerEnabled()) {
+		if (registrationModule.isDisclaimerEnabled()) {
 			disclaimerLink = LinkFactory.createLink("tab.disclaimer", mainVC, this);
 			disclaimerLink.setElementCssClass("o_sel_user_settings_disclaimer");
 			segmentView.addSegment(disclaimerLink, false);
 		}
+		userDataLink = LinkFactory.createLink("tab.user.data", mainVC, this);
+		userDataLink.setElementCssClass("o_sel_user_data_download");
+		segmentView.addSegment(userDataLink, false);
+		
+		
 		mainVC.put("segments", segmentView);
 		doOpenPreferences(ureq);
 		putInitialPanel(mainVC);
@@ -101,9 +120,29 @@ public class UserSettingsController extends BasicController implements Activatea
 		//
 	}
 
-	/**
-	 * @see org.olat.core.gui.control.DefaultController#event(org.olat.core.gui.UserRequest, org.olat.core.gui.components.Component, org.olat.core.gui.control.Event)
-	 */
+	@Override
+	public void activate(UserRequest ureq, List<ContextEntry> entries, StateEntry state) {
+		if(entries == null || entries.isEmpty()) return;
+		
+		String name = entries.get(0).getOLATResourceable().getResourceableTypeName();
+		if("Preferences".equalsIgnoreCase(name)) {
+			doOpenPreferences(ureq);
+			segmentView.select(preferencesLink);
+		} else if("WebDAV".equalsIgnoreCase(name) && webdavLink != null && webDAVModule.isEnabled()) {
+			doOpenWebDAV(ureq);
+			segmentView.select(webdavLink);	
+		} else if("Chat".equalsIgnoreCase(name) && imLink != null && imModule.isEnabled()) {
+			doOpenIM(ureq);
+			segmentView.select(webdavLink);
+		} else if("Disclaimer".equalsIgnoreCase(name) && disclaimerLink != null && registrationModule.isDisclaimerEnabled()) {
+			doOpenDisclaimer(ureq);
+			segmentView.select(disclaimerLink);	
+		} else if("Data".equalsIgnoreCase(name)) {
+			doOpenUserData(ureq);
+			segmentView.select(userDataLink);	
+		}
+	}
+	
 	@Override
 	public void event(UserRequest ureq, Component source, Event event) {
 		if(source == segmentView) {
@@ -119,6 +158,8 @@ public class UserSettingsController extends BasicController implements Activatea
 					doOpenIM(ureq);
 				} else if (clickedLink == disclaimerLink) {
 					doOpenDisclaimer(ureq);
+				} else if (clickedLink == userDataLink) {
+					doOpenUserData(ureq);
 				}
 			}
 		}
@@ -126,38 +167,56 @@ public class UserSettingsController extends BasicController implements Activatea
 	
 	private void doOpenPreferences(UserRequest ureq) {
 		if(preferencesCtrl == null) {
-			preferencesCtrl = new ChangePrefsController(ureq, getWindowControl(), getIdentity());
+			OLATResourceable ores = OresHelper.createOLATResourceableInstance("Preferences", 0l);
+			WindowControl bwControl = BusinessControlFactory.getInstance().createBusinessWindowControl(ores, null, getWindowControl());
+			preferencesCtrl = new ChangePrefsController(ureq, bwControl, getIdentity());
 			listenTo(preferencesCtrl);
 		}
 		mainVC.put("segmentCmp", preferencesCtrl.getInitialComponent());
+		addToHistory(ureq, preferencesCtrl);
 	}
 	
 	private void doOpenWebDAV(UserRequest ureq) {
 		if(webdavCtrl == null) {
-			webdavCtrl = new WebDAVPasswordController(ureq, getWindowControl());
+			OLATResourceable ores = OresHelper.createOLATResourceableInstance("WebDAV", 0l);
+			WindowControl bwControl = BusinessControlFactory.getInstance().createBusinessWindowControl(ores, null, getWindowControl());
+			webdavCtrl = new WebDAVPasswordController(ureq, bwControl);
 			listenTo(webdavCtrl);
 		}
 		mainVC.put("segmentCmp", webdavCtrl.getInitialComponent());
+		addToHistory(ureq, webdavCtrl);
 	}
 	
 	private void doOpenIM(UserRequest ureq) {
 		if(imCtrl == null) {
-			imCtrl = new IMPreferenceController(ureq, getWindowControl(), getIdentity());
+			OLATResourceable ores = OresHelper.createOLATResourceableInstance("Chat", 0l);
+			WindowControl bwControl = BusinessControlFactory.getInstance().createBusinessWindowControl(ores, null, getWindowControl());
+			imCtrl = new IMPreferenceController(ureq, bwControl, getIdentity());
 			listenTo(imCtrl);
 		}
 		mainVC.put("segmentCmp", imCtrl.getInitialComponent());
+		addToHistory(ureq, imCtrl);
 	}
 	
 	private void doOpenDisclaimer(UserRequest ureq) {
 		if(disclaimerCtrl == null) {
-			disclaimerCtrl = new DisclaimerController(ureq, getWindowControl(), true);
+			OLATResourceable ores = OresHelper.createOLATResourceableInstance("Disclaimer", 0l);
+			WindowControl bwControl = BusinessControlFactory.getInstance().createBusinessWindowControl(ores, null, getWindowControl());
+			disclaimerCtrl = new DisclaimerController(ureq, bwControl, true);
 			listenTo(disclaimerCtrl);
 		}
 		mainVC.put("segmentCmp", disclaimerCtrl.getInitialComponent());
+		addToHistory(ureq, disclaimerCtrl);
 	}
-
-	@Override
-	public void activate(UserRequest ureq, List<ContextEntry> entries, StateEntry state) {
-		//
-	}
+	
+	private void doOpenUserData(UserRequest ureq) {
+		if(userDataCtrl == null) {
+			OLATResourceable ores = OresHelper.createOLATResourceableInstance("Data", 0l);
+			WindowControl bwControl = BusinessControlFactory.getInstance().createBusinessWindowControl(ores, null, getWindowControl());
+			userDataCtrl = new UserDataController(ureq, bwControl, getIdentity());
+			listenTo(userDataCtrl);
+		}
+		mainVC.put("segmentCmp", userDataCtrl.getInitialComponent());
+		addToHistory(ureq, userDataCtrl);
+	}	
 }

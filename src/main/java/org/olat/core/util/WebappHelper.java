@@ -76,6 +76,9 @@ public class WebappHelper implements Initializable, Destroyable, ServletContextA
 	private static long timeOfServerStartup = System.currentTimeMillis();
 	
 	private static String mathJaxCdn;
+	private static String mathJaxConfig;
+	private static boolean mathJaxMarkers;
+	
 	private static String mobileContext;
 	
 	/** need to set this at least once before the actual request, since we cannot extract it from the servletContext, 
@@ -171,7 +174,7 @@ public class WebappHelper implements Initializable, Destroyable, ServletContextA
 	public void destroy() {
 		log.info("");
 		log.info("*********************************************");
-		log.info("*                SHUTDOWM                    ");
+		log.info("*                SHUTDOWN                    ");
 		log.info("*********************************************");
 		log.info("* Application:   " + applicationName);
 		log.info("* StopTimeStamp: " + new Date());
@@ -304,6 +307,22 @@ public class WebappHelper implements Initializable, Destroyable, ServletContextA
 		WebappHelper.mathJaxCdn = mathJaxCdn;
 	}
 
+	public static String getMathJaxConfig() {
+		return mathJaxConfig;
+	}
+
+	public void setMathJaxConfig(String mathJaxConfig) {
+		WebappHelper.mathJaxConfig = mathJaxConfig;
+	}
+	
+	public static boolean isMathJaxMarkers() {
+		return mathJaxMarkers;
+	}
+	
+	public void setMathJaxMarkers(boolean mathJaxMarkers) {
+		WebappHelper.mathJaxMarkers = mathJaxMarkers;
+	}
+
 	public void setFullPathToSrc(String fullPathToSrc) {
 		File path = new File(fullPathToSrc);
 		if (path.exists()) {
@@ -407,6 +426,7 @@ public class WebappHelper implements Initializable, Destroyable, ServletContextA
 	 *	key="smtpPwd"
 	 *	key="mailSupport"
 	 *  key="mailReplyTo" - default from email address (reply-to)
+	 *  key="mailFromDomain" - own domain of our smtp server where it is allowed to use foreign addresses
 	 *  key="mailFrom" - real from email address
 	 *  key="mailFromName" - plain text name for from address
 	 * @param string
@@ -414,6 +434,10 @@ public class WebappHelper implements Initializable, Destroyable, ServletContextA
 	 */
 	public static String getMailConfig(String key) {
 		return WebappHelper.mailConfig.get(key);
+	}
+
+	public static String setMailConfig(String key, String value) {
+		return WebappHelper.mailConfig.put(key, value);
 	}
 
 	public static boolean isMailHostAuthenticationEnabled() {
@@ -429,7 +453,7 @@ public class WebappHelper implements Initializable, Destroyable, ServletContextA
 	private void testUtf8FileSystem() {
 		File tmpDir = new File(new File(WebappHelper.getUserDataRoot()), "tmp");
 		if (!tmpDir.exists()) tmpDir.mkdir();
-		File writeFile = new File(tmpDir, "UTF-8 test läsÖiç-首页|新");
+		File writeFile = new File(tmpDir, "UTF-8 test läsÖiç-首页f新");
 		if (writeFile.exists()) {
 			// remove exising files first
 			writeFile.delete();
@@ -445,7 +469,7 @@ public class WebappHelper implements Initializable, Destroyable, ServletContextA
 		if(tmpFiles != null){
 			for (int i = 0; i < tmpFiles.length; i++) {
 				File tmpFile = tmpFiles[i];
-				if (tmpFile.getName().equals("UTF-8 test läsÖiç-首页|新")) {
+				if (tmpFile.getName().equals("UTF-8 test läsÖiç-首页f新")) {
 					foundUtf8File = true;
 					break;
 				}

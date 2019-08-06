@@ -30,9 +30,8 @@ import java.io.InputStream;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-import org.olat.core.CoreSpringFactory;
 import org.olat.core.commons.modules.bc.FolderLoggingAction;
-import org.olat.core.commons.modules.bc.FolderModule;
+import org.olat.core.commons.modules.bc.FolderManager;
 import org.olat.core.commons.modules.bc.components.FolderComponent;
 import org.olat.core.commons.modules.bc.meta.MetaInfo;
 import org.olat.core.commons.modules.bc.meta.tagged.MetaTagged;
@@ -63,6 +62,7 @@ public class CmdServeResource implements FolderCommand {
 	
 	private int status = FolderCommandStatus.STATUS_SUCCESS;
 	
+	@Override
 	public Controller execute(FolderComponent folderComponent, UserRequest ureq, WindowControl wControl, Translator translator) {
 		VFSSecurityCallback inheritedSecCallback = VFSManager.findInheritedSecurityCallback(folderComponent.getCurrentContainer());
 		if (inheritedSecCallback != null && !inheritedSecCallback.canRead())
@@ -70,28 +70,42 @@ public class CmdServeResource implements FolderCommand {
 		
 		// extract file
 		String path = ureq.getModuleURI();
-		MediaResource mr = null;
 		VFSItem vfsitem = folderComponent.getRootContainer().resolve(path);
 		if(vfsitem == null) {
 			//double decoding of ++
 			vfsitem = FolderCommandHelper.tryDoubleDecoding(ureq, folderComponent);
 		}
+		MediaResource mr = getMediaResource(path, vfsitem);
+		ThreadLocalUserActivityLogger.log(FolderLoggingAction.BC_FILE_READ, getClass(), CoreLoggingResourceable.wrapBCFile(path));
+		ureq.getDispatchResult().setResultingMediaResource(mr);
+		
+		// update download counter
+		if (vfsitem instanceof MetaTagged) {
+			MetaTagged itemWithMeta = (MetaTagged) vfsitem;
+			MetaInfo meta = itemWithMeta.getMetaInfo();
+			meta.increaseDownloadCount();
+			meta.write();
+		}
 
+		return null;
+	}
+	
+	public MediaResource getMediaResource(String path, VFSItem vfsitem) {
+		MediaResource mr = null;
 		if (vfsitem == null) {
-			mr = new NotFoundMediaResource(path);
+			mr = new NotFoundMediaResource();
 		} else if(!(vfsitem instanceof VFSLeaf)) {
-			mr = new NotFoundMediaResource(path);
+			mr = new NotFoundMediaResource();
 		} else {
-			boolean forceDownload = CoreSpringFactory.getImpl(FolderModule.class).isForceDownload();
 			
 			VFSLeaf vfsfile = (VFSLeaf)vfsitem;
+			boolean forceDownload = FolderManager.isDownloadForcedFileType(vfsfile.getName());
 			if (path.toLowerCase().endsWith(".html") || path.toLowerCase().endsWith(".htm")) {
-				// setCurrentURI(path);
 				// set the http content-type and the encoding
 				// try to load in iso-8859-1
 				InputStream is = vfsfile.getInputStream();
 				if(is == null) {
-					mr = new NotFoundMediaResource(path);
+					mr = new NotFoundMediaResource();
 				} else {
 					String page = FileUtils.load(is, DEFAULT_ENCODING);
 					// search for the <meta content="text/html; charset=utf-8"
@@ -119,6 +133,9 @@ public class CmdServeResource implements FolderCommand {
 						smr.setContentType(mimetype);
 						smr.setEncoding(enc);
 						smr.setData(page);
+						if(forceDownload) {
+							smr.setDownloadable(true, vfsfile.getName());
+						}
 						mr = smr;
 					} else {
 						// found a new charset other than iso-8859-1 -> let it load again
@@ -158,28 +175,13 @@ public class CmdServeResource implements FolderCommand {
 			} else {
 				// binary data: not .html, not .htm, not .js -> treated as is
 				VFSMediaResource vmr = new VFSMediaResource(vfsfile);
-				// This is to prevent the login prompt in Excel, Word and PowerPoint
-				if (path.endsWith(".xlsx") || path.endsWith(".pptx") || path.endsWith(".docx")) {
-					vmr.setDownloadable(true);
-				} else if(forceDownload) {
+				if(forceDownload) {
 					vmr.setDownloadable(true);
 				}
 				mr = vmr;
 			}
 		}
-				
-		ThreadLocalUserActivityLogger.log(FolderLoggingAction.BC_FILE_READ, getClass(), CoreLoggingResourceable.wrapBCFile(path));
-		ureq.getDispatchResult().setResultingMediaResource(mr);
-		
-		// update download counter
-		if (vfsitem instanceof MetaTagged) {
-			MetaTagged itemWithMeta = (MetaTagged) vfsitem;
-			MetaInfo meta = itemWithMeta.getMetaInfo();
-			meta.increaseDownloadCount();
-			meta.write();
-		}
-
-		return null;
+		return mr;
 	}
 
 	@Override

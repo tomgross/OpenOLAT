@@ -26,7 +26,7 @@ import java.util.List;
 import javax.servlet.http.HttpServletResponse;
 import javax.xml.transform.TransformerException;
 
-import org.apache.pdfbox.exceptions.COSVisitorException;
+import org.apache.pdfbox.util.Matrix;
 import org.olat.core.gui.media.MediaResource;
 import org.olat.core.gui.translator.Translator;
 import org.olat.core.id.UserConstants;
@@ -54,11 +54,11 @@ public class CheckboxPDFExport extends PdfDocument implements MediaResource {
 	private String groupName;
 	private String author;
 	private final Translator translator;
-	private int firstNameIndex, lastNameIndex, institutionalUserIdentifierIndex;
+	private int firstNameIndex;
+	private int lastNameIndex;
+	private int institutionalUserIdentifierIndex;
 	
-	
-	public CheckboxPDFExport(String filename, Translator translator, List<UserPropertyHandler> userPropertyHandlers)
-			throws IOException {
+	public CheckboxPDFExport(String filename, Translator translator, List<UserPropertyHandler> userPropertyHandlers) {
 		super(translator.getLocale());
 		
 		marginTopBottom = 62.0f;
@@ -117,6 +117,11 @@ public class CheckboxPDFExport extends PdfDocument implements MediaResource {
 	}
 	
 	@Override
+	public long getCacheControlDuration() {
+		return 0;
+	}
+
+	@Override
 	public boolean acceptRanges() {
 		return false;
 	}
@@ -147,7 +152,7 @@ public class CheckboxPDFExport extends PdfDocument implements MediaResource {
 			hres.setHeader("Content-Disposition","attachment; filename*=UTF-8''" + StringHelper.urlEncodeUTF8(filename));			
 			hres.setHeader("Content-Description",StringHelper.urlEncodeUTF8(filename));
 			document.save(hres.getOutputStream());
-		} catch (COSVisitorException | IOException e) {
+		} catch (IOException e) {
 			log.error("", e);
 		}
 	}
@@ -162,7 +167,7 @@ public class CheckboxPDFExport extends PdfDocument implements MediaResource {
 	}
 
 	public void create(CheckboxList checkboxList, List<CheckListAssessmentRow> rows)
-    throws IOException, COSVisitorException, TransformerException {
+    throws IOException, TransformerException {
     	addPage();
     	addMetadata(courseNodeTitle, courseTitle, author);
 
@@ -343,13 +348,13 @@ public class CheckboxPDFExport extends PdfDocument implements MediaResource {
 			currentContentStream.beginText();
 			currentContentStream.setFont(font, fontSize);
 			if (h == 0 || (h == lastColIndex)) {
-				currentContentStream.moveTextPositionByAmount(textx, texty - headerHeight + cellMargin);
+				currentContentStream.newLineAtOffset(textx, texty - headerHeight + cellMargin);
 				textx += nameMaxSizeWithMargin;
 			} else {
-				currentContentStream.setTextRotation(3 * (Math.PI / 2), textx + cellMargin, texty - cellMargin);
+				currentContentStream.setTextMatrix(Matrix.getRotateInstance(3 * (Math.PI / 2), textx + cellMargin, texty - cellMargin));
 				textx += colWidth;
 			}
-			currentContentStream.drawString(text);
+			currentContentStream.showText(cleanString(text));
 			currentContentStream.endText();
 		}
 
@@ -375,16 +380,16 @@ public class CheckboxPDFExport extends PdfDocument implements MediaResource {
 							String textLine = texts[k];
 							currentContentStream.beginText();
 							currentContentStream.setFont(font, fontSize);
-							currentContentStream.moveTextPositionByAmount(textx, lineTexty);
-							currentContentStream.drawString(textLine);
+							currentContentStream.newLineAtOffset(textx, lineTexty);
+							currentContentStream.showText(textLine);
 							currentContentStream.endText();
 							lineTexty -= (lineHeightFactory * fontSize);
 						}
 					} else {
 						currentContentStream.beginText();
 						currentContentStream.setFont(font, fontSize);
-						currentContentStream.moveTextPositionByAmount(textx, texty);
-						currentContentStream.drawString(text);
+						currentContentStream.newLineAtOffset(textx, texty);
+						currentContentStream.showText(text);
 						currentContentStream.endText();
 					}
 				}
@@ -394,79 +399,5 @@ public class CheckboxPDFExport extends PdfDocument implements MediaResource {
 			textx = marginLeftRight + cellMargin;
 		}
 		return rows;
-	}
-	
-	/**
-	 * The number 6 was chosen after some trial and errors. It's a good compromise as
-	 * the width of the letter is not fixed. Don't replace ... with ellipsis, it break
-	 * the PDF.
-	 * 
-	 * @param text
-	 * @param maxWidth
-	 * @param fontSize
-	 * @return
-	 * @throws IOException
-	 */
-	private String[] splitText(String text, float maxWidth, float fontSize) throws IOException {
-		float textWidth = getStringWidth(text, fontSize);
-		if(maxWidth < textWidth) {
-
-			float letterWidth = textWidth / text.length();
-			int maxNumOfLetter = Math.round(maxWidth / letterWidth) - 1;
-			//use space and comma as separator to gentle split the text
-
-			int indexBefore = findBreakBefore(text, maxNumOfLetter);
-			if(indexBefore < (maxNumOfLetter / 2)) {
-				indexBefore = -1;//use more place
-			}
-
-			String one, two;
-			if(indexBefore <= 0) {
-				//one word
-				indexBefore = Math.min(text.length(), maxNumOfLetter - 6);
-				one = text.substring(0, indexBefore) + "...";
-				
-				int indexAfter = findBreakAfter(text, maxNumOfLetter);
-				if(indexAfter <= 0) {
-					two = text.substring(indexBefore);
-				} else {
-					two = text.substring(indexAfter);
-				}
-			} else {
-				one = text.substring(0, indexBefore + 1);
-				two = text.substring(indexBefore + 1);
-			}
-			
-			if(two.length() > maxNumOfLetter) {
-				two = two.substring(0, maxNumOfLetter - 6) + "...";
-			}
-			return new String[] { one.trim(), two.trim() };
-		}
-		return new String[]{ text };
-	}
-	
-	public static int findBreakBefore(String line, int start) {
-		start = Math.min(line.length(), start);
-		for (int i = start; i >= 0; --i) {
-			char c = line.charAt(i);
-			if (Character.isWhitespace(c) || c == '-' || c == ',') {
-				return i;
-			}
-		}
-		return -1;
-	}
-	
-	public static int findBreakAfter(String line, int start) {
-		int len = line.length();
-		for (int i = start; i < len; ++i) {
-			char c = line.charAt(i);
-			if (Character.isWhitespace(c) || c == ',') {
-				if(i + 1 < line.length()) {
-					return i + 1;
-				}
-				return i;
-			}
-		}
-		return -1;
 	}
 }

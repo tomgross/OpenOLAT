@@ -26,12 +26,12 @@ import java.util.Date;
 
 import javax.servlet.http.HttpServletResponse;
 
-import org.olat.commons.servlets.RSSServlet;
+import org.olat.core.commons.services.notifications.PersonalRSSServlet;
 import org.olat.core.gui.media.MediaResource;
 
-import com.sun.syndication.feed.synd.SyndFeed;
-import com.sun.syndication.io.FeedException;
-import com.sun.syndication.io.SyndFeedOutput;
+import com.rometools.rome.feed.synd.SyndFeed;
+import com.rometools.rome.io.FeedException;
+import com.rometools.rome.io.SyndFeedOutput;
 
 /**
  * The media resource for synd feeds. Used for dispatching.
@@ -60,33 +60,32 @@ public class SyndFeedMediaResource implements MediaResource {
 	}
 	
 	@Override
+	public long getCacheControlDuration() {
+		return 0;
+	}
+
+	@Override
 	public boolean acceptRanges() {
 		return true;
 	}
 
-	/**
-	 * @see org.olat.core.gui.media.MediaResource#getContentType()
-	 */
+	@Override
 	public String getContentType() {
 		return CONTENT_TYPE;
 	}
 
-	/**
-	 * @see org.olat.core.gui.media.MediaResource#getInputStream()
-	 */
+	@Override
 	public InputStream getInputStream() {
 		ByteArrayInputStream inputStream = null;
 		try {
-			inputStream = new ByteArrayInputStream(feedString.getBytes(RSSServlet.DEFAULT_ENCODING));
+			inputStream = new ByteArrayInputStream(feedString.getBytes(PersonalRSSServlet.DEFAULT_ENCODING));
 		} catch (UnsupportedEncodingException e) {
 			// log something
 		}
 		return inputStream;
 	}
 
-	/**
-	 * @see org.olat.core.gui.media.MediaResource#getLastModified()
-	 */
+	@Override
 	public Long getLastModified() {
 		Long lastModified = null;
 		Date date = feed.getPublishedDate();
@@ -96,26 +95,18 @@ public class SyndFeedMediaResource implements MediaResource {
 		return lastModified;
 	}
 
-	/**
-	 * @see org.olat.core.gui.media.MediaResource#getSize()
-	 */
+	@Override
 	public Long getSize() {
-		return new Long(feedString.getBytes().length);
+		return Long.valueOf(feedString.getBytes().length);
 	}
 
-	/**
-	 * @see org.olat.core.gui.media.MediaResource#prepare(javax.servlet.http.HttpServletResponse)
-	 */
 	@Override
 	public void prepare(HttpServletResponse hres) {
 	// nothing to prepare
 	}
 
-	/**
-	 * @see org.olat.core.gui.media.MediaResource#release()
-	 */
+	@Override
 	public void release() {
 	// nothing to release
 	}
-
 }

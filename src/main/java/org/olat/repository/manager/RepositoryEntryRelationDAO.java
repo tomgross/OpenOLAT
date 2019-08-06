@@ -28,6 +28,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import javax.persistence.EntityManager;
 import javax.persistence.TypedQuery;
@@ -37,10 +38,12 @@ import org.olat.basesecurity.GroupRoles;
 import org.olat.basesecurity.IdentityRef;
 import org.olat.basesecurity.manager.GroupDAO;
 import org.olat.core.commons.persistence.DB;
+import org.olat.core.commons.persistence.PersistenceHelper;
 import org.olat.core.id.Identity;
 import org.olat.repository.RepositoryEntry;
 import org.olat.repository.RepositoryEntryRef;
 import org.olat.repository.RepositoryEntryRelationType;
+import org.olat.repository.model.MembershipInfos;
 import org.olat.repository.model.RepositoryEntryToGroupRelation;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -163,7 +166,7 @@ public class RepositoryEntryRelationDAO {
 		}
 		
 		List<Long> first = query.getResultList();
-		return first != null && first.size() > 0 && first.get(0) != null && first.get(0).longValue() >= 0l;
+		return first != null && !first.isEmpty() && first.get(0) != null && first.get(0).longValue() >= 0l;
 	}
 
 	boolean hasRole(Identity identity, Group group, String role) {
@@ -191,12 +194,18 @@ public class RepositoryEntryRelationDAO {
 	
 	public int removeRole(IdentityRef identity, RepositoryEntryRef re, String role) {
 		Group group = getDefaultGroup(re);
-		return groupDao.removeMembership(group, identity, role);
+		if(group != null) {
+			return groupDao.removeMembership(group, identity, role);
+		}
+		return 0;
 	}
 	
 	public int removeRole(RepositoryEntry re, String role) {
 		Group group = getDefaultGroup(re);
-		return groupDao.removeMemberships(group, role);
+		if(group != null) {
+			return groupDao.removeMemberships(group, role);
+		}
+		return 0;
 	}
 
 	/**
@@ -214,9 +223,10 @@ public class RepositoryEntryRelationDAO {
 		  .append(" inner join relGroup.group as baseGroup")
 		  .append(" where v.key=:repoKey");
 
-		return dbInstance.getCurrentEntityManager().createQuery(sb.toString(), Group.class)
+		List<Group> groups = dbInstance.getCurrentEntityManager().createQuery(sb.toString(), Group.class)
 				.setParameter("repoKey", re.getKey())
-				.getSingleResult();
+				.getResultList();
+		return groups == null || groups.isEmpty() ? null : groups.get(0);
 	}
 	
 	/**
@@ -438,6 +448,12 @@ public class RepositoryEntryRelationDAO {
 	}
 	
 	public List<Identity> getMembers(RepositoryEntryRef re, RepositoryEntryRelationType type, String... roles) {
+		return getMembers(Collections.singletonList(re), type, roles);
+	}
+	
+	public List<Identity> getMembers(List<? extends RepositoryEntryRef> res, RepositoryEntryRelationType type, String... roles) {
+		if(res == null || res.isEmpty()) return Collections.emptyList();
+		
 		List<String> roleList = GroupRoles.toList(roles);
 		
 		String def;
@@ -454,14 +470,15 @@ public class RepositoryEntryRelationDAO {
 		  .append(" inner join baseGroup.members as memberships")
 		  .append(" inner join memberships.identity as ident")
 		  .append(" inner join fetch ident.user as identUser")
-		  .append(" where v.key=:repoKey");
+		  .append(" where v.key in (:repoKeys)");
 		if(roleList.size() > 0) {
 				sb.append(" and memberships.role in (:roles)");
 		}
-			
+		
+		List<Long> repoKeys = res.stream().map(re -> re.getKey()).collect(Collectors.toList());	
 		TypedQuery<Identity> query = dbInstance.getCurrentEntityManager()
 				.createQuery(sb.toString(), Identity.class)
-				.setParameter("repoKey", re.getKey());
+				.setParameter("repoKeys", repoKeys);
 		if(roleList.size() > 0) {
 				query.setParameter("roles", roleList);
 		}
@@ -499,8 +516,10 @@ public class RepositoryEntryRelationDAO {
 	
 	public boolean removeMembers(RepositoryEntry re, List<Identity> members) {
 		Group group = getDefaultGroup(re);
-		for(Identity member:members) {
-			groupDao.removeMembership(group, member);
+		if(group != null) {
+			for(Identity member:members) {
+				groupDao.removeMembership(group, member);
+			}
 		}
 		return true;
 	}
@@ -652,5 +671,42 @@ public class RepositoryEntryRelationDAO {
 				.createQuery(sb.toString(), Long.class)
 				.setParameter("ownerKey", owner.getKey())
 				.getResultList();
+	}
+	
+	public List<MembershipInfos> getMembership(IdentityRef identity) {
+		StringBuilder sb = new StringBuilder(512);
+		sb.append("select v.key, v.displayname, reMember.key, reMember.role, reMember.creationDate,")
+		  .append(" userinfos.initialLaunch, userinfos.recentLaunch, userinfos.visit")
+		  .append(" from repositoryentry as v")
+		  .append(" inner join v.groups as rel")
+		  .append(" inner join rel.group as bGroup")
+		  .append(" inner join bGroup.members as reMember")
+		  .append(" left join usercourseinfos as userinfos on (v.olatResource.key=userinfos.resource.key)")
+		  .append(" where reMember.identity.key=:identityKey");
+		List<Object[]> rawObjects = dbInstance.getCurrentEntityManager()
+				.createQuery(sb.toString(), Object[].class)
+				.setParameter("identityKey", identity.getKey())
+				.getResultList();
+		
+		Set<Long> memberKeys = new HashSet<>();
+		List<MembershipInfos> memberhips = new ArrayList<>(rawObjects.size());
+		for(Object[] rawObject:rawObjects) {
+			int col = 0;
+			Long entryKey = (Long)rawObject[col++];
+			String displayName = (String)rawObject[col++];
+			Long memberKey = (Long)rawObject[col++];
+			if(memberKeys.contains(memberKey)) {
+				continue;//duplicate
+			}
+			memberKeys.add(memberKey);
+			
+			String role = (String)rawObject[col++];
+			Date creationDate = (Date)rawObject[col++];
+			Date initialLaunch = (Date)rawObject[col++];
+			Date recentLaunch = (Date)rawObject[col++];
+			Long visit =  PersistenceHelper.extractLong(rawObject, col);
+			memberhips.add(new MembershipInfos(identity.getKey(), entryKey, displayName, role, creationDate, initialLaunch, recentLaunch, visit));
+		}
+		return memberhips;
 	}
 }

@@ -5,7 +5,14 @@
   http://www.springframework.org/schema/beans 
   http://www.springframework.org/schema/beans/spring-beans.xsd">
 
-	<bean id="taskExecutorManager" class="org.olat.core.commons.services.taskexecutor.manager.TaskExecutorManagerImpl"/>
+	<bean id="taskExecutorManager" class="org.olat.core.commons.services.taskexecutor.manager.TaskExecutorManagerImpl">
+		<constructor-arg index="0" ref="mpTaskExecutorService" />
+		<constructor-arg index="1" ref="sequentialTaskExecutorService" />
+		<constructor-arg index="2" ref="lowPriorityTaskSpringExecutorService" />
+		<property name="persistentTaskDao" ref="persistentTaskDao"/>
+		<property name="dbInstance" ref="database"/>
+		<property name="scheduler" ref="schedulerFactoryBean"/>
+	</bean>
 	
 	<bean id="mpTaskExecutorService" class="org.springframework.core.task.support.ExecutorServiceAdapter">
 		<constructor-arg index="0" ref="mpTaskSpringExecutor" />
@@ -14,16 +21,26 @@
 	<bean id="sequentialTaskExecutorService" class="org.springframework.core.task.support.ExecutorServiceAdapter">
 		<constructor-arg index="0" ref="sequentialTaskSpringExecutor" />
 	</bean>
+	
+	<bean id="lowPriorityTaskSpringExecutorService" class="org.springframework.core.task.support.ExecutorServiceAdapter">
+		<constructor-arg index="0" ref="lowPriorityTaskSpringExecutor" />
+	</bean>
 
 	<bean id="mpTaskSpringExecutor" class="org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor">
 		<property name="corePoolSize" value="2" />
 		<property name="maxPoolSize" value="5" />
-		<property name="queueCapacity" value="2000" />
+		<property name="queueCapacity" value="1000" />
 	</bean>
 	
 	<bean id="sequentialTaskSpringExecutor" class="org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor">
 		<property name="corePoolSize" value="1" />
 		<property name="maxPoolSize" value="1" />
+		<property name="queueCapacity" value="1000" />
+	</bean>
+	
+	<bean id="lowPriorityTaskSpringExecutor" class="org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor">
+		<property name="corePoolSize" value="2" />
+		<property name="maxPoolSize" value="2" />
 		<property name="queueCapacity" value="1000" />
 	</bean>
 	

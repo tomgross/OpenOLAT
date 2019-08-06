@@ -183,6 +183,11 @@ public class AssessmentModeManagerImpl implements AssessmentModeManager {
 	public List<AssessmentMode> getAssessmentModeFor(RepositoryEntryRef entry) {
 		return assessmentModeDao.getAssessmentModeFor(entry);
 	}
+	
+	@Override
+	public List<AssessmentMode> getPlannedAssessmentMode(RepositoryEntryRef entry, Date from) {
+		return assessmentModeDao.getPlannedAssessmentMode(entry, from);
+	}
 
 	@Override
 	public List<AssessmentMode> getAssessmentModeFor(IdentityRef identity) {
@@ -245,6 +250,11 @@ public class AssessmentModeManagerImpl implements AssessmentModeManager {
 	@Override
 	public boolean isInAssessmentMode(RepositoryEntryRef entry, Date date) {
 		return assessmentModeDao.isInAssessmentMode(entry, date);
+	}
+	
+	@Override
+	public List<AssessmentMode> getCurrentAssessmentMode(RepositoryEntryRef entry, Date now) {
+		return assessmentModeDao.getCurrentAssessmentMode(entry, now);
 	}
 
 	@Override
@@ -309,8 +319,21 @@ public class AssessmentModeManagerImpl implements AssessmentModeManager {
 				if(safeExamHash != null && safeExamHash.equals(hash)) {
 					safe = true;
 				}
+
+				if(!safe && url.endsWith("/")) {
+					String strippedUrl = url.substring(0, url.length() - 1);
+					String strippedHash = Encoder.sha256Exam(strippedUrl + safeExamBrowserKey);
+					if(safeExamHash != null && safeExamHash.equals(strippedHash)) {
+						safe = true;
+					}
+				}
+				
 				if(debug) {
-					log.debug((safeExamHash.equals(hash) ? "Success" : "Failed") + " : " + safeExamHash +" (Header) " + hash + " (Calculated)");
+					if(safeExamHash == null) {
+						log.debug("Failed safeexambrowser request hash is null for URL: " + url + " and key: " + safeExamBrowserKey);
+					} else {
+						log.debug((safeExamHash.equals(hash) ? "Success" : "Failed") + " : " + safeExamHash +" (Header) " + hash + " (Calculated) for URL: " + url + " and key: " + safeExamBrowserKey);
+					}
 				}
 			}
 		} else {

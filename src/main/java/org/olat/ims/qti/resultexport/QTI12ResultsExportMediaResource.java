@@ -44,11 +44,8 @@ import javax.servlet.http.HttpServletResponse;
 
 import org.apache.velocity.VelocityContext;
 import org.dom4j.Document;
-import org.olat.core.OlatServletResource;
-import org.olat.core.gui.UserRequest;
 import org.olat.core.gui.media.MediaResource;
 import org.olat.core.gui.render.velocity.VelocityHelper;
-import org.olat.core.gui.translator.PackageTranslator;
 import org.olat.core.gui.translator.Translator;
 import org.olat.core.id.Identity;
 import org.olat.core.id.UserConstants;
@@ -56,7 +53,9 @@ import org.olat.core.logging.OLog;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.FileUtils;
 import org.olat.core.util.StringHelper;
+import org.olat.core.util.Util;
 import org.olat.core.util.WebappHelper;
+import org.olat.core.util.ZipUtil;
 import org.olat.course.nodes.QTICourseNode;
 import org.olat.course.run.environment.CourseEnvironment;
 import org.olat.ims.qti.QTIResultManager;
@@ -64,6 +63,7 @@ import org.olat.ims.qti.QTIResultSet;
 import org.olat.ims.qti.process.AssessmentInstance;
 import org.olat.ims.qti.process.FilePersister;
 import org.olat.ims.qti.render.LocalizedXSLTransformer;
+import org.olat.user.UserManager;
 
 public class QTI12ResultsExportMediaResource implements MediaResource {
 
@@ -83,41 +83,28 @@ public class QTI12ResultsExportMediaResource implements MediaResource {
 	private final QTIResultManager qtiResultManager;
 	private QTICourseNode courseNode;
 	private CourseEnvironment courseEnv;
-	private UserRequest ureq;
 	private Locale locale;
 	private String title, exportFolderName;
 	private Translator translator;
-	
-
-	public QTI12ResultsExportMediaResource(CourseEnvironment courseEnv, UserRequest ureq,
-			List<Identity> identities, QTICourseNode courseNode) {
-		this.courseNode = courseNode;
-		this.courseEnv = courseEnv;
-		this.ureq = ureq;
-		this.locale = null;
-		this.title = "qti12export";	
-		this.identities = identities;
-		this.velocityHelper = VelocityHelper.getInstance();
-		
-		translator = new PackageTranslator(QTI12ResultsExportMediaResource.class.getPackage().getName(), ureq.getLocale());
-		this.exportFolderName = translator.translate("export.folder.name");
-		
-		qtiResultManager = QTIResultManager.getInstance();
-	}
 
 	public QTI12ResultsExportMediaResource(CourseEnvironment courseEnv, Locale locale, List<Identity> identities,
 			QTICourseNode courseNode) {
 		this.courseNode = courseNode;
 		this.courseEnv = courseEnv;
 		this.locale = locale;
-		this.title = "qti12export";	
+		title = "qti12export";	
 		this.identities = identities;
-		this.velocityHelper = VelocityHelper.getInstance();
+		velocityHelper = VelocityHelper.getInstance();
 		
-		translator = new PackageTranslator(QTI12ResultsExportMediaResource.class.getPackage().getName(), locale);
-		this.exportFolderName = translator.translate("export.folder.name");
+		translator = Util.createPackageTranslator(QTI12ResultsExportMediaResource.class, locale);
+		exportFolderName = translator.translate("export.folder.name");
 		
 		qtiResultManager = QTIResultManager.getInstance();
+	}
+
+	@Override
+	public long getCacheControlDuration() {
+		return 0;
 	}
 
 	@Override
@@ -157,8 +144,7 @@ public class QTI12ResultsExportMediaResource implements MediaResource {
 		hres.setHeader("Content-Disposition", "attachment; filename*=UTF-8''" + urlEncodedLabel);
 		hres.setHeader("Content-Description", urlEncodedLabel);
 	
-		try {
-			ZipOutputStream zout = new ZipOutputStream(hres.getOutputStream()); 
+		try(ZipOutputStream zout = new ZipOutputStream(hres.getOutputStream())) {	
 			zout.setLevel(9);
 								
 			List<AssessedMember> assessedMembers = createAssessedMembersDetail(zout);
@@ -167,13 +153,16 @@ public class QTI12ResultsExportMediaResource implements MediaResource {
 			String usersHTML = createMemberListingHTML(assessedMembers);	
 			convertToZipEntry(zout, exportFolderName + "/index.html", usersHTML);
 			
-			//Copy resource files or file trees to export file tree 
-			OlatServletResource.appendDirectory(zout, "/static/offline/qti", exportFolderName + "/css/offline/qti/");
+			//Copy resource files or file trees to export file tree
+			File theme = new File(WebappHelper.getContextRealPath("/static/themes/light/theme.css"));
+			ZipUtil.addFileToZip(exportFolderName + "/css/offline/qti/theme.css", theme, zout);
+			File themeMap = new File(WebappHelper.getContextRealPath("/static/themes/light/theme.css.map"));
+			ZipUtil.addFileToZip(exportFolderName + "/css/offline/qti/theme.css.map", themeMap, zout);
 			
-			OlatServletResource.appendDirectory(zout, "/static/font-awesome", exportFolderName + "/css/font-awesome/");
-
-			zout.close();
-
+			File fontawesome = new File(WebappHelper.getContextRealPath("/static/font-awesome"));
+			fsToZip(zout, fontawesome.toPath(), exportFolderName + "/css/font-awesome/");
+			File qtiJs = new File(WebappHelper.getContextRealPath("/static/js/jquery/"));
+			ZipUtil.addDirectoryToZip(qtiJs.toPath(), exportFolderName + "/js/jquery", zout);
 		} catch (Exception e) {
 			log.error("Unknown error while assessment result resource export", e);
 		}
@@ -207,7 +196,7 @@ public class QTI12ResultsExportMediaResource implements MediaResource {
 	}
 	
 	private List<AssessedMember> createAssessedMembersDetail (ZipOutputStream zout) throws IOException {
-		List<AssessedMember> assessedMembers = new ArrayList<AssessedMember>();		
+		List<AssessedMember> assessedMembers = new ArrayList<>();		
 		for (Identity identity : identities) {
 			
 			String idDir = exportFolderName + "/" + DATA + identity.getName();
@@ -218,8 +207,7 @@ public class QTI12ResultsExportMediaResource implements MediaResource {
 			String userName = identity.getName();
 			String firstName = identity.getUser().getProperty(UserConstants.FIRSTNAME, null);
 			String lastName = identity.getUser().getProperty(UserConstants.LASTNAME, null);
-			
-			String memberEmail = identity.getUser().getProperty(UserConstants.EMAIL, null);
+			String memberEmail = UserManager.getInstance().getUserDisplayEmail(identity, locale);
 			AssessedMember assessedMember = new AssessedMember (userName, lastName, firstName, memberEmail, null);
 			
 			List<ResultDetail> assessments = createResultDetail(identity, zout, idDir);
@@ -253,9 +241,13 @@ public class QTI12ResultsExportMediaResource implements MediaResource {
 		convertToZipEntry(zout, exportFolderName + "/index.html", usersHTML);
 		
 		//Copy resource files or file trees to export file tree 
-		OlatServletResource.appendDirectory(zout, "/static/offline/qti", exportFolderName + "/css/offline/qti/");
+		File theme = new File(WebappHelper.getContextRealPath("/static/themes/light/theme.css"));
+		ZipUtil.addFileToZip(exportFolderName + "/css/offline/qti/theme.css", theme, zout);
+		File themeMap = new File(WebappHelper.getContextRealPath("/static/themes/light/theme.css.map"));
+		ZipUtil.addFileToZip(exportFolderName + "/css/offline/qti/theme.css.map", themeMap, zout);
 		
-		OlatServletResource.appendDirectory(zout, "/static/font-awesome", exportFolderName + "/css/font-awesome/");
+		File fontawesome = new File(WebappHelper.getContextRealPath("/static/font-awesome"));
+		fsToZip(zout, fontawesome.toPath(), exportFolderName + "/css/font-awesome/");
 	}
 	
 	private String createLink(String name, String href, boolean userview){
@@ -329,25 +321,29 @@ public class QTI12ResultsExportMediaResource implements MediaResource {
 	private String createHTMLfromQTIResultSet(String idPath, String idDir, ZipOutputStream zout,
 			Identity assessedIdentity, QTIResultSet resultSet) throws IOException {
 
-		Document doc = FilePersister.retreiveResultsReporting(assessedIdentity,
-				AssessmentInstance.QMD_ENTRY_TYPE_ASSESS, resultSet.getAssessmentID());
-		if (doc == null) {
+		try {
+			Document doc = FilePersister.retreiveResultsReporting(assessedIdentity,
+					AssessmentInstance.QMD_ENTRY_TYPE_ASSESS, resultSet.getAssessmentID());
+			if (doc == null) {
+				return "null";
+			}
+			
+			File resourceXML = retrieveXML(assessedIdentity, resultSet.getAssessmentID());			
+			String resultsHTML = LocalizedXSLTransformer.getInstance(locale).renderResults(doc);		
+			resultsHTML = createResultHTML(resultsHTML);
+			
+			String html = idPath + resultSet.getAssessmentID() + ".html";
+			String xml = html.replace(".html", ".xml");
+			convertToZipEntry(zout, html, resultsHTML);		
+			convertToZipEntry(zout, xml, resourceXML);
+			
+			return idPath.replace(idDir, "") + resultSet.getAssessmentID() + ".html";
+		} catch (Exception e) {
+			log.error("", e);
 			return "null";
 		}
-		
-		File resourceXML = retrieveXML(assessedIdentity, resultSet.getAssessmentID());			
-		String resultsHTML = LocalizedXSLTransformer.getInstance(locale != null ? locale : ureq.getLocale()).renderResults(doc);		
-		resultsHTML = createResultHTML(resultsHTML);
-		
-		String html = idPath + resultSet.getAssessmentID() + ".html";
-		String xml = html.replace(".html", ".xml");
-		convertToZipEntry(zout, html, resultsHTML);		
-		convertToZipEntry(zout, xml, resourceXML);
-		
-		return idPath.replace(idDir, "") + resultSet.getAssessmentID() + ".html";
 	}
 	
-	@Deprecated
 	private void fsToZip(ZipOutputStream zout, final Path sourceFolder, final String targetPath) throws IOException {
 		Files.walkFileTree(sourceFolder, new SimpleFileVisitor<Path>() {
 			@Override

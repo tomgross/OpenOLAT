@@ -20,25 +20,27 @@
 
 package org.olat.commons.info.model;
 
-import java.io.*;
-import java.util.ArrayList;
 import java.util.Date;
-import java.util.List;
-import java.util.UUID;
 
-import javax.persistence.*;
+import javax.persistence.Column;
+import javax.persistence.Entity;
+import javax.persistence.FetchType;
+import javax.persistence.GeneratedValue;
+import javax.persistence.Id;
+import javax.persistence.JoinColumn;
+import javax.persistence.ManyToOne;
+import javax.persistence.Table;
+import javax.persistence.Temporal;
+import javax.persistence.TemporalType;
 
 import org.hibernate.annotations.GenericGenerator;
 import org.hibernate.annotations.Parameter;
 import org.olat.basesecurity.IdentityImpl;
-import org.olat.core.commons.modules.bc.vfs.OlatRootFileImpl;
-import org.olat.core.commons.modules.bc.vfs.OlatRootFolderImpl;
+import org.olat.commons.info.InfoMessage;
 import org.olat.core.id.CreateInfo;
 import org.olat.core.id.Identity;
 import org.olat.core.id.OLATResourceable;
 import org.olat.core.id.Persistable;
-import org.olat.core.util.FileUtils;
-import org.olat.core.util.vfs.VFSItem;
 
 /**
  * Initial Date: 17.03.2017
@@ -76,6 +78,8 @@ public class InfoMessageImpl implements InfoMessage, CreateInfo, Persistable {
 	private String title;
 	@Column(name="message", nullable=true, insertable=true, updatable=true)
 	private String message;
+	@Column(name="attachmentpath", nullable=true, insertable=true, updatable=true)
+	private String attachmentPath;
 	
 	@Column(name="resid", nullable=false, insertable=true, updatable=false)
 	private Long resId;
@@ -92,61 +96,67 @@ public class InfoMessageImpl implements InfoMessage, CreateInfo, Persistable {
 	@ManyToOne(targetEntity=IdentityImpl.class, fetch=FetchType.LAZY, optional=true)
 	@JoinColumn(name="fk_modifier_id", nullable=true, insertable=true, updatable=true)
 	private Identity modifier;
-
-	@Transient
-	private File[] attachments = null;
-
+	
 	public InfoMessageImpl() {
 		//
 	}
-	
-	public Date getModificationDate() {
-		return modificationDate;
+
+	@Override
+	public Long getKey() {
+		return key;
 	}
 
-	public void setModificationDate(Date modificationDate) {
-		this.modificationDate = modificationDate;
+	
+	@Override
+	public Date getCreationDate() {
+		return creationDate;
 	}
 	
 	public void setCreationDate(Date creationDate) {
 		this.creationDate= creationDate;
 	}
+	
+	@Override
+	public Date getModificationDate() {
+		return modificationDate;
+	}
 
+	@Override
+	public void setModificationDate(Date modificationDate) {
+		this.modificationDate = modificationDate;
+	}
+
+	@Override
 	public String getTitle() {
 		return title;
 	}
 
+	@Override
 	public void setTitle(String title) {
 		this.title = title;
 	}
 
+	@Override
 	public String getMessage() {
 		return message;
 	}
 
+	@Override
 	public void setMessage(String message) {
 		this.message = message;
 	}
 
 	@Override
-	public File[] getAttachments() {
-		if (attachments == null) { // lazy loading
-			List<File> files = new ArrayList<>();
-			for (Object fileItem : getMediaFolder().getItems().toArray()) {
-				if (fileItem instanceof VFSItem) {
-					files.add(((OlatRootFileImpl) fileItem).getBasefile());
-				}
-			}
-			attachments = files.toArray(new File[0]);
-		}
-		return attachments;
+	public String getAttachmentPath() {
+		return attachmentPath;
 	}
 
 	@Override
-	public void setAttachments(File[] attachments) {
-		this.attachments = attachments;
+	public void setAttachmentPath(String attachmentPath) {
+		this.attachmentPath = attachmentPath;
 	}
 
+	@Override
 	public Long getResId() {
 		return resId;
 	}
@@ -155,6 +165,7 @@ public class InfoMessageImpl implements InfoMessage, CreateInfo, Persistable {
 		this.resId = resId;
 	}
 
+	@Override
 	public String getResName() {
 		return resName;
 	}
@@ -163,6 +174,7 @@ public class InfoMessageImpl implements InfoMessage, CreateInfo, Persistable {
 		this.resName = resName;
 	}
 
+	@Override
 	public String getResSubPath() {
 		return resSubPath;
 	}
@@ -171,6 +183,7 @@ public class InfoMessageImpl implements InfoMessage, CreateInfo, Persistable {
 		this.resSubPath = subPath;
 	}
 
+	@Override
 	public String getBusinessPath() {
 		return businessPath;
 	}
@@ -179,6 +192,7 @@ public class InfoMessageImpl implements InfoMessage, CreateInfo, Persistable {
 		this.businessPath = businessPath;
 	}
 
+	@Override
 	public Identity getAuthor() {
 		return author;
 	}
@@ -187,14 +201,17 @@ public class InfoMessageImpl implements InfoMessage, CreateInfo, Persistable {
 		this.author = author;
 	}
 
+	@Override
 	public Identity getModifier() {
 		return modifier;
 	}
 
+	@Override
 	public void setModifier(Identity modifier) {
 		this.modifier = modifier;
 	}
 
+	@Override
 	public OLATResourceable getOLATResourceable() {
 		final String name = resName;
 		final Long id = resId;
@@ -231,35 +248,4 @@ public class InfoMessageImpl implements InfoMessage, CreateInfo, Persistable {
 	public boolean equalsByPersistableKey(Persistable persistable) {
 		return equals(persistable);
 	}
-
-	@Override
-	public Long getKey() {
-		return key;
-	}
-
-	
-	@Override
-	public Date getCreationDate() {
-		return creationDate;
-	}
-
-	@Override
-	public OlatRootFolderImpl getMediaFolder() {
-		return new OlatRootFolderImpl("/repository/" + getOLATResourceable().getResourceableId() + "/" + getKey().toString() + "/attachments",	null);
-	}
-
-	@Override
-	public boolean copyAttachmentToMediaFolder(File attachment) {
-		try(
-				InputStream in = new FileInputStream(attachment);
-				OutputStream out = getMediaFolder().createChildLeaf(UUID.randomUUID().toString() + "." + attachment.getName()).getOutputStream(false);
-		) {
-			return FileUtils.copy(in, out);
-		} catch (IOException e) {
-			return false;
-		}
-	}
-
-
-
 }

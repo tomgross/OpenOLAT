@@ -44,6 +44,7 @@ import org.olat.core.gui.control.generic.closablewrapper.CloseableModalControlle
 import org.olat.core.util.StringHelper;
 import org.olat.core.util.resource.OresHelper;
 import org.olat.core.util.vfs.VFSContainer;
+import org.olat.core.util.vfs.VFSItem;
 import org.olat.core.util.vfs.VFSManager;
 import org.olat.course.CourseModule;
 import org.olat.course.ICourse;
@@ -66,6 +67,7 @@ public class BCCourseNodeEditForm extends FormBasicController implements Control
 	private FormLink createFolder;
 	private BCCourseNodeEditCreateFolderForm createFolderForm;
 	private FormItem sharedFolderWarning, sharedFolderInfo;
+	private FormItem linkedFolderWarning;
 	private BCCourseNodeEditChooseFolderForm chooseForm;
 
 	public BCCourseNodeEditForm(UserRequest ureq, WindowControl wControl, BCCourseNode bcNode, ICourse course) {
@@ -73,6 +75,7 @@ public class BCCourseNodeEditForm extends FormBasicController implements Control
 		node = bcNode;
 		this.course = course;
 		initForm(ureq);
+		validate();
 	}
 
 	@Override
@@ -89,29 +92,24 @@ public class BCCourseNodeEditForm extends FormBasicController implements Control
 		sharedFolderWarning = uifactory.createSimpleErrorText("warning", translate("warning.no.sharedfolder"));
 		formLayout.add(sharedFolderWarning);
 
+		linkedFolderWarning = uifactory.createSimpleErrorText("warning2", translate("warning.no.linkedfolder"));
+		formLayout.add(linkedFolderWarning);
+
 		boolean isAuto = node.getModuleConfiguration().getBooleanSafe(BCCourseNodeEditController.CONFIG_AUTO_FOLDER);
 
-		if(isAuto){
+		if(isAuto) {
 			folderTargetChoose.select("autoPath", true);
 			subPath.setVisible(false);
-			sharedFolderWarning.setVisible(false);
-		}else{
+		} else {
 			folderTargetChoose.select("pathChoose", false);
 			String subpath = node.getModuleConfiguration().getStringValue(BCCourseNodeEditController.CONFIG_SUBPATH);
 
-			if(subpath != ""){
+			if(subpath != "") {
 				subPath.setValue(subpath);
 			}
 			subPath.setVisible(true);
-
-			if(isSharedfolderNotPresent()){
-				sharedFolderWarning.setVisible(true);
-			}else{
-				sharedFolderWarning.setVisible(false);
-			}
-
-
 		}
+		
 		if(node.isSharedFolder()) {
 			sharedFolderInfo.setVisible(course.getCourseConfig().isSharedFolderReadOnlyMount());
 		} else {
@@ -135,20 +133,7 @@ public class BCCourseNodeEditForm extends FormBasicController implements Control
 
 	@Override
 	protected void formInnerEvent(UserRequest ureq, FormItem source, FormEvent event) {
-		if(folderTargetChoose.isSelected(0)){
-			sharedFolderWarning.setVisible(false);
-		}else{
-			if(isSharedfolderNotPresent()){
-				sharedFolderWarning.setVisible(true);
-			}else{
-				sharedFolderWarning.setVisible(false);
-			}
-			if(node.isSharedFolder()) {
-				sharedFolderInfo.setVisible(course.getCourseConfig().isSharedFolderReadOnlyMount());
-			}else{
-				sharedFolderInfo.setVisible(false);
-			}
-		}
+		validate();
 		if(source == folderTargetChoose){
 			subPath.setVisible(folderTargetChoose.isSelected(1));
 			chooseFolder.setVisible(folderTargetChoose.isSelected(1));
@@ -203,12 +188,8 @@ public class BCCourseNodeEditForm extends FormBasicController implements Control
 				subPath.setValue(subpath);
 				fireEvent(ureq, NodeEditController.NODECONFIG_CHANGED_EVENT);
 			}
-			
-			if(node.isSharedFolder()) {
-				sharedFolderInfo.setVisible(true);
-			} else {
-				sharedFolderInfo.setVisible(false);
-			}
+
+			validate();
 			cleanUp();
 		} else if(source == chooseForm) {
 			if(Event.CANCELLED_EVENT == event){
@@ -226,14 +207,33 @@ public class BCCourseNodeEditForm extends FormBasicController implements Control
 				fireEvent(ureq, NodeEditController.NODECONFIG_CHANGED_EVENT);
 			}
 			
-			if(node.isSharedFolder()){
-				sharedFolderInfo.setVisible(true);
-			} else {
-				sharedFolderInfo.setVisible(false);
-			}
+			validate();
 			cleanUp();
 		} else if(cmc == source) {
 			cleanUp();
+		}
+	}
+	
+	private void validate() {
+		if(folderTargetChoose.isSelected(0)){
+			sharedFolderWarning.setVisible(false);
+			linkedFolderWarning.setVisible(false);
+		} else {
+			if(isSharedfolderNotPresent()){
+				sharedFolderWarning.setVisible(true);
+			} else {
+				sharedFolderWarning.setVisible(false);
+			}
+			if(node.isSharedFolder()) {
+				sharedFolderInfo.setVisible(course.getCourseConfig().isSharedFolderReadOnlyMount());
+			} else {
+				sharedFolderInfo.setVisible(false);
+			}
+			if(isLinkedFolderNotPresent()) {
+				linkedFolderWarning.setVisible(true);
+			} else {
+				linkedFolderWarning.setVisible(false);
+			}
 		}
 	}
 	
@@ -264,10 +264,10 @@ public class BCCourseNodeEditForm extends FormBasicController implements Control
 
 	@Override
 	protected void doDispose() {
-
+		//
 	}
 
-	private boolean isSharedfolderNotPresent(){
+	private boolean isSharedfolderNotPresent() {
 		if(node.getModuleConfiguration().getStringValue(BCCourseNodeEditController.CONFIG_SUBPATH, "").startsWith("/_sharedfolder")){
 			if(course.getCourseEnvironment().getCourseFolderContainer().resolve("/_sharedfolder/") == null){
 				return true;
@@ -276,4 +276,16 @@ public class BCCourseNodeEditForm extends FormBasicController implements Control
 		return false;
 	}
 
+	private boolean isLinkedFolderNotPresent() {
+		VFSContainer courseBase = course.getCourseBaseContainer();
+		String subpath = node.getModuleConfiguration().getStringValue(BCCourseNodeEditController.CONFIG_SUBPATH);
+		
+		VFSItem folder;
+		if(subpath != null && subpath.startsWith("/_sharedfolder/")) {
+			folder = course.getCourseEnvironment().getCourseFolderContainer().resolve(subpath);
+		} else {
+			folder = courseBase.resolve("/coursefolder" + subpath);
+		}
+		return folder == null;
+	}
 }

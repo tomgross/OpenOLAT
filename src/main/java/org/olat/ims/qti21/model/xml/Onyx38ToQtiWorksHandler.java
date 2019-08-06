@@ -54,7 +54,7 @@ public class Onyx38ToQtiWorksHandler extends DefaultHandler2 {
 	private int pLevel = -1;
 	private int liLevel = -1;
 	private int itemBodySubLevel = -1;
-	private Deque<String> skipTags = new ArrayDeque<String>();
+	private Deque<String> skipTags = new ArrayDeque<>();
 
 	private boolean envelopP = false;
 	
@@ -81,7 +81,7 @@ public class Onyx38ToQtiWorksHandler extends DefaultHandler2 {
 	throws SAXException {
 		try{
 			String comment = new String(ch, start, length);
-			if(comment != null && comment.contains("Onyx Editor")) {
+			if(comment.contains("Onyx Editor")) {
 				int versionIndex = comment.indexOf(VERSION_MARKER);
 				if(versionIndex > 0) {
 					int offset = VERSION_MARKER.length();
@@ -133,7 +133,7 @@ public class Onyx38ToQtiWorksHandler extends DefaultHandler2 {
 				writeAssessmentElement(qName, attributes);
 			} else if("mapTolResponse".equals(qName)) {
 				writeMapTo1ResponseElement(attributes);
-			}else {
+			} else {
 				if(itemBodySubLevel == 0 && !envelopP && !isBlock(qName)) {
 					xtw.writeStartElement("p");
 					envelopP = true;
@@ -205,16 +205,28 @@ public class Onyx38ToQtiWorksHandler extends DefaultHandler2 {
 	
 	private void writeAssessmentElement(String qName, Attributes attributes)
 	throws XMLStreamException {
+		boolean hasToolName = false;
+		boolean hasVersion = false;
 		xtw.writeStartElement(qName);
 		int numOfAttributes = attributes.getLength();
 		for(int i=0;i<numOfAttributes; i++) {
 			String attrQName = attributes.getQName(i);
 			String attrValue = attributes.getValue(i);
+			if("xsi:schemaLocation".equals(attrQName)) {
+				attrValue = attrValue.replace("http://www.w3.org/1998/Math/MathML http://www.w3.org/Math/XMLSchema/mathml2/mathml2.xsd", "");
+			}
 			xtw.writeAttribute(attrQName, attrValue);
+			if("toolName".equals(attrQName)) {
+				hasToolName = true;
+			} else if("toolVersion".equals(attrQName)) {
+				hasVersion = true;
+			}
 		}
 		
-		xtw.writeAttribute("toolName", "Onyx Editor");
-		if(StringHelper.containsNonWhitespace(version)) {
+		if(!hasToolName) {
+			xtw.writeAttribute("toolName", "Onyx Editor");
+		}
+		if(!hasVersion && StringHelper.containsNonWhitespace(version)) {
 			xtw.writeAttribute("toolVersion", version);
 		}
 	}

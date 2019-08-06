@@ -80,6 +80,8 @@ public class RegistrationModule extends AbstractSpringModule {
 	private boolean disclaimerEnabled;	
 	@Value("${registration.disclaimerAdditionalCheckbox}")
 	private boolean additionalCheckbox;
+	@Value("${registration.disclaimerAdditionalCheckbox2}")
+	private boolean additionalCheckbox2;
 	@Value("${registration.disclaimerAdditionaLinkText}	")
 	private boolean additionaLinkText;
 	
@@ -95,10 +97,6 @@ public class RegistrationModule extends AbstractSpringModule {
 		return usernamePresetBean;
 	}
 
-
-	/**
-	 * @return true if self registration is turned on, false otherwhise
-	 */
 	public boolean isSelfRegistrationEnabled(){
 	    return selfRegistrationEnabled;
 	}
@@ -109,9 +107,6 @@ public class RegistrationModule extends AbstractSpringModule {
 		setStringProperty("registration.enabled", value, true);
 	}
 	
-	/**
-	 * @return true if self registration is turned on, false otherwhise
-	 */
 	public boolean isStaticPropertyMappingEnabled(){
 	    return staticPropertyMappingEnabled;
 	}
@@ -207,6 +202,13 @@ public class RegistrationModule extends AbstractSpringModule {
 	 */
 	public boolean isDisclaimerAdditionalCheckbox() {
 		return additionalCheckbox;
+	}
+
+	/**
+	 * @return true to add a third checkbox to the disclaimer
+	 */
+	public boolean isDisclaimerAdditionalCheckbox2() {
+		return additionalCheckbox2;
 	}
 
 	/**

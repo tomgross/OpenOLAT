@@ -31,7 +31,6 @@ import java.util.Set;
 
 import javax.xml.transform.TransformerException;
 
-import org.apache.pdfbox.exceptions.COSVisitorException;
 import org.olat.NewControllerFactory;
 import org.olat.basesecurity.BaseSecurity;
 import org.olat.basesecurity.BaseSecurityModule;
@@ -89,6 +88,7 @@ import org.olat.group.BusinessGroup;
 import org.olat.group.BusinessGroupMembership;
 import org.olat.group.BusinessGroupService;
 import org.olat.modules.ModuleConfiguration;
+import org.olat.modules.assessment.Role;
 import org.olat.repository.RepositoryEntry;
 import org.olat.repository.RepositoryManager;
 import org.olat.repository.RepositoryService;
@@ -273,7 +273,7 @@ public class CheckListAssessmentController extends FormBasicController implement
 		table.setCustomizeColumns(true);
 		FlexiTableSortOptions sortOptions = new FlexiTableSortOptions();
 		table.setSortSettings(sortOptions);
-		table.setAndLoadPersistedPreferences(ureq, "checklist-assessment");
+		table.setAndLoadPersistedPreferences(ureq, "checklist-assessment-" + courseNode.getIdent());
 		
 		pdfExportButton = uifactory.addFormLink("pdf.export", formLayout, Link.BUTTON);
 		pdfExportButton.setEnabled(numOfCheckbox > 0);
@@ -363,7 +363,7 @@ public class CheckListAssessmentController extends FormBasicController implement
 		List<CheckListAssessmentRow> dataViews = new ArrayList<>();
 		
 		int numOfcheckbox = checkbox.size();
-		Map<String,Integer> indexed = new HashMap<String,Integer>();
+		Map<String,Integer> indexed = new HashMap<>();
 		for(int i=numOfcheckbox; i-->0; ) {
 			indexed.put(checkbox.get(i).getCheckboxId(), new Integer(i));
 		}
@@ -587,7 +587,7 @@ public class CheckListAssessmentController extends FormBasicController implement
 			List<Identity> assessedIdentities = securityManager.loadIdentityByKeys(assessedIdentityToUpdate);
 			for(Identity assessedIdentity:assessedIdentities) {
 				UserCourseEnvironment assessedUserCourseEnv = AssessmentHelper.createAndInitUserCourseEnvironment(assessedIdentity, course);
-				courseNode.updateScoreEvaluation(getIdentity(), assessedUserCourseEnv, assessedIdentity);
+				courseNode.updateScoreEvaluation(getIdentity(), assessedUserCourseEnv, assessedIdentity, Role.coach);
 			}
 		}
 		
@@ -622,7 +622,7 @@ public class CheckListAssessmentController extends FormBasicController implement
 			pdfExport.setGroupName(groupName);
 			pdfExport.create(checkboxList, model.getObjects());
 			ureq.getDispatchResult().setResultingMediaResource(pdfExport);
-		} catch (IOException | COSVisitorException | TransformerException e) {
+		} catch (IOException | TransformerException e) {
 			logError("", e);
 		}
 	}
@@ -638,7 +638,7 @@ public class CheckListAssessmentController extends FormBasicController implement
 			pdfExport.setCourseTitle(course.getCourseTitle());
 			pdfExport.create(checkboxList, model.getObjects());
 			ureq.getDispatchResult().setResultingMediaResource(pdfExport);
-		} catch (IOException | COSVisitorException | TransformerException e) {
+		} catch (IOException | TransformerException e) {
 			logError("", e);
 		}
 	}

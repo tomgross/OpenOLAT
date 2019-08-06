@@ -55,7 +55,6 @@ import org.olat.core.gui.media.FileMediaResource;
 import org.olat.core.gui.util.CSSHelper;
 import org.olat.core.id.Identity;
 import org.olat.core.id.OLATResourceable;
-import org.olat.core.id.UserConstants;
 import org.olat.core.id.context.BusinessControl;
 import org.olat.core.id.context.BusinessControlFactory;
 import org.olat.core.id.context.ContextEntry;
@@ -80,6 +79,7 @@ import org.olat.course.properties.CoursePropertyManager;
 import org.olat.course.run.scoring.AssessmentEvaluation;
 import org.olat.course.run.userview.UserCourseEnvironment;
 import org.olat.modules.ModuleConfiguration;
+import org.olat.modules.assessment.Role;
 import org.olat.modules.assessment.model.AssessmentEntryStatus;
 import org.olat.properties.Property;
 import org.olat.user.UserManager;
@@ -282,7 +282,7 @@ public class DropboxScoringViewController extends BasicController {
 					// log entry for this file
 					Identity coach = ureq.getIdentity();
 					Identity student = userCourseEnv.getIdentityEnvironment().getIdentity();
-					am.appendToUserNodeLog(node, coach, student, "FILE DELETED: " + folderEvent.getFilename());
+					am.appendToUserNodeLog(node, coach, student, "FILE DELETED: " + folderEvent.getFilename(), null);
 				}
 			}
 		} else if (source == returnboxFolderRunController) {
@@ -300,12 +300,12 @@ public class DropboxScoringViewController extends BasicController {
 						AssessmentEvaluation eval = acn.getUserScoreEvaluation(userCourseEnv);
 						if(eval.getAssessmentStatus() == null || eval.getAssessmentStatus() == AssessmentEntryStatus.notStarted) {
 							eval = new AssessmentEvaluation(eval, AssessmentEntryStatus.inProgress);
-							acn.updateUserScoreEvaluation(eval, userCourseEnv, coach, false);
+							acn.updateUserScoreEvaluation(eval, userCourseEnv, coach, false, Role.coach);
 						}
 					}
 
-					am.appendToUserNodeLog(node, coach, student, "FILE UPLOADED: " + folderEvent.getFilename());
-					String toMail = student.getUser().getProperty(UserConstants.EMAIL, ureq.getLocale());
+					am.appendToUserNodeLog(node, coach, student, "FILE UPLOADED: " + folderEvent.getFilename(), null);
+					String toMail = UserManager.getInstance().getUserDisplayEmail(student, ureq.getLocale());
 					
 					OLATResourceable ores = OresHelper.createOLATResourceableInstance(CourseNode.class, Long.valueOf(node.getIdent()));
 					ContextEntry ce =		BusinessControlFactory.getInstance().createContextEntry(ores);
@@ -324,7 +324,7 @@ public class DropboxScoringViewController extends BasicController {
 					bundle.setContent(subject, body);
 					MailerResult result = CoreSpringFactory.getImpl(MailManager.class).sendMessage(bundle);
 					if(result.getReturnCode() > 0) {
-						am.appendToUserNodeLog(node, coach, student, "MAIL SEND FAILED TO:" + toMail + "; MailReturnCode: " + result.getReturnCode());
+						am.appendToUserNodeLog(node, coach, student, "MAIL SEND FAILED TO:" + toMail + "; MailReturnCode: " + result.getReturnCode(), null);
 						log.warn("Could not send email 'returnbox notification' to " + student + "with email=" + toMail);
 					} else {
 						log.info("Send email 'returnbox notification' to " + student + "with email=" + toMail);
@@ -339,7 +339,7 @@ public class DropboxScoringViewController extends BasicController {
 					}
 					if(eval.getAssessmentStatus() == null || eval.getAssessmentStatus() == AssessmentEntryStatus.notStarted) {
 						eval = new AssessmentEvaluation(eval, AssessmentEntryStatus.inProgress);
-						acn.updateUserScoreEvaluation(eval, userCourseEnv, getIdentity(), false);
+						acn.updateUserScoreEvaluation(eval, userCourseEnv, getIdentity(), false, Role.coach);
 						fireEvent(ureq, Event.CHANGED_EVENT);
 					}
 				}

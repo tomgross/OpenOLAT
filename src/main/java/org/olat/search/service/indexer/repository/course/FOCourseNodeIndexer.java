@@ -30,6 +30,7 @@ import java.io.IOException;
 import org.apache.lucene.document.Document;
 import org.olat.basesecurity.BaseSecurityManager;
 import org.olat.basesecurity.Constants;
+import org.olat.core.CoreSpringFactory;
 import org.olat.core.id.Identity;
 import org.olat.core.id.Roles;
 import org.olat.core.id.context.BusinessControl;
@@ -86,11 +87,11 @@ public class FOCourseNodeIndexer extends ForumIndexer implements CourseNodeIndex
 	public boolean checkAccess(ContextEntry contextEntry, BusinessControl businessControl, Identity identity, Roles roles) {
 		ContextEntry ce = businessControl.popLauncherContextEntry();
 		if(ce == null || ce.getOLATResourceable() == null || ce.getOLATResourceable().getResourceableId() == null) {
-			return false;
+			return true;//it's the node itself
 		}
 		
 		Long resourceableId = ce.getOLATResourceable().getResourceableId();
-		Message message = ForumManager.getInstance().loadMessage(resourceableId);
+		Message message = CoreSpringFactory.getImpl(ForumManager.class).loadMessage(resourceableId);
 		if(message != null) {
 			Message threadtop = message.getThreadtop();
 			if(threadtop == null) {
@@ -117,16 +118,14 @@ public class FOCourseNodeIndexer extends ForumIndexer implements CourseNodeIndex
 	 */
 	private void doIndexForum(SearchResourceContext parentResourceContext, ICourse course, CourseNode courseNode, OlatFullIndexer indexWriter) throws IOException,InterruptedException  {
 		if (log.isDebug()) log.debug("Index Course Forum...");
-		ForumManager fom = ForumManager.getInstance();
+		ForumManager fom = CoreSpringFactory.getImpl(ForumManager.class);
 		CoursePropertyManager cpm = course.getCourseEnvironment().getCoursePropertyManager();
 
-  	Property forumKeyProperty = cpm.findCourseNodeProperty(courseNode, null, null, FOCourseNode.FORUM_KEY);
+		Property forumKeyProperty = cpm.findCourseNodeProperty(courseNode, null, null, FOCourseNode.FORUM_KEY);
 		// Check if forum-property exist
 		if (forumKeyProperty != null) {
 		  Long forumKey = forumKeyProperty.getLongValue();
 		  Forum forum = fom.loadForum(forumKey);
-//		  SearchResourceContext forumSearchResourceContext = new SearchResourceContext(parentResourceContext);
-//		  forumSearchResourceContext.setBusinessControlFor(BusinessGroupMainRunController.ORES_TOOLFORUM); // TODO:chg: Must be an other Class e.g. CourseRunMainController 
 		  parentResourceContext.setDocumentType(TYPE);
 		  doIndexAllMessages(parentResourceContext, forum, indexWriter );
 		}

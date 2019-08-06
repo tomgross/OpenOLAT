@@ -26,6 +26,7 @@ import java.util.Locale;
 
 import org.junit.Assert;
 import org.junit.Test;
+import org.olat.admin.user.delete.service.UserDeletionManager;
 import org.olat.core.commons.persistence.DB;
 import org.olat.core.commons.services.commentAndRating.manager.UserCommentsDAO;
 import org.olat.core.id.Identity;
@@ -34,13 +35,18 @@ import org.olat.core.util.resource.OresHelper;
 import org.olat.modules.portfolio.Assignment;
 import org.olat.modules.portfolio.AssignmentType;
 import org.olat.modules.portfolio.Binder;
+import org.olat.modules.portfolio.Media;
 import org.olat.modules.portfolio.Page;
+import org.olat.modules.portfolio.PageBody;
 import org.olat.modules.portfolio.PortfolioRoles;
 import org.olat.modules.portfolio.PortfolioService;
 import org.olat.modules.portfolio.Section;
 import org.olat.modules.portfolio.SectionRef;
+import org.olat.modules.portfolio.handler.TextHandler;
 import org.olat.modules.portfolio.model.AccessRights;
 import org.olat.modules.portfolio.model.BinderStatistics;
+import org.olat.modules.portfolio.model.MediaPart;
+import org.olat.modules.portfolio.model.PageImpl;
 import org.olat.modules.portfolio.model.SectionImpl;
 import org.olat.modules.portfolio.model.SynchedBinder;
 import org.olat.repository.RepositoryEntry;
@@ -64,6 +70,8 @@ public class PortfolioServiceTest extends OlatTestCase {
 	@Autowired
 	private PageDAO pageDao;
 	@Autowired
+	private MediaDAO mediaDao;
+	@Autowired
 	private BinderDAO binderDao;
 	@Autowired
 	private AssignmentDAO assignmentDao;
@@ -73,6 +81,8 @@ public class PortfolioServiceTest extends OlatTestCase {
 	private PortfolioService portfolioService;
 	@Autowired
 	private RepositoryService repositoryService;
+	@Autowired
+	private UserDeletionManager userDeletionManager;
 	
 	@Test
 	public void createNewOwnedPorfolio() {
@@ -352,7 +362,7 @@ public class PortfolioServiceTest extends OlatTestCase {
 		List<Assignment> assignments = portfolioService.getAssignments(binder, null);
 		Assert.assertEquals(4, assignments.size());
 		for(Assignment assignment:assignments) {
-			portfolioService.startAssignment(assignment, id);
+			portfolioService.startAssignment(assignment.getKey(), id);
 			dbInstance.commit();
 		}
 		dbInstance.commit();
@@ -443,7 +453,7 @@ public class PortfolioServiceTest extends OlatTestCase {
 		List<Assignment> assignments = portfolioService.getAssignments(binder, null);
 		Assert.assertEquals(4, assignments.size());
 		for(Assignment assignment:assignments) {
-			portfolioService.startAssignment(assignment, id);
+			portfolioService.startAssignment(assignment.getKey(), id);
 			dbInstance.commit();
 		}
 		dbInstance.commit();
@@ -559,7 +569,7 @@ public class PortfolioServiceTest extends OlatTestCase {
 		List<Assignment> assignments = portfolioService.getAssignments(binder, null);
 		Assert.assertEquals(5, assignments.size());
 		for(Assignment assignment:assignments) {
-			portfolioService.startAssignment(assignment, id);
+			portfolioService.startAssignment(assignment.getKey(), id);
 			dbInstance.commit();
 		}
 		dbInstance.commit();
@@ -708,6 +718,92 @@ public class PortfolioServiceTest extends OlatTestCase {
 		Assert.assertEquals("Assignment 4 description", assignment4_1.getSummary());
 	}
 	
+
+	@Test
+	public void syncBinder_moveAssignmentsInSection_multiple() {
+		Identity owner = JunitTestHelper.createAndPersistIdentityAsRndUser("port-u-10");
+		Identity id = JunitTestHelper.createAndPersistIdentityAsRndUser("port-u-11");
+		RepositoryEntry templateEntry = createTemplate(owner, "Template", "TE");
+		dbInstance.commitAndCloseSession();
+		
+		//make 2 sections
+		Binder templateBinder = portfolioService.getBinderByResource(templateEntry.getOlatResource());
+		SectionRef sectionRef1 = portfolioService.getSections(templateBinder).get(0);
+		dbInstance.commit();
+		
+		//make 4 assignments
+		Section templateSection1 = portfolioService.getSection(sectionRef1);
+		Assignment assignment_1_1 = portfolioService.addAssignment("1.1 Assignment", "", "", AssignmentType.essay, templateSection1, false, false, false, null);
+		Assignment assignment_1_2 = portfolioService.addAssignment("1.2 Assignment", "", "", AssignmentType.essay, templateSection1, false, false, false, null);
+		Assignment assignment_1_3 = portfolioService.addAssignment("1.3 Assignment", "", "", AssignmentType.essay, templateSection1, false, false, false, null);
+		Assignment assignment_1_4 = portfolioService.addAssignment("1.4 Assignment", "", "", AssignmentType.essay, templateSection1, false, false, false, null);
+		Assignment assignment_1_5 = portfolioService.addAssignment("1.5 Assignment", "", "", AssignmentType.essay, templateSection1, false, false, false, null);
+		Assignment assignment_1_6 = portfolioService.addAssignment("1.6 Assignment", "", "", AssignmentType.essay, templateSection1, false, false, false, null);
+		dbInstance.commit();
+		List<Assignment> templateAssignments = portfolioService.getAssignments(templateBinder, null);
+		Assert.assertEquals(6, templateAssignments.size());
+		
+		// a user take the binder and synched it a first time
+		Binder binder = portfolioService.assignBinder(id, templateBinder, templateEntry, "74", null);
+		dbInstance.commit();
+		SynchedBinder synchedBinder = portfolioService.loadAndSyncBinder(binder);
+		dbInstance.commitAndCloseSession();
+		Assert.assertNotNull(synchedBinder);
+		Assert.assertEquals(binder, synchedBinder.getBinder());
+		
+		//start all assignments
+		List<Assignment> assignments = portfolioService.getAssignments(binder, null);
+		Assert.assertEquals(6, assignments.size());
+		for(Assignment assignment:assignments) {
+			portfolioService.startAssignment(assignment.getKey(), id);
+			dbInstance.commit();
+		}
+		dbInstance.commit();
+		
+		// check that the student has it's 8 pages
+		List<Page> pages = portfolioService.getPages(binder, null);
+		Assert.assertEquals(6, pages.size());
+		dbInstance.commit();
+
+		// synched and check the sections order
+		SynchedBinder synchedBinder2 = portfolioService.loadAndSyncBinder(binder);
+		Binder freshBinder = synchedBinder2.getBinder();
+		dbInstance.commitAndCloseSession();
+		
+		//ooops, someone deleted the assignment (simulate jump in the numbering of the list)
+		List<Section> sections = portfolioService.getSections(freshBinder);
+		List<Assignment> firstSectionAssignments = portfolioService.getAssignments(sections.get(0), null);
+		dbInstance.getCurrentEntityManager().remove(firstSectionAssignments.get(1));
+		dbInstance.getCurrentEntityManager().remove(firstSectionAssignments.get(2));
+		dbInstance.getCurrentEntityManager().remove(firstSectionAssignments.get(3));
+		dbInstance.getCurrentEntityManager().remove(firstSectionAssignments.get(5));
+		dbInstance.commit();
+
+		List<Assignment> firstSectionDeletedAssignments = portfolioService.getAssignments(sections.get(0), null);
+		Assert.assertEquals(2, firstSectionDeletedAssignments.size());
+
+		// synched and check the sections order
+		SynchedBinder synchedBinder3 = portfolioService.loadAndSyncBinder(binder);
+		Binder freshBinder3 = synchedBinder3.getBinder();
+		dbInstance.commitAndCloseSession();
+		Assert.assertNotNull(freshBinder3);
+		
+		List<Assignment> firstSectionAssignmentResynched = portfolioService.getAssignments(sections.get(0), null);
+		List<Assignment> templateAssignmentsSynched= new ArrayList<>();
+		Assert.assertEquals(6, firstSectionAssignmentResynched.size());
+		for(Assignment firstSectionAssignment:firstSectionAssignmentResynched) {
+			Assert.assertEquals(firstSectionAssignment.getTitle(), firstSectionAssignment.getTemplateReference().getTitle());
+			templateAssignmentsSynched.add(firstSectionAssignment.getTemplateReference());
+		}
+		
+		Assert.assertTrue(templateAssignmentsSynched.contains(assignment_1_1));
+		Assert.assertTrue(templateAssignmentsSynched.contains(assignment_1_2));
+		Assert.assertTrue(templateAssignmentsSynched.contains(assignment_1_3));
+		Assert.assertTrue(templateAssignmentsSynched.contains(assignment_1_4));
+		Assert.assertTrue(templateAssignmentsSynched.contains(assignment_1_5));
+		Assert.assertTrue(templateAssignmentsSynched.contains(assignment_1_6));
+	}
+	
 	@Test
 	public void removeAssignment() {
 		Identity owner = JunitTestHelper.createAndPersistIdentityAsRndUser("port-u-10");
@@ -773,10 +869,10 @@ public class PortfolioServiceTest extends OlatTestCase {
 		dbInstance.commitAndCloseSession();
 		
 		List<Assignment> assignments = portfolioService.getAssignments(binder, null);
-		portfolioService.startAssignment(assignments.get(0), id);
-		portfolioService.startAssignment(assignments.get(1), id);
-		portfolioService.startAssignment(assignments.get(2), id);
-		portfolioService.startAssignment(assignments.get(3), id);
+		portfolioService.startAssignment(assignments.get(0).getKey(), id);
+		portfolioService.startAssignment(assignments.get(1).getKey(), id);
+		portfolioService.startAssignment(assignments.get(2).getKey(), id);
+		portfolioService.startAssignment(assignments.get(3).getKey(), id);
 		dbInstance.commit();
 		
 		List<Section> sections = portfolioService.getSections(binder);
@@ -836,6 +932,65 @@ public class PortfolioServiceTest extends OlatTestCase {
 	}
 	
 	@Test
+	public void deleteTemplateBinder() {
+		Identity owner = JunitTestHelper.createAndPersistIdentityAsRndUser("port-u-20");
+		RepositoryEntry templateEntry = createTemplate(owner, "Template", "TE");
+		dbInstance.commitAndCloseSession();
+
+		Binder templateBinder = portfolioService.getBinderByResource(templateEntry.getOlatResource());
+		List<SectionRef> sections = new ArrayList<>();
+		for(int i=0; i<10; i++) {
+			SectionRef templateSectionRef = portfolioService.appendNewSection(i + ". section ", "Section " + i, null, null, templateBinder);
+			dbInstance.commit();
+			sections.add(templateSectionRef);
+			
+			Section templateSection = portfolioService.getSection(templateSectionRef);
+			for(int j=0; j<10; j++) {
+				Assignment assignment = portfolioService.addAssignment(i + "_" + j + " Assignment", "", "", AssignmentType.essay, templateSection, false, false, false, null);
+				Assert.assertNotNull(assignment);
+			}
+			dbInstance.commit();
+		}
+		
+		//collect the page
+		List<Page> assignmentPages = new ArrayList<>();
+		for(int k=0; k<10; k++) {
+			// get a binder from the template
+			Identity id = JunitTestHelper.createAndPersistIdentityAsRndUser("port-u-13" + k);
+			Binder binder = portfolioService.assignBinder(id, templateBinder, templateEntry, null, null);
+			SynchedBinder synchedBinder = portfolioService.loadAndSyncBinder(binder);
+			binder = synchedBinder.getBinder();
+			dbInstance.commitAndCloseSession();
+			
+			List<Assignment> assignments = portfolioService.getAssignments(binder, null);
+			for(Assignment assignment:assignments) {
+				Assignment startedAssignment = portfolioService.startAssignment(assignment.getKey(), id);
+				Assert.assertNotNull(startedAssignment);
+				
+				Page page = startedAssignment.getPage();
+				assignmentPages.add(page);
+				Assert.assertNotNull(page.getBody());
+				dbInstance.commit();
+			}
+			dbInstance.commitAndCloseSession();
+		}
+		
+		//delete
+		boolean deleted = portfolioService.deleteBinderTemplate(templateBinder, templateEntry);
+		dbInstance.commit();
+		Assert.assertTrue(deleted);
+		
+		//check that the pages exists
+		Assert.assertFalse(assignmentPages.isEmpty());
+		for(Page page:assignmentPages) {
+			Page reloadedPage = portfolioService.getPageByKey(page.getKey());
+			Assert.assertNotNull(reloadedPage);
+			Section section = reloadedPage.getSection();
+			Assert.assertNotNull(section);
+		}
+	}
+	
+	@Test
 	public void deleteSynchedBinder() {
 		Identity owner = JunitTestHelper.createAndPersistIdentityAsRndUser("port-u-12");
 		Identity id = JunitTestHelper.createAndPersistIdentityAsRndUser("port-u-13");
@@ -862,8 +1017,8 @@ public class PortfolioServiceTest extends OlatTestCase {
 		dbInstance.commitAndCloseSession();
 		
 		List<Assignment> assignments = portfolioService.getAssignments(binder, null);
-		Assignment startedAssignment_1 = portfolioService.startAssignment(assignments.get(0), id);
-		Assignment startedAssignment_2 = portfolioService.startAssignment(assignments.get(1), id);
+		Assignment startedAssignment_1 = portfolioService.startAssignment(assignments.get(0).getKey(), id);
+		Assignment startedAssignment_2 = portfolioService.startAssignment(assignments.get(1).getKey(), id);
 		Long startedPageKey_1 = startedAssignment_1.getPage().getKey();
 		Long startedPageKey_2 = startedAssignment_2.getPage().getKey();
 		dbInstance.commitAndCloseSession();
@@ -941,5 +1096,111 @@ public class PortfolioServiceTest extends OlatTestCase {
 			Page deletedPage = pageDao.loadByKey(pageSection1.getKey());
 			Assert.assertNull(deletedPage);
 		}
+	}
+	
+	/**
+	 * Check if we can delete a section where there is an error of numbering
+	 * in the list of pages.
+	 * 
+	 */
+	@Test
+	public void deleteSectionWithPages_errorInNumbering() {
+		// prepare a binder with 2 sections and some pages
+		Identity owner = JunitTestHelper.createAndPersistIdentityAsRndUser("del-binder-");
+		Binder binder = portfolioService.createNewBinder("Binder to delete", "Deletion", "", owner);
+		SectionRef sectionRef = portfolioService.appendNewSection("1. section ", "Section 1", null, null, binder);
+		dbInstance.commit();
+		portfolioService.updateBinderUserInformations(binder, owner);
+		dbInstance.commit();
+		
+		Section reloadedSection = portfolioService.getSection(sectionRef);
+		List<Page> pagesSection = new ArrayList<>();
+		for(int i=0; i<10; i++) {
+			Page page = portfolioService.appendNewPage(owner, "New page", "A brand new page.", null, null, reloadedSection);
+			pagesSection.add(page);
+		}
+		dbInstance.commitAndCloseSession();
+		
+		//simulate a gap in numbering of the list
+		Page pageToDelete = dbInstance.getCurrentEntityManager().getReference(PageImpl.class, pagesSection.get(4).getKey());
+		dbInstance.getCurrentEntityManager().remove(pageToDelete);
+		dbInstance.commitAndCloseSession();
+
+		// delete the section
+		portfolioService.deleteSection(binder, reloadedSection);
+		dbInstance.commit();
+		
+		//check if the section and the pages are deleted
+		Section deletedSection = binderDao.loadSectionByKey(sectionRef.getKey());
+		Assert.assertNull(deletedSection);
+		Page deletedPage = pageDao.loadByKey(pagesSection.get(4).getKey());
+		Assert.assertNull(deletedPage);
+		List<Page> deletedPages = pageDao.getPages(sectionRef);
+		Assert.assertNotNull(deletedPages);
+		Assert.assertTrue(deletedPages.isEmpty());
+	}
+	
+	/**
+	 * Check if the delete user method do its job.
+	 * 
+	 */
+	@Test
+	public void deleteUser() {
+		Identity owner = JunitTestHelper.createAndPersistIdentityAsRndUser("port-u-21");
+		RepositoryEntry templateEntry = createTemplate(owner, "Template", "TE");
+		dbInstance.commitAndCloseSession();
+
+		// the user make a template
+		Binder templateBinder = portfolioService.getBinderByResource(templateEntry.getOlatResource());
+		SectionRef templateSectionRef = portfolioService.appendNewSection("1. section ", "Section 1", null, null, templateBinder);
+		dbInstance.commit();
+		Section templateSection = portfolioService.getSection(templateSectionRef);
+		Assignment assignment = portfolioService.addAssignment("1 Assignment", "", "", AssignmentType.essay, templateSection, false, false, false, null);
+		Assert.assertNotNull(assignment);
+		dbInstance.commit();
+
+		// the user use the template
+		Binder binder = portfolioService.assignBinder(owner, templateBinder, templateEntry, null, null);
+		SynchedBinder synchedBinder = portfolioService.loadAndSyncBinder(binder);
+		binder = synchedBinder.getBinder();
+		dbInstance.commitAndCloseSession();
+		
+		// add a media to a page
+		Section reloadedSection = portfolioService.getSections(binder).get(0);
+		Page page = pageDao.createAndPersist("Page 1", "A page with content.", null, null, true, reloadedSection, null);
+		Media media = mediaDao.createMedia("To delete", "Binder", "A media to delete promptly", TextHandler.TEXT_MEDIA, "[Media:0]", null, 10, owner);
+		dbInstance.commitAndCloseSession();
+		MediaPart mediaPart = new MediaPart();
+		mediaPart.setMedia(media);
+		PageBody reloadedBody = pageDao.loadPageBodyByKey(page.getBody().getKey());
+		pageDao.persistPart(reloadedBody, mediaPart);
+		dbInstance.commitAndCloseSession();
+		
+		// add some markers
+		Identity permanentUser = JunitTestHelper.createAndPersistIdentityAsRndUser("port-u-22");
+		Media permanentMedia = mediaDao.createMedia("Permanent", "Binder", "A media to stay", TextHandler.TEXT_MEDIA, "[Media:0]", null, 10, permanentUser);
+		Binder permanentBinder = portfolioService.assignBinder(permanentUser, templateBinder, templateEntry, null, null);
+		dbInstance.commitAndCloseSession();
+		
+		// delete the user
+		userDeletionManager.deleteIdentity(owner, null);
+		
+		// the template is a learn ressource and will not be deleted
+		Binder reloadedtemplateBinder = portfolioService.getBinderByKey(templateBinder.getKey());
+		Assert.assertNotNull(reloadedtemplateBinder);
+		// the binder 
+		Binder deletedBinder = portfolioService.getBinderByKey(binder.getKey());
+		Assert.assertNull(deletedBinder);
+		// the media
+		Media deletedMedia = portfolioService.getMediaByKey(media.getKey());
+		Assert.assertNull(deletedMedia);
+		
+		// check that the method doesn't delete stuff of other users
+		Binder reloadedPermanentBinder = portfolioService.getBinderByKey(permanentBinder.getKey());
+		Assert.assertNotNull(reloadedPermanentBinder);
+		// the media
+		Media reloadedPermanentMedia = portfolioService.getMediaByKey(permanentMedia.getKey());
+		Assert.assertNotNull(reloadedPermanentMedia);
+		
 	}
 }

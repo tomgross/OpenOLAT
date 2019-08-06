@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="
+  http://www.springframework.org/schema/beans 
+  http://www.springframework.org/schema/beans/spring-beans.xsd">
+
+	<bean id="jmxManager" class="org.olat.core.commons.services.jmx.JMXManager" >
+		<constructor-arg ref="org.springframework.jmx.support.MBeanServerFactoryBean" />
+	</bean>
+
+	<bean id="org.springframework.jmx.support.MBeanServerFactoryBean" class="org.springframework.jmx.support.MBeanServerFactoryBean">
+		<property name="locateExistingServerIfPossible" value="true" />
+	</bean>
+	
+	<bean id="registry" class="org.springframework.remoting.rmi.RmiRegistryFactoryBean" lazy-init="true">
+	  <property name="port" value="${jmx.rmi.port}"/>
+	</bean>	
+
+</beans>

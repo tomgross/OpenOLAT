@@ -71,29 +71,29 @@ public class BaseSecurityModule extends AbstractSpringModule {
 
 	private static final String USERINFOS_TUNNEL_CBB = "userInfosTunnelCourseBuildingBlock";
 	/** The feature is enabled, always */
-	private static final String FORCE_TOP_FRAME = "forceTopFrame";
+	
 	private static final String WIKI_ENABLED = "wiki";
-
+	
 	/**
 	 * default values
 	 */
-	public static Boolean USERMANAGER_CAN_CREATE_USER = true;
-	public static Boolean USERMANAGER_CAN_DELETE_USER = false;
-	public static Boolean USERMANAGER_CAN_CREATE_PWD = true;
-	public static Boolean USERMANAGER_CAN_MODIFY_PWD = true;
-	public static Boolean USERMANAGER_CAN_START_GROUPS = true;
-	public static Boolean USERMANAGER_CAN_MODIFY_SUBSCRIPTIONS = true;
-	public static Boolean USERMANAGER_ACCESS_TO_QUOTA = true;
-	public static Boolean USERMANAGER_ACCESS_TO_PROP = false;
-	public static Boolean USERMANAGER_ACCESS_TO_AUTH = false;
-	public static Boolean USERMANAGER_CAN_MANAGE_POOLMANAGERS = true;
-	public static Boolean USERMANAGER_CAN_MANAGE_GROUPMANAGERS = true;
-	public static Boolean USERMANAGER_CAN_MANAGE_INSTITUTIONAL_RESOURCE_MANAGER = true;
-	public static Boolean USERMANAGER_CAN_MANAGE_AUTHORS = true;
-	public static Boolean USERMANAGER_CAN_MANAGE_GUESTS = false;
-	public static Boolean USERMANAGER_CAN_MANAGE_STATUS = true;
-	public static Boolean USERMANAGER_CAN_BYPASS_EMAILVERIFICATION = true;
-	public static Boolean USERMANAGER_CAN_EDIT_ALL_PROFILE_FIELDS = true;
+	public static final Boolean USERMANAGER_CAN_CREATE_USER = true;
+	public static final Boolean USERMANAGER_CAN_DELETE_USER = false;
+	public static final Boolean USERMANAGER_CAN_CREATE_PWD = true;
+	public static final Boolean USERMANAGER_CAN_MODIFY_PWD = true;
+	public static final Boolean USERMANAGER_CAN_START_GROUPS = true;
+	public static final Boolean USERMANAGER_CAN_MODIFY_SUBSCRIPTIONS = true;
+	public static final Boolean USERMANAGER_ACCESS_TO_QUOTA = true;
+	public static final Boolean USERMANAGER_ACCESS_TO_PROP = false;
+	public static final Boolean USERMANAGER_ACCESS_TO_AUTH = false;
+	public static final Boolean USERMANAGER_CAN_MANAGE_POOLMANAGERS = true;
+	public static final Boolean USERMANAGER_CAN_MANAGE_GROUPMANAGERS = true;
+	public static final Boolean USERMANAGER_CAN_MANAGE_INSTITUTIONAL_RESOURCE_MANAGER = true;
+	public static final Boolean USERMANAGER_CAN_MANAGE_AUTHORS = true;
+	public static final Boolean USERMANAGER_CAN_MANAGE_GUESTS = false;
+	public static final Boolean USERMANAGER_CAN_MANAGE_STATUS = true;
+	public static final Boolean USERMANAGER_CAN_BYPASS_EMAILVERIFICATION = true;
+	public static final Boolean USERMANAGER_CAN_EDIT_ALL_PROFILE_FIELDS = true;
 	
 	private static String defaultAuthProviderIdentifier;
 
@@ -135,9 +135,9 @@ public class BaseSecurityModule extends AbstractSpringModule {
 	@Value("${userinfos.tunnelcoursebuildingblock}")
 	private String userInfosTunnelCourseBuildingBlock;
 	
-	private String forceTopFrame = "disabled";
-	private String wikiEnabled = "enabled";
-
+	@Value("${base.security.wiki:enabled}")
+	private String wikiEnabled;
+	
 	@Autowired
 	public BaseSecurityModule(CoordinatorManager coordinatorManager) {
 		super(coordinatorManager);
@@ -237,11 +237,7 @@ public class BaseSecurityModule extends AbstractSpringModule {
 		if(StringHelper.containsNonWhitespace(enabled)) {
 			userInfosTunnelCourseBuildingBlock = enabled;
 		}
-		
-		enabled = getStringPropertyValue(FORCE_TOP_FRAME, true);
-		if(StringHelper.containsNonWhitespace(enabled)) {
-			forceTopFrame = enabled;
-		}
+
 		enabled = getStringPropertyValue(WIKI_ENABLED, true);
 		if(StringHelper.containsNonWhitespace(enabled)) {
 			wikiEnabled = enabled;
@@ -455,21 +451,13 @@ public class BaseSecurityModule extends AbstractSpringModule {
 		setStringProperty(USERINFOS_TUNNEL_CBB, enable, true);
 	}
 
-	public boolean isForceTopFrame() {
-		return true;//"enabled".equals(forceTopFrame);
-	}
-
-	public void setForceTopFrame(boolean enable) {
-		String enabled = enable ? "enabled" : "disabled";
-		setStringProperty(FORCE_TOP_FRAME, enabled, true);
-	}
-
 	public boolean isWikiEnabled() {
 		return "enabled".equals(wikiEnabled);
 	}
 
 	public void setWikiEnabled(boolean enable) {
 		String enabled = enable ? "enabled" : "disabled";
+		wikiEnabled = enabled;
 		setStringProperty(WIKI_ENABLED, enabled, true);
 	}
 }

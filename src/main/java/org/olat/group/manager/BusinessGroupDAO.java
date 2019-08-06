@@ -51,6 +51,7 @@ import org.olat.group.BusinessGroupModule;
 import org.olat.group.BusinessGroupOrder;
 import org.olat.group.BusinessGroupShort;
 import org.olat.group.model.BusinessGroupMembershipImpl;
+import org.olat.group.model.BusinessGroupMembershipInfos;
 import org.olat.group.model.BusinessGroupMembershipViewImpl;
 import org.olat.group.model.BusinessGroupQueryParams;
 import org.olat.group.model.BusinessGroupRow;
@@ -102,7 +103,6 @@ public class BusinessGroupDAO {
 				boolean showOwners, boolean showParticipants, boolean showWaitingList) {
 
 		BusinessGroupImpl businessgroup = new BusinessGroupImpl(name, description);
-		businessgroup.setCreationDate(new Date());
 		if(minParticipants != null && minParticipants.intValue() >= 0) {
 			businessgroup.setMinParticipants(minParticipants);
 		}
@@ -220,6 +220,19 @@ public class BusinessGroupDAO {
 		return groups;
 	}
 	
+	public BusinessGroup loadByResourceId(Long resourceId) {
+		StringBuilder sb = new StringBuilder();
+		sb.append("select bgi from businessgroup bgi ")
+		  .append(" inner join fetch bgi.resource resource")
+		  .append(" where resource.resName='BusinessGroup' and resource.resId=:resId");
+
+		List<BusinessGroup> groups = dbInstance.getCurrentEntityManager()
+				.createQuery(sb.toString(), BusinessGroup.class)
+				.setParameter("resId", resourceId)
+				.getResultList();
+		return groups == null || groups.isEmpty() ? null : groups.get(0);
+	}
+	
 	public BusinessGroup loadForUpdate(Long id) {
 		StringBuilder sb = new StringBuilder();
 		sb.append("select bgi from businessgroup bgi ")
@@ -252,10 +265,13 @@ public class BusinessGroupDAO {
 		return groups.get(0);
 	}
 	
+	/**
+	 * Work with the hibernate session
+	 * @param group
+	 * @return
+	 */
 	public BusinessGroup merge(BusinessGroup group) {
-		EntityManager em = dbInstance.getCurrentEntityManager();
-		BusinessGroup mergedGroup = em.merge(group);
-		return mergedGroup;
+		return dbInstance.getCurrentEntityManager().merge(group);
 	}
 	
 	/**
@@ -268,15 +284,6 @@ public class BusinessGroupDAO {
 		groupDao.removeMemberships(group.getBaseGroup());
 		dbInstance.getCurrentEntityManager().remove(group);
 		dbInstance.getCurrentEntityManager().remove(group.getBaseGroup());
-	}
-	
-	/**
-	 * Work with the hibernate session
-	 * @param group
-	 * @return
-	 */
-	public BusinessGroup update(BusinessGroup group) {
-		return dbInstance.getCurrentEntityManager().merge(group);
 	}
 	
 	public List<BusinessGroupMembership> getBusinessGroupsMembership(Collection<BusinessGroup> groups) {
@@ -333,6 +340,32 @@ public class BusinessGroupDAO {
 		}
 	}
 	
+	public List<BusinessGroupMembershipInfos> getMemberships(IdentityRef identity) {
+		StringBuilder sb = new StringBuilder(256);
+		sb.append("select bgi.key, bgi.name, bmember.role, bmember.creationDate, bmember.lastModified")
+		  .append(" from businessgroup as bgi")
+		  .append(" inner join bgi.baseGroup as baseGroup")
+		  .append(" inner join baseGroup.members as bmember")
+		  .append(" where bmember.identity.key=:identityKey");
+		
+		List<Object[]> rawObjects = dbInstance.getCurrentEntityManager()
+				.createQuery(sb.toString(), Object[].class)
+				.setParameter("identityKey", identity.getKey())
+				.getResultList();
+		List<BusinessGroupMembershipInfos> memberships = new ArrayList<>(rawObjects.size());
+		for(Object[] rawObject:rawObjects) {
+			Long businessGroupKey = (Long)rawObject[0];
+			String businessGroupName = (String)rawObject[1];
+			String role = (String)rawObject[2];
+			Date lastModified = (Date)rawObject[3];
+			Date creationDate = (Date)rawObject[4];
+			
+			memberships.add(new BusinessGroupMembershipInfos(identity.getKey(), businessGroupKey, businessGroupName,
+					role, creationDate, lastModified));
+		}
+		return memberships;
+	}
+	
 	public int countMembershipInfoInBusinessGroups(Identity identity, List<Long> groupKeys) {
 		StringBuilder sb = new StringBuilder(); 
 		sb.append("select count(membership) from bgmembershipview as membership ")
@@ -352,7 +385,7 @@ public class BusinessGroupDAO {
 	}
 
 	public List<BusinessGroupMembershipViewImpl> getMembershipInfoInBusinessGroups(Collection<BusinessGroup> groups, List<Identity> identities) {
-		List<Long> groupKeys = new ArrayList<Long>();
+		List<Long> groupKeys = new ArrayList<>();
 		for(BusinessGroup group:groups) {
 			groupKeys.add(group.getKey());
 		}
@@ -672,20 +705,20 @@ public class BusinessGroupDAO {
 			dbq.setParameter("roles", roles);
 		}
 		if(StringHelper.containsNonWhitespace(params.getNameOrDesc())) {
-			dbq.setParameter("search", makeFuzzyQueryString(params.getNameOrDesc()));
+			dbq.setParameter("search", PersistenceHelper.makeFuzzyQueryString(params.getNameOrDesc()));
 		} else {
 			if(StringHelper.containsNonWhitespace(params.getExactName())) {
 				dbq.setParameter("exactName", params.getExactName());
 			}
 			if(StringHelper.containsNonWhitespace(params.getName())) {
-				dbq.setParameter("name", makeFuzzyQueryString(params.getName()));
+				dbq.setParameter("name", PersistenceHelper.makeFuzzyQueryString(params.getName()));
 			}
 			if(StringHelper.containsNonWhitespace(params.getDescription())) {
-				dbq.setParameter("description", makeFuzzyQueryString(params.getDescription()));
+				dbq.setParameter("description", PersistenceHelper.makeFuzzyQueryString(params.getDescription()));
 			}
 		}
 		if(StringHelper.containsNonWhitespace(params.getCourseTitle())) {
-			dbq.setParameter("displayName", makeFuzzyQueryString(params.getCourseTitle()));
+			dbq.setParameter("displayName", PersistenceHelper.makeFuzzyQueryString(params.getCourseTitle()));
 		}
 		return dbq;
 	}
@@ -961,7 +994,7 @@ public class BusinessGroupDAO {
 		
 		//owner
 		if(StringHelper.containsNonWhitespace(params.getOwnerName())) {
-			query.setParameter("owner", PersistenceHelper.makeEndFuzzyQueryString(params.getOwnerName()));
+			query.setParameter("owner", PersistenceHelper.makeFuzzyQueryString(params.getOwnerName()));
 		}
 		
 		//id
@@ -979,19 +1012,19 @@ public class BusinessGroupDAO {
 		
 		//name
 		if(StringHelper.containsNonWhitespace(params.getNameOrDesc())) {
-			query.setParameter("search", PersistenceHelper.makeEndFuzzyQueryString(params.getNameOrDesc()));
+			query.setParameter("search", PersistenceHelper.makeFuzzyQueryString(params.getNameOrDesc()));
 		} else {
 			if(StringHelper.containsNonWhitespace(params.getName())) {
-				query.setParameter("name", PersistenceHelper.makeEndFuzzyQueryString(params.getName()));
+				query.setParameter("name", PersistenceHelper.makeFuzzyQueryString(params.getName()));
 			}
 			if(StringHelper.containsNonWhitespace(params.getDescription())) {
-				query.setParameter("description", PersistenceHelper.makeEndFuzzyQueryString(params.getDescription()));
+				query.setParameter("description", PersistenceHelper.makeFuzzyQueryString(params.getDescription()));
 			}
 		}
 		
 		//course title
 		if(StringHelper.containsNonWhitespace(params.getCourseTitle())) {
-			query.setParameter("displayName", PersistenceHelper.makeEndFuzzyQueryString(params.getCourseTitle()));
+			query.setParameter("displayName", PersistenceHelper.makeFuzzyQueryString(params.getCourseTitle()));
 		}
 		
 		//public group
@@ -1131,7 +1164,7 @@ public class BusinessGroupDAO {
 		if(params.isHeadless()) {
 			where = PersistenceHelper.appendAnd(sb, where);
 			sb.append(" not exists (select headMembership.key from bgroupmember as headMembership")
-			  .append(" where bGroup.key=headMembership.group.key and headMembership.role in ('").append(GroupRoles.coach.name()).append("','").append(GroupRoles.participant.name()).append("')")
+			  .append("   where bGroup.key=headMembership.group.key and headMembership.role in ('").append(GroupRoles.coach.name()).append("','").append(GroupRoles.participant.name()).append("')")
 			  .append(" )");
 		}
 	}
@@ -1158,7 +1191,7 @@ public class BusinessGroupDAO {
 
 	private void loadRelations(Map<Long, ? extends BusinessGroupRow> keyToGroup, BusinessGroupQueryParams params, IdentityRef identity) {
 		if(keyToGroup.isEmpty()) return;
-		if(params.getResources() != null && !params.getResources()) return; //no resources, no relations
+		if(params.getResources() != null && !params.getResources().booleanValue()) return;//no resources, no relations
 		if(params.isHeadless()) return; //headless don't have relations
 		
 		final int RELATIONS_IN_LIMIT = 64;
@@ -1176,7 +1209,7 @@ public class BusinessGroupDAO {
 			  .append(" inner join bGroup.members as membership on membership.identity.key=:identityKey");
 		} else if(keyToGroup.size() < RELATIONS_IN_LIMIT) {
 			sr.append(" where bgi.key in (:businessGroupKeys)");
-		} else if(params.getPublicGroups() != null && params.getPublicGroups()) {
+		} else if(params.getPublicGroups() != null && params.getPublicGroups().booleanValue()) {
 			sr.append(" inner join acoffer as offer on (bgi.resource.key = offer.resource.key)");
 		} else if(params.getRepositoryEntry() != null) {
 			sr.append(" inner join repoentrytobusinessgroup as refBgiToGroup")
@@ -1191,13 +1224,13 @@ public class BusinessGroupDAO {
 				.createQuery(sr.toString(), Object[].class);
 		if(restrictToMembership) {
 			resourcesQuery.setParameter("identityKey", identity.getKey());
-		} else  if(keyToGroup.size() < RELATIONS_IN_LIMIT) {
+		} else if(keyToGroup.size() < RELATIONS_IN_LIMIT) {
 			List<Long> businessGroupKeys = new ArrayList<>(keyToGroup.size());
 			for(Long businessGroupKey:keyToGroup.keySet()) {
 				businessGroupKeys.add(businessGroupKey);
 			}
 			resourcesQuery.setParameter("businessGroupKeys", businessGroupKeys);
-		} else if(params.getPublicGroups() != null && params.getPublicGroups()) {
+		} else if(params.getPublicGroups() != null && params.getPublicGroups().booleanValue()) {
 			//no parameters to add
 		} else if(params.getRepositoryEntry() != null) {
 			resourcesQuery.setParameter("repositoryEntryKey", params.getRepositoryEntry().getKey());
@@ -1316,19 +1349,6 @@ public class BusinessGroupDAO {
 	 	 	}
 		}
 		return sb;
-	}
-	
-	private String makeFuzzyQueryString(String string) {
-		// By default only fuzzyfy at the end. Usually it makes no sense to do a
-		// fuzzy search with % at the beginning, but it makes the query very very
-		// slow since it can not use any index and must perform a fulltext search.
-		// User can always use * to make it a really fuzzy search query
-		string = string.replace('*', '%');
-		string = string + "%";
-		// with 'LIKE' the character '_' is a wildcard which matches exactly one character.
-		// To test for literal instances of '_', we have to escape it.
-		string = string.replace("_", "\\_");
-		return string.toLowerCase();
 	}
 	
 	private final boolean where(StringBuilder sb, boolean where) {

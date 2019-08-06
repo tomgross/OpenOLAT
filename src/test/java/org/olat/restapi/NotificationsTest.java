@@ -61,9 +61,12 @@ import org.olat.core.commons.persistence.DB;
 import org.olat.core.commons.services.notifications.NotificationsManager;
 import org.olat.core.commons.services.notifications.PublisherData;
 import org.olat.core.commons.services.notifications.SubscriptionContext;
+import org.olat.core.commons.services.notifications.restapi.vo.PublisherVO;
 import org.olat.core.commons.services.notifications.restapi.vo.SubscriptionInfoVO;
 import org.olat.core.commons.services.notifications.restapi.vo.SubscriptionListItemVO;
 import org.olat.core.id.Identity;
+import org.olat.core.logging.OLog;
+import org.olat.core.logging.Tracing;
 import org.olat.core.util.resource.OresHelper;
 import org.olat.core.util.vfs.VFSContainer;
 import org.olat.core.util.vfs.VFSLeaf;
@@ -95,6 +98,8 @@ import org.springframework.beans.factory.annotation.Autowired;
  * @author srosse, stephane.rosse@frentix.com, http://www.frentix.com
  */
 public class NotificationsTest extends OlatJerseyTestCase {
+	
+	private static final OLog log = Tracing.createLoggerFor(NotificationsTest.class);
 
 	private static Identity userSubscriberId;
 	private static Identity userAndForumSubscriberId;
@@ -104,6 +109,8 @@ public class NotificationsTest extends OlatJerseyTestCase {
 	
 	@Autowired
 	private DB dbInstance;
+	@Autowired
+	private ForumManager forumManager;
 	@Autowired
 	private BusinessGroupService businessGroupService;
 	@Autowired
@@ -129,7 +136,7 @@ public class NotificationsTest extends OlatJerseyTestCase {
 			}
 			
 			//create a forum
-			forum = ForumManager.getInstance().addAForum();
+			forum = forumManager.addAForum();
 			Message m1 = createMessage(userSubscriberId, forum);
 			Assert.assertNotNull(m1);
 			
@@ -448,23 +455,58 @@ public class NotificationsTest extends OlatJerseyTestCase {
 		Assert.assertEquals("/" + filename, itemVO.getPath());
 	}
 	
+	@Test
+	public void testGetPublisher() throws IOException, URISyntaxException {
+		//create a business group with forum notifications
+		Identity id = JunitTestHelper.createAndPersistIdentityAsRndUser("rest-not-9");
+		BusinessGroup group = businessGroupService.createBusinessGroup(id, "Notifications 1", "REST forum notifications for group", null, null, false, false, null);
+		CollaborationTools tools = CollaborationToolsFactory.getInstance().getOrCreateCollaborationTools(group);
+		tools.setToolEnabled(CollaborationTools.TOOL_FORUM, true);
+		Forum groupForum = tools.getForum();
+		dbInstance.commitAndCloseSession();
+		
+		//publish
+		String businessPath = "[BusinessGroup:" + group.getKey() + "][toolforum:0]";
+		SubscriptionContext forumSubContext = new SubscriptionContext("BusinessGroup", group.getKey(), "toolforum");
+		PublisherData forumPdata =
+				new PublisherData(OresHelper.calculateTypeName(Forum.class), groupForum.getKey().toString(), businessPath);
+		notificationManager.subscribe(id, forumSubContext, forumPdata);
+		dbInstance.commitAndCloseSession();
+		
+		// GET publisher
+		RestConnection conn = new RestConnection();
+		assertTrue(conn.login("administrator", "openolat"));
+		
+		UriBuilder request = UriBuilder.fromUri(getContextURI()).path("notifications/publisher/BusinessGroup/" + group.getKey() + "/toolforum");
+		HttpGet method = conn.createGet(request.build(), MediaType.APPLICATION_JSON, true);
+		HttpResponse response = conn.execute(method);
+		assertEquals(200, response.getStatusLine().getStatusCode());
+		PublisherVO publisher = conn.parse(response, PublisherVO.class);
+		Assert.assertNotNull(publisher);
+		Assert.assertEquals("BusinessGroup", publisher.getResName());
+		Assert.assertEquals(group.getKey(), publisher.getResId());
+		Assert.assertEquals("toolforum", publisher.getSubidentifier());
+		Assert.assertEquals("Forum", publisher.getType());
+		Assert.assertEquals(groupForum.getKey().toString(), publisher.getData());
+	}
+	
 	private String addFile(VFSContainer folder) throws IOException {
 		String filename = UUID.randomUUID().toString();
 		VFSLeaf file = folder.createChildLeaf(filename + ".jpg");
-		OutputStream out = file.getOutputStream(true);
-		InputStream in = UserMgmtTest.class.getResourceAsStream("portrait.jpg");
-		IOUtils.copy(in, out);
-		IOUtils.closeQuietly(in);
-		IOUtils.closeQuietly(out);
+		try(OutputStream out = file.getOutputStream(true);
+			InputStream in = UserMgmtTest.class.getResourceAsStream("portrait.jpg");) {
+			IOUtils.copy(in, out);
+		} catch(Exception e) {
+			log.error("", e);
+		}
 		return file.getName();
 	}
 	
 	private Message createMessage(Identity id, Forum fo) {
-		ForumManager fm = ForumManager.getInstance();
-		Message m1 = fm.createMessage(fo, id, false);
+		Message m1 = forumManager.createMessage(fo, id, false);
 		m1.setTitle("Thread-1");
 		m1.setBody("Body of Thread-1");
-		fm.addTopMessage(m1);
+		forumManager.addTopMessage(m1);
 		return m1;
 	}
 	

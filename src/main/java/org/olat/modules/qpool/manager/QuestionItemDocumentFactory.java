@@ -26,6 +26,8 @@ import org.apache.lucene.document.Document;
 import org.apache.lucene.document.Field;
 import org.apache.lucene.document.StringField;
 import org.apache.lucene.document.TextField;
+import org.olat.core.commons.services.license.LicenseService;
+import org.olat.core.commons.services.license.ResourceLicense;
 import org.olat.core.id.Identity;
 import org.olat.core.id.User;
 import org.olat.core.id.UserConstants;
@@ -37,6 +39,7 @@ import org.olat.modules.qpool.QuestionItemFull;
 import org.olat.modules.qpool.QuestionPoolModule;
 import org.olat.modules.qpool.model.QItemDocument;
 import org.olat.modules.qpool.model.QuestionItemImpl;
+import org.olat.modules.taxonomy.TaxonomyLevel;
 import org.olat.resource.OLATResource;
 import org.olat.search.model.AbstractOlatDocument;
 import org.olat.search.model.OlatDocument;
@@ -61,6 +64,8 @@ public class QuestionItemDocumentFactory {
 	private QuestionItemDAO questionItemDao;
 	@Autowired
 	private QPoolService qpoolService;
+	@Autowired
+	private LicenseService licenseService;
 
 	public String getResourceUrl(Long itemKey) {
 		return "[QuestionItem:" + itemKey + "]";
@@ -121,11 +126,14 @@ public class QuestionItemDocumentFactory {
 		addTextField(document, QItemDocument.COVERAGE_FIELD, item.getCoverage(), 2.0f);
 		addTextField(document, QItemDocument.ADD_INFOS_FIELD, item.getAdditionalInformations(), 2.0f);
 		addStringField(document, QItemDocument.LANGUAGE_FIELD,  item.getLanguage(), 1.0f);
+		addTextField(document, QItemDocument.TOPIC_FIELD, item.getTopic(), 2.0f);
 		
 		//educational
-		if(item.getEducationalContext() != null) {
-			String context = item.getEducationalContext().getLevel();
-			addStringField(document, QItemDocument.EDU_CONTEXT_FIELD,  context, 1.0f);
+		if (qpoolModule.isEducationalContextEnabled()) {
+			if(item.getEducationalContext() != null) {
+				String context = item.getEducationalContext().getLevel();
+				addStringField(document, QItemDocument.EDU_CONTEXT_FIELD,  context, 1.0f);
+			}
 		}
 		
 		//question
@@ -142,9 +150,10 @@ public class QuestionItemDocumentFactory {
 		}
 		
 		//rights
-		if(item.getLicense() != null) {
-			String licenseKey = item.getLicense().getLicenseKey();
-			addTextField(document, QItemDocument.COPYRIGHT_FIELD, licenseKey, 2.0f);
+		ResourceLicense license = licenseService.loadLicense(item);
+		if(license != null && license.getLicenseType() != null) {
+			String licenseKey = String.valueOf(license.getLicenseType().getKey());
+			addTextField(document, QItemDocument.LICENSE_TYPE_FIELD_NAME, licenseKey, 2.0f);
 		}
 
 		//technical
@@ -170,17 +179,25 @@ public class QuestionItemDocumentFactory {
 		}
 
 		//need path
-		String path = item.getTaxonomicPath();
-		if(StringHelper.containsNonWhitespace(path)) {
-			for(StringTokenizer tokenizer = new StringTokenizer(path, "/"); tokenizer.hasMoreTokens(); ) {
-				String nextToken = tokenizer.nextToken();
-				document.add(new TextField(QItemDocument.TAXONOMIC_PATH_FIELD, nextToken, Field.Store.NO));
-			}
-			if(item instanceof QuestionItemImpl) {
-				Long key = ((QuestionItemImpl)item).getTaxonomyLevel().getKey();
+		if (qpoolModule.isTaxonomyEnabled()) {
+			String path = item.getTaxonomicPath();
+			if(StringHelper.containsNonWhitespace(path)) {
+				for(StringTokenizer tokenizer = new StringTokenizer(path, "/"); tokenizer.hasMoreTokens(); ) {
+					String nextToken = tokenizer.nextToken();
+					document.add(new TextField(QItemDocument.TAXONOMIC_IDENTIFIER_FIELD, nextToken, Field.Store.NO));
+				}
+				if(item instanceof QuestionItemImpl) {
+					Long key = ((QuestionItemImpl)item).getTaxonomyLevel().getKey();
 
-				TextField field = new TextField(QItemDocument.TAXONOMIC_FIELD, key.toString(), Field.Store.YES);
-				field.setBoost(3.0f);
+					TextField field = new TextField(QItemDocument.TAXONOMIC_FIELD, key.toString(), Field.Store.YES);
+					field.setBoost(3.0f);
+					document.add(field);
+				}
+			}
+			TaxonomyLevel taxonomyLevel = item.getTaxonomyLevel();
+			if (taxonomyLevel != null) {
+				String materializedPathKeys = taxonomyLevel.getMaterializedPathKeys().replaceAll("/", "_");
+				TextField field = new TextField(QItemDocument.TAXONOMIC_PATH_FIELD, materializedPathKeys, Field.Store.YES);
 				document.add(field);
 			}
 		}

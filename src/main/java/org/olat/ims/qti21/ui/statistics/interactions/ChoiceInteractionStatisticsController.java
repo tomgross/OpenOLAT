@@ -33,8 +33,6 @@ import org.olat.core.gui.control.controller.BasicController;
 import org.olat.core.util.Util;
 import org.olat.ims.qti.statistics.QTIType;
 import org.olat.ims.qti.statistics.model.StatisticsItem;
-import org.olat.ims.qti.statistics.ui.ResponseInfos;
-import org.olat.ims.qti.statistics.ui.Series;
 import org.olat.ims.qti21.QTI21StatisticsManager;
 import org.olat.ims.qti21.manager.CorrectResponsesUtil;
 import org.olat.ims.qti21.model.statistics.ChoiceStatistics;
@@ -60,6 +58,10 @@ import uk.ac.ed.ph.jqtiplus.value.Cardinality;
  */
 public abstract class ChoiceInteractionStatisticsController extends BasicController {
 	
+	protected final VelocityContainer mainVC;
+	
+	protected int count = 0;
+	protected final String mapperUri;
 	protected final Interaction interaction;
 	protected final AssessmentItemRef itemRef;
 	protected final AssessmentItem assessmentItem;
@@ -70,14 +72,15 @@ public abstract class ChoiceInteractionStatisticsController extends BasicControl
 	
 	public ChoiceInteractionStatisticsController(UserRequest ureq, WindowControl wControl,
 			AssessmentItemRef itemRef, AssessmentItem assessmentItem, Interaction interaction,
-			StatisticsItem itemStats, QTI21StatisticResourceResult resourceResult) {
+			StatisticsItem itemStats, QTI21StatisticResourceResult resourceResult, String mapperUri) {
 		super(ureq, wControl, Util.createPackageTranslator(QTI21AssessmentItemStatisticsController.class, ureq.getLocale()));
 		this.interaction = interaction;
 		this.itemRef = itemRef;
 		this.assessmentItem = assessmentItem;
 		this.resourceResult = resourceResult;
+		this.mapperUri = mapperUri;
 		
-		VelocityContainer mainVC = createVelocityContainer("statistics_interaction");
+		mainVC = createVelocityContainer("statistics_interaction");
 		Series series;
 		if(isMultipleChoice()) {
 			series = getMultipleChoice(itemStats);
@@ -126,8 +129,8 @@ public abstract class ChoiceInteractionStatisticsController extends BasicControl
 		List<ResponseInfos> responseInfos = new ArrayList<>();
 		for (ChoiceStatistics statisticResponse:statisticResponses) {
 			Choice choice = statisticResponse.getChoice();
-			String text = getAnswerText(choice);
-			double ans_count = statisticResponse.getCount();
+			Component text = getAnswerText(choice);
+			double ansCount = statisticResponse.getCount();
 			numOfResults += statisticResponse.getCount();
 			boolean correct = correctAnswers.contains(choice.getIdentifier());
 
@@ -137,12 +140,17 @@ public abstract class ChoiceInteractionStatisticsController extends BasicControl
 				points = null;
 				cssColor = "bar_default";
 			} else {
-				points = correct ? 1.0f : 0.0f; //response.getPoints();
+				Double mappedValue = CorrectResponsesUtil.getMappedValue(assessmentItem, interaction, choice);
+				if(mappedValue != null) {
+					points = mappedValue.floatValue();
+				} else {
+					points = correct ? 1.0f : 0.0f; //response.getPoints();
+				}
 				cssColor = correct ? "bar_green" : "bar_red";
 			}
 
 			String label = Integer.toString(++i);
-			d1.add(ans_count, label, cssColor);
+			d1.add(ansCount, label, cssColor);
 
 			responseInfos.add(new ResponseInfos(label, text, points, correct, survey, false));
 		}
@@ -152,7 +160,7 @@ public abstract class ChoiceInteractionStatisticsController extends BasicControl
 			if(notAnswered > 0) {
 				String label = Integer.toString(++i);
 				String text = translate("user.not.answer");
-				responseInfos.add(new ResponseInfos(label, text, null, false, survey, false));
+				responseInfos.add(new ResponseInfos(label, text, null, null, null, false, survey, false));
 				d1.add(notAnswered, label, "bar_grey");
 			}
 		}
@@ -180,7 +188,7 @@ public abstract class ChoiceInteractionStatisticsController extends BasicControl
 		List<ResponseInfos> responseInfos = new ArrayList<>();
 		for(ChoiceStatistics statisticResponse:statisticResponses) {
 			Choice choice = statisticResponse.getChoice();
-			String text = getAnswerText(choice);
+			Component text = getAnswerText(choice);
 			boolean correct = correctAnswers.contains(choice.getIdentifier());
 			double answersPerAnswerOption = statisticResponse.getCount();
 
@@ -204,7 +212,17 @@ public abstract class ChoiceInteractionStatisticsController extends BasicControl
 			d2.add(wrongA, label);
 			d3.add(notAnswered, label);
 			
-			Float pointsObj = survey ? null : (correct ? 1.0f : 0.0f);
+			Float pointsObj;
+			if(survey) {
+				pointsObj = null;
+			} else {
+				Double mappedValue = CorrectResponsesUtil.getMappedValue(assessmentItem, interaction, choice);
+				if(mappedValue != null) {
+					pointsObj = mappedValue.floatValue();
+				} else {
+					pointsObj = correct ? 1.0f : 0.0f;
+				}
+			}
 			responseInfos.add(new ResponseInfos(label, text, pointsObj, correct, survey, false));
 		}
 
@@ -223,7 +241,7 @@ public abstract class ChoiceInteractionStatisticsController extends BasicControl
 	
 	protected abstract List<ChoiceStatistics> getChoiceInteractionStatistics();
 	
-	protected abstract String getAnswerText(Choice choice);
+	protected abstract Component getAnswerText(Choice choice);
 
 
 }

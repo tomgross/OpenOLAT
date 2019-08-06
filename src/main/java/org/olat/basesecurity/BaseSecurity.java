@@ -62,7 +62,7 @@ public interface BaseSecurity {
 	 * @param olatResourceable
 	 * @return true if permitted
 	 */
-	public boolean isIdentityPermittedOnResourceable(Identity identity, String permission, OLATResourceable olatResourceable);
+	public boolean isIdentityPermittedOnResourceable(IdentityRef identity, String permission, OLATResourceable olatResourceable);
 
 	
 	
@@ -72,7 +72,7 @@ public interface BaseSecurity {
 	 * @param identity
 	 * @return The roles of the identity
 	 */
-	public Roles getRoles(Identity identity);
+	public Roles getRoles(IdentityRef identity);
 	
 	/**
 	 * Get the list of roles as string without inheritence (an admin
@@ -80,7 +80,16 @@ public interface BaseSecurity {
 	 * @param identity
 	 * @return
 	 */
-	public List<String> getRolesAsString(Identity identity);
+	public List<String> getRolesAsString(IdentityRef identity);
+	
+	/**
+	 * This method need several queries to catch all roles.
+	 * 
+	 * @param identity
+	 * @return
+	 */
+	public List<String> getRolesSummaryWithResources(IdentityRef identity);
+	
 	
 	/**
 	 * Update the roles
@@ -97,7 +106,7 @@ public interface BaseSecurity {
 	 * @param checkTypeRight
 	 * @return true if permitted
 	 */
-	public boolean isIdentityPermittedOnResourceable(Identity identity, String permission, OLATResourceable olatResourceable,
+	public boolean isIdentityPermittedOnResourceable(IdentityRef identity, String permission, OLATResourceable olatResourceable,
 			boolean checkTypeRight);
 
 	/**
@@ -108,7 +117,7 @@ public interface BaseSecurity {
 	 * @param secGroup
 	 * @return true if the identity is in the group
 	 */
-	public boolean isIdentityInSecurityGroup(Identity identity, SecurityGroup secGroup);
+	public boolean isIdentityInSecurityGroup(IdentityRef identity, SecurityGroup secGroup);
 	
 	/**
 	 * Change the last modificaiton date of the membership
@@ -369,6 +378,8 @@ public interface BaseSecurity {
 	 */
 	public Authentication findAuthentication(IdentityRef identity, String provider);
 	
+	public List<Authentication> findAuthentications(IdentityRef identity, List<String> providers);
+	
 	public String findAuthenticationName(IdentityRef identity, String provider);
 	
 	
@@ -403,10 +414,31 @@ public interface BaseSecurity {
 	public void deleteAuthentication(Authentication authentication);
 	
 	/**
+	 * Deletes invalid authentications with the specified email address in the field
+	 * username. An authentication is invalid if no unique user with that email
+	 * exists. Use this method to clean old authentications after the change of the
+	 * email address of a user to avoid duplicate authentications. Because a user
+	 * can have an email address as his username, the authentication of the OLAT
+	 * authentication provider is never deleted.
+	 * 
+	 * @param email
+	 */
+	public void deleteInvalidAuthenticationsByEmail(String email);
+	
+	/**
 	 * 
 	 * @param authentication
 	 */
 	public Authentication updateAuthentication(Authentication authentication);
+	
+	/**
+	 * Check if the password is allowed.
+	 * 
+	 * @param identity
+	 * @param password
+	 * @return
+	 */
+	public boolean checkCredentialHistory(Identity identity, String provider, String password);
 	
 	/**
 	 * 
@@ -528,6 +560,9 @@ public interface BaseSecurity {
 	 *         found
 	 */
 	public Authentication findAuthenticationByAuthusername(String authusername, String provider);
+	
+
+	public List<Authentication> findAuthenticationByAuthusername(String authusername, List<String> providers);
 
 
 	/**
@@ -616,11 +651,14 @@ public interface BaseSecurity {
 			SecurityGroup[] groups, PermissionOnResourceable[] permissionOnResources, String[] authProviders, Date createdAfter,
 			Date createdBefore, Date userLoginAfter, Date userLoginBefore, Integer status);
 	
-	
-	/** Save an identity
-	 * @param identity  Save this identity
+	/**
+	 * 
+	 * @param identity The identity with a new status
+	 * @param status The status to set
+	 * @param doer The identity which is acting
+	 * @return
 	 */
-	public Identity saveIdentityStatus(Identity identity, Integer status);
+	public Identity saveIdentityStatus(Identity identity, Integer status, Identity doer);
 	
 	/**
 	 * Set the date of the last login
@@ -644,6 +682,16 @@ public interface BaseSecurity {
 	 * @return The reloaded and renamed identity
 	 */
 	public Identity saveIdentityName(Identity identity, String newName, String newExertnalId);
+	
+	/**
+	 * the method doesn't set the status deleted, it will set the user
+	 * who deleted the specified identity, the list of roles and the date.
+	 * 
+	 * @param identity The identity to set the data of
+	 * @param doer The identity which is acting
+	 * @return The merged identity
+	 */
+	public Identity saveDeletedByData(Identity identity, Identity doer);
 	
 	/**
 	 * Set an external id if the identity is managed by an external system.

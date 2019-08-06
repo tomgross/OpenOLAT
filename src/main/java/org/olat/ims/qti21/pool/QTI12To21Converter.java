@@ -55,11 +55,13 @@ import org.olat.core.util.Util;
 import org.olat.core.util.vfs.VFSContainer;
 import org.olat.core.util.vfs.VFSItem;
 import org.olat.core.util.vfs.VFSLeaf;
+import org.olat.course.nodes.iq.QTIResourceTypeModule;
 import org.olat.ims.qti.QTIModule;
 import org.olat.ims.qti.editor.QTIEditHelper;
 import org.olat.ims.qti.editor.QTIEditorPackage;
 import org.olat.ims.qti.editor.beecom.objects.Assessment;
 import org.olat.ims.qti.editor.beecom.objects.ChoiceQuestion;
+import org.olat.ims.qti.editor.beecom.objects.ChoiceResponse;
 import org.olat.ims.qti.editor.beecom.objects.Control;
 import org.olat.ims.qti.editor.beecom.objects.Duration;
 import org.olat.ims.qti.editor.beecom.objects.EssayQuestion;
@@ -76,6 +78,7 @@ import org.olat.ims.qti.editor.beecom.objects.SelectionOrdering;
 import org.olat.ims.qti.fileresource.TestFileResource;
 import org.olat.ims.qti.qpool.QTI12HtmlHandler;
 import org.olat.ims.qti21.QTI21Constants;
+import org.olat.ims.qti21.QTI21DeliveryOptions;
 import org.olat.ims.qti21.model.IdentifierGenerator;
 import org.olat.ims.qti21.model.xml.AssessmentHtmlBuilder;
 import org.olat.ims.qti21.model.xml.AssessmentItemBuilder;
@@ -85,6 +88,10 @@ import org.olat.ims.qti21.model.xml.AssessmentTestFactory;
 import org.olat.ims.qti21.model.xml.ManifestBuilder;
 import org.olat.ims.qti21.model.xml.ManifestMetadataBuilder;
 import org.olat.ims.qti21.model.xml.ModalFeedbackBuilder;
+import org.olat.ims.qti21.model.xml.ModalFeedbackBuilder.ModalFeedbackType;
+import org.olat.ims.qti21.model.xml.ModalFeedbackCondition;
+import org.olat.ims.qti21.model.xml.ModalFeedbackCondition.Operator;
+import org.olat.ims.qti21.model.xml.ModalFeedbackCondition.Variable;
 import org.olat.ims.qti21.model.xml.QtiNodesExtractor;
 import org.olat.ims.qti21.model.xml.interactions.EssayAssessmentItemBuilder;
 import org.olat.ims.qti21.model.xml.interactions.FIBAssessmentItemBuilder;
@@ -102,7 +109,6 @@ import org.olat.resource.OLATResource;
 import org.xml.sax.InputSource;
 import org.xml.sax.SAXException;
 
-import de.bps.onyx.plugin.OnyxModule;
 import uk.ac.ed.ph.jqtiplus.node.AssessmentObject;
 import uk.ac.ed.ph.jqtiplus.node.content.variable.RubricBlock;
 import uk.ac.ed.ph.jqtiplus.node.content.xhtml.text.P;
@@ -149,12 +155,12 @@ public class QTI12To21Converter {
 		manifest = ManifestBuilder.createAssessmentTestBuilder();
 	}
 	
-	public AssessmentTest convert(QTIEditorPackage qtiEditorPackage)
+	public AssessmentTest convert(QTIEditorPackage qtiEditorPackage, QTI21DeliveryOptions qti21Options)
 	throws URISyntaxException {
-		return convert(qtiEditorPackage.getBaseDir(), qtiEditorPackage.getQTIDocument());
+		return convert(qtiEditorPackage.getBaseDir(), qtiEditorPackage.getQTIDocument(), qti21Options);
 	}
 	
-	public AssessmentTest convert(VFSContainer originalContainer, QTIDocument doc)
+	public AssessmentTest convert(VFSContainer originalContainer, QTIDocument doc, QTI21DeliveryOptions qti21Options)
 	throws URISyntaxException {
 		Assessment assessment = doc.getAssessment();
 
@@ -172,11 +178,16 @@ public class QTI12To21Converter {
 		TestPart testPart = AssessmentTestFactory.createTestPart(assessmentTest);
 		ItemSessionControl itemSessionControl = testPart.getItemSessionControl();
 		Control tmpControl = QTIEditHelper.getControl(assessment);
-		if(tmpControl.getFeedback() == Control.CTRL_YES) {
-			itemSessionControl.setShowFeedback(Boolean.TRUE);
-		}
 		if(tmpControl.getSolution() == Control.CTRL_YES) {
 			itemSessionControl.setShowSolution(Boolean.TRUE);
+		}
+		
+		if(qti21Options != null) {
+			qti21Options.setHideFeedbacks(false);
+			
+			if(assessment.isInheritControls() && tmpControl.getFeedback() != Control.CTRL_YES) {
+				qti21Options.setHideFeedbacks(true);
+			}
 		}
 
 		AssessmentTestBuilder assessmentTestBuilder = new AssessmentTestBuilder(assessmentTest);
@@ -395,7 +406,7 @@ public class QTI12To21Converter {
 		manifest.appendAssessmentItem(itemFile.getName());
 		ManifestMetadataBuilder metadata = manifest.getResourceBuilderByHref(itemFile.getName());
 		metadata.setTechnicalFormat(ManifestBuilder.ASSESSMENTITEM_MIMETYPE);
-		metadata.setQtiMetadata(itemBuilder.getInteractionNames());
+		metadata.setQtiMetadataInteractionTypes(itemBuilder.getInteractionNames());
 		metadata.setOpenOLATMetadataQuestionType(itemBuilder.getQuestionType().getPrefix());
 		metadata.setTitle(item.getTitle(), locale.getLanguage());
 		metadata.setDescription(item.getObjectives(), locale.getLanguage());
@@ -425,6 +436,7 @@ public class QTI12To21Converter {
 		convertOrientation(question, itemBuilder);
 		
 		List<Response> responses = question.getResponses();
+		Map<String,Identifier> identToIdentifier = new HashMap<>();
 		for(Response response:responses) {
 			String responseText = response.getContent().renderAsHtmlForEditor();
 			responseText = blockedHtml(responseText);
@@ -438,11 +450,14 @@ public class QTI12To21Converter {
 					.createSimpleChoice(interaction, responseText, itemBuilder.getQuestionType().getPrefix());
 			}
 			itemBuilder.addSimpleChoice(newChoice);
+			identToIdentifier.put(response.getIdent(), newChoice.getIdentifier());
 			
 			if(response.isCorrect()) {
 				itemBuilder.setCorrectAnswer(newChoice.getIdentifier());
 			}	
 		}
+		
+		convertFeedbackPerAnswers(item, itemBuilder, identToIdentifier);
 		
 		double correctScore = question.getSingleCorrectScore();
 		if(correctScore >= 0.0d) {
@@ -474,6 +489,7 @@ public class QTI12To21Converter {
 		}
 		
 		boolean singleCorrect = question.isSingleCorrect();
+		Map<String, Identifier> identToIdentifier = new HashMap<>();
 		for(Response response:responses) {
 			String responseText = response.getContent().renderAsHtmlForEditor();
 			responseText = blockedHtml(responseText);
@@ -489,6 +505,7 @@ public class QTI12To21Converter {
 			}
 			
 			itemBuilder.addSimpleChoice(newChoice);
+			identToIdentifier.put(response.getIdent(), newChoice.getIdentifier());
 			
 			double score = response.getPoints();
 			if(singleCorrect) {
@@ -505,6 +522,8 @@ public class QTI12To21Converter {
 				itemBuilder.setMapping(newChoice.getIdentifier(), score);
 			}
 		}
+
+		convertFeedbackPerAnswers(item, itemBuilder, identToIdentifier);
 
 		if(singleCorrect) {
 			itemBuilder.setScoreEvaluationMode(ScoreEvaluation.allCorrectAnswers);
@@ -682,21 +701,53 @@ public class QTI12To21Converter {
 		String solutionText = question.getSolutionText();
 		if(StringHelper.containsNonWhitespace(solutionText)) {
 			ModalFeedbackBuilder solution = itemBuilder.createCorrectSolutionFeedback();
+			solutionText = blockedHtml(solutionText);
 			solution.setText(solutionText);
 		}
 		
 		String feedbackMastery = QTIEditHelper.getFeedbackMasteryText(item);
 		if(StringHelper.containsNonWhitespace(feedbackMastery)) {
 			ModalFeedbackBuilder feedback = itemBuilder.createCorrectFeedback();
+			feedbackMastery = blockedHtml(feedbackMastery);
 			feedback.setText(feedbackMastery);
 		}
 
 		String feedbackFail = QTIEditHelper.getFeedbackFailText(item);
 		if(StringHelper.containsNonWhitespace(feedbackFail)) {
 			ModalFeedbackBuilder feedback = itemBuilder.createIncorrectFeedback();
+			feedbackFail = blockedHtml(feedbackFail);
 			feedback.setText(feedbackFail);
 		}
 		
+
+	}
+	
+	private void convertFeedbackPerAnswers(Item item, AssessmentItemBuilder itemBuilder, Map<String,Identifier> identToIdentifier) {
+		Question question = item.getQuestion();
+		
+		List<ModalFeedbackBuilder> additionalFeedbacks = new ArrayList<>();
+		for (Response response : question.getResponses()) {
+			if(response instanceof ChoiceResponse) {
+				Material responseFeedbackMat = QTIEditHelper.getFeedbackOlatRespMaterial(item, response.getIdent());
+				if(responseFeedbackMat != null) {
+					String feedbackCondition = responseFeedbackMat.renderAsHtmlForEditor();
+					feedbackCondition = blockedHtml(feedbackCondition);
+					
+					ModalFeedbackCondition condition = new ModalFeedbackCondition();
+					condition.setVariable(Variable.response);
+					condition.setOperator(Operator.equals);
+					condition.setValue(identToIdentifier.get(response.getIdent()).toString());
+					List<ModalFeedbackCondition> conditions = new ArrayList<>(1);
+					conditions.add(condition);
+					
+					ModalFeedbackBuilder feedback = new ModalFeedbackBuilder(itemBuilder.getAssessmentItem(), ModalFeedbackType.additional);
+					feedback.setFeedbackConditions(conditions);
+					feedback.setText(feedbackCondition);
+					additionalFeedbacks.add(feedback);
+				}
+			}
+		}
+		itemBuilder.setAdditionalFeedbackBuilders(additionalFeedbacks);
 	}
 	
 	private void convertDuration(Duration duration, ControlObject<?> parent) {
@@ -757,7 +808,7 @@ public class QTI12To21Converter {
 
 	public static boolean isConvertible(OLATResource resource) {
 		if(TestFileResource.TYPE_NAME.equals(resource.getResourceableTypeName())) {
-			if(OnyxModule.isOnyxTest(resource)) {
+			if(QTIResourceTypeModule.isOnyxTest(resource)) {
 				return true;
 			}
 			

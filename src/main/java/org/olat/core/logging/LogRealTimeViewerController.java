@@ -55,6 +55,7 @@ import org.quartz.Scheduler;
 import org.quartz.SchedulerException;
 import org.quartz.Trigger;
 import org.quartz.TriggerKey;
+import org.springframework.beans.factory.annotation.Autowired;
 
 /**
  * Description:<br>
@@ -76,9 +77,11 @@ public class LogRealTimeViewerController extends BasicController implements JobL
 	private StringWriter writer;
 	private JobKey jobKey;
 	private TriggerKey triggerKey;
-	private String jobName;
 	private Link updateLink, startLink, stopLink;
 	private boolean removeLogNoise;
+	
+	@Autowired
+	private Scheduler scheduler;
 
 	/**
 	 * Constructor for creating a real time log viewer controller
@@ -113,25 +116,23 @@ public class LogRealTimeViewerController extends BasicController implements JobL
 		updateLogViewFromWriter();
 		// Add job to read from the string writer every second
 		try {
-			jobName = "Log_Displayer_Job_" + this.hashCode();
 			jobKey = new JobKey("Log_Displayer_Job_" + this.hashCode(), LOG_DISPLAYER_GROUP);
 			triggerKey = new TriggerKey("Log_Displayer_Trigger_" + this.hashCode(), LOG_DISPLAYER_GROUP);
-
+			
 			JobDetail jobDetail = newJob(DummyJob.class)
 					.withIdentity(jobKey)
 					.build();
-
+			
 			Trigger trigger = newTrigger()
-					.withIdentity(triggerKey)
-					.withSchedule(cronSchedule("* * * * * ?"))
-					.build();
-
+				    .withIdentity(triggerKey)
+				    .withSchedule(cronSchedule("* * * * * ?"))
+				    .build();
+			
 			// Schedule job now
-			Scheduler scheduler = (Scheduler) CoreSpringFactory.getBean(Scheduler.class);
 			scheduler.getListenerManager().addJobListener(this, keyEquals(jobKey));
 			scheduler.scheduleJob(jobDetail, trigger);
-		} catch (SchedulerException e) {
-			logError("Problem when creating log viewer scheduler", e);
+		} catch (Exception e) {
+			logError("Can not parse log viewer cron expression", e);
 		}
 		// Add one second interval to update the log view every second
 		JSAndCSSComponent jsc = new JSAndCSSComponent("intervall", this.getClass(), 3000);
@@ -149,9 +150,8 @@ public class LogRealTimeViewerController extends BasicController implements JobL
 	 */
 	@Override
 	protected void doDispose() {
-		
 		if (logViewerVC != null) { // don't clean up twice
-			Scheduler scheduler = (Scheduler) CoreSpringFactory.getBean(Scheduler.class);
+			Scheduler scheduler = (Scheduler) CoreSpringFactory.getBean("schedulerFactoryBean");
 			// remove scheduler job first
 			try {
 				scheduler.deleteJob(jobKey);
@@ -204,44 +204,51 @@ public class LogRealTimeViewerController extends BasicController implements JobL
 	protected void event(UserRequest ureq, Component source, Event event) {
 		if (source == updateLink) {
 			updateLogViewFromWriter();
-		}
-		if (source == stopLink) {
-			// update viewable links
-			logViewerVC.remove(stopLink);
-			logViewerVC.remove(updateLink);
-			startLink = LinkFactory.createButtonSmall("logviewer.link.start", logViewerVC, this);
-			// remove logger appender
-			log4JLogger.removeAppender(writerAppender);
-			// pause log update trigger job
-			try {
-				Scheduler scheduler = (Scheduler) CoreSpringFactory.getBean(Scheduler.class);
-				scheduler.pauseJob(jobKey);
-			} catch (SchedulerException e) {
-				logError("Can not pause log viewer job", e);
-			}
-		}
-		if (source == startLink) {
-			// update viewable links
-			logViewerVC.remove(startLink);
-			updateLink = LinkFactory.createButtonSmall("logviewer.link.update", logViewerVC, this);
-			stopLink = LinkFactory.createButtonSmall("logviewer.link.stop", logViewerVC, this);
-			// re-add appender to logger
-			log4JLogger.addAppender(writerAppender);
-			// resume trigger job
-			try {
-				Scheduler scheduler = (Scheduler) CoreSpringFactory.getBean(Scheduler.class);
-				scheduler.resumeJob(jobKey);
-			} catch (SchedulerException e) {
-				logError("Can not resume log viewer job", e);
-			}
+		} else if (source == stopLink) {
+			doStop();
+		} else if (source == startLink) {
+			doStart();
 		}		
+	}
+	
+	private void doStart() {
+		// update viewable links
+		logViewerVC.remove(startLink);
+		updateLink = LinkFactory.createButtonSmall("logviewer.link.update", logViewerVC, this);
+		stopLink = LinkFactory.createButtonSmall("logviewer.link.stop", logViewerVC, this);
+		// re-add appender to logger
+		log4JLogger.addAppender(writerAppender);
+		// resume trigger job
+		try {
+			Scheduler scheduler = (Scheduler) CoreSpringFactory.getBean("schedulerFactoryBean");
+			scheduler.resumeJob(jobKey);
+		} catch (SchedulerException e) {
+			logError("Can not resume log viewer job", e);
+		}
+	}
+	
+	private void doStop() {
+		// update viewable links
+		logViewerVC.remove(stopLink);
+		logViewerVC.remove(updateLink);
+		startLink = LinkFactory.createButtonSmall("logviewer.link.start", logViewerVC, this);
+		// remove logger appender
+		log4JLogger.removeAppender(writerAppender);
+		// pause log update trigger job
+		try {
+			Scheduler scheduler = (Scheduler) CoreSpringFactory.getBean("schedulerFactoryBean");
+			scheduler.pauseJob(jobKey);
+		} catch (SchedulerException e) {
+			logError("Can not pause log viewer job", e);
+		}
 	}
 
 	/**
 	 * @see org.quartz.JobListener#getName()
 	 */
+	@Override
 	public String getName() {
-		return jobName;
+		return jobKey.getName();
 	}
 
 	/**

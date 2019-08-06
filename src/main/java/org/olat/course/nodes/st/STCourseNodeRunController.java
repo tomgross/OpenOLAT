@@ -96,7 +96,7 @@ public class STCourseNodeRunController extends BasicController {
 
 		myContent = createVelocityContainer("run");
 		myContent.setDomReplacementWrapperRequired(false); // we provide our own DOM replacement ID
-
+		
 		if (se != null && (stCourseNode.hasScoreConfigured() || stCourseNode.hasPassedConfigured())) {
 			HighScoreRunController highScoreCtr = new HighScoreRunController(ureq, wControl, userCourseEnv, stCourseNode);
 			if (highScoreCtr.isViewHighscore()) {
@@ -175,9 +175,9 @@ public class STCourseNodeRunController extends BasicController {
 			myContent.contextPut("hasScore", new Boolean(stCourseNode.hasScoreConfigured()));
 			myContent.contextPut("hasPassed", new Boolean(stCourseNode.hasPassedConfigured()));
 
-			if (stCourseNode.hasScoreConfigured() || stCourseNode.hasPassedConfigured()) {
+			if(stCourseNode.hasScoreConfigured() || stCourseNode.hasPassedConfigured()) {
 				CourseConfig cc = userCourseEnv.getCourseEnvironment().getCourseConfig();
-				if ((cc.isEfficencyStatementEnabled() || cc.isCertificateEnabled())
+				if((cc.isEfficencyStatementEnabled() || cc.isCertificateEnabled())
 						&& userCourseEnv.hasEfficiencyStatementOrCertificate(false)) {
 					certificationLink = LinkFactory.createButton("certification", myContent, this);
 				}

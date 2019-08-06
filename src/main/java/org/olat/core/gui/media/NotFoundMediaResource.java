@@ -36,22 +36,16 @@ import javax.servlet.http.HttpServletResponse;
  * @author Felix Jost
  */
 public class NotFoundMediaResource extends DefaultMediaResource {
-	private String notFoundURI;
 
-	/**
-	 * @param notFoundURI
-	 */
-	public NotFoundMediaResource(String notFoundURI) {
-		this.notFoundURI = notFoundURI;
+	@Override
+	public long getCacheControlDuration() {
+		return ServletUtil.CACHE_ONE_HOUR;
 	}
 
-	/**
-	 * @see org.olat.core.gui.media.MediaResource#prepare(javax.servlet.http.HttpServletResponse)
-	 */
 	@Override
 	public void prepare(HttpServletResponse hres) {
 		try {
-			hres.sendError(HttpServletResponse.SC_NOT_FOUND, "Not found: " + notFoundURI);
+			hres.sendError(HttpServletResponse.SC_NOT_FOUND);
 		} catch (IOException e) {
 			// we can do nothing better
 		}

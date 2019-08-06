@@ -30,8 +30,8 @@ package org.olat.core.gui.exception;
 import java.util.Date;
 import java.util.List;
 
-import org.olat.basesecurity.BaseSecurityModule;
 import org.olat.core.CoreSpringFactory;
+import org.olat.core.commons.services.csp.CSPModule;
 import org.olat.core.gui.UserRequest;
 import org.olat.core.gui.WindowSettings;
 import org.olat.core.gui.Windows;
@@ -98,7 +98,7 @@ public class ExceptionWindowController extends DefaultChiefController {
 		Formatter formatter = Formatter.getInstance(ureq.getLocale());
 		msg = new VelocityContainer("olatmain", VELOCITY_ROOT + "/exception_page.html", trans, this);
 
-		BaseSecurityModule securityModule = CoreSpringFactory.getImpl(BaseSecurityModule.class);
+		CSPModule securityModule = CoreSpringFactory.getImpl(CSPModule.class);
 		msg.contextPut("enforceTopFrame", new Boolean(securityModule.isForceTopFrame()));
 		
 		// Disallow wrapping of divs around the panel and the main velocity page
@@ -193,7 +193,7 @@ public class ExceptionWindowController extends DefaultChiefController {
 		msg.contextPut("stacktrace", OLATRuntimeException.throwableToHtml(th));			
 		
 		Identity curIdent = ureq.getIdentity();
-		msg.contextPut("username", curIdent == null? "n/a" : curIdent.getName());
+		msg.contextPut("username", curIdent == null? "n/a" : curIdent.getKey());
 		msg.contextPut("allowBackButton", Boolean.valueOf(allowBackButton));
 		msg.contextPut("detailedmessage", detailedmessage);
 		// Cluster NodeId + E-Nr
@@ -236,11 +236,6 @@ public class ExceptionWindowController extends DefaultChiefController {
 
 		w.setContentPane(msg);
 		setWindow(w);
-	}
-
-	@Override
-	public String getWindowTitle() {
-		return null;
 	}
 
 	@Override

@@ -43,6 +43,11 @@ public class QTI21AssessmentItemFactory implements QItemFactory {
 	public QTI21AssessmentItemFactory(QTI21QuestionType type) {
 		this.type = type;
 	}
+	
+	@Override
+	public String getType() {
+		return "qti21_".concat(type.name());
+	}
 
 	@Override
 	public String getLabel(Locale locale) {
@@ -52,6 +57,8 @@ public class QTI21AssessmentItemFactory implements QItemFactory {
 			case mc: return "QTI 2.1 " + trans.translate("new.mc");
 			case kprim: return "QTI 2.1 " + trans.translate("new.kprim");
 			case match: return "QTI 2.1 " + trans.translate("new.match");
+			case matchdraganddrop: return "QTI 2.1 " + trans.translate("new.matchdraganddrop");
+			case matchtruefalse: return "QTI 2.1 " + trans.translate("new.matchtruefalse");
 			case fib: return "QTI 2.1 " + trans.translate("new.fib");
 			case numerical: return "QTI 2.1 " + trans.translate("new.fib.numerical");
 			case essay: return "QTI 2.1 " + trans.translate("new.essay");
@@ -66,8 +73,6 @@ public class QTI21AssessmentItemFactory implements QItemFactory {
 	@Override
 	public QuestionItem createItem(Identity owner, String title, Locale locale) {
 		QTI21QPoolServiceProvider spi = CoreSpringFactory.getImpl(QTI21QPoolServiceProvider.class);
-		QuestionItem newItem = spi.createItem(owner, type, title, locale);
-		//QTI21EditorController ctrl = new QTI21EditorController(ureq, wControl, newItem);
-		return newItem;
+		return spi.createItem(owner, type, title, locale);
 	}
 }

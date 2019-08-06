@@ -125,8 +125,9 @@ public class ForumUserListController extends FormBasicController {
 		columnsModel.addFlexiColumnModel(new DefaultFlexiColumnModel("viewswitch.title", translate("viewswitch.title"), "select"));
 
 		dataModel = new ForumUserDataModel(columnsModel, getTranslator());
-		tableEl = uifactory.addTableElement(getWindowControl(), "users", dataModel, getTranslator(), formLayout);
-		tableEl.setPageSize(50);
+		tableEl = uifactory.addTableElement(getWindowControl(), "users", dataModel, 25, false, getTranslator(), formLayout);
+		tableEl.setPageSize(25);
+		tableEl.setAndLoadPersistedPreferences(ureq, "forum-users");
 	}
 	
 	private void loadModel() {

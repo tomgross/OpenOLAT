@@ -42,7 +42,6 @@ import org.quartz.JobDetail;
 import org.quartz.Scheduler;
 import org.quartz.Trigger;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
@@ -154,10 +153,8 @@ public class LDAPLoginModule extends AbstractSpringModule {
 	
 	@Autowired
 	private LDAPSyncConfiguration syncConfiguration;
-	
 	@Autowired
 	private Scheduler scheduler;
-	
 	@Autowired
 	private BaseSecurity securityManager;
 	
@@ -276,9 +273,9 @@ public class LDAPLoginModule extends AbstractSpringModule {
 					.withIdentity("LDAP_Cron_Syncer_Job", Scheduler.DEFAULT_GROUP)
 					.build();
 			Trigger trigger = newTrigger()
-					.withIdentity("LDAP_Cron_Syncer_Trigger")
-					.withSchedule(cronSchedule(ldapSyncCronSyncExpression))
-					.build();
+				    .withIdentity("LDAP_Cron_Syncer_Trigger")
+				    .withSchedule(cronSchedule(ldapSyncCronSyncExpression))
+				    .build();
 
 			// Schedule job now
 			scheduler.scheduleJob(jobDetail, trigger);

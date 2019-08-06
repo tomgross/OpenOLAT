@@ -8,7 +8,8 @@
 #set($checkJavaScript = $r.checkJavaScript($responseDeclaration,$interaction.patternmask))
 <input name="qtiworks_presented_${responseIdentifier}" type="hidden" value="1"/>
 <span class="$localName">
-	<input id="od_${responseIdentifier}" type="text" name="qtiworks_response_${responseIdentifier}" #if($responseInputString && !$responseInputString.isEmpty()) value="$r.escapeHtml($responseInputString)" #else value="" #end #if(!$r.isItemSessionEnded()) $r.placeholder($interaction) #end #if($r.isItemSessionEnded()) disabled #end #if($isBadResponse) class='badResponse' #end #if($interaction.expectedLength) size='$interaction.expectedLength' #end #if($checks && $checks.size() > 0) onchange='$checkJavaScript' #end autocomplete="off"/>
+	#if($r.isTrue($isCorrectionHelp))<i class="o_icon #if($r.isCorrectTextEntry($interaction)) o_icon_correct_response #else o_icon_incorrect_response #end"> </i> #end
+	<input id="od_${responseIdentifier}" type="text" name="qtiworks_response_${responseIdentifier}" #if($responseInputString && !$responseInputString.isEmpty()) value="$r.escapeHtml($responseInputString)" #else value="" #end #if(!$r.isItemSessionEnded()) $r.placeholder($interaction) #end #if($r.isItemSessionEnded()) disabled #end #if($isBadResponse) class='badResponse' #end #if($interaction.expectedLength) size='$interaction.expectedLength' #end #if($checks && $checks.size() > 0) onchange='$checkJavaScript' #end autocomplete="off" required="required"/>
 	#if($isBadResponse)
         <span class="badResponse">
 		#if($responseDeclaration.cardinality.toQtiString() == "record")
@@ -22,6 +23,12 @@
 	#end
 	#if($isInvalidResponse)
 	<span class="badResponse">$r.translate("error.required.format")</span>
+	#end
+	#if($r.isTrue($isCorrectionSolution))
+		#set($alternativesString = $r.renderTextEntryAlternatives($interaction))
+		#if($r.isNotEmpty($alternativesString))
+			<span class="o_qti_gaptext_alternatives" title='$r.translate("correction.alternatives")'>$alternativesString</span>
+		#end
 	#end
 </span>
 $r.appendFlexiFormDirty("od_${responseIdentifier}")

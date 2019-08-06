@@ -20,8 +20,6 @@
 
 package org.olat.login;
 
-import java.io.File;
-import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.Locale;
@@ -38,7 +36,6 @@ import org.olat.core.gui.control.WindowControl;
 import org.olat.core.gui.control.controller.BasicController;
 import org.olat.core.gui.control.generic.closablewrapper.CloseableModalController;
 import org.olat.core.gui.translator.Translator;
-import org.olat.core.helpers.Settings;
 import org.olat.core.util.Util;
 import org.olat.core.util.WebappHelper;
 
@@ -62,20 +59,10 @@ public class AboutController extends BasicController {
 		VelocityContainer aboutVC = createVelocityContainer("about");
 		// add license text
 		String licenses = "Not found";
-		InputStream licensesStream = AboutController.class.getResourceAsStream("../../../NOTICE.TXT");
-		try {
-			// try from source if debug enabled
-			if(licensesStream == null && Settings.isDebuging()) {
-				File noticeFile = new File(WebappHelper.getSourcePath() + "/../../../NOTICE.TXT");
-				licensesStream = new FileInputStream(noticeFile);			
-			}
-			if(licensesStream != null) {
-				licenses = IOUtils.toString(licensesStream);
-			}
+		try(InputStream licensesStream = AboutController.class.getResourceAsStream("../../../NOTICE.TXT")) {
+			licenses = IOUtils.toString(licensesStream, "UTF-8");
 		} catch (IOException e) {
 			logError("Error while reading NOTICE.TXT", e);
-		} finally {
-			IOUtils.closeQuietly(licensesStream);
 		}
 		aboutVC.contextPut("licenses", licenses);
 		// close link after about text
@@ -89,9 +76,11 @@ public class AboutController extends BasicController {
 	 * Open a modal dialog which can be closed by user. 
 	 */
 	public void activateAsModalDialog() {
-		cmc = new CloseableModalController(getWindowControl(), "close", this.getInitialComponent());
-		listenTo(cmc);
-		cmc.activate();
+		if(cmc == null) {
+			cmc = new CloseableModalController(getWindowControl(), "close", getInitialComponent());
+			listenTo(cmc);
+			cmc.activate();
+		}
 	}
 
 	/**
@@ -108,17 +97,16 @@ public class AboutController extends BasicController {
 	@Override
 	protected void event(UserRequest ureq, Component source, Event event) {
 		if (source == closeLink) {
-			if (cmc != null) {
-				cmc.deactivate();
-				removeAsListenerAndDispose(cmc);
-				cmc = null;
-			}
+			deactivateModalDialog();
+			fireEvent(ureq, Event.CLOSE_EVENT);
 		}
 	}
 
 	@Override
 	protected void event(UserRequest ureq, Controller source, Event event) {
-		// nothing to do on cmc event, cleanup on dispose
+		if(cmc == source) {
+			fireEvent(ureq, Event.CLOSE_EVENT);
+		}
 	}
 
 	@Override
@@ -140,7 +128,8 @@ public class AboutController extends BasicController {
 	 */
 	public static final Link aboutLinkFactory(Locale locale, Controller listener, boolean withIcon, boolean withBuildInfo) {
 		Translator aboutTrans = Util.createPackageTranslator(AboutController.class, locale);
-		Link aboutLink = LinkFactory.createLink("menu.about", "menu.about", aboutTrans, null, listener, Link.LINK + Link.NONTRANSLATED);
+		Link aboutLink = LinkFactory
+				.createLink("menu.about", "menu.about", "about", "menu.about", aboutTrans, null, listener, Link.LINK + Link.NONTRANSLATED);
 		aboutLink.setCustomDisplayText(aboutTrans.translate("menu.about"));
 		if (withIcon) {			
 			aboutLink.setIconLeftCSS("o_icon o_icon_openolat o_icon-fw");
@@ -155,9 +144,6 @@ public class AboutController extends BasicController {
 				aboutLink.setTitle(title);				
 			}			
 		}
-		
 		return aboutLink;
 	}
-
-
 }

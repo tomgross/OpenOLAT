@@ -30,36 +30,36 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.StandardCopyOption;
 import java.util.List;
+import java.util.Locale;
 
 import org.olat.basesecurity.BaseSecurityManager;
 import org.olat.core.CoreSpringFactory;
 import org.olat.core.commons.modules.bc.FolderConfig;
+import org.olat.core.commons.modules.bc.meta.tagged.MetaTagged;
 import org.olat.core.commons.modules.bc.vfs.OlatRootFolderImpl;
 import org.olat.core.commons.services.image.ImageService;
 import org.olat.core.commons.services.image.Size;
 import org.olat.core.gui.media.FileMediaResource;
 import org.olat.core.gui.media.MediaResource;
+import org.olat.core.gui.media.ServletUtil;
 import org.olat.core.id.Identity;
 import org.olat.core.logging.OLog;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.FileUtils;
 import org.olat.core.util.StringHelper;
+import org.olat.core.util.io.SystemFilenameFilter;
 import org.olat.core.util.vfs.VFSContainer;
 import org.olat.core.util.vfs.VFSItem;
 import org.olat.core.util.vfs.VFSLeaf;
+import org.olat.user.manager.ManifestBuilder;
 
 /**
- * Description: <br>
- * TODO: alex Class Description
- * <P>
  * 
  * Initial Date: Sept 08, 2005 <br>
  * @author Alexander Schneider
  */
-public class DisplayPortraitManager implements UserDataDeletable {
+public class DisplayPortraitManager implements UserDataDeletable, UserDataExportable {
 	private static final OLog log = Tracing.createLoggerFor(DisplayPortraitManager.class);
-	
-	private static DisplayPortraitManager singleton;
 	
 	private static final String LOGO_PREFIX_FILENAME = "logo";
 	private static final String LOGO_BIG_FILENAME = LOGO_PREFIX_FILENAME + "_big";
@@ -93,22 +93,6 @@ public class DisplayPortraitManager implements UserDataDeletable {
 	
 	public static final int WIDTH_LOGO_BIG = HEIGHT_BIG * 4;  // 4-8 kbytes (jpeg)
 	public static final int WIDTH_LOGO_SMALL = HEIGHT_SMALL * 4; // 2-4
-	
-	/**
-	 * [spring]
-	 */
-	private DisplayPortraitManager() {
-		singleton = this;
-	}
-	
-	/**
-	 * Singleton pattern
-	 * 
-	 * @return instance
-	 */
-	public static DisplayPortraitManager getInstance() {
-		return singleton;
-	}
 
 	public MediaResource getSmallPortraitResource(String username) {
 		return getPortraitResource(username, PORTRAIT_SMALL_FILENAME);
@@ -117,15 +101,15 @@ public class DisplayPortraitManager implements UserDataDeletable {
 		return getPortraitResource(identityKey, PORTRAIT_SMALL_FILENAME);
 	}
 	
-	public MediaResource getBigPortraitResource(String String) {
-		return getPortraitResource(String, PORTRAIT_BIG_FILENAME);
+	public MediaResource getBigPortraitResource(String string) {
+		return getPortraitResource(string, PORTRAIT_BIG_FILENAME);
 	}
 	public MediaResource getBigPortraitResource(Long identityKey) {
 		return getPortraitResource(identityKey, PORTRAIT_BIG_FILENAME);
 	}
 	
-	public MediaResource getMasterPortraitResource(String String) {
-		return getPortraitResource(String, PORTRAIT_MASTER_FILENAME);
+	public MediaResource getMasterPortraitResource(String string) {
+		return getPortraitResource(string, PORTRAIT_MASTER_FILENAME);
 	}
 	public MediaResource getMasterPortraitResource(Long identityKey) {
 		return getPortraitResource(identityKey, PORTRAIT_MASTER_FILENAME);
@@ -227,8 +211,8 @@ public class DisplayPortraitManager implements UserDataDeletable {
 	}
 	
 	public boolean hasPortrait(String username) {
-		File portraitDir = getPortraitDir(username);
-		if(portraitDir != null) {
+		File portraitDir = getPortraitDir(username, false);
+		if(portraitDir != null && portraitDir.exists()) {
 			File[] portraits = portraitDir.listFiles();
 			if(portraits.length > 0) {
 				for(File file:portraits) {
@@ -242,7 +226,7 @@ public class DisplayPortraitManager implements UserDataDeletable {
 	}
 
 	private File getPortraitFile(String username, String prefix) {
-		File portraitDir = getPortraitDir(username);
+		File portraitDir = getPortraitDir(username, true);
 		if(portraitDir != null) {
 			File[] portraits = portraitDir.listFiles();
 			if(portraits.length > 0) {
@@ -260,11 +244,9 @@ public class DisplayPortraitManager implements UserDataDeletable {
 		VFSContainer portraitDir = getPortraitFolder(username);
 		if(portraitDir != null) {
 			List<VFSItem> portraits = portraitDir.getItems();
-			if(portraits.size() > 0) {
-				for(VFSItem file:portraits) {
-					if(file.getName().startsWith(prefix) && file instanceof VFSLeaf) {
-						return (VFSLeaf)file;
-					}
+			for(VFSItem file:portraits) {
+				if(file.getName().startsWith(prefix) && file instanceof VFSLeaf) {
+					return (VFSLeaf)file;
 				}
 			}
 		}
@@ -286,7 +268,7 @@ public class DisplayPortraitManager implements UserDataDeletable {
 	private void setImage(File file, String filename, String username, String prefix,
 			String masterImagePrefix, String largeImagePrefix, String smallImagePrefix,
 			int maxBigWidth, int maxSmallWidth) {
-		File directory = getPortraitDir(username);
+		File directory = getPortraitDir(username, true);
 		if(directory != null) {
 			for(File currentImage:directory.listFiles()) {
 				if(currentImage.equals(file)) {
@@ -318,8 +300,13 @@ public class DisplayPortraitManager implements UserDataDeletable {
 		File smallFile = new File(directory, smallImagePrefix + "." + extension);
 		ImageService imageHelper = CoreSpringFactory.getImpl(ImageService.class);
 		Size size = imageHelper.scaleImage(file, extension, bigFile, maxBigWidth, HEIGHT_BIG , false);
-		if(size != null){
-			size = imageHelper.scaleImage(file, extension, smallFile, maxSmallWidth, HEIGHT_SMALL, false);
+		if(size != null) {
+			imageHelper.scaleImage(file, extension, smallFile, maxSmallWidth, HEIGHT_SMALL, false);
+		}
+		
+		VFSLeaf vfsPortrait = getLargestVFSPortrait(username);
+		if(vfsPortrait instanceof MetaTagged) {
+			((MetaTagged)vfsPortrait).getMetaInfo().clearThumbnails();
 		}
 	}
 
@@ -332,7 +319,7 @@ public class DisplayPortraitManager implements UserDataDeletable {
 	}
 	
 	private void deleteImages(Identity identity, String prefix) {
-		File directory = getPortraitDir(identity.getName());
+		File directory = getPortraitDir(identity.getName(), false);
 		if(directory != null && directory.exists()) {
 			for(File file:directory.listFiles()) {
 				String filename = file.getName();
@@ -349,10 +336,11 @@ public class DisplayPortraitManager implements UserDataDeletable {
 	 * @return imageResource portrait
 	 */
 	public MediaResource getPortrait(File uploadDir, String portraitName){
-		MediaResource imageResource = null;
+		FileMediaResource imageResource = null;
 		File imgFile = new File(uploadDir, portraitName);
 		if (imgFile.exists()){
-			imageResource = new FileMediaResource(imgFile);	
+			imageResource = new FileMediaResource(imgFile);
+			imageResource.setCacheControlDuration(ServletUtil.CACHE_ONE_DAY);
 		}
 		return imageResource;
 	}
@@ -362,11 +350,12 @@ public class DisplayPortraitManager implements UserDataDeletable {
 	 * @param identity
 	 * @return
 	 */
-	public File getPortraitDir(String identityName){
-		String portraitPath = FolderConfig.getCanonicalRoot() + 
-				FolderConfig.getUserHomePage(identityName) + "/portrait"; 
-		File portraitDir = new File(portraitPath);
-		portraitDir.mkdirs();
+	public File getPortraitDir(String identityName, boolean create) {
+		String portraitPath = FolderConfig.getCanonicalRoot() + FolderConfig.getUserHomePage(identityName); 
+		File portraitDir = new File(portraitPath, "portrait");
+		if(create) {
+			portraitDir.mkdirs();
+		}
 		return portraitDir;
 	}
 	
@@ -377,18 +366,36 @@ public class DisplayPortraitManager implements UserDataDeletable {
 		}
 		return folder;
 	}
-	
-	/**
-	 * Delete home-page config-file of a certain user.
-	 * @see org.olat.user.UserDataDeletable#deleteUserData(org.olat.core.id.Identity)
-	 */
+
 	@Override
-	public void deleteUserData(Identity identity, String newDeletedUserName, File archivePath) {
-		String userHomePage = FolderConfig.getCanonicalRoot() + FolderConfig.getUserHomePage(identity.getName()); 
-		File portraitDir = new File(userHomePage, "portrait");
+	public int deleteUserDataPriority() {
+		// must have higher priority than HomePageConfigManager
+		return 650;
+	}
+		
+	@Override
+	public void deleteUserData(Identity identity, String newDeletedUserName) {
+		File portraitDir = getPortraitDir(identity.getName(), false);
 		if(portraitDir.exists()) {
 			FileUtils.deleteDirsAndFiles(portraitDir, true, true);
 		}
 		log.debug("Homepage-config file deleted for identity=" + identity);
+	}
+	@Override
+	public String getExporterID() {
+		return "display.portrait";
+	}
+	
+	@Override
+	public void export(Identity identity, ManifestBuilder manifest, File archiveDirectory, Locale locale) {
+		File portraitDir = getPortraitDir(identity.getName(), false);
+		if(portraitDir.exists()) {
+			File archivePortrait = new File(archiveDirectory, "portrait");
+			File[] portraits = portraitDir.listFiles(new SystemFilenameFilter(true, false));
+			for(File portrait:portraits) {
+				manifest.appendFile("portrait/" + portrait.getName());
+				FileUtils.copyFileToDir(portrait, archivePortrait, false, null, "Archive portrait");
+			}
+		}
 	}
 }

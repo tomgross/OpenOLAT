@@ -60,9 +60,9 @@ public class LoginPage {
 	@Drone
 	private WebDriver browser;
 	
-	public static LoginPage getLoginPage(WebDriver browser, URL deployemntUrl) {
+	public static LoginPage getLoginPage(WebDriver browser, URL deploymentUrl) {
 		LoginPage page = new LoginPage(browser);
-		browser.navigate().to(deployemntUrl);
+		browser.navigate().to(deploymentUrl);
 		return page;
 	}
 	
@@ -136,8 +136,7 @@ public class LoginPage {
 	/**
 	 * Login and accept the disclaimer if there is one.
 	 * 
-	 * @param username
-	 * @param password
+	 * @param user
 	 */
 	public LoginPage loginAs(UserVO user) {
 		return loginAs(user.getLogin(), user.getPassword());
@@ -199,7 +198,7 @@ public class LoginPage {
 		OOGraphene.waitBusy(browser);
 		
 		By errorMessageby = By.cssSelector("div.modal-body.alert.alert-danger");
-		OOGraphene.waitElement(errorMessageby, 2, browser);
+		OOGraphene.waitElement(errorMessageby, browser);
 		return this;
 	}
 	
@@ -234,6 +233,9 @@ public class LoginPage {
 		By okBy = By.cssSelector("button.btn.btn-primary");
 		browser.findElement(okBy).click();
 		OOGraphene.waitBusy(browser);
+
+		By reservationBy = By.xpath("//div[contains(@class,'o_reservation')]");
+		OOGraphene.waitElementDisappears(reservationBy, 5, browser);
 		return this;
 	}
 }

@@ -24,6 +24,9 @@ import java.util.List;
 
 import org.olat.core.gui.control.Event;
 import org.olat.ims.qti21.AssessmentTestSession;
+import org.olat.modules.assessment.model.AssessmentEntryStatus;
+
+import uk.ac.ed.ph.jqtiplus.node.test.AssessmentTest;
 
 /**
  * 
@@ -37,14 +40,26 @@ public class CompleteAssessmentTestSessionEvent extends Event {
 
 	public static final String COMPLETE_EVENT = "complete-assessments";
 	
+	private final AssessmentEntryStatus status;
+	private final AssessmentTest assessmentTest;
 	private final List<AssessmentTestSession> testSessions;
 	
-	public CompleteAssessmentTestSessionEvent(List<AssessmentTestSession> testSessions) {
+	public CompleteAssessmentTestSessionEvent(List<AssessmentTestSession> testSessions, AssessmentTest assessmentTest, AssessmentEntryStatus status) {
 		super(COMPLETE_EVENT);
+		this.status = status;
 		this.testSessions = testSessions;
+		this.assessmentTest = assessmentTest;
+	}
+	
+	public AssessmentEntryStatus getStatus() {
+		return status;
 	}
 
 	public List<AssessmentTestSession> getTestSessions() {
 		return testSessions;
+	}
+
+	public AssessmentTest getAssessmentTest() {
+		return assessmentTest;
 	}
 }

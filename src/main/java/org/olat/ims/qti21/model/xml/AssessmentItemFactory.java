@@ -46,19 +46,25 @@ import uk.ac.ed.ph.jqtiplus.node.content.ItemBody;
 import uk.ac.ed.ph.jqtiplus.node.content.basic.TextRun;
 import uk.ac.ed.ph.jqtiplus.node.content.xhtml.object.Object;
 import uk.ac.ed.ph.jqtiplus.node.content.xhtml.text.P;
+import uk.ac.ed.ph.jqtiplus.node.expression.Expression;
 import uk.ac.ed.ph.jqtiplus.node.expression.general.BaseValue;
 import uk.ac.ed.ph.jqtiplus.node.expression.general.Correct;
+import uk.ac.ed.ph.jqtiplus.node.expression.general.MapResponse;
 import uk.ac.ed.ph.jqtiplus.node.expression.general.Variable;
 import uk.ac.ed.ph.jqtiplus.node.expression.operator.And;
+import uk.ac.ed.ph.jqtiplus.node.expression.operator.Equal;
 import uk.ac.ed.ph.jqtiplus.node.expression.operator.Gt;
 import uk.ac.ed.ph.jqtiplus.node.expression.operator.Gte;
 import uk.ac.ed.ph.jqtiplus.node.expression.operator.IsNull;
 import uk.ac.ed.ph.jqtiplus.node.expression.operator.Lt;
+import uk.ac.ed.ph.jqtiplus.node.expression.operator.Lte;
 import uk.ac.ed.ph.jqtiplus.node.expression.operator.Match;
+import uk.ac.ed.ph.jqtiplus.node.expression.operator.Member;
 import uk.ac.ed.ph.jqtiplus.node.expression.operator.Multiple;
 import uk.ac.ed.ph.jqtiplus.node.expression.operator.Not;
 import uk.ac.ed.ph.jqtiplus.node.expression.operator.Shape;
 import uk.ac.ed.ph.jqtiplus.node.expression.operator.Sum;
+import uk.ac.ed.ph.jqtiplus.node.expression.operator.ToleranceMode;
 import uk.ac.ed.ph.jqtiplus.node.item.AssessmentItem;
 import uk.ac.ed.ph.jqtiplus.node.item.CorrectResponse;
 import uk.ac.ed.ph.jqtiplus.node.item.ModalFeedback;
@@ -79,6 +85,7 @@ import uk.ac.ed.ph.jqtiplus.node.item.response.declaration.MapEntry;
 import uk.ac.ed.ph.jqtiplus.node.item.response.declaration.Mapping;
 import uk.ac.ed.ph.jqtiplus.node.item.response.declaration.ResponseDeclaration;
 import uk.ac.ed.ph.jqtiplus.node.item.response.processing.ResponseCondition;
+import uk.ac.ed.ph.jqtiplus.node.item.response.processing.ResponseConditionChild;
 import uk.ac.ed.ph.jqtiplus.node.item.response.processing.ResponseElse;
 import uk.ac.ed.ph.jqtiplus.node.item.response.processing.ResponseElseIf;
 import uk.ac.ed.ph.jqtiplus.node.item.response.processing.ResponseIf;
@@ -92,12 +99,15 @@ import uk.ac.ed.ph.jqtiplus.node.test.View;
 import uk.ac.ed.ph.jqtiplus.node.test.VisibilityMode;
 import uk.ac.ed.ph.jqtiplus.types.ComplexReferenceIdentifier;
 import uk.ac.ed.ph.jqtiplus.types.Identifier;
+import uk.ac.ed.ph.jqtiplus.utils.QueryUtils;
 import uk.ac.ed.ph.jqtiplus.value.BaseType;
 import uk.ac.ed.ph.jqtiplus.value.Cardinality;
 import uk.ac.ed.ph.jqtiplus.value.DirectedPairValue;
 import uk.ac.ed.ph.jqtiplus.value.FloatValue;
 import uk.ac.ed.ph.jqtiplus.value.IdentifierValue;
+import uk.ac.ed.ph.jqtiplus.value.IntegerValue;
 import uk.ac.ed.ph.jqtiplus.value.Orientation;
+import uk.ac.ed.ph.jqtiplus.value.SingleValue;
 import uk.ac.ed.ph.jqtiplus.value.StringValue;
 
 /**
@@ -184,6 +194,90 @@ public class AssessmentItemFactory {
 		outcomeDeclarations.getOutcomeDeclarations().add(feedbackOutcomeDeclaration);
 	}
 	
+	/*
+	<setOutcomeValue identifier="FEEDBACKBASIC">
+		<baseValue baseType="identifier">
+			correct
+		</baseValue>
+	</setOutcomeValue>
+	*/
+	public static void appendSetOutcomeFeedbackCorrect(ResponseConditionChild responseCondition) {
+		SetOutcomeValue correctOutcomeValue = new SetOutcomeValue(responseCondition);
+		correctOutcomeValue.setIdentifier(QTI21Constants.FEEDBACKBASIC_IDENTIFIER);
+		responseCondition.getResponseRules().add(correctOutcomeValue);
+		
+		BaseValue correctValue = new BaseValue(correctOutcomeValue);
+		correctValue.setBaseTypeAttrValue(BaseType.IDENTIFIER);
+		correctValue.setSingleValue(QTI21Constants.CORRECT_IDENTIFIER_VALUE);
+		correctOutcomeValue.setExpression(correctValue);
+	}
+	
+	/*
+	<setOutcomeValue identifier="FEEDBACKBASIC">
+		<baseValue baseType="identifier">incorrect</baseValue>
+	</setOutcomeValue>
+	*/
+	public static void appendSetOutcomeFeedbackIncorrect(ResponseConditionChild responseCondition) {
+		SetOutcomeValue incorrectOutcomeValue = new SetOutcomeValue(responseCondition);
+		incorrectOutcomeValue.setIdentifier(QTI21Constants.FEEDBACKBASIC_IDENTIFIER);
+		responseCondition.getResponseRules().add(incorrectOutcomeValue);
+		
+		BaseValue incorrectValue = new BaseValue(incorrectOutcomeValue);
+		incorrectValue.setBaseTypeAttrValue(BaseType.IDENTIFIER);
+		incorrectValue.setSingleValue(QTI21Constants.INCORRECT_IDENTIFIER_VALUE);
+		incorrectOutcomeValue.setExpression(incorrectValue);
+	}
+	
+	/*
+    <setOutcomeValue identifier="SCORE">
+      <sum>
+        <variable identifier="SCORE"/>
+        <mapResponse identifier="RESPONSE_1"/>
+      </sum>
+    </setOutcomeValue>
+	*/
+	public static void appendSetOutcomeScoreMapResponse(ResponseConditionChild responseCondition, Identifier responseIdentifier) {
+		SetOutcomeValue scoreOutcome = new SetOutcomeValue(responseCondition);
+		scoreOutcome.setIdentifier(QTI21Constants.SCORE_IDENTIFIER);
+		responseCondition.getResponseRules().add(scoreOutcome);
+		
+		Sum sum = new Sum(scoreOutcome);
+		scoreOutcome.getExpressions().add(sum);
+		
+		Variable scoreVar = new Variable(sum);
+		scoreVar.setIdentifier(QTI21Constants.SCORE_CLX_IDENTIFIER);
+		sum.getExpressions().add(scoreVar);
+		
+		MapResponse mapResponse = new MapResponse(sum);
+		mapResponse.setIdentifier(responseIdentifier);
+		sum.getExpressions().add(mapResponse);
+	}
+	
+	/*
+	<setOutcomeValue identifier="SCORE">
+	    <sum>
+	      <variable identifier="SCORE"/>
+	      <variable identifier="MAXSCORE"/>
+	    </sum>
+	  </setOutcomeValue>
+	*/
+	public static void appendSetOutcomeScoreMaxScore(ResponseConditionChild responseCondition) {
+		SetOutcomeValue scoreOutcomeValue = new SetOutcomeValue(responseCondition);
+		scoreOutcomeValue.setIdentifier(QTI21Constants.SCORE_IDENTIFIER);
+		responseCondition.getResponseRules().add(scoreOutcomeValue);
+		
+		Sum sum = new Sum(scoreOutcomeValue);
+		scoreOutcomeValue.getExpressions().add(sum);
+		
+		Variable scoreVar = new Variable(sum);
+		scoreVar.setIdentifier(QTI21Constants.SCORE_CLX_IDENTIFIER);
+		sum.getExpressions().add(scoreVar);
+		
+		Variable maxScoreVar = new Variable(sum);
+		maxScoreVar.setIdentifier(QTI21Constants.MAXSCORE_CLX_IDENTIFIER);
+		sum.getExpressions().add(maxScoreVar);
+	}
+	
 	public static HotspotInteraction appendHotspotInteraction(ItemBody itemBody, Identifier responseDeclarationId, Identifier correctResponseId) {
 		HotspotInteraction hotspotInteraction = new HotspotInteraction(itemBody);
 		hotspotInteraction.setResponseIdentifier(responseDeclarationId);
@@ -231,10 +325,13 @@ public class AssessmentItemFactory {
 		return responseDeclaration;
 	}
 	
-	public static ResponseDeclaration createHotspotCorrectResponseDeclaration(AssessmentItem assessmentItem, Identifier declarationId, List<Identifier> correctResponseIds) {
+	public static ResponseDeclaration createHotspotCorrectResponseDeclaration(AssessmentItem assessmentItem, Identifier declarationId,
+			List<Identifier> correctResponseIds, Cardinality cardinality) {
 		ResponseDeclaration responseDeclaration = new ResponseDeclaration(assessmentItem);
 		responseDeclaration.setIdentifier(declarationId);
-		if(correctResponseIds == null || correctResponseIds.size() == 0 || correctResponseIds.size() > 1) {
+		if(cardinality != null && (cardinality == Cardinality.SINGLE || cardinality == Cardinality.MULTIPLE)) {
+			responseDeclaration.setCardinality(cardinality);
+		} else if(correctResponseIds == null || correctResponseIds.size() == 0 || correctResponseIds.size() > 1) {
 			responseDeclaration.setCardinality(Cardinality.MULTIPLE);
 		} else {
 			responseDeclaration.setCardinality(Cardinality.SINGLE);
@@ -494,13 +591,13 @@ public class AssessmentItemFactory {
 		SimpleMatchSet sourceMatchSet = new SimpleMatchSet(matchInteraction);
 		matchInteraction.getSimpleMatchSets().add(sourceMatchSet);
 		
-		String[] classic = new String[]{ "A", "B" };
-		for(int i=0; i<2; i++) {
+		String[] sources = new String[]{ "A", "B" };
+		for(int i=0; i<sources.length; i++) {
 			SimpleAssociableChoice sourceChoice = new SimpleAssociableChoice(sourceMatchSet);
 			sourceChoice.setMatchMax(0);
 			sourceChoice.setMatchMin(0);
-			sourceChoice.setIdentifier(IdentifierGenerator.newNumberAsIdentifier(classic[i]));
-			P question = getParagraph(sourceChoice, classic[i]);
+			sourceChoice.setIdentifier(IdentifierGenerator.newNumberAsIdentifier(sources[i]));
+			P question = getParagraph(sourceChoice, sources[i]);
 			sourceChoice.getFlowStatics().add(question);
 			sourceMatchSet.getSimpleAssociableChoices().add(sourceChoice);
 		}
@@ -508,18 +605,56 @@ public class AssessmentItemFactory {
 		SimpleMatchSet targetMatchSet = new SimpleMatchSet(matchInteraction);
 		matchInteraction.getSimpleMatchSets().add(targetMatchSet);
 		
-		String[] target = new String[]{ "M", "N" };
-		for(int i=0; i<2; i++) {
+		String[] targets = new String[]{ "M", "N" };
+		for(int i=0; i<targets.length; i++) {
 			SimpleAssociableChoice targetChoice = new SimpleAssociableChoice(sourceMatchSet);
 			targetChoice.setMatchMax(0);
 			targetChoice.setMatchMin(0);
-			targetChoice.setIdentifier(IdentifierGenerator.newNumberAsIdentifier(target[i]));
-			P question = getParagraph(targetChoice, target[i]);
+			targetChoice.setIdentifier(IdentifierGenerator.newNumberAsIdentifier(targets[i]));
+			P question = getParagraph(targetChoice, targets[i]);
 			targetChoice.getFlowStatics().add(question);
 			targetMatchSet.getSimpleAssociableChoices().add(targetChoice);
 		}
 		
 		return matchInteraction;
+	}
+	
+	public static MatchInteraction appendMatchInteractionTrueFalse(ItemBody itemBody,
+			String unanswered, String right, String wrong, Identifier responseDeclarationId) {
+		MatchInteraction matchInteraction = new MatchInteraction(itemBody);
+		matchInteraction.setResponseIdentifier(responseDeclarationId);
+		matchInteraction.setMaxAssociations(4);
+		matchInteraction.setShuffle(false);
+		itemBody.getBlocks().add(matchInteraction);
+		
+		PromptGroup prompts = new PromptGroup(matchInteraction);
+		matchInteraction.getNodeGroups().add(prompts);
+		
+		SimpleMatchSet sourceMatchSet = new SimpleMatchSet(matchInteraction);
+		matchInteraction.getSimpleMatchSets().add(sourceMatchSet);
+		
+		String[] sources = new String[]{ "A", "B" };
+		for(int i=0; i<sources.length; i++) {
+			appendSimpleAssociableChoice(sourceMatchSet, sources[i], sources[i], 1, 1);
+		}
+		
+		SimpleMatchSet targetMatchSet = new SimpleMatchSet(matchInteraction);
+		matchInteraction.getSimpleMatchSets().add(targetMatchSet);
+		appendSimpleAssociableChoice(targetMatchSet, "unanswered", unanswered, 0, 0);
+		appendSimpleAssociableChoice(targetMatchSet, "right", right, 0, 0);
+		appendSimpleAssociableChoice(targetMatchSet, "wrong", wrong, 0, 0);
+		
+		return matchInteraction;
+	}
+	
+	public static void appendSimpleAssociableChoice(SimpleMatchSet matchSet, String identifierPrefix, String value, int matchMax, int matchMin) {
+		SimpleAssociableChoice choice = new SimpleAssociableChoice(matchSet);
+		choice.setMatchMax(matchMax);
+		choice.setMatchMin(matchMin);
+		choice.setIdentifier(IdentifierGenerator.newNumberAsIdentifier(identifierPrefix));
+		P question = getParagraph(choice, value);
+		choice.getFlowStatics().add(question);
+		matchSet.getSimpleAssociableChoices().add(choice);
 	}
 	
 	public static SimpleAssociableChoice createSimpleAssociableChoice(String text, SimpleMatchSet matchSet) {
@@ -532,22 +667,29 @@ public class AssessmentItemFactory {
 		return targetChoice;
 	}
 	
+	/**
+	 * Add the response declaration with correct answers (but without score mapping)
+	 * 
+	 * @param assessmentItem
+	 * @param declarationId
+	 * @param associations
+	 * @return
+	 */
 	public static ResponseDeclaration createMatchResponseDeclaration(AssessmentItem assessmentItem, Identifier declarationId,
-			Map<Identifier, List<Identifier>> associations, double maxScore) {
+			Map<Identifier, List<Identifier>> associations) {
 		ResponseDeclaration responseDeclaration = new ResponseDeclaration(assessmentItem);
 		responseDeclaration.setIdentifier(declarationId);
 		responseDeclaration.setCardinality(Cardinality.MULTIPLE);
 		responseDeclaration.setBaseType(BaseType.DIRECTED_PAIR);
-		return appendAssociationMatchResponseDeclaration(responseDeclaration, associations, maxScore);
+		return appendAssociationMatchResponseDeclaration(responseDeclaration, associations);
 	}
 	
 	public static ResponseDeclaration appendAssociationMatchResponseDeclaration(ResponseDeclaration responseDeclaration,
-			Map<Identifier, List<Identifier>> associations, double maxScore) {
+			Map<Identifier, List<Identifier>> associations) {
 		responseDeclaration.setCardinality(Cardinality.MULTIPLE);
 		responseDeclaration.setBaseType(BaseType.DIRECTED_PAIR);
 
 		//correct response
-		int numOfassociations = 0;
 		CorrectResponse correctResponse = new CorrectResponse(responseDeclaration);
 		responseDeclaration.setCorrectResponse(correctResponse);
 		for(Map.Entry<Identifier,List<Identifier>> association:associations.entrySet()) {
@@ -558,27 +700,6 @@ public class AssessmentItemFactory {
 				DirectedPairValue dpValue = new DirectedPairValue(sourceChoiceId, targetChoiceId);
 				FieldValue fValue = new FieldValue(correctResponse, dpValue);
 				correctResponse.getFieldValues().add(fValue);
-				numOfassociations++;
-			}
-		}
-		
-		double mappedValue = maxScore;
-		if(numOfassociations > 0) {
-			mappedValue = maxScore / numOfassociations;
-		}
-		
-		// mapping
-		Mapping mapping = new Mapping(responseDeclaration);
-		mapping.setDefaultValue(-mappedValue);
-		responseDeclaration.setMapping(mapping);
-		for(Map.Entry<Identifier,List<Identifier>> association:associations.entrySet()) {
-			Identifier sourceChoiceId = association.getKey();
-			List<Identifier> targetChoiceIds = association.getValue();
-			for(Identifier targetChoiceId:targetChoiceIds) {
-				MapEntry mapEntry = new MapEntry(mapping);
-				mapEntry.setMapKey(new DirectedPairValue(sourceChoiceId, targetChoiceId));
-				mapEntry.setMappedValue(mappedValue);
-				mapping.getMapEntries().add(mapEntry);
 			}
 		}
 		
@@ -1045,6 +1166,247 @@ public class AssessmentItemFactory {
 		return modalFeedback;
 	}
 	
+	/**
+	 * the additional feedback have only responseIf
+	 * 
+	 * 
+	 * @param item
+	 * @param feedback
+	 * @return
+	 */
+	public static boolean matchAdditionalFeedback(AssessmentItem item, ModalFeedback feedback) {
+		List<ResponseRule> responseRules = item.getResponseProcessing().getResponseRules();
+		for(ResponseRule responseRule:responseRules) {
+			if(responseRule instanceof ResponseCondition) {
+				ResponseCondition responseCondition = (ResponseCondition)responseRule;
+				if(responseCondition.getResponseIf() == null || responseCondition.getResponseElse() != null
+						|| (responseCondition.getResponseElseIfs() != null && responseCondition.getResponseElseIfs().size() > 0)) {
+					continue;
+				}
+				
+				ResponseIf responseIf = responseCondition.getResponseIf();
+				List<ResponseRule> ifResponseRules = responseIf.getResponseRules();
+				if(ifResponseRules == null || ifResponseRules.size() != 1 || !(ifResponseRules.get(0) instanceof SetOutcomeValue)) {
+					continue;
+				}
+				
+				SetOutcomeValue setOutcomeValue = (SetOutcomeValue)responseIf.getResponseRules().get(0);
+				if(!findBaseValueInExpression(setOutcomeValue.getExpression(), feedback.getIdentifier())) {
+					continue;
+				}
+				
+				List<Expression> expressions = responseIf.getExpressions();
+				if(expressions == null || expressions.size() != 1 || !(expressions.get(0) instanceof And)) {
+					continue;
+				}
+				
+				List<Variable> variables = QueryUtils.search(Variable.class, expressions.get(0));
+				if(variables != null && variables.size() == 1) {
+					Variable bValue = variables.get(0);
+					ComplexReferenceIdentifier identifier = bValue.getIdentifier();
+					if(identifier.equals(QTI21Constants.SCORE_CLX_IDENTIFIER)
+							|| identifier.equals(QTI21Constants.NUM_ATTEMPTS_CLX_IDENTIFIER)) {
+						return true;
+					}
+					if(identifier.equals(QTI21Constants.CORRECT_CLX_IDENTIFIER)
+							|| identifier.equals(QTI21Constants.INCORRECT_CLX_IDENTIFIER)
+							|| identifier.equals(QTI21Constants.EMPTY_CLX_IDENTIFIER)) {
+						return false;
+					}
+					String identifierToString = identifier.toString();
+					if(identifierToString.contains("RESPONSE_")) {
+						return true;
+					}
+				}	
+			}
+		}
+
+		return false;
+	}
+	
+	public static ResponseCondition createModalFeedbackRuleWithConditions(ResponseProcessing responseProcessing,
+			Identifier feedbackIdentifier, Identifier responseIdentifier, Cardinality cardinality, List<ModalFeedbackCondition> conditions) {
+		ResponseCondition rule = new ResponseCondition(responseProcessing);
+		
+		/*
+		<responseCondition>
+			<responseIf>
+				<and>
+					<equal toleranceMode="exact">
+						<variable identifier="SCORE" />
+						<baseValue baseType="float">
+							4
+						</baseValue>
+					</equal>
+				</and>
+				<setOutcomeValue identifier="FEEDBACKMODAL">
+					<multiple>
+						<variable identifier="FEEDBACKMODAL" />
+						<baseValue baseType="identifier">
+							Feedback2074019497
+						</baseValue>
+					</multiple>
+				</setOutcomeValue>
+			</responseIf>
+		</responseCondition>
+		*/
+		
+		ResponseIf responseIf = new ResponseIf(rule);
+		rule.setResponseIf(responseIf);
+		
+		{//rule
+			And and = new And(responseIf);
+			responseIf.getExpressions().add(and);
+			for(ModalFeedbackCondition condition:conditions) {
+				appendModalFeedbackCondition(condition, responseIdentifier, cardinality, and);
+			}
+		}
+
+		{//outcome
+			SetOutcomeValue feedbackVar = new SetOutcomeValue(responseIf);
+			feedbackVar.setIdentifier(QTI21Constants.FEEDBACKMODAL_IDENTIFIER);
+			
+			Multiple multiple = new Multiple(feedbackVar);
+			feedbackVar.setExpression(multiple);
+			
+			Variable variable = new Variable(multiple);
+			variable.setIdentifier(ComplexReferenceIdentifier.parseString(QTI21Constants.FEEDBACKMODAL));
+			multiple.getExpressions().add(variable);
+			
+			BaseValue feedbackVal = new BaseValue(feedbackVar);
+			feedbackVal.setBaseTypeAttrValue(BaseType.IDENTIFIER);
+			feedbackVal.setSingleValue(new IdentifierValue(feedbackIdentifier));
+			multiple.getExpressions().add(feedbackVal);
+			
+			responseIf.getResponseRules().add(feedbackVar);
+		}
+		
+		return rule;
+	}
+	
+	private static void appendModalFeedbackCondition(ModalFeedbackCondition condition, Identifier responseIdentifier, Cardinality cardinality, And and) {
+		ModalFeedbackCondition.Variable var = condition.getVariable();
+		ModalFeedbackCondition.Operator operator = condition.getOperator();
+		String value = condition.getValue();
+		
+		if(var == ModalFeedbackCondition.Variable.response) {
+			if(cardinality == Cardinality.MULTIPLE) {
+				if(operator == ModalFeedbackCondition.Operator.equals) {
+					Member member = new Member(and);
+					and.getExpressions().add(member);
+					appendVariableBaseValue(var, value, responseIdentifier, member, true);
+				} else if(operator == ModalFeedbackCondition.Operator.notEquals) {
+					Not not = new Not(and);
+					and.getExpressions().add(not);
+					
+					Member member = new Member(not);
+					not.getExpressions().add(member);
+					appendVariableBaseValue(var, value, responseIdentifier, member, true);
+				}
+			} else {
+				if(operator == ModalFeedbackCondition.Operator.equals) {
+					Match match = new Match(and);
+					and.getExpressions().add(match);
+					appendVariableBaseValue(var, value, responseIdentifier, match, false);
+				} else if(operator == ModalFeedbackCondition.Operator.notEquals) {
+					Not not = new Not(and);
+					and.getExpressions().add(not);
+					
+					Match match = new Match(not);
+					not.getExpressions().add(match);
+					appendVariableBaseValue(var, value, responseIdentifier, match, false);
+				}
+			}
+		} else {
+			switch(operator) {
+				case bigger: {
+					Gt gt = new Gt(and);
+					and.getExpressions().add(gt);
+					appendVariableBaseValue(var, value, responseIdentifier, gt, false);
+					break;
+				}
+				case biggerEquals: {
+					Gte gte = new Gte(and);
+					and.getExpressions().add(gte);
+					appendVariableBaseValue(var, value, responseIdentifier, gte, false);
+					break;
+				}
+				case equals: {
+					Equal equal = new Equal(and);
+					equal.setToleranceMode(ToleranceMode.EXACT);
+					and.getExpressions().add(equal);
+					appendVariableBaseValue(var, value, responseIdentifier, equal, false);
+					break;
+				}
+				case notEquals: {
+					Not not = new Not(and);
+					and.getExpressions().add(not);
+					Equal equal = new Equal(not);
+					equal.setToleranceMode(ToleranceMode.EXACT);
+					not.getExpressions().add(equal);
+					appendVariableBaseValue(var, value, responseIdentifier, equal, false);
+					break;
+				}
+				case smaller: {
+					Lt lt = new Lt(and);
+					and.getExpressions().add(lt);
+					appendVariableBaseValue(var, value, responseIdentifier, lt, false);
+					break;
+				}
+				case smallerEquals: {
+					Lte lte = new Lte(and);
+					and.getExpressions().add(lte);
+					appendVariableBaseValue(var, value, responseIdentifier, lte, false);
+					break;
+				}
+			}
+		}
+	}
+	
+	/*
+		<variable identifier="SCORE" />
+		<baseValue baseType="float">4</baseValue>
+	 */
+	/**
+	 * 
+	 * @param var
+	 * @param value
+	 * @param responseIdentifier
+	 * @param parentExpression
+	 * @param reverse if true, reverse the order, first baseValue and then variable
+	 */
+	private static void appendVariableBaseValue(ModalFeedbackCondition.Variable var, String value,
+			Identifier responseIdentifier, Expression parentExpression, boolean reverse) {
+
+		Variable variable = new Variable(parentExpression);
+		BaseValue bValue = new BaseValue(parentExpression);
+		if(reverse) {
+			parentExpression.getExpressions().add(bValue);
+			parentExpression.getExpressions().add(variable);
+		} else {
+			parentExpression.getExpressions().add(variable);
+			parentExpression.getExpressions().add(bValue);
+		}
+
+		switch(var) {
+			case score:
+				bValue.setBaseTypeAttrValue(BaseType.FLOAT);
+				bValue.setSingleValue(new FloatValue(Double.parseDouble(value)));
+				variable.setIdentifier(QTI21Constants.SCORE_CLX_IDENTIFIER);
+				break;
+			case attempts:
+				bValue.setBaseTypeAttrValue(BaseType.INTEGER);
+				bValue.setSingleValue(new IntegerValue(Integer.parseInt(value)));
+				variable.setIdentifier(QTI21Constants.NUM_ATTEMPTS_CLX_IDENTIFIER);
+				break;	
+			case response:
+				bValue.setBaseTypeAttrValue(BaseType.IDENTIFIER);
+				bValue.setSingleValue(new IdentifierValue(Identifier.parseString(value)));
+				variable.setIdentifier(ComplexReferenceIdentifier.parseString(responseIdentifier.toString()));
+				break;
+		}
+	}
+	
 	public static ResponseCondition createModalFeedbackBasicRule(ResponseProcessing responseProcessing,
 			Identifier feedbackIdentifier, String inCorrect, boolean hint) {
 		ResponseCondition rule = new ResponseCondition(responseProcessing);
@@ -1405,7 +1767,26 @@ public class AssessmentItemFactory {
 		return list;
 	}
 	
-
+	public static boolean findBaseValueInExpression(Expression expression, Identifier feedbackIdentifier) {
+		if(expression instanceof BaseValue) {
+			BaseValue bValue = (BaseValue)expression;
+			SingleValue sValue = bValue.getSingleValue();
+			if(sValue instanceof IdentifierValue) {
+				IdentifierValue iValue = (IdentifierValue)sValue;
+				if(feedbackIdentifier.equals(iValue.identifierValue())) {
+					return true;
+				}
+			}
+		} else {
+			List<Expression> childExpressions = expression.getExpressions();
+			for(Expression childExpression:childExpressions) {
+				if(findBaseValueInExpression(childExpression, feedbackIdentifier)) {
+					return true;
+				}
+			}
+		}
+		return false;
+	}
 	
 
 }

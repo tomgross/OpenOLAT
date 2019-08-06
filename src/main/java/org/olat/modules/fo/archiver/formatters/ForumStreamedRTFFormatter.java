@@ -39,6 +39,7 @@ import java.util.zip.ZipOutputStream;
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.IOUtils;
 import org.apache.commons.lang.StringEscapeUtils;
+import org.olat.core.CoreSpringFactory;
 import org.olat.core.id.Identity;
 import org.olat.core.id.UserConstants;
 import org.olat.core.logging.AssertException;
@@ -65,7 +66,6 @@ public class ForumStreamedRTFFormatter extends ForumFormatter {
 	private static final OLog log = Tracing.createLoggerFor(ForumStreamedRTFFormatter.class);
 
 	private ZipOutputStream exportStream;
-	private ForumManager fm = ForumManager.getInstance();
 	
 	final Pattern PATTERN_HTML_BOLD = Pattern.compile("<strong>(.*?)</strong>", Pattern.CASE_INSENSITIVE);
 	final Pattern PATTERN_HTML_ITALIC = Pattern.compile("<em>(.*?)</em>", Pattern.CASE_INSENSITIVE);
@@ -80,9 +80,10 @@ public class ForumStreamedRTFFormatter extends ForumFormatter {
 	final Pattern PATTERN_THREEPOINTS = Pattern.compile("&#8230;", Pattern.CASE_INSENSITIVE);
 	final String THREEPOINTS = "...";
 	
-	//TODO: (LD) translate this!
 	private String HIDDEN_STR = "VERBORGEN";
 	private final String path;
+	
+	private final ForumManager forumManager;
 		
 	/**
 	 * 
@@ -93,6 +94,9 @@ public class ForumStreamedRTFFormatter extends ForumFormatter {
 	public ForumStreamedRTFFormatter(ZipOutputStream exportStream, String path, boolean filePerThread, Locale locale) {
 		// init String Buffer in ForumFormatter
 		super(locale);
+		
+		forumManager = CoreSpringFactory.getImpl(ForumManager.class);
+		
 		// where to write
 		this.exportStream = exportStream;
 		this.filePerThread = filePerThread;
@@ -153,7 +157,7 @@ public class ForumStreamedRTFFormatter extends ForumFormatter {
 		}
 		sb.append(" \\par}");
 		// attachment(s)
-		VFSContainer msgContainer = fm.getMessageContainer(getForumKey(), mn.getKey());
+		VFSContainer msgContainer = forumManager.getMessageContainer(getForumKey(), mn.getKey());
 		List<VFSItem> attachments = msgContainer.getItems();
 		if (attachments != null && attachments.size() > 0){
 			sb.append("{\\pard \\f0\\fs15 Attachment(s): ");
@@ -185,7 +189,7 @@ public class ForumStreamedRTFFormatter extends ForumFormatter {
 				}
 			}
 		} catch (IOException e) {
-			e.printStackTrace();
+			log.error("", e);
 		}
 	}
 
@@ -193,6 +197,7 @@ public class ForumStreamedRTFFormatter extends ForumFormatter {
 	 * 
 	 * @see org.olat.modules.fo.archiver.formatters.ForumFormatter#openThread()
 	 */
+	@Override
 	public void openThread() {
 		super.openThread();
 		if(filePerThread){
@@ -207,6 +212,7 @@ public class ForumStreamedRTFFormatter extends ForumFormatter {
 	 * 
 	 * @see org.olat.modules.fo.archiver.formatters.ForumFormatter#getThreadResult()
 	 */
+	@Override
 	public StringBuilder closeThread() {
 		String footerThread = "{\\pard \\brdrb \\brdrs \\brdrw20 \\brsp20 \\par}{\\pard\\par}";
 		sb.append(footerThread);
@@ -266,7 +272,7 @@ public class ForumStreamedRTFFormatter extends ForumFormatter {
 			}
 			String encoded = out.toString();
 			exportStream.putNextEntry(new ZipEntry(path + "/" + fileName));
-			IOUtils.write(encoded, exportStream);
+			IOUtils.write(encoded, exportStream, "UTF-8");
 			exportStream.closeEntry();
 		} catch (UnsupportedEncodingException ueEx) {
 			throw new AssertException("could not encode stream from forum export file: " + ueEx);
@@ -397,7 +403,7 @@ public class ForumStreamedRTFFormatter extends ForumFormatter {
 	 * @return
 	 */
 	private List<String> addImagesToVFSContainer(MessageNode messageNode) {
-		List<String> fileNameList = new ArrayList<String>();
+		List<String> fileNameList = new ArrayList<>();
 		String iconPath = null;
 		if(messageNode.isClosed() && messageNode.isSticky()) {
 			iconPath = getImagePath("fo_sticky_closed");
@@ -418,7 +424,6 @@ public class ForumStreamedRTFFormatter extends ForumFormatter {
 	}
 	
 	/**
-	 * TODO: LD: to clarify whether there it a better way to get the image path?
 	 * Gets the image path.
 	 * @param val
 	 * @return the path of the static icon image.

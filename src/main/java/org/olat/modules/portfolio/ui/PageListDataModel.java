@@ -47,18 +47,26 @@ public class PageListDataModel extends DefaultFlexiTableDataModel<PortfolioEleme
 	
 	private static final OLog log = Tracing.createLoggerFor(PageListDataModel.class);
 	
+	private boolean flat;
 	private final Locale locale;
 	private List<PortfolioElementRow> backup;
-	
-	
+
 	public PageListDataModel(FlexiTableColumnModel columnModel, Locale locale) {
 		super(columnModel);
 		this.locale = locale;
 	}
 	
+	public boolean isFlat() {
+		return flat;
+	}
+
+	public void setFlat(boolean flat) {
+		this.flat = flat;
+	}
+
 	@Override
 	public void sort(SortKey orderBy) {
-		PageListSortableDataModelDelegate sorter = new PageListSortableDataModelDelegate(orderBy, this, locale);
+		PageListSortableDataModelDelegate sorter = new PageListSortableDataModelDelegate(orderBy, this, flat, locale);
 		List<PortfolioElementRow> rows;
 		try {
 			rows = sorter.sort();
@@ -88,25 +96,11 @@ public class PageListDataModel extends DefaultFlexiTableDataModel<PortfolioEleme
 			} else {
 				row.setNewEntry(false);
 			}
-			if(row.isAssignmentToInstantiate()) {
-				if(previousRow != null && previousRow.isSection()) {
-					previousRow.setSectionWithAssignmentToInstantiate(true);
-				}
-			}
-			
-			if(previousRow != null && previousRow.isAssignmentToInstantiate() && !row.isAssignmentToInstantiate()) {
-				previousRow.setLastAssignmentToInstantiate(true);
-			}
-			
 			previousRow = row;
 		}
 		if(lastNewEntry && previousRow != null) {
 			previousRow.setNewEntry(true);
 		}
-		if(previousRow != null && previousRow.isAssignmentToInstantiate()) {
-			previousRow.setLastAssignmentToInstantiate(true);
-		}
-		
 		super.setObjects(rows);
 	}
 	
@@ -179,6 +173,7 @@ public class PageListDataModel extends DefaultFlexiTableDataModel<PortfolioEleme
 				return creationDate;
 			}
 			case publicationDate: return page.getLastPublicationDate();
+			case pageStatus:
 			case status: {
 				if(page.isPage()) {
 					return page.getPageStatus();
@@ -203,9 +198,11 @@ public class PageListDataModel extends DefaultFlexiTableDataModel<PortfolioEleme
 				return Boolean.FALSE;
 			}
 			case comment: return page.getCommentFormLink();
+			case viewerStatus: return page;
 		}
 		return null;
 	}
+
 	
 	@Override
 	public DefaultFlexiTableDataModel<PortfolioElementRow> createCopyWithEmptyList() {
@@ -222,7 +219,9 @@ public class PageListDataModel extends DefaultFlexiTableDataModel<PortfolioEleme
 		section("table.header.section", true),
 		up("table.header.up", false),
 		down("table.header.down", false),
-		comment("comment.title", true);
+		comment("comment.title", true),
+		pageStatus("table.header.status.user", true),
+		viewerStatus("table.header.status.viewer", true);
 		
 		private final String i18nKey;
 		private final boolean sortable;

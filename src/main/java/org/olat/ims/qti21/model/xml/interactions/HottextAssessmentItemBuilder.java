@@ -27,6 +27,7 @@ import static org.olat.ims.qti21.model.xml.AssessmentItemFactory.createHottextCo
 import static org.olat.ims.qti21.model.xml.AssessmentItemFactory.createResponseProcessing;
 import static org.olat.ims.qti21.model.xml.QtiNodesExtractor.extractIdentifiersFromCorrectResponse;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Iterator;
@@ -34,13 +35,16 @@ import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-import javax.xml.transform.stream.StreamResult;
-
 import org.olat.core.gui.render.StringOutput;
+import org.olat.core.logging.OLog;
+import org.olat.core.logging.Tracing;
+import org.olat.core.util.filter.FilterFactory;
 import org.olat.ims.qti21.QTI21Constants;
 import org.olat.ims.qti21.model.IdentifierGenerator;
 import org.olat.ims.qti21.model.QTI21QuestionType;
+import org.olat.ims.qti21.model.xml.AssessmentHtmlBuilder;
 import org.olat.ims.qti21.model.xml.AssessmentItemFactory;
+import org.olat.ims.qti21.model.xml.ResponseIdentifierForFeedback;
 import org.olat.ims.qti21.model.xml.interactions.SimpleChoiceAssessmentItemBuilder.ScoreEvaluation;
 
 import uk.ac.ed.ph.jqtiplus.node.content.ItemBody;
@@ -85,7 +89,9 @@ import uk.ac.ed.ph.jqtiplus.value.SingleValue;
  * @author srosse, stephane.rosse@frentix.com, http://www.frentix.com
  *
  */
-public class HottextAssessmentItemBuilder extends ChoiceAssessmentItemBuilder {
+public class HottextAssessmentItemBuilder extends ChoiceAssessmentItemBuilder implements ResponseIdentifierForFeedback {
+	
+	private static final OLog log = Tracing.createLoggerFor(HottextAssessmentItemBuilder.class);
 	
 	private String question;
 	private Identifier responseIdentifier;
@@ -138,19 +144,22 @@ public class HottextAssessmentItemBuilder extends ChoiceAssessmentItemBuilder {
 	}
 	
 	private void extractHottextInteraction() {
-		StringOutput sb = new StringOutput();
-		List<Block> blocks = assessmentItem.getItemBody().getBlocks();
-		for(Block block:blocks) {
-			if(block instanceof HottextInteraction) {
-				hottextInteraction = (HottextInteraction)block;
-				for(BlockStatic innerBlock: hottextInteraction.getBlockStatics()) {
-					qtiSerializer.serializeJqtiObject(innerBlock, new StreamResult(sb));
+		try(StringOutput sb = new StringOutput()) {
+			List<Block> blocks = assessmentItem.getItemBody().getBlocks();
+			for(Block block:blocks) {
+				if(block instanceof HottextInteraction) {
+					hottextInteraction = (HottextInteraction)block;
+					for(BlockStatic innerBlock: hottextInteraction.getBlockStatics()) {
+						serializeJqtiObject(innerBlock, sb);
+					}
+					responseIdentifier = hottextInteraction.getResponseIdentifier();
+					break;
 				}
-				responseIdentifier = hottextInteraction.getResponseIdentifier();
-				break;
 			}
+			question = sb.toString();
+		} catch(IOException e) {
+			log.error("", e);
 		}
-		question = sb.toString();
 	}
 	
 	private void extractScoreEvaluationMode() {
@@ -188,6 +197,23 @@ public class HottextAssessmentItemBuilder extends ChoiceAssessmentItemBuilder {
 			}
 		}
 	}
+	
+	@Override
+	public Identifier getResponseIdentifier() {
+		return responseIdentifier;
+	}
+	
+	@Override
+	public List<Answer> getAnswers() {
+		List<Hottext> hottexts = getChoices();
+		List<Answer> answers = new ArrayList<>(hottexts.size());
+		for(Hottext hottext:hottexts) {
+			String answer = new AssessmentHtmlBuilder().inlineStaticString(hottext.getInlineStatics());
+			answer = FilterFactory.getHtmlTagAndDescapingFilter().filter(answer);
+			answers.add(new Answer(hottext.getIdentifier(), answer));
+		}
+		return answers;
+	}
 
 	@Override
 	public QTI21QuestionType getQuestionType() {
@@ -202,6 +228,31 @@ public class HottextAssessmentItemBuilder extends ChoiceAssessmentItemBuilder {
 	@Override
 	public boolean isCorrect(Choice choice) {
 		return correctAnswers.contains(choice.getIdentifier());
+	}
+	
+	@Override
+	public int getMaxPossibleCorrectAnswers() {
+		return getChoices().size();
+	}
+
+	@Override
+	public int getMaxChoices() {
+		return hottextInteraction.getMaxChoices();
+	}
+	
+	@Override
+	public void setMaxChoices(int choices) {
+		hottextInteraction.setMaxChoices(choices);
+	}
+	
+	@Override
+	public int getMinChoices() {
+		return hottextInteraction.getMinChoices();
+	}
+
+	@Override
+	public void setMinChoices(int choices) {
+		hottextInteraction.setMinChoices(choices);
 	}
 
 	@Override

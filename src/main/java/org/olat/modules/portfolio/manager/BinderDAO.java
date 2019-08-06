@@ -23,6 +23,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -39,6 +40,7 @@ import org.olat.core.id.Identity;
 import org.olat.core.logging.OLog;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.StringHelper;
+import org.olat.course.nodes.PortfolioCourseNode;
 import org.olat.modules.portfolio.Assignment;
 import org.olat.modules.portfolio.AssignmentStatus;
 import org.olat.modules.portfolio.Binder;
@@ -80,6 +82,8 @@ public class BinderDAO {
 	private GroupDAO groupDao;
 	@Autowired
 	private AssignmentDAO assignmentDao;
+	@Autowired
+	private PageUserInfosDAO pageUserInfosDao;
 	@Autowired
 	private AssessmentSectionDAO assessmentSectionDao;
 	@Autowired
@@ -133,6 +137,7 @@ public class BinderDAO {
 	
 	public Binder syncWithTemplate(BinderImpl template, BinderImpl binder, AtomicBoolean changes) {
 		binder.setImagePath(template.getImagePath());
+		binder.setSummary(template.getSummary());
 		
 		List<Section> templateSections = template.getSections();
 		Map<Assignment,Section> assignmentTemplateToSectionTemplatesMap = new HashMap<>();
@@ -209,6 +214,12 @@ public class BinderDAO {
 	
 	private void syncMovingAssignments(SectionImpl templateSection, SectionImpl currentSection, Map<Section,Section> templateToSectionsMap) {
 		List<Assignment> templateAssignments = new ArrayList<>(templateSection.getAssignments());
+		for(Iterator<Assignment> currentAssignmentIt=currentSection.getAssignments().iterator(); currentAssignmentIt.hasNext(); ) {
+			if(currentAssignmentIt.next() == null) {
+				currentAssignmentIt.remove();
+			}
+		}
+
 		List<Assignment> currentAssignments = new ArrayList<>(currentSection.getAssignments());
 		for(int i=0; i<currentAssignments.size(); i++) {
 			Assignment currentAssignment = currentAssignments.get(i);
@@ -333,6 +344,30 @@ public class BinderDAO {
 		return dbInstance.getCurrentEntityManager().merge(binder);
 	}
 	
+	/**
+	 * @param owner The owner
+	 * @return All the binder where the specified identity as the role owner
+	 */
+	public List<Binder> getAllBindersAsOwner(IdentityRef owner) {
+		StringBuilder sb = new StringBuilder();
+		sb.append("select binder from pfbinder as binder")
+		  .append(" inner join fetch binder.baseGroup as baseGroup")
+		  .append(" inner join baseGroup.members as membership")
+		  .append(" left join fetch binder.olatResource as resource")
+		  .append(" where membership.identity.key=:identityKey and membership.role=:role");
+		
+		return dbInstance.getCurrentEntityManager()
+			.createQuery(sb.toString(), Binder.class)
+			.setParameter("identityKey", owner.getKey())
+			.setParameter("role", PortfolioRoles.owner.name())
+			.getResultList();
+	}
+	
+	/**
+	 * 
+	 * @param owner The owner
+	 * @return The binder where the specified identity has the role 'owner' and the binder is still open.
+	 */
 	public List<Binder> getOwnedBinders(IdentityRef owner) {
 		StringBuilder sb = new StringBuilder();
 		sb.append("select binder from pfbinder as binder")
@@ -382,6 +417,7 @@ public class BinderDAO {
 			for(Page page:pages) {
 				if(page != null) {
 					rows += pageDao.deletePage(page);
+					rows += pageUserInfosDao.delete(page);
 				}
 			}
 			
@@ -427,6 +463,27 @@ public class BinderDAO {
 				.createQuery(binderQ)
 				.setParameter("binderKey", binder.getKey())
 				.executeUpdate();
+		return rows;
+	}
+	
+	public int detachBinderFromRepositoryEntry(RepositoryEntry entry) {
+		//remove reference to the course and the course node
+		String sb = "update pfbinder binder set binder.entry=null,binder.subIdent=null where binder.entry.key=:entryKey";
+		int rows = dbInstance.getCurrentEntityManager()
+			.createQuery(sb)
+			.setParameter("entryKey", entry.getKey())
+			.executeUpdate();
+		return rows;
+	}
+	
+	public int detachBinderFromRepositoryEntry(RepositoryEntry entry, PortfolioCourseNode node) {
+		//remove reference to the course and the course node
+		String sb = "update pfbinder binder set binder.entry=null,binder.subIdent=null where binder.entry.key=:entryKey and binder.subIdent=:nodeIdent";
+		int rows = dbInstance.getCurrentEntityManager()
+			.createQuery(sb)
+			.setParameter("entryKey", entry.getKey())
+			.setParameter("nodeIdent", node.getIdent())
+			.executeUpdate();
 		return rows;
 	}
 	
@@ -570,15 +627,18 @@ public class BinderDAO {
 		List<Page> pages = new ArrayList<>(section.getPages());
 		//delete pages
 		for(Page page:pages) {
-			pageDao.deletePage(page);
-			section.getPages().remove(page);
+			if(page != null) {
+				pageDao.deletePage(page);
+				pageUserInfosDao.delete(page);
+				section.getPages().remove(page);
+			}
 		}
 		
-		List<Assignment> assignments = new ArrayList<>(((SectionImpl)section).getAssignments());
+		List<Assignment> assignments = assignmentDao.loadAssignments(section, null);
 		for(Assignment assignment:assignments) {
 			assignmentDao.deleteAssignmentReference(assignment);
 		}
-		
+		assignmentDao.deleteAssignmentBySection(section);
 		assessmentSectionDao.deleteAssessmentSections(section);
 
 		//remove reference via template

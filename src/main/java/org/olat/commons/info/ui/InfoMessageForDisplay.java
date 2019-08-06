@@ -21,8 +21,7 @@
 package org.olat.commons.info.ui;
 
 import org.olat.core.util.StringHelper;
-
-import java.io.File;
+import org.olat.core.util.vfs.VFSLeaf;
 
 /**
  * 
@@ -40,15 +39,15 @@ public class InfoMessageForDisplay {
 	private final String message;
 	private final String infos;
 	private final String modifier;
-	private final File[] attachments;
-
-	public InfoMessageForDisplay(Long key, String title, String message, File[] attachments, String infos, String modifier) {
+	private final VFSLeaf attachment;
+	
+	public InfoMessageForDisplay(Long key, String title, String message, VFSLeaf attachment, String infos, String modifier) {
 		this.key = key;
 		this.title = title;
 		this.infos = infos;
-		this.attachments = attachments;
 		this.message = message;
 		this.modifier = modifier;
+		this.attachment = attachment;
 	}
 
 	public Long getKey() {
@@ -62,17 +61,13 @@ public class InfoMessageForDisplay {
 	public String getMessage() {
 		return message;
 	}
-
-	public File[] getAttachments() {
-		return attachments;
-	}
-
-	public boolean hasAttachments() {
-		return attachments.length > 0;
-	}
-
+	
 	public String getInfos() {
 		return infos;
+	}
+	
+	public VFSLeaf getAttachment() {
+		return attachment;
 	}
 
 	public boolean isModified() {

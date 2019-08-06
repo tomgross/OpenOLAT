@@ -117,7 +117,35 @@ public class AssessmentSessionAuditFileLog implements AssessmentSessionAuditLogg
 	public void logTestRetrieved(AssessmentTestSession candidateSession, Identity coach) {
 		try {
 			AuditLogFormatter.logDate(writer);
-			writer.write("Test session retrieved by " + coach.getKey() + "/" + coach.getName());
+			writer.write("Test session retrieved by " + coach.getKey());
+			writer.write("\n");
+			writer.flush();
+			debugLog.logTestRetrieved(candidateSession, coach);
+		} catch (IOException e) {
+			log.error("", e);
+		}
+	}
+	
+	
+
+	@Override
+	public void logTestReopen(AssessmentTestSession candidateSession, Identity coach) {
+		try {
+			AuditLogFormatter.logDate(writer);
+			writer.write("Test session reopened by " + coach.getKey());
+			writer.write("\n");
+			writer.flush();
+			debugLog.logTestRetrieved(candidateSession, coach);
+		} catch (IOException e) {
+			log.error("", e);
+		}
+	}
+
+	@Override
+	public void logTestExtend(AssessmentTestSession candidateSession, int extraTime, Identity coach) {
+		try {
+			AuditLogFormatter.logDate(writer);
+			writer.write("Test session extened " + extraTime + " by " + coach.getKey());
 			writer.write("\n");
 			writer.flush();
 			debugLog.logTestRetrieved(candidateSession, coach);

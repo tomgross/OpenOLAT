@@ -79,6 +79,10 @@ public class AssessmentItemSessionImpl implements AssessmentItemSession, Persist
     
     @Column(name="q_manual_score", nullable=true, insertable=true, updatable=true)
     private BigDecimal manualScore;
+    @Column(name="q_to_review", nullable=true, insertable=true, updatable=true)
+    private boolean toReview;
+    @Column(name="q_coach_comment", nullable=true, insertable=true, updatable=true)
+    private String coachComment;
     
 	@ManyToOne(targetEntity=AssessmentTestSessionImpl.class,fetch=FetchType.LAZY,optional=false)
 	@JoinColumn(name="fk_assessmenttest_session", nullable=false, insertable=true, updatable=false)
@@ -143,12 +147,33 @@ public class AssessmentItemSessionImpl implements AssessmentItemSession, Persist
 		this.score = score;
 	}
 
+	@Override
 	public BigDecimal getManualScore() {
 		return manualScore;
 	}
 
+	@Override
 	public void setManualScore(BigDecimal manualScore) {
 		this.manualScore = manualScore;
+	}
+
+	@Override
+	public String getCoachComment() {
+		return coachComment;
+	}
+
+	@Override
+	public void setCoachComment(String coachComment) {
+		this.coachComment = coachComment;
+	}
+
+	@Override
+	public boolean isToReview() {
+		return toReview;
+	}
+
+	public void setToReview(boolean toReview) {
+		this.toReview = toReview;
 	}
 
 	@Override
@@ -160,6 +185,7 @@ public class AssessmentItemSessionImpl implements AssessmentItemSession, Persist
 		this.assessmentItemIdentifier = assessmentItemIdentifier;
 	}
 
+	@Override
 	public String getSectionIdentifier() {
 		return sectionIdentifier;
 	}
@@ -168,6 +194,7 @@ public class AssessmentItemSessionImpl implements AssessmentItemSession, Persist
 		this.sectionIdentifier = sectionIdentifier;
 	}
 
+	@Override
 	public String getTestPartIdentifier() {
 		return testPartIdentifier;
 	}
@@ -176,6 +203,7 @@ public class AssessmentItemSessionImpl implements AssessmentItemSession, Persist
 		this.testPartIdentifier = testPartIdentifier;
 	}
 
+	@Override
 	public AssessmentTestSession getAssessmentTestSession() {
 		return assessmentTestSession;
 	}

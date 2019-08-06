@@ -22,7 +22,6 @@ package org.olat.selenium.page.course;
 import java.io.File;
 import java.util.List;
 
-import org.jboss.arquillian.drone.api.annotation.Drone;
 import org.junit.Assert;
 import org.olat.selenium.page.graphene.OOGraphene;
 import org.openqa.selenium.By;
@@ -38,12 +37,7 @@ import org.openqa.selenium.WebElement;
  */
 public class GroupTaskConfigurationPage {
 
-	@Drone
-	private WebDriver browser;
-	
-	public GroupTaskConfigurationPage() {
-		//
-	}
+	private final WebDriver browser;
 	
 	public GroupTaskConfigurationPage(WebDriver browser) {
 		this.browser = browser;
@@ -52,6 +46,32 @@ public class GroupTaskConfigurationPage {
 	public GroupTaskConfigurationPage selectWorkflow() {
 		By configBy = By.className("o_sel_course_gta_steps");
 		return selectTab(configBy);
+	}
+	
+	public GroupTaskConfigurationPage enableAssignment(boolean enable) {
+		return enableStep("task.assignment", enable);
+	}
+	
+	public GroupTaskConfigurationPage enableReview(boolean enable) {
+		return enableStep("review", enable);
+	}
+	
+	public GroupTaskConfigurationPage enableRevision(boolean enable) {
+		return enableStep("revision", enable);
+	}
+	
+	public GroupTaskConfigurationPage enableSolution(boolean enable) {
+		return enableStep("sample", enable);
+	}
+	
+	private GroupTaskConfigurationPage enableStep(String name, boolean enable) {
+		By stepBy = By.xpath("//fieldset[contains(@class,'o_sel_course_gta_steps')]//label[input[@name='" + name + "']]");
+		WebElement labelEl = browser.findElement(stepBy);
+		By checkboxStepBy = By.xpath("//fieldset[contains(@class,'o_sel_course_gta_steps')]//label/input[@name='" + name + "']");
+		WebElement checkboxEl = browser.findElement(checkboxStepBy);
+		OOGraphene.check(labelEl, checkboxEl, Boolean.valueOf(enable));
+		OOGraphene.waitBusy(browser);
+		return this;
 	}
 	
 	public GroupTaskConfigurationPage saveWorkflow() {
@@ -64,7 +84,6 @@ public class GroupTaskConfigurationPage {
 	public GroupTaskConfigurationPage openBusinessGroupChooser() {
 		By chooseGroupBy = By.cssSelector("a.o_form_groupchooser");
 		browser.findElement(chooseGroupBy).click();
-		OOGraphene.waitBusy(browser);
 		OOGraphene.waitModalDialog(browser);
 		return this;
 	}
@@ -72,7 +91,6 @@ public class GroupTaskConfigurationPage {
 	public GroupTaskConfigurationPage createBusinessGroup(String name) {
 		By createGroupBy = By.cssSelector("div.o_button_group_right a");
 		browser.findElement(createGroupBy).click();
-		OOGraphene.waitBusy(browser);
 		OOGraphene.waitModalDialog(browser);
 		
 		//fill the form
@@ -126,6 +144,15 @@ public class GroupTaskConfigurationPage {
 		//save
 		By saveBy = By.cssSelector(".o_sel_course_gta_upload_task_form button.btn-primary");
 		browser.findElement(saveBy).click();
+		OOGraphene.waitBusy(browser);
+		return this;
+	}
+	
+	public GroupTaskConfigurationPage enableAutoAssignment(boolean enable) {
+		//task.assignment.type
+		String type = enable ? "auto" : "manual";
+		By typeBy = By.xpath("//fieldset[contains(@class,'o_sel_course_gta_task_config_form')]//input[@name='task.assignment.type'][@value='" + type + "']");
+		browser.findElement(typeBy).click();
 		OOGraphene.waitBusy(browser);
 		return this;
 	}

@@ -108,12 +108,14 @@ class PublishStepCatalog extends BasicStep {
 	}
 	
 	static class PublishStepCatalogForm extends StepFormBasicController {
+
+		private static final String[] keys = new String[]{"yes","no"};
 		
 		private FormLink addToCatalog;
 		private SingleSelection catalogBox;
 		private CloseableModalController cmc;
 		private Controller catalogAddController;
-		private final List<FormLink> deleteLinks = new ArrayList<FormLink>();;
+		private final List<FormLink> deleteLinks = new ArrayList<>();
 		
 		private final RepositoryEntry repositoryEntry;
 		private final CatalogManager catalogManager;
@@ -148,7 +150,6 @@ class PublishStepCatalog extends BasicStep {
 			fc.setRootForm(mainForm);
 			formLayout.add("catalogSettings", fc);
 			
-			final String[] keys = new String[]{"yes","no"};
 			final String[] values = new String[] {
 					translate("yes"),
 					translate("no")
@@ -173,6 +174,7 @@ class PublishStepCatalog extends BasicStep {
 			}
 
 			flc.contextPut("categories", deleteLinks);
+			flc.contextPut("courseTitle", courseEnv.getCourseGroupManager().getCourseEntry().getDisplayname());
 		}
 		
 		private String getPath(CatalogEntry entry) {
@@ -197,7 +199,7 @@ class PublishStepCatalog extends BasicStep {
 		}
 		
 		private void doAddCatalog(UserRequest ureq) {
-			List<CategoryLabel> categories = new ArrayList<CategoryLabel>();
+			List<CategoryLabel> categories = new ArrayList<>();
 			for(FormLink deleteLink:deleteLinks) {
 				CategoryLabel label = (CategoryLabel)deleteLink.getUserObject();
 				categories.add(label);
@@ -207,8 +209,10 @@ class PublishStepCatalog extends BasicStep {
 			catalogAddController = new SpecialCatalogEntryAddController(ureq, getWindowControl(), repositoryEntry, categories);
 			listenTo(catalogAddController);
 			removeAsListenerAndDispose(cmc);
+			
+			String displayName = courseEnv.getCourseGroupManager().getCourseEntry().getDisplayname();
 			cmc = new CloseableModalController(getWindowControl(), "close",
-					catalogAddController.getInitialComponent(), true, translate("publish.catalog.add"));
+					catalogAddController.getInitialComponent(), true, translate("publish.catalog.add.title", new String[] { displayName }));
 			listenTo(cmc);
 			cmc.activate();
 		}
@@ -291,18 +295,17 @@ class PublishStepCatalog extends BasicStep {
 
 		@Override
 		protected void formOK(UserRequest ureq) {
-			if(catalogBox.isOneSelected()) {
-				String val = catalogBox.getSelectedKey();
-				addToRunContext("catalogChoice", val);
-				
-				List<CategoryLabel> categories = new ArrayList<CategoryLabel>();
-				for(FormLink deletedLink:deleteLinks) {
-					CategoryLabel cat = (CategoryLabel)deletedLink.getUserObject();
-					categories.add(cat);
+			CourseCatalog courseCatalog = new CourseCatalog();
+			courseCatalog.setChoiceValue(catalogBox.getSelectedKey());
+			boolean removeAll = "no".equals(catalogBox.getSelectedKey());
+			for(FormLink deletedLink:deleteLinks) {
+				CategoryLabel cat = (CategoryLabel)deletedLink.getUserObject();
+				if(removeAll) {
+					cat.setDeleted(true);
 				}
-				addToRunContext("categories", categories);
+				courseCatalog.getCategoryLabels().add(cat);
 			}
-			
+			addToRunContext("categories", courseCatalog);
 			fireEvent(ureq, StepsEvent.ACTIVATE_NEXT);
 		}
 

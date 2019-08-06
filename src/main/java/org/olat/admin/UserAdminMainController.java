@@ -29,6 +29,7 @@ import java.util.Calendar;
 import java.util.Date;
 import java.util.List;
 
+import org.olat.admin.user.DeletedUsersController;
 import org.olat.admin.user.NewUsersNotificationsController;
 import org.olat.admin.user.UserAdminController;
 import org.olat.admin.user.UserCreateController;
@@ -156,9 +157,7 @@ public class UserAdminMainController extends MainLayoutBasicController implement
 		putInitialPanel(columnLayoutCtr.getInitialComponent());
 	}
 	
-	/**
-	 * @see org.olat.core.gui.control.DefaultController#event(org.olat.core.gui.UserRequest, org.olat.core.gui.components.Component, org.olat.core.gui.control.Event)
-	 */
+	@Override
 	public void event(UserRequest ureq, Component source, Event event) {
 		if (source == olatMenuTree) {
 			if (event.getCommand().equals(MenuTree.COMMAND_TREENODE_CLICKED)) {
@@ -218,13 +217,14 @@ public class UserAdminMainController extends MainLayoutBasicController implement
 			}
 		} else if (source == userAdminCtr) {
 			if (event == Event.BACK_EVENT) {
+				Identity editedIdentity = userAdminCtr.getEditedIdentity();
 				removeAsListenerAndDispose(userAdminCtr);
 				userAdminCtr = null;
 				// update data model of content controller when of type user search
 				// to display correct values of identity
 				if (contentCtr instanceof UsermanagerUserSearchController) {
 					UsermanagerUserSearchController userSearchCtr = (UsermanagerUserSearchController) contentCtr;
-					userSearchCtr.reloadFoundIdentity();
+					userSearchCtr.reloadFoundIdentity(editedIdentity);
 					addToHistory(ureq, userSearchCtr);
 				}
 				content.setContent(contentCtr.getInitialComponent());
@@ -286,11 +286,11 @@ public class UserAdminMainController extends MainLayoutBasicController implement
 		
 		
 		if (uobject.equals("usearch") || uobject.equals("useradmin")) {
-			if(contentCtr != userSearchCtrl) {
-				activatePaneInDetailView = null;
-				contentCtr = userSearchCtrl = new UsermanagerUserSearchController(ureq, bwControl);
-				listenTo(contentCtr);
-			}
+			activatePaneInDetailView = null;
+			removeAsListenerAndDispose(userSearchCtrl);
+			contentCtr = userSearchCtrl = new UsermanagerUserSearchController(ureq, bwControl);
+			listenTo(contentCtr);
+
 			addToHistory(ureq, bwControl);
 			return contentCtr.getInitialComponent();
 		}
@@ -434,6 +434,22 @@ public class UserAdminMainController extends MainLayoutBasicController implement
 			listenTo(contentCtr);
 			return contentCtr.getInitialComponent();
 		}
+		else if (uobject.equals("userswithoutemail")) {
+			activatePaneInDetailView = "userswithoutemail";
+			List<Identity> usersWithoutEmail = userManager.findVisibleIdentitiesWithoutEmail();
+			contentCtr = new UsermanagerUserSearchController(ureq, bwControl, usersWithoutEmail, null, true, true);
+			addToHistory(ureq, bwControl);
+			listenTo(contentCtr);
+			return contentCtr.getInitialComponent();
+		}
+		else if (uobject.equals("usersemailduplicates")) {
+			activatePaneInDetailView = "users.email.duplicate";
+			List<Identity> usersEmailDuplicates = userManager.findVisibleIdentitiesWithEmailDuplicates();
+			contentCtr = new UsermanagerUserSearchController(ureq, bwControl, usersEmailDuplicates, null, true, true);
+			addToHistory(ureq, bwControl);
+			listenTo(contentCtr);
+			return contentCtr.getInitialComponent();
+		}
 		else if (uobject.equals("logondeniedgroup")) {
 			activatePaneInDetailView = "edit.uroles";
 			contentCtr = new UsermanagerUserSearchController(ureq, bwControl,null, null, null, null, null, Identity.STATUS_LOGIN_DENIED, true);
@@ -443,7 +459,7 @@ public class UserAdminMainController extends MainLayoutBasicController implement
 		}		
 		else if (uobject.equals("deletedusers")) {
 			activatePaneInDetailView = "list.deletedusers";
-			contentCtr = new UsermanagerUserSearchController(ureq, bwControl,null, null, null, null, null, Identity.STATUS_DELETED, false);
+			contentCtr = new DeletedUsersController(ureq, bwControl);
 			addToHistory(ureq, bwControl);
 			listenTo(contentCtr);
 			return contentCtr.getInitialComponent();
@@ -737,6 +753,18 @@ public class UserAdminMainController extends MainLayoutBasicController implement
 		gtnChild.setTitle(translator.translate("menu.userswithoutgroup"));
 		gtnChild.setUserObject("userswithoutgroup");
 		gtnChild.setAltText(translator.translate("menu.userswithoutgroup.alt"));
+		gtn3.addChild(gtnChild);
+		
+		gtnChild = new GenericTreeNode();		
+		gtnChild.setTitle(translator.translate("menu.users.without.email"));
+		gtnChild.setUserObject("userswithoutemail");
+		gtnChild.setAltText(translator.translate("menu.users.without.email.alt"));
+		gtn3.addChild(gtnChild);
+		
+		gtnChild = new GenericTreeNode();		
+		gtnChild.setTitle(translator.translate("menu.users.email.duplicate"));
+		gtnChild.setUserObject("usersemailduplicates");
+		gtnChild.setAltText(translator.translate("menu.users.email.duplicate.alt"));
 		gtn3.addChild(gtnChild);
 		
 		gtnChild = new GenericTreeNode();		

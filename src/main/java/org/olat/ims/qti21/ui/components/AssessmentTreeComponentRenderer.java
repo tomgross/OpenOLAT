@@ -28,6 +28,8 @@ import org.olat.core.gui.render.Renderer;
 import org.olat.core.gui.render.StringOutput;
 import org.olat.core.gui.render.URLBuilder;
 import org.olat.core.gui.translator.Translator;
+import org.olat.core.logging.OLog;
+import org.olat.core.logging.Tracing;
 import org.olat.core.util.StringHelper;
 import org.olat.ims.qti21.AssessmentTestSession;
 import org.olat.ims.qti21.model.audit.CandidateEvent;
@@ -55,6 +57,8 @@ import uk.ac.ed.ph.jqtiplus.state.TestSessionState;
  *
  */
 public class AssessmentTreeComponentRenderer extends AssessmentObjectComponentRenderer {
+	
+	private static final OLog log = Tracing.createLoggerFor(AssessmentTreeComponentRenderer.class);
 
 	@Override
 	public void render(Renderer renderer, StringOutput sb, Component source, URLBuilder ubu,
@@ -78,8 +82,8 @@ public class AssessmentTreeComponentRenderer extends AssessmentObjectComponentRe
 	            } else {
 	            	options = RenderingRequest.getItem(testSessionController);
 	            }
-	        	AssessmentRenderer renderHints = new AssessmentRenderer(renderer);
-    			renderTestEvent(testSessionController, renderHints, sb, component, ubu, translator, options);
+	        		AssessmentRenderer renderHints = new AssessmentRenderer(renderer);
+	        		renderTestEvent(testSessionController, renderHints, sb, component, ubu, translator, options);
 
 			}
 		}
@@ -97,7 +101,7 @@ public class AssessmentTreeComponentRenderer extends AssessmentObjectComponentRe
         	if (testEventType == CandidateTestEventType.REVIEW_ITEM) {
         		renderer.setReviewMode(true);
         	} else if (testEventType == CandidateTestEventType.SOLUTION_ITEM) {
-                renderer.setSolutionMode(true);
+        		renderer.setSolutionMode(true);
         	}
             renderNavigation(renderer, target, component, ubu, translator, options);
         }
@@ -105,7 +109,7 @@ public class AssessmentTreeComponentRenderer extends AssessmentObjectComponentRe
 	
 	private void renderNavigation(AssessmentRenderer renderer, StringOutput sb,
 			AssessmentTreeComponent component, URLBuilder ubu, Translator translator, RenderingRequest options) {
-		sb.append("<div id='o_qti_menu' class='qtiworks o_assessmenttest o_testpartnavigation o_qti_menu_menustyle'>");
+		sb.append("<div id='o_qti_menu' class='qtiworks o_assessmenttest o_testpartnavigation o_qti_menu_menustyle' role='navigation'>");
 		//part, sections and item refs
 		TestPlanNode currentTestPartNode = component.getCurrentTestPartNode();
 		if(currentTestPartNode != null) {
@@ -134,7 +138,6 @@ public class AssessmentTreeComponentRenderer extends AssessmentObjectComponentRe
 			URLBuilder ubu, Translator translator, RenderingRequest options) {
 		sb.append("<li class='o_assessmentsection o_qti_menu_item'>")
 		  .append("<header><h4>").append(StringHelper.escapeHtml(sectionNode.getSectionPartTitle())).append("</h4>");
-		//renderAssessmentSectionRubrickBlock(renderer, sb, component, sectionNode, ubu, translator);
 
 		sb.append("</header><ul class='o_testpartnavigation_inner list-unstyled'>");
 		sectionNode.getChildren().forEach((child)
@@ -157,10 +160,15 @@ public class AssessmentTreeComponentRenderer extends AssessmentObjectComponentRe
 		}
 		
 		sb.append("<li class='o_assessmentitem").append(" active", active).append("'>");
-		renderAssessmentItemMark(sb, component, itemNode, translator);
-		renderAssessmentItemAttempts(sb, component, itemNode, translator);
-		renderItemStatus(sb, component, itemNode, translator, options);
-		renderAssessmentItemLink(sb, component, itemNode);
+		try {
+			renderAssessmentItemMark(sb, component, itemNode, translator);
+			renderAssessmentItemAttempts(sb, component, itemNode, translator);
+			renderItemStatus(sb, component, itemNode, translator, options);
+			renderAssessmentItemLink(sb, component, itemNode, translator);
+		} catch(IllegalStateException ex) {
+			log.error("", ex);
+			sb.append("<span class='o_danger'>ERROR</span>");
+		}
 		sb.append("</li>");
 	}
 	
@@ -171,7 +179,7 @@ public class AssessmentTreeComponentRenderer extends AssessmentObjectComponentRe
 	 * @param itemNode
 	 * @return The event used or null
 	 */
-	private Event renderAssessmentItemLink(StringOutput sb, AssessmentTreeComponent component, TestPlanNode itemNode) {
+	private Event renderAssessmentItemLink(StringOutput sb, AssessmentTreeComponent component, TestPlanNode itemNode, Translator translator) {
 		String key = itemNode.getKey().toString();
 		Form form = component.getQtiItem().getRootForm();
 		String dispatchId = component.getQtiItem().getFormDispatchId();
@@ -200,12 +208,19 @@ public class AssessmentTreeComponentRenderer extends AssessmentObjectComponentRe
 		if(event == null) {
 			sb.append("<span class='o_assessmentitem_nav_disabled'>");
 		} else {
-			sb.append("<a href='javascript:;' onclick=\"")
-			  .append(FormJSHelper.getXHRFnCallFor(form, dispatchId, 1, true, true,
+			sb.append("<a href='javascript:;' ")
+			  .onClickKeyEnter(FormJSHelper.getXHRFnCallFor(form, dispatchId, 1, true, true,
 					new NameValuePair("cid", event.name()), new NameValuePair("item", key)))
-			  .append(";\" class='o_sel_assessmentitem'>");
+			  .append(" class='o_sel_assessmentitem'>");
 		}
-		sb.append("<span class='questionTitle'>").append(StringHelper.escapeHtml(itemNode.getSectionPartTitle())).append("</span>");
+		String title;
+		if(component.isShowTitles()) {
+			title = StringHelper.escapeHtml(itemNode.getSectionPartTitle());
+		} else {
+			int num = component.getCandidateSessionContext().getNumber(itemNode);
+			title = translator.translate("question.title", new String[] { Integer.toString(num) });
+		}
+		sb.append("<span class='questionTitle'>").append(title).append("</span>");
 
 		if(event == null) {
 			sb.append("</span>");
@@ -229,9 +244,13 @@ public class AssessmentTreeComponentRenderer extends AssessmentObjectComponentRe
 		boolean mark = component.getCandidateSessionContext().isMarked(key);
 		
 		sb.append("<a href='javascript:;' onclick=\"")
-		  .append(FormJSHelper.getXHRFnCallFor(form, dispatchId, 1, true, true,
+		  .append(FormJSHelper.getXHRNFFnCallFor(form, dispatchId, 1,
 				new NameValuePair("cid", Event.mark.name()), new NameValuePair("item", key)))
-		  .append("; o_toggleMark(this); return false;\" class='o_assessmentitem_marks'><i class='o_icon ")
+		  .append("; o_toggleMark(this); return false;\" onkeydown=\"if(event.which == 13 || event.keyCode == 13) {")
+		  .append(FormJSHelper.getXHRNFFnCallFor(form, dispatchId, 1,
+					new NameValuePair("cid", Event.mark.name()), new NameValuePair("item", key)))
+		  .append("; o_toggleMark(this); return false; }\" ")
+		  .append(" class='o_assessmentitem_marks'><i class='o_icon ")
 		  .append("o_icon_bookmark", "o_icon_bookmark_add", mark)
 		  .append("' title='").append(StringHelper.escapeHtml(translator.translate("assessment.item.mark"))).append("'>&nbsp;</i></a>");
 	}
@@ -262,9 +281,6 @@ public class AssessmentTreeComponentRenderer extends AssessmentObjectComponentRe
 			sb.append("'>").append(numOfAttempts);			
 		}
 		sb.append("</span>");
-		
-		
-		
 	}
 	
 	@Override
