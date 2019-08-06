@@ -166,7 +166,7 @@ public class QuestionListController extends AbstractItemListController implement
 
 		newItem = uifactory.addFormLink("new.item", formLayout, Link.BUTTON);
 		copyItem = uifactory.addFormLink("copy", formLayout, Link.BUTTON);
-		convertItem = uifactory.addFormLink("convert.item", formLayout, Link.BUTTON);
+		//convertItem = uifactory.addFormLink("convert.item", formLayout, Link.BUTTON);
 		importItem = uifactory.addFormLink("import.item", formLayout, Link.BUTTON);
 		authorItem = uifactory.addFormLink("author.item", formLayout, Link.BUTTON);
 		if(getSource().isDeleteEnabled()) {

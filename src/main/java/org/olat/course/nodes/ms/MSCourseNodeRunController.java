@@ -31,6 +31,7 @@ import org.olat.core.gui.components.velocity.VelocityContainer;
 import org.olat.core.gui.control.Event;
 import org.olat.core.gui.control.WindowControl;
 import org.olat.core.gui.control.controller.BasicController;
+import org.olat.core.id.Roles;
 import org.olat.core.util.Formatter;
 import org.olat.core.util.StringHelper;
 import org.olat.core.util.Util;
@@ -121,6 +122,10 @@ public class MSCourseNodeRunController extends BasicController {
 		
 		//admin setting whether to show change log or not
 		myContent.contextPut("changelogconfig", courseModule.isDisplayChangeLog());
+		Roles roles = ureq.getUserSession().getRoles();
+		if (roles.isOLATAdmin() || roles.isAuthor()) {
+			myContent.contextPut("changelogconfig", true);
+		}
 
 		// Push variables to velcity page
 		exposeConfigToVC(config);		

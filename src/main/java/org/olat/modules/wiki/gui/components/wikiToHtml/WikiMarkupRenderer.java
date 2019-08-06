@@ -83,9 +83,8 @@ public class WikiMarkupRenderer extends DefaultComponentRenderer {
 		input.setUserIpAddress("0.0.0.0");
 		OlatWikiDataHandler dataHandler = new OlatWikiDataHandler(wikiComp.getOres(), wikiComp.getImageBaseUri());
 		input.setDataHandler(dataHandler);
-    
-		StringOutput out = new StringOutput(100);
-		ubu.buildURI(out, null , null, iframePostEnabled ? AJAXFlags.MODE_TOBGIFRAME : AJAXFlags.MODE_NORMAL);
+
+		StringOutput out = ubu.buildUriWithoutUrlEncoding(null , null, iframePostEnabled ? AJAXFlags.MODE_TOBGIFRAME : AJAXFlags.MODE_NORMAL);
 		String uri = out.toString();
 		
 		ParserDocument parsedDoc = null;
@@ -94,7 +93,7 @@ public class WikiMarkupRenderer extends DefaultComponentRenderer {
 			uri = URLDecoder.decode(uri, "utf-8");
 			input.setVirtualWiki(uri.substring(1, uri.length()-1));
 			if (iframePostEnabled) {
-				String targetUrl = " onclick=\"o_XHREvent(jQuery(this).attr('href'),false,true); return false;\"";
+				String targetUrl = " onclick=\"return o_XHREventWithEncodedUrl(jQuery(this).attr('href'),false,true);\"";
 				input.setURLTarget(targetUrl);
 			}
 			sb.append("<div style=\"min-height:"+ wikiComp.getMinHeight() +"px\" id=\"");

@@ -31,15 +31,14 @@ import org.olat.core.gui.control.controller.BasicController;
 import org.olat.core.gui.control.generic.closablewrapper.CloseableModalController;
 import org.olat.core.id.Identity;
 import org.olat.core.id.OLATResourceable;
+import org.olat.core.util.mail.*;
 import org.olat.core.util.resource.OresHelper;
 import org.olat.course.CourseFactory;
 import org.olat.course.ICourse;
 import org.olat.course.assessment.AssessmentHelper;
 import org.olat.course.assessment.ui.tool.AssessmentIdentityCourseNodeController;
 import org.olat.course.nodes.GTACourseNode;
-import org.olat.course.nodes.gta.GTAManager;
-import org.olat.course.nodes.gta.Task;
-import org.olat.course.nodes.gta.TaskProcess;
+import org.olat.course.nodes.gta.*;
 import org.olat.course.nodes.ms.MSCourseNodeRunController;
 import org.olat.course.run.scoring.AssessmentEvaluation;
 import org.olat.course.run.userview.UserCourseEnvironment;
@@ -47,6 +46,8 @@ import org.olat.modules.assessment.model.AssessmentEntryStatus;
 import org.olat.modules.assessment.ui.event.AssessmentFormEvent;
 import org.olat.repository.RepositoryEntry;
 import org.springframework.beans.factory.annotation.Autowired;
+
+import java.util.*;
 
 /**
  * 
@@ -71,7 +72,7 @@ public class GTACoachedParticipantGradingController extends BasicController {
 
 	@Autowired
 	private GTAManager gtaManager;
-	
+
 	public GTACoachedParticipantGradingController(UserRequest ureq, WindowControl wControl,
 			OLATResourceable courseOres, GTACourseNode gtaNode, Task assignedTask, 
 			UserCourseEnvironment coachCourseEnv, Identity assessedIdentity) {
@@ -158,7 +159,14 @@ public class GTACoachedParticipantGradingController extends BasicController {
 		
 		AssessmentEvaluation scoreEval = gtaNode.getUserScoreEvaluation(assessedUserCourseEnv);
 		if(scoreEval.getAssessmentStatus() == AssessmentEntryStatus.done) {
-			assignedTask = gtaManager.updateTask(assignedTask, TaskProcess.graded, gtaNode);
+			RepositoryEntry courseEntry = coachCourseEnv.getCourseEnvironment().getCourseGroupManager().getCourseEntry();
+			if(assignedTask == null) {
+				TaskList taskList = gtaManager.createIfNotExists(courseEntry, gtaNode);
+				assignedTask = gtaManager.createTask(null, taskList, TaskProcess.graded, null, assessedIdentity, gtaNode);
+			} else {
+				assignedTask = gtaManager.updateTask(assignedTask, TaskProcess.graded, gtaNode);
+			}
+			doGradedEmail(courseEntry, gtaNode, assignedTask);
 			fireEvent(ureq, Event.CHANGED_EVENT);
 		}
 	}
@@ -176,4 +184,15 @@ public class GTACoachedParticipantGradingController extends BasicController {
 		listenTo(cmc);
 		cmc.activate();
 	}
+
+	private void doGradedEmail(RepositoryEntry courseEntry, GTACourseNode gtaNode, Task assignedTask) {
+		// Build the list of recipients for the message according to configuration of the course element
+		List<Identity> recipients = gtaManager.addRecipients(courseEntry, gtaNode, assessedIdentity);
+
+		String subject = translate("assessment.email.subject");
+		MailContext context = new MailContextImpl(getWindowControl().getBusinessControl().getAsString());
+
+		gtaManager.sendGradedEmail(gtaNode, assessedIdentity, recipients, subject, assignedTask.getTaskName(), context, getTranslator());
+	}
+
 }

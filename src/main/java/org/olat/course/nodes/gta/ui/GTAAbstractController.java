@@ -35,6 +35,7 @@ import org.olat.core.gui.control.WindowControl;
 import org.olat.core.gui.control.controller.BasicController;
 import org.olat.core.id.Identity;
 import org.olat.core.id.OLATResourceable;
+import org.olat.core.id.Roles;
 import org.olat.core.util.Formatter;
 import org.olat.core.util.StringHelper;
 import org.olat.core.util.coordinate.CoordinatorManager;
@@ -52,6 +53,7 @@ import org.olat.course.nodes.gta.GTAType;
 import org.olat.course.nodes.gta.Task;
 import org.olat.course.nodes.gta.TaskList;
 import org.olat.course.nodes.gta.TaskProcess;
+import org.olat.course.nodes.gta.model.TaskDefinition;
 import org.olat.course.nodes.gta.ui.events.TaskMultiUserEvent;
 import org.olat.course.run.environment.CourseEnvironment;
 import org.olat.course.run.userview.UserCourseEnvironment;
@@ -246,6 +248,10 @@ public abstract class GTAAbstractController extends BasicController implements G
 		}
 		
 		mainVC.contextPut("changelogconfig", courseModule.isDisplayChangeLog());
+		Roles roles = ureq.getUserSession().getRoles();
+		if (roles.isOLATAdmin() || roles.isAuthor()) {
+			mainVC.contextPut("changelogconfig", true);
+		}
 		
 		nodeLog();
 		collapsedContents(task);
@@ -543,6 +549,20 @@ public abstract class GTAAbstractController extends BasicController implements G
 	private void doHide(UserRequest ureq) {
 		String step = ureq.getParameter("step");
 		doSaveStepPreferences(ureq, step, Boolean.FALSE);
+	}
+
+	protected TaskDefinition getTaskDefinition(Task task) {
+		if(task == null) return null;
+
+		TaskDefinition taskDef = null;
+		List<TaskDefinition> availableTasks = gtaManager.getTaskDefinitions(courseEnv, gtaNode);
+		for(TaskDefinition availableTask:availableTasks) {
+			if(availableTask.getFilename() != null && availableTask.getFilename().equals(task.getTaskName())) {
+				taskDef = availableTask;
+				break;
+			}
+		}
+		return taskDef;
 	}
 
 	private void doSaveStepPreferences(UserRequest ureq, String step, Boolean showHide) {

@@ -113,6 +113,7 @@ import org.olat.repository.RepositoryEntryRelationType;
 import org.olat.repository.RepositoryEntryShort;
 import org.olat.repository.RepositoryManager;
 import org.olat.repository.RepositoryService;
+import org.olat.repository.listener.BeforeBusinessGroupDeletionListener;
 import org.olat.repository.manager.RepositoryEntryRelationDAO;
 import org.olat.repository.model.RepositoryEntryToGroupRelation;
 import org.olat.repository.model.SearchRepositoryEntryParameters;
@@ -169,6 +170,8 @@ public class BusinessGroupServiceImpl implements BusinessGroupService, UserDataD
 	private ACReservationDAO reservationDao;
 	@Autowired
 	private DB dbInstance;
+	@Autowired
+	private BeforeBusinessGroupDeletionListener[] beforeBusinessGroupDeletionListeners;
 	
 	@Override
 	public void deleteUserData(Identity identity, String newDeletedUserName, File archivePath) {
@@ -750,6 +753,11 @@ public class BusinessGroupServiceImpl implements BusinessGroupService, UserDataD
 	
 			// refresh object to avoid stale object exceptions
 			group = loadBusinessGroup(group);
+
+			for (BeforeBusinessGroupDeletionListener beforeBusinessGroupDeletionListener : beforeBusinessGroupDeletionListeners) {
+				beforeBusinessGroupDeletionListener.onAction(group);
+			}
+
 			// 0) Loop over all deletableGroupData
 			Map<String,DeletableGroupData> deleteListeners = CoreSpringFactory.getBeansOfType(DeletableGroupData.class);
 			for (DeletableGroupData deleteListener : deleteListeners.values()) {
@@ -954,10 +962,8 @@ public class BusinessGroupServiceImpl implements BusinessGroupService, UserDataD
 	/**
 	 * this method is for internal usage only. It add the identity to to group without synchronization or checks!
 	 * @param ureqIdentity
-	 * @param ureqRoles
 	 * @param identityToAdd
 	 * @param group
-	 * @param syncIM
 	 */
 	private void internalAddParticipant(Identity ureqIdentity, Identity identityToAdd, BusinessGroup group,
 			List<BusinessGroupModifiedEvent.Deferred> events) {
@@ -981,7 +987,8 @@ public class BusinessGroupServiceImpl implements BusinessGroupService, UserDataD
 		BusinessGroupAddResponse response = new BusinessGroupAddResponse();
 		List<BusinessGroupModifiedEvent.Deferred> events = new ArrayList<BusinessGroupModifiedEvent.Deferred>();
 
-		BusinessGroup currBusinessGroup = businessGroupDAO.loadForUpdate(group);	
+		BusinessGroup currBusinessGroup = businessGroupDAO.loadForUpdate(group);
+		int count = 0;
 		for (final Identity identity : addIdentities) {
 			if (securityManager.isIdentityPermittedOnResourceable(identity, Constants.PERMISSION_HASROLE, Constants.ORESOURCE_GUESTONLY)) {
 				response.getIdentitiesWithoutPermission().add(identity);
@@ -989,6 +996,10 @@ public class BusinessGroupServiceImpl implements BusinessGroupService, UserDataD
 				response.getAddedIdentities().add(identity);
 			} else {
 				response.getIdentitiesAlreadyInGroup().add(identity);
+			}
+			// Avoid "too many db access for one transaction" warning by closing entity manager from time to time
+			if (count++ % 200 == 0) {
+				dbInstance.commitAndCloseSession();
 			}
 		}
 		dbInstance.commit();
@@ -1165,7 +1176,9 @@ public class BusinessGroupServiceImpl implements BusinessGroupService, UserDataD
 		
 		//remove managed groups
 		for(Iterator<BusinessGroup> groupIt=groups.iterator(); groupIt.hasNext(); ) {
-			boolean managed = BusinessGroupManagedFlag.isManaged(groupIt.next(), BusinessGroupManagedFlag.membersmanagement);
+			BusinessGroup nextGroup = groupIt.next();
+			boolean managed = BusinessGroupManagedFlag.isManaged(nextGroup, BusinessGroupManagedFlag.membersmanagement)
+					&& !BusinessGroupManagedFlag.isManaged(nextGroup, BusinessGroupManagedFlag.excludeGroupCoachesFromMembersmanagement);
 			if(managed) {
 				groupIt.remove();
 			}
@@ -1255,7 +1268,18 @@ public class BusinessGroupServiceImpl implements BusinessGroupService, UserDataD
 	}
 
 	private void addToWaitingList(Identity ureqIdentity, Identity identity, BusinessGroup group, MailPackage mailing,
-			List<BusinessGroupModifiedEvent.Deferred> events) {
+								  List<BusinessGroupModifiedEvent.Deferred> events) {
+		if (!businessGroupRelationDAO.hasRole(identity, group, GroupRoles.waiting.name())) {
+			internalAddToWaitingList(ureqIdentity, identity, group, mailing, events);
+		}
+	}
+
+	/**
+	 * This method is for internal usage only. It adds the identity to to group without synchronization or checks!
+	 *
+	 */
+	private void internalAddToWaitingList(Identity ureqIdentity, Identity identity, BusinessGroup group, MailPackage mailing,
+										  List<BusinessGroupModifiedEvent.Deferred> events) {
 		businessGroupRelationDAO.addRole(identity, group, GroupRoles.waiting.name());
 
 		// notify currently active users of this business group
@@ -1289,7 +1313,7 @@ public class BusinessGroupServiceImpl implements BusinessGroupService, UserDataD
 					response.getIdentitiesAlreadyInGroup().add(identity);
 				} else {
 					// identity has permission and is not already in group => add it
-					addToWaitingList(ureqIdentity, identity, currBusinessGroup, mailing, events);
+					internalAddToWaitingList(ureqIdentity, identity, currBusinessGroup, mailing, events);
 					response.getAddedIdentities().add(identity);
 				}
 			}
@@ -1372,54 +1396,56 @@ public class BusinessGroupServiceImpl implements BusinessGroupService, UserDataD
 	@Override
 	public EnrollState enroll(Identity ureqIdentity, Roles ureqRoles, Identity identity, BusinessGroup group,
 			MailPackage mailing) {
-		final BusinessGroup reloadedGroup = businessGroupDAO.loadForUpdate(group);
-		
-		log.info("doEnroll start: group=" + OresHelper.createStringRepresenting(group), identity.getName());
-		EnrollState enrollStatus = new EnrollState();
-		List<BusinessGroupModifiedEvent.Deferred> events = new ArrayList<BusinessGroupModifiedEvent.Deferred>();
+		dbInstance.commitAndCloseSession();
+		synchronized (this) {
+			final BusinessGroup reloadedGroup = businessGroupDAO.loadForUpdate(group);
 
-		ResourceReservation reservation = reservationDao.loadReservation(identity, reloadedGroup.getResource());
-		
-		//reservation has the highest priority over max participant or other settings
-		if(reservation != null) {
-			addParticipant(ureqIdentity, ureqRoles, identity, reloadedGroup, mailing, events);
-			enrollStatus.setEnrolled(BGMembership.participant);
-			log.info("doEnroll (reservation) - setIsEnrolled ", identity.getName());
+			log.info("doEnroll start: group=" + OresHelper.createStringRepresenting(group), identity.getName());
+			EnrollState enrollStatus = new EnrollState();
+			List<BusinessGroupModifiedEvent.Deferred> events = new ArrayList<BusinessGroupModifiedEvent.Deferred>();
+
+			ResourceReservation reservation = reservationDao.loadReservation(identity, reloadedGroup.getResource());
+
+			//reservation has the highest priority over max participant or other settings
 			if(reservation != null) {
-				reservationDao.deleteReservation(reservation);
-			}
-		} else if (reloadedGroup.getMaxParticipants() != null) {
-			int participantsCounter = businessGroupRelationDAO.countEnrollment(reloadedGroup);
-			int reservations = reservationDao.countReservations(reloadedGroup.getResource());
-			
-			log.info("doEnroll - participantsCounter: " + participantsCounter + ", reservations: " + reservations + " maxParticipants: " + reloadedGroup.getMaxParticipants().intValue(), identity.getName());
-			if ((participantsCounter + reservations) >= reloadedGroup.getMaxParticipants().intValue()) {
-				// already full, show error and updated choose page again
-				if (reloadedGroup.getWaitingListEnabled().booleanValue()) {
-					addToWaitingList(ureqIdentity, identity, reloadedGroup, mailing, events);
-					enrollStatus.setEnrolled(BGMembership.waiting);
-				} else {
-					// No Waiting List => List is full
-					enrollStatus.setI18nErrorMessage("error.group.full");
-					enrollStatus.setFailed(true);
-				}
-			} else {
-				//enough place
 				addParticipant(ureqIdentity, ureqRoles, identity, reloadedGroup, mailing, events);
 				enrollStatus.setEnrolled(BGMembership.participant);
-				log.info("doEnroll - setIsEnrolled ", identity.getName());
+				log.info("doEnroll (reservation) - setIsEnrolled ", identity.getName());
+				if(reservation != null) {
+					reservationDao.deleteReservation(reservation);
+				}
+			} else if (reloadedGroup.getMaxParticipants() != null) {
+				int participantsCounter = businessGroupRelationDAO.countEnrollment(reloadedGroup);
+				int reservations = reservationDao.countReservations(reloadedGroup.getResource());
+				log.info("doEnroll - participantsCounter: " + participantsCounter + ", reservations: " + reservations + " maxParticipants: " + reloadedGroup.getMaxParticipants().intValue(), identity.getName());
+				if ((participantsCounter + reservations) >= reloadedGroup.getMaxParticipants().intValue()) {
+					// already full, show error and updated choose page again
+					if (reloadedGroup.getWaitingListEnabled().booleanValue()) {
+						addToWaitingList(ureqIdentity, identity, reloadedGroup, mailing, events);
+						enrollStatus.setEnrolled(BGMembership.waiting);
+					} else {
+						// No Waiting List => List is full
+						enrollStatus.setI18nErrorMessage("error.group.full");
+						enrollStatus.setFailed(true);
+					}
+				} else {
+					//enough place
+					addParticipant(ureqIdentity, ureqRoles, identity, reloadedGroup, mailing, events);
+					enrollStatus.setEnrolled(BGMembership.participant);
+					log.info("doEnroll - setIsEnrolled ", identity.getName());
+				}
+			} else {
+				if (log.isDebug()) log.debug("doEnroll as participant beginTransaction");
+				addParticipant(ureqIdentity, ureqRoles, identity, reloadedGroup, mailing, events);
+				enrollStatus.setEnrolled(BGMembership.participant);
+				if (log.isDebug()) log.debug("doEnroll as participant committed");
 			}
-		} else {
-			if (log.isDebug()) log.debug("doEnroll as participant beginTransaction");
-			addParticipant(ureqIdentity, ureqRoles, identity, reloadedGroup, mailing, events);
-			enrollStatus.setEnrolled(BGMembership.participant);						
-			if (log.isDebug()) log.debug("doEnroll as participant committed");
-		}
 
-		dbInstance.commit();
-		BusinessGroupModifiedEvent.fireDeferredEvents(events);
-		log.info("doEnroll end", identity.getName());
-		return enrollStatus;
+			dbInstance.commit();
+			BusinessGroupModifiedEvent.fireDeferredEvents(events);
+			log.info("doEnroll end", identity.getName());
+			return enrollStatus;
+		}
 	}
 
 	/**
@@ -1427,7 +1453,6 @@ public class BusinessGroupServiceImpl implements BusinessGroupService, UserDataD
 	 * @param ureqIdentity
 	 * @param group
 	 * @param mailing
-	 * @param syncIM
 	 */
 	private void transferFirstIdentityFromWaitingToParticipant(Identity ureqIdentity, BusinessGroup group, 
 			MailPackage mailing, List<BusinessGroupModifiedEvent.Deferred> events) {
@@ -1623,7 +1648,7 @@ public class BusinessGroupServiceImpl implements BusinessGroupService, UserDataD
 				List<Identity> ownerList = getMembers(groups, GroupRoles.participant.name());
 				repoTutorList.retainAll(ownerList);
 				if(!dryRun) {
-					repositoryManager.removeTutors(ureqIdentity, repoTutorList, entry);
+                    repositoryManager.removeTutors(ureqIdentity, repoTutorList, entry, null, false);
 				}
 				count += repoTutorList.size();
 			}

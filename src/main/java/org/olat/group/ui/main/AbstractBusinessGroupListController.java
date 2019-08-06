@@ -556,7 +556,7 @@ public abstract class AbstractBusinessGroupListController extends FormBasicContr
 		NewControllerFactory.getInstance().launch(businessPath, ureq, getWindowControl());
 	}
 	
-	private void doConfirmLeaving(UserRequest ureq, BusinessGroup businessGroup) {
+	protected void doConfirmLeaving(UserRequest ureq, BusinessGroup businessGroup) {
 		if (businessGroupService.hasRoles(getIdentity(), businessGroup, GroupRoles.coach.name())
 				|| businessGroupService.hasRoles(getIdentity(), businessGroup, GroupRoles.waiting.name()) ) {
 			doOpenConfirmLeavingDialog(ureq, businessGroup);
@@ -600,8 +600,6 @@ public abstract class AbstractBusinessGroupListController extends FormBasicContr
 	/**
 	 * Removes user from the group as owner and participant. If
 	 * no other owner are found the user won't be removed from the owner group
-	 * 
-	 * @param ureq
 	 */
 	private void doLeave(BusinessGroup group) {
 		List<Identity> identityToRemove = Collections.singletonList(getIdentity());
@@ -714,7 +712,6 @@ public abstract class AbstractBusinessGroupListController extends FormBasicContr
 	/**
 	 * 
 	 * @param ureq
-	 * @param items
 	 */
 	private void doConfiguration(UserRequest ureq, List<? extends BusinessGroupRef> selectedItems) {
 		removeAsListenerAndDispose(businessGroupWizard);
@@ -800,12 +797,7 @@ public abstract class AbstractBusinessGroupListController extends FormBasicContr
 		listenTo(businessGroupWizard);
 		getWindowControl().pushAsModalDialog(businessGroupWizard.getInitialComponent());
 	}
-	
-	/**
-	 * 
-	 * @param ureq
-	 * @param items
-	 */
+
 	private void doEmails(UserRequest ureq, List<? extends BusinessGroupRef> selectedItems) {
 		removeAsListenerAndDispose(emailWizard);
 		if(selectedItems == null || selectedItems.isEmpty()) {
@@ -836,12 +828,7 @@ public abstract class AbstractBusinessGroupListController extends FormBasicContr
 		listenTo(emailWizard);
 		getWindowControl().pushAsModalDialog(emailWizard.getInitialComponent());
 	}
-	
-	/**
-	 * 
-	 * @param ureq
-	 * @param items
-	 */
+
 	private void doUserManagement(UserRequest ureq, List<? extends BusinessGroupRef> selectedItems) {
 		removeAsListenerAndDispose(cmc);
 		removeAsListenerAndDispose(userManagementController);
@@ -926,7 +913,7 @@ public abstract class AbstractBusinessGroupListController extends FormBasicContr
 	
 	protected void doSearch(FlexiTableSearchEvent event) {
 		BusinessGroupQueryParams params = getDefaultSearchParams();
-		params.setNameOrDesc(event.getSearch());
+		params.setNameOrDesc("*" + event.getSearch() + "*");
 		loadModel(params);
 	}
 
@@ -943,7 +930,7 @@ public abstract class AbstractBusinessGroupListController extends FormBasicContr
 	
 	protected abstract BusinessGroupQueryParams getDefaultSearchParams();
 	
-	protected boolean doDefaultSearch() {
+	public boolean doDefaultSearch() {
 		BusinessGroupQueryParams params = getDefaultSearchParams();
 		return loadModel(params) > 0;
 	}
@@ -957,12 +944,7 @@ public abstract class AbstractBusinessGroupListController extends FormBasicContr
 		List<BusinessGroup> selection = Collections.singletonList(group);
 		fireEvent(ureq, new BusinessGroupSelectionEvent(selection));
 	}
-	
-	/**
-	 * 
-	 * @param ureq
-	 * @param items
-	 */
+
 	private void doMerge(UserRequest ureq, List<? extends BusinessGroupRef> selectedItems) {
 		removeAsListenerAndDispose(businessGroupWizard);
 		if(selectedItems == null || selectedItems.size() < 2) {

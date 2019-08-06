@@ -20,13 +20,17 @@
 package org.olat.core.gui.themes;
 
 import java.io.File;
+import java.net.URL;
 
+import org.olat.admin.layout.StaticDirectory;
 import org.olat.core.CoreSpringFactory;
 import org.olat.core.dispatcher.impl.StaticMediaDispatcher;
 import org.olat.core.gui.render.StringOutput;
 import org.olat.core.helpers.GUISettings;
 import org.olat.core.helpers.Settings;
+import org.olat.core.servlets.StaticServlet;
 import org.olat.core.util.WebappHelper;
+import org.springframework.beans.factory.annotation.Autowired;
 
 /**
  * <h3>Description:</h3> A class that represents a GUI theme
@@ -45,11 +49,15 @@ public class Theme {
 
 	private static String CUSTOMFILENAME = "theme.js";
 
+	@Autowired
+	private StaticDirectory[] staticDirectories;
+
 	/**
 	 * @param name
 	 *            The unique theme identifyer
 	 */
 	public Theme(String themeIdentifyer) {
+		CoreSpringFactory.autowireObject(this);
 		init(themeIdentifyer);
 	}
 
@@ -76,19 +84,22 @@ public class Theme {
 	 * 
 	 * @return
 	 */
-	private File getCustomJSFile() {
-		String staticThemesPath = WebappHelper.getContextRealPath("/static/themes/");
-		if(staticThemesPath == null) {
-			staticThemesPath = WebappHelper.getContextRoot() + "/static/themes/";
-		}
-		
+	private boolean getCustomJSFile() {
 		String guiThemIdentifyer = CoreSpringFactory.getImpl(GUISettings.class).getGuiThemeIdentifyer();
+		URL url = StaticServlet.getStaticResource(staticDirectories,
+				"/themes/" + guiThemIdentifyer + "/" +
+						CUSTOMFILENAME);
+		if (url != null) {
+			return true;
+		}
+
+		String staticThemesPath = WebappHelper.getContextRealPath("/static/themes/");
 		File themeFolder = new File(staticThemesPath, guiThemIdentifyer);
 		if (!themeFolder.exists() && Settings.getGuiCustomThemePath() != null) {
 			// fallback to custom themes folder
 			themeFolder = new File(Settings.getGuiCustomThemePath(), guiThemIdentifyer);
 		}
-		return new File(themeFolder, CUSTOMFILENAME);
+		return new File(themeFolder, CUSTOMFILENAME).exists();
 	}
 
 	/**
@@ -130,7 +141,7 @@ public class Theme {
 		StaticMediaDispatcher.renderStaticURI(themePath, relPathToThemesDir);
 		this.baseURI = themePath.toString();
 		// Check if theme has a custom JS file to tweak UI on JS level
-		hasCustomJSFile = getCustomJSFile().exists();
+		hasCustomJSFile = getCustomJSFile();
 	}
 
 }

@@ -26,6 +26,7 @@ import java.util.Locale;
 
 import org.olat.basesecurity.IdentityRef;
 import org.olat.commons.info.model.InfoMessage;
+import org.olat.core.commons.modules.bc.vfs.OlatRootFolderImpl;
 import org.olat.core.id.Identity;
 import org.olat.core.id.OLATResourceable;
 import org.olat.core.util.resource.OresHelper;

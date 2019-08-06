@@ -32,6 +32,8 @@ import org.olat.core.id.OLATResourceable;
 import org.olat.core.id.Roles;
 import org.olat.core.util.resource.OresHelper;
 import org.olat.core.util.vfs.VFSLeaf;
+import org.olat.repository.handlers.RepositoryHandler;
+import org.olat.repository.manager.RepositoryEntryDeletionException;
 import org.olat.repository.model.SearchAuthorRepositoryEntryViewParams;
 import org.olat.repository.model.SearchMyRepositoryEntryViewParams;
 import org.olat.resource.OLATResource;
@@ -56,6 +58,8 @@ public interface RepositoryService {
 	
 	public RepositoryEntry create(String initialAuthor, String resourceName,
 			String displayname, String description, OLATResource resource);
+
+	RepositoryEntry copy(RepositoryEntry sourceEntry, Identity author, String displayname, RepositoryHandler repositoryHandler);
 	
 	public RepositoryEntry copy(RepositoryEntry sourceEntry, Identity author, String displayname);
 	
@@ -80,8 +84,8 @@ public interface RepositoryService {
 	public VFSLeaf getIntroductionImage(RepositoryEntry re);
 
 	public VFSLeaf getIntroductionMovie(RepositoryEntry re);
-	
-	
+
+
 	public RepositoryEntry update(RepositoryEntry re);
 	
 	/**
@@ -92,14 +96,14 @@ public interface RepositoryService {
 	 * @param entry
 	 * @param owners If the owners need to be removed
 	 */
-	public RepositoryEntry deleteSoftly(RepositoryEntry entry, Identity deletedBy, boolean owners);
+	public RepositoryEntry deleteSoftly(RepositoryEntry entry, Identity deletedBy, boolean owners) throws RepositoryEntryDeletionException;
 	
 	/**
 	 * The access is set to B.
 	 * @param entry
 	 * @return
 	 */
-	public RepositoryEntry restoreRepositoryEntry(RepositoryEntry entry);
+	public RepositoryEntry restoreRepositoryEntry(RepositoryEntry entry, Identity restoredBy);
 	
 	
 	/**
@@ -110,7 +114,7 @@ public interface RepositoryService {
 	 * @param locale
 	 * @return
 	 */
-	public ErrorList deletePermanently(RepositoryEntry entry, Identity identity, Roles roles, Locale locale);
+	public ErrorList deletePermanently(RepositoryEntry entry, Identity identity, Roles roles, Locale locale) throws RepositoryEntryDeletionException;
 	
 	/**
 	 * Delete only the database object

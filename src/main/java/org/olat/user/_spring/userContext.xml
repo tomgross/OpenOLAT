@@ -36,24 +36,63 @@
         	<list>
                 <bean class="org.olat.user.DefaultUser">
                         <!-- constructor arg is userName -->
-                       <constructor-arg type="java.lang.String" value="author" />
-                       <property name="firstName" value="Aurich" />
-                       <property name="lastName" value="Thorw" />
-                       <property name="email" value="author@olat-newinstallation.org" />
-                       <property name="password" value="test" />
+                       <constructor-arg type="java.lang.String" value="jama" />
+                       <property name="firstName" value="Jacob" />
+                       <property name="lastName" value="Macload" />
+                       <property name="email" value="jacob.macload@dummi.ch" />
+                    <property name="password" value="Tetris2020!" />
+                    <property name="language" value="${defaultlang}" />
+                    <property name="guest" value="false" />
+                    <property name="author" value="true" />
+                    <property name="admin" value="false" />
+                </bean>
+
+                <bean class="org.olat.user.DefaultUser">
+                    <!-- constructor arg is userName -->
+                    <constructor-arg type="java.lang.String" value="anmc" />
+                    <property name="firstName" value="Andrew" />
+                    <property name="lastName" value="McDonald" />
+                    <property name="email" value="andrew.macdonald@dummi.ch" />
+                       <property name="password" value="Tetris2020!" />
                        <property name="language" value="${defaultlang}" />
                        <property name="guest" value="false" />
                        <property name="author" value="true" />
                        <property name="admin" value="false" />
-                       
+
                </bean>
                <bean class="org.olat.user.DefaultUser">
                         <!-- constructor arg is userName -->
-                       <constructor-arg type="java.lang.String" value="learner" />
-                       <property name="firstName" value="Leisa" />
-                       <property name="lastName" value="Arnerich" />
-                       <property name="email" value="learner@olat-newinstallation.org" />
-                       <property name="password" value="test" />
+                       <constructor-arg type="java.lang.String" value="alla" />
+                       <property name="firstName" value="Alison" />
+                       <property name="lastName" value="Lambert" />
+                       <property name="email" value="alison.lambert@dummi.ch" />
+                    <property name="password" value="Tetris2020!" />
+                    <property name="language" value="${defaultlang}" />
+                    <property name="guest" value="false" />
+                    <property name="author" value="true" />
+                    <property name="admin" value="false" />
+                </bean>
+
+                <bean class="org.olat.user.DefaultUser">
+                    <!-- constructor arg is userName -->
+                    <constructor-arg type="java.lang.String" value="alla2" />
+                    <property name="firstName" value="Alison_2" />
+                    <property name="lastName" value="Lambert_2" />
+                    <property name="email" value="alison_2.lambert_2@dummi.ch" />
+                    <property name="password" value="Tetris2020!" />
+                    <property name="language" value="${defaultlang}" />
+                    <property name="guest" value="false" />
+                    <property name="author" value="true" />
+                    <property name="admin" value="false" />
+                </bean>
+
+                <bean class="org.olat.user.DefaultUser">
+                    <!-- constructor arg is userName -->
+                    <constructor-arg type="java.lang.String" value="damu" />
+                    <property name="firstName" value="Dan" />
+                    <property name="lastName" value="Murray" />
+                    <property name="email" value="dan.murray@dummi.ch" />
+                       <property name="password" value="Tetris2020!" />
                        <property name="language" value="${defaultlang}" />
                       <property name="guest" value="false" />
                        <property name="author" value="false" />
@@ -61,37 +100,61 @@
                </bean>
                <bean class="org.olat.user.DefaultUser">
                         <!-- constructor arg is userName -->
-                       <constructor-arg type="java.lang.String" value="usermgr" />
-                       <property name="firstName" value="Marc" />
-                       <property name="lastName" value="Bond" />
-                       <property name="email" value="usermgr@olat-newinstallation.org" />
-                       <property name="password" value="test" />
+                       <constructor-arg type="java.lang.String" value="feja" />
+                       <property name="firstName" value="Felicity" />
+                       <property name="lastName" value="Jackson" />
+                       <property name="email" value="felicity.jackson@dummi.ch" />
+                       <property name="password" value="Tetris2020!" />
                        <property name="language" value="${defaultlang}" />
                        <property name="guest" value="false" />
                        <property name="author" value="false" />
                        <property name="admin" value="false" />
-                       <property name="userManager" value="true" />
+                       </bean>
+
+                <bean class="org.olat.user.DefaultUser">
+                    <!-- constructor arg is userName -->
+                    <constructor-arg type="java.lang.String" value="chco" />
+                    <property name="firstName" value="Chloe" />
+                    <property name="lastName" value="Coleman" />
+                    <property name="email" value="chloe.coleman@dummi.ch" />
+                    <property name="password" value="Tetris2020!" />
+                    <property name="language" value="${defaultlang}" />
+                    <property name="guest" value="false" />
+                    <property name="author" value="false" />
+                    <property name="admin" value="false" />
                </bean>
                <bean class="org.olat.user.DefaultUser">
                         <!-- constructor arg is userName -->
-                       <constructor-arg type="java.lang.String" value="groupmgr" />
-                       <property name="firstName" value="Alexandra" />
-                       <property name="lastName" value="Jeunet" />
-                       <property name="email" value="groupmgr@olat-newinstallation.org" />
-                       <property name="password" value="test" />
+                       <constructor-arg type="java.lang.String" value="jash" />
+                       <property name="firstName" value="James" />
+                       <property name="lastName" value="Sharp" />
+                       <property name="email" value="james.sharp@dummi.ch" />
+                       <property name="password" value="Tetris2020!" />
                        <property name="language" value="${defaultlang}" />
                        <property name="guest" value="false" />
                        <property name="author" value="false" />
                        <property name="admin" value="false" />
-                       <property name="groupManager" value="true" />
+                       </bean>
+
+                <bean class="org.olat.user.DefaultUser">
+                    <!-- constructor arg is userName -->
+                    <constructor-arg type="java.lang.String" value="jash2" />
+                    <property name="firstName" value="James" />
+                    <property name="lastName" value="Sheperd" />
+                    <property name="email" value="james.sheperd@dummi.ch" />
+                    <property name="password" value="Tetris2020!" />
+                    <property name="language" value="${defaultlang}" />
+                    <property name="guest" value="false" />
+                    <property name="author" value="false" />
+                    <property name="admin" value="false" />
                </bean>
                <bean class="org.olat.user.DefaultUser">
                         <!-- constructor arg is userName -->
-                       <constructor-arg type="java.lang.String" value="test" />
-                       <property name="firstName" value="Thomas" />
-                       <property name="lastName" value="Est" />
-                       <property name="email" value="test@olat-newinstallation.org" />
-                       <property name="password" value="test" />
+                       <constructor-arg type="java.lang.String" value="arlo" />
+                       <property name="firstName" value="Arden" />
+                       <property name="lastName" value="Lolly" />
+                       <property name="email" value="arden.lolly@dummi.ch" />
+                       <property name="password" value="Tetris2020!" />
                        <property name="language" value="${defaultlang}" />
                        <property name="guest" value="false" />
                        <property name="author" value="false" />
@@ -99,11 +162,11 @@
                </bean>
                <bean class="org.olat.user.DefaultUser">
                         <!-- constructor arg is userName -->
-                       <constructor-arg type="java.lang.String" value="test2" />
-                       <property name="firstName" value="Till" />
-                       <property name="lastName" value="Estobesto" />
-                       <property name="email" value="test2@olat-newinstallation.org" />
-                       <property name="password" value="test" />
+                       <constructor-arg type="java.lang.String" value="arlo2" />
+                       <property name="firstName" value="Arden_2" />
+                       <property name="lastName" value="Lolly_2" />
+                       <property name="email" value="arden.lolly@dummi.ch" />
+                       <property name="password" value="Tetris2020!" />
                        <property name="language" value="${defaultlang}" />
                       <property name="guest" value="false" />
                        <property name="author" value="false" />
@@ -111,20 +174,33 @@
                </bean>
                <bean class="org.olat.user.DefaultUser">
                         <!-- constructor arg is userName -->
-                       <constructor-arg type="java.lang.String" value="test3" />
-                       <property name="firstName" value="Tanja" />
-                       <property name="lastName" value="Estelle" />
-                       <property name="email" value="test3@olat-newinstallation.org" />
-                       <property name="password" value="test" />
+                       <constructor-arg type="java.lang.String" value="josh" />
+                       <property name="firstName" value="John" />
+                       <property name="lastName" value="Sheppard" />
+                       <property name="email" value="john.sheppard@dummi.ch" />
+                    <property name="password" value="Tetris2020!" />
+                    <property name="language" value="${defaultlang}" />
+                    <property name="guest" value="false" />
+                    <property name="author" value="false" />
+                    <property name="admin" value="false" />
+                </bean>
+
+                <bean class="org.olat.user.DefaultUser">
+                    <!-- constructor arg is userName -->
+                    <constructor-arg type="java.lang.String" value="rode" />
+                    <property name="firstName" value="Ronon" />
+                    <property name="lastName" value="Dex" />
+                    <property name="email" value="ronon.dex@dummi.ch" />
+                       <property name="password" value="Tetris2020!" />
                        <property name="language" value="${defaultlang}" />
                       <property name="guest" value="false" />
                        <property name="author" value="false" />
                        <property name="admin" value="false" />
                </bean>
            </list>
-		</constructor-arg>
+        </constructor-arg>
 	</bean>
-	
+
 	<bean id="loginBlacklist" class="java.util.ArrayList">
 		<constructor-arg index="0">
 		<list>
@@ -167,32 +243,32 @@
 			<value>[\.\-_].*</value>
 			<value>[\.\-_]*</value>
 		</list>
-		</constructor-arg>
+	</constructor-arg>
 	</bean>
 
-	<!-- 
+	<!--
 	<bean id="org.olat.user.AfterLogin.Injection" class="org.springframework.beans.factory.config.MethodInvokingFactoryBean">
-		<property name="targetObject" ref="afterLoginInterceptionManager" />
-		<property name="targetMethod" value="addAfterLoginControllerConfig" />
+		<propertyname="targetObject" ref="afterLoginInterceptionManager" />
+	<property name="targetMethod" value="addAfterLoginControllerConfig" />
 		<property name="arguments">
-			<ref bean="org.olat.user.AfterLoginConfig"/>
-		</property>
-	</bean>
+		<ref bean="org.olat.user.AfterLoginConfig"/>
+	</property>
+</bean>
 
 	<bean id="org.olat.user.AfterLoginConfig" class="org.olat.login.AfterLoginConfig" scope="prototype">	
 		<property name="afterLoginControllerList">
 			<list>
-			// Configuration to force users to regularly check and update the user profile, redoTimeout sets the interval	(seconds)		
+			// Configuration to force users to regularly check and update the user profile, redoTimeout sets the interval	(seconds)
 				<map>
 					<entry key="controller">
 						<bean class="org.olat.core.gui.control.creator.AutoCreator" scope="prototype">
 							<property name="className" value="org.olat.user.ProfileAndHomePageEditController"/>
 						</bean>
 					</entry>
-					<entry key="forceUser"><value>true</value></entry>			
-					  <entry key="redoTimeout"><value>10</value></entry>  
-					<entry key="i18nIntro"><value>org.olat.user:runonce.profile.intro</value></entry>	
-				</map> 
+					<entry key="forceUser"><value>true</value></entry>
+					  <entry key="redoTimeout"><value>10</value></entry>
+					<entry key="i18nIntro"><value>org.olat.user:runonce.profile.intro</value></entry>
+				</map>
 			// Alternative configuration to force users to fill out profile if a mandatory user property is missing (no syntax checks done, only checks if property exists)
                 <map>
                         <entry key="controller">
@@ -202,8 +278,8 @@
                         <entry key="redoTimeout"><value>31536000</value></entry>
                         <entry key="i18nIntro"><value>org.olat.user:runonce.profile.intro</value></entry>
                         <entry key="size"><value>800x600</value></entry>
-                </map>			
-			// Configuration to force users to change their password after the configured redoTimeout (seconds) 
+                </map>
+			// Configuration to force users to change their password after the configured redoTimeout (seconds)
 				<map>
 					<entry key="controller">
 						<bean class="org.olat.core.gui.control.creator.AutoCreator" scope="prototype">
@@ -211,14 +287,14 @@
 						</bean>
 					</entry>
 					<entry key="forceUser"><value>true</value></entry>
-					## equals 30d in seconds ## 
-					<entry key="redoTimeout"><value>2592000</value></entry> 
-					<entry key="i18nIntro"><value>org.olat.user:runonce.changepw.intro</value></entry>			
-				</map> 
-			-->		
-			<!-- Documented example of the change password dialog 
+					## equals 30d in seconds ##
+					<entry key="redoTimeout"><value>2592000</value></entry>
+					<entry key="i18nIntro"><value>org.olat.user:runonce.changepw.intro</value></entry>
+				</map>
+			-->
+			<!-- Documented example of the change password dialog
 				<map>
-					## specify a controller to start with default args (ureq, wControl) 
+					## specify a controller to start with default args (ureq, wControl)
 					<entry key="controller">
 						<bean class="org.olat.core.gui.control.creator.AutoCreator" scope="prototype">
 							<property name="className" value="org.olat.user.ChangePasswordController"/>
@@ -226,15 +302,15 @@
 					</entry>
 					## optional argument to not let user close the controller before controller sent done-event
 					<entry key="forceUser"><value>false</value></entry>
-					## optional argument to redo workflow after specified timeout in seconds. O means everytime. 
+					## optional argument to redo workflow after specified timeout in seconds. O means everytime.
 					## leave parameter to only run once
-					<entry key="redoTimeout"><value>0</value></entry>		
+					<entry key="redoTimeout"><value>0</value></entry>
 					## optional i18nKey to present an intro-text for this controller
 					## specify in the form of "package:i18nKey"
-					<entry key="i18nIntro"><value>org.olat.user:runonce.intro</value></entry>		
-				</map> 
-		
-			</list> 
+					<entry key="i18nIntro"><value>org.olat.user:runonce.intro</value></entry>
+				</map>
+
+			</list>
 		</property>
 	</bean>
 	-->
@@ -276,19 +352,19 @@
 		<property name="actionController">
 			<bean class="org.olat.core.gui.control.creator.AutoCreator" scope="prototype">
 				<property name="className" value="org.olat.user.propertyhandlers.ui.UsrPropCfgController"/>
-			</bean>
+		</bean>
 		</property>
 		<property name="navigationKey" value="userproperties" />
-		<property name="translationPackage" value="org.olat.admin" />
+		<property name="translationPackage" value="org.olat.admin"/>
 		<property name="i18nActionKey" value="menu.userproperties"/>
-		<property name="i18nDescriptionKey" value="menu.userproperties.alt"/>
+		<property name="i18nDescriptionKey" value="menu.userproperties.alt" />
 		<property name="extensionPoints">
-			<list>	
-				<value>org.olat.admin.SystemAdminMainController</value>		
+			<list>
+				<value>org.olat.admin.SystemAdminMainController</value>
 			</list>
 		</property>
 		<property name="parentTreeNodeIdentifier" value="sysAdminMenueNodeCustomizing" />
 		<property name="order" value="7411" />
-	</bean>	
+	</bean>
 
 </beans>

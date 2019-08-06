@@ -27,6 +27,7 @@ package org.olat.course.nodes.tu;
 
 import java.net.MalformedURLException;
 import java.net.URL;
+import java.util.Arrays;
 
 import org.olat.core.gui.UserRequest;
 import org.olat.core.gui.components.form.flexible.FormItem;
@@ -148,11 +149,9 @@ public class TUConfigForm extends FormBasicController {
 
 		fullURI = getFullURL(proto, host, port, uri, query, ref).toString();
 		
-		selectableValues = new String[] { OPTION_TUNNEL_THROUGH_OLAT_IFRAME, OPTION_SHOW_IN_OLAT_IN_AN_IFRAME,
-				OPTION_SHOW_IN_NEW_BROWSER_WINDOW, OPTION_TUNNEL_THROUGH_OLAT_INLINE };
+		selectableValues = new String[] { OPTION_SHOW_IN_NEW_BROWSER_WINDOW, OPTION_SHOW_IN_OLAT_IN_AN_IFRAME, OPTION_TUNNEL_THROUGH_OLAT_IFRAME, OPTION_TUNNEL_THROUGH_OLAT_INLINE };
 
-		selectableLabels = new String[] { translate(NLS_OPTION_TUNNEL_IFRAME_LABEL), translate(NLS_OPTION_OLAT_IFRAME_LABEL),
-				translate(NLS_OPTION_EXTERN_PAGE_LABEL), translate(NLS_OPTION_TUNNEL_INLINE_LABEL) };
+		selectableLabels = new String[] { translate(NLS_OPTION_EXTERN_PAGE_LABEL), translate(NLS_OPTION_OLAT_IFRAME_LABEL), translate(NLS_OPTION_TUNNEL_IFRAME_LABEL), translate(NLS_OPTION_TUNNEL_INLINE_LABEL) };
 		
 		initForm (ureq);
 	}
@@ -191,6 +190,12 @@ public class TUConfigForm extends FormBasicController {
 		boolean allOk = true;
 		try {
 			URL url = new URL(thost.getValue());
+			String protocol = url.getProtocol();
+			boolean validProtocol = isProtocolValid(protocol);
+			if (!validProtocol) {
+				thost.setErrorKey("TUConfigForm.invalidProtocol", null);
+				allOk &= false;
+			}
 			allOk &= StringHelper.containsNonWhitespace(url.getHost());
 		} catch (MalformedURLException e) {
 			thost.setErrorKey("TUConfigForm.invalidurl", null);
@@ -198,14 +203,24 @@ public class TUConfigForm extends FormBasicController {
 		}
 		return allOk & super.validateFormLogic(ureq);
 	}
-	
-	
+
+	private static boolean isProtocolValid(String protocol) {
+		return protocol != null && Arrays.asList(PROTOCOLS).contains(protocol);
+	}
+
+	/**
+	 * Utility method
+	 */
+	static boolean isProtocolValid(ModuleConfiguration config) {
+		return config != null && isProtocolValid(config.getStringValue(CONFIGKEY_PROTO));
+	}
+
 	private String convertConfigToNewStyle(ModuleConfiguration cfg) {
 		Boolean tunnel = cfg.getBooleanEntry(CONFIG_TUNNEL);
 		Boolean iframe = cfg.getBooleanEntry(CONFIG_IFRAME);
 		Boolean extern = cfg.getBooleanEntry(CONFIG_EXTERN);
 		if (tunnel == null && iframe == null && extern == null) {				// nothing saved yet
-			return OPTION_TUNNEL_THROUGH_OLAT_IFRAME;
+			return OPTION_SHOW_IN_NEW_BROWSER_WINDOW;
 		} else {																												// something is saved ...
 			if (extern != null && extern.booleanValue()) {								// ... it was extern...
 				return OPTION_SHOW_IN_NEW_BROWSER_WINDOW;
@@ -283,7 +298,7 @@ public class TUConfigForm extends FormBasicController {
 		selectables = uifactory.addRadiosVertical("selectables", NLS_DISPLAY_CONFIG_EXTERN, formLayout, selectableValues, selectableLabels);
 		selectables.select(loadedConfig, true);
 		selectables.addActionListener(FormEvent.ONCLICK);
-		
+
 		checkboxPagePasswordProtected = uifactory.addCheckboxesHorizontal("checkbox", "TUConfigForm.protected", formLayout, new String[] { "ison" }, new String[] { "" });
 		
 		checkboxPagePasswordProtected.select("ison", (user != null) && !user.equals(""));
@@ -292,7 +307,7 @@ public class TUConfigForm extends FormBasicController {
 		
 		tuser = uifactory.addTextElement("user", "TUConfigForm.user", 255, user == null ? "" : user, formLayout);
 		tpass = uifactory.addPasswordElement("pass", "TUConfigForm.pass", 255, pass == null ? "" : pass, formLayout);
-		
+
 		uifactory.addFormSubmitButton("submit", formLayout);
 		
 		update();

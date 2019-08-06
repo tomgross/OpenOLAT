@@ -65,6 +65,8 @@ public class ShibbolethModule extends AbstractSpringModule implements ConfigOnOf
 	public static final String CONF_OLATUSERMAPPING_INSTITUTIONALNAME = "InstitutionalName";
 	private static final String CONF_OLATUSERMAPPING_INSTITUTIONALEMAIL = "InstitutionalEMail";
 	private static final String CONF_OLATUSERMAPPING_INSTITUTIONALUSERIDENTIFIER = "InstitutionalUserIdentifier";
+	private static final String CONF_OLATUSERMAPPING_INSTITUTIONAL_EMPLOYEE_NUMBER = "InstitutionalEmployeeNumber";
+	private static final String CONF_OLATUSERMAPPING_INSTITUTIONAL_MATRICULATION_NUMBER = "InstitutionalMatriculationNumber";
 	private static final String CONF_OLATUSERMAPPING_PREFERED_LANGUAGE = "PreferedLanguage";
 	private static final String CONF_OLATUSERMAPPING_ORGUNIT = "OrgUnit";
 	
@@ -89,7 +91,7 @@ public class ShibbolethModule extends AbstractSpringModule implements ConfigOnOf
 
 	public final String MULTIVALUE_SEPARATOR = ";";
 	
-	@Value("${shibboleth.defaultUID:Shib-SwissEP-UniqueID}")
+	@Value("${shibboleth.defaultUID:uniqueID}")
 	private String defaultUIDAttribute;
 	@Autowired @Qualifier("shibbolethUserMapping")
 	private HashMap<String, String> userMapping;
@@ -238,13 +240,24 @@ public class ShibbolethModule extends AbstractSpringModule implements ConfigOnOf
 		return userMapping.get(CONF_OLATUSERMAPPING_INSTITUTIONALNAME);
 	}
 	
-	/**
-	 * @return Institutional User Identifyer value from shibboleth attributes.
-	 */
-	public String getInstitutionalUserIdentifier() {
-		return userMapping.get(CONF_OLATUSERMAPPING_INSTITUTIONALUSERIDENTIFIER);
-	}
+//	public String getInstitutionalUserIdentifier() {
+//		return userMapping.get(CONF_OLATUSERMAPPING_INSTITUTIONALUSERIDENTIFIER);
+//	}
 	
+	/**
+	 * @return Institutional User Employee Number value from shibboleth attributes.
+	 */
+	public String getInstitutionalEmployeeNumber() {
+		return userMapping.get(CONF_OLATUSERMAPPING_INSTITUTIONAL_EMPLOYEE_NUMBER);
+	}
+
+	/**
+	 * @return Institutional User Matriculation Number value from shibboleth attributes.
+	 */
+	public String getInstitutionalMatriculationNumber() {
+		return userMapping.get(CONF_OLATUSERMAPPING_INSTITUTIONAL_MATRICULATION_NUMBER);
+	}
+
 	/**
 	 * @return OrgUnit User Identifyer value from shibboleth attributes or NULL if not defined.
 	 */

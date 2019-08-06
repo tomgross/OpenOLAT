@@ -62,10 +62,7 @@ import org.olat.core.gui.control.generic.messages.MessageUIFactory;
 import org.olat.core.gui.translator.Translator;
 import org.olat.core.id.Identity;
 import org.olat.core.id.OLATResourceable;
-import org.olat.core.id.context.BusinessControlFactory;
-import org.olat.core.id.context.ContextEntry;
-import org.olat.core.id.context.HistoryPoint;
-import org.olat.core.id.context.StateEntry;
+import org.olat.core.id.context.*;
 import org.olat.core.logging.AssertException;
 import org.olat.core.logging.activity.OlatResourceableType;
 import org.olat.core.logging.activity.ThreadLocalUserActivityLogger;
@@ -784,16 +781,12 @@ public class BusinessGroupMainRunController extends MainLayoutBasicController im
 		WindowControl bwControl = BusinessControlFactory.getInstance().createBusinessWindowControl(ce, getWindowControl());
 		ThreadLocalUserActivityLogger.addLoggingResourceInfo(LoggingResourceable.wrapPortfolioOres(ce.getOLATResourceable()));
 		addToHistory(ureq, bwControl);
-		
+
 		CollaborationTools collabTools = CollaborationToolsFactory.getInstance().getOrCreateCollaborationTools(businessGroup);
-		collabToolCtr = collabTools.createPortfolioController(ureq, bwControl, toolbarPanel, businessGroup);
-		listenTo(collabToolCtr);
-		toolbarPanel.popUpToRootController(ureq);
-		toolbarPanel.pushController("Portfolio", collabToolCtr);
-		
-		List<ContextEntry> entries = BusinessControlFactory.getInstance().createCEListFromResourceType("Toc");
-		((Activateable2)collabToolCtr).activate(ureq, entries, null);
-		return (Activateable2)collabToolCtr;
+		Controller collaborationToolCtr = collabTools.createPortfolioController(ureq, bwControl, businessGroup);
+		listenTo(collaborationToolCtr);
+		mainPanel.setContent(collaborationToolCtr.getInitialComponent());
+		return (Activateable2)collaborationToolCtr;
 	}
 	
 	private void doOpenMeetings(UserRequest ureq) {
@@ -860,6 +853,10 @@ public class BusinessGroupMainRunController extends MainLayoutBasicController im
 	}
 	
 	protected final void doClose(UserRequest ureq) {
+		// Remove context to be closed from history stack
+		BusinessControl businessControl = getWindowControl().getBusinessControl();
+		UserSession userSession = ureq.getUserSession();
+		userSession.removeFromHistory(businessControl);
 		OLATResourceable ores = businessGroup.getResource();
 		getWindowControl().getWindowBackOffice().getWindow()
 			.getDTabs().closeDTab(ureq, ores, launchedFromPoint);
@@ -1188,7 +1185,7 @@ public class BusinessGroupMainRunController extends MainLayoutBasicController im
 			gtnChild.setTitle(translate("menutree.portfolio"));
 			gtnChild.setUserObject(ACTIVITY_MENUSELECT_PORTFOLIO);
 			gtnChild.setAltText(translate("menutree.portfolio.alt"));
-			gtnChild.setIconCssClass("o_ep_icon");
+			gtnChild.setIconCssClass("o_EPStructuredMapTemplate_icon");
 			gtnChild.setCssClass("o_sel_group_portfolio");
 			root.addChild(gtnChild);
 			nodePortfolio = gtnChild;

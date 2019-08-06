@@ -42,6 +42,7 @@ import org.apache.http.util.EntityUtils;
 import org.apache.poi.util.IOUtils;
 import org.junit.After;
 import org.junit.Assert;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.olat.basesecurity.GroupRoles;
 import org.olat.core.commons.modules.bc.FolderConfig;
@@ -73,6 +74,7 @@ import org.springframework.beans.factory.annotation.Autowired;
  * @author srosse, stephane.rosse@frentix.com, http://www.frentix.com
  *
  */
+@Ignore
 public class WebDAVCommandsTest extends WebDAVTestCase {
 	
 	private static final OLog log = Tracing.createLoggerFor(WebDAVCommandsTest.class);

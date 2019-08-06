@@ -119,8 +119,7 @@ public class FOCourseNode extends AbstractAccessableCourseNode {
 	public TabbableController createEditController(UserRequest ureq, WindowControl wControl, BreadcrumbPanel stackPanel, ICourse course, UserCourseEnvironment euce) {
 		updateModuleConfigDefaults(false);
 		FOCourseNodeEditController childTabCntrllr = new FOCourseNodeEditController(ureq, wControl, this, course, euce);
-		CourseNode chosenNode = course.getEditorTreeModel().getCourseNode(euce.getCourseEditorEnv().getCurrentCourseNodeId());
-		return new NodeEditController(ureq, wControl, course.getEditorTreeModel(), course, chosenNode, euce, childTabCntrllr);
+		return new NodeEditController(ureq, wControl, course.getEditorTreeModel(), course, euce, childTabCntrllr);
 	}
 
 	/**
@@ -180,7 +179,7 @@ public class FOCourseNode extends AbstractAccessableCourseNode {
 	 * Private helper method to load the forum from the configuration or create on
 	 * if it does not yet exist
 	 * 
-	 * @param userCourseEnv
+	 * @param courseEnv
 	 * @return the loaded forum
 	 */
 	public Forum loadOrCreateForum(final CourseEnvironment courseEnv) {
@@ -315,7 +314,14 @@ public class FOCourseNode extends AbstractAccessableCourseNode {
 			// Create a forum peekview controller that shows the latest two messages		
 			Forum theForum = loadOrCreateForum(userCourseEnv.getCourseEnvironment());
 			RepositoryEntry courseEntry = userCourseEnv.getCourseEnvironment().getCourseGroupManager().getCourseEntry();
-			Controller peekViewController = new FOPeekviewController(ureq, wControl, courseEntry, theForum, getIdent(), 3);
+
+			// OLATNG-198: Prepare callback for PeekViewController
+			final Roles userRoles = ureq.getUserSession().getRoles();
+			final SubscriptionContext forumSubContext = CourseModule.createSubscriptionContext(userCourseEnv.getCourseEnvironment(), this);
+			ForumNodeForumCallback foCallback = new ForumNodeForumCallback(ne, userRoles.isOLATAdmin(), userRoles.isGuestOnly(),
+					false, false, false, forumSubContext);
+
+			Controller peekViewController = new FOPeekviewController(ureq, wControl, courseEntry, theForum, getIdent(), 3, foCallback);
 			return peekViewController;			
 		} else {
 			// use standard peekview

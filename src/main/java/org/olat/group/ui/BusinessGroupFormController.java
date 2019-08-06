@@ -113,7 +113,6 @@ public class BusinessGroupFormController extends FormBasicController {
 	 * @param ureq The user request.
 	 * @param wControl The window control.
 	 * @param businessGroup The group object which will be modified by this dialog.
-	 * @param minMaxEnabled Decides whether to limit the number of people that can enrol to a group or not
 	 */
 	public BusinessGroupFormController(UserRequest ureq, WindowControl wControl, BusinessGroup businessGroup) {
 		super(ureq, wControl, FormBasicController.LAYOUT_DEFAULT);
@@ -127,7 +126,6 @@ public class BusinessGroupFormController extends FormBasicController {
 	 * @param ureq
 	 * @param wControl
 	 * @param businessGroup The group object which will be modified by this dialog.
-	 * @param minMaxEnabled Decides whether to limit the number of people that can enrol to a group or not
 	 * @param bulkMode when passing group names as CSV you have to set this to true and all groups will be created at once
 	 */
 	public BusinessGroupFormController(UserRequest ureq, WindowControl wControl, BusinessGroup businessGroup, boolean bulkMode) {
@@ -271,8 +269,13 @@ public class BusinessGroupFormController extends FormBasicController {
 					flagList.append("</div>");
 					flagList.append("<ul>");
 					for (String flag : flags.split(",")) {
+						String translatedManagedFlag = managedTrans.translate("managed.flags.group." + flag);
+						if (translatedManagedFlag.trim().isEmpty()) {
+							// Empty translation for this managed flag -> do not display anything
+							continue;
+						}
 						flagList.append("<li>");
-						flagList.append(managedTrans.translate("managed.flags.group." + flag));
+						flagList.append(translatedManagedFlag);
 						flagList.append("</li>");
 					}
 					

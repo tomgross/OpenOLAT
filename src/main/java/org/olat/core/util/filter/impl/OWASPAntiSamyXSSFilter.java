@@ -1,4 +1,4 @@
-/**
+/*
  * <a href="http://www.openolat.org">
  * OpenOLAT - Online Learning and Training</a><br>
  * <p>
@@ -56,7 +56,6 @@ public class OWASPAntiSamyXSSFilter implements Filter {
 
 	//to be found in /_resources
 	private static final String POLICY_FILE = "antisamy-tinymce.xml";
-	private static boolean jUnitDebug;
 	private CleanResults cr;
 	private final int maxLength;
 	private final boolean entityEncodeIntlChars;
@@ -78,19 +77,14 @@ public class OWASPAntiSamyXSSFilter implements Filter {
 	}
 	
 	public OWASPAntiSamyXSSFilter(){
-		this(-1, true, false);
+		this(-1, true);
 	}
 
-	/**
-	 * @param maxLength
-	 * @param junitDebug
-	 */
-	public OWASPAntiSamyXSSFilter(int maxLength, boolean junitDebug){
-		this(maxLength, true, junitDebug);
+	public OWASPAntiSamyXSSFilter(int maxLength){
+		this(maxLength, true);
 	}
 	
-	public OWASPAntiSamyXSSFilter(int maxLength, boolean entityEncodeIntlChars, boolean junitDebug){
-		OWASPAntiSamyXSSFilter.jUnitDebug = junitDebug;
+	public OWASPAntiSamyXSSFilter(int maxLength, boolean entityEncodeIntlChars){
 		this.maxLength = maxLength;
 		this.entityEncodeIntlChars = entityEncodeIntlChars;
 	}
@@ -99,26 +93,27 @@ public class OWASPAntiSamyXSSFilter implements Filter {
 	 * @see org.olat.core.util.filter.Filter#filter(java.lang.String)
 	 */
     public String filter(String original) {
-        if (jUnitDebug) System.out.println("************************************************");
-        if (jUnitDebug) System.out.println("              Input: " + original);
         if (original == null) {
             if (log.isDebug()) log.debug("  Filter-Input was null, is this intended?", null);
             return null;
-        }
-        String output = getCleanHTML(original);
-        if (original.equals(output)) {
-//            logInfo("          filter worked correctly!", null);
-		} else {
-			String errMsg = getOrPrintErrorMessages();
-			if (!errMsg.equals("")) {
-				log.warn(" Filter applied! => message from filter, check if this should not be allowed: " + errMsg, null);
-				log.info(" Original Input: \n" + original, null);
-				log.info("  Filter Result: \n" +  output, null);
-			} else {
-				log.debug(" Filter result doesn't match input! / no message from filter! maybe only some formatting differences.", null);
+        } else {
+			String output = getCleanHTML(original);
+			if (log.isDebug()) {
+				if (original.equals(output)) {
+					log.debug("          filter worked correctly!", null);
+				} else {
+					String errorMessages = getErrorMessages();
+					if (errorMessages != null) {
+						log.debug(" Filter applied! => message from filter, check if this should not be allowed: " + errorMessages, null);
+						log.debug(" Original Input: \n" + original, null);
+						log.debug("  Filter Result: \n" + output, null);
+					} else {
+						log.debug(" Filter result doesn't match input! / no message from filter! maybe only some formatting differences.", null);
+					}
+				}
 			}
+			return output;
 		}
-		return output;
 	}
 
 	private void printOriginStackTrace() {
@@ -158,10 +153,6 @@ public class OWASPAntiSamyXSSFilter implements Filter {
             output = "";
             log.error("Error getting cleaned HTML from string::" + original, e);
         }
-        if (jUnitDebug) System.out.println("OWASP-AntiSamy-Outp: " + output);
-        getOrPrintErrorMessages();
-        if (jUnitDebug) System.out.println("OWASP-ParseTime:                    " + cr.getScanTime());
-		
 		return output;
 	}
 	
@@ -173,18 +164,15 @@ public class OWASPAntiSamyXSSFilter implements Filter {
 	}
 
 	/**
-	 * get Errors/Messages from filter. 
+	 * get Errors/Messages from filter.
 	 * This have not to be "errors", its what has been filtered and gets reported.
-	 * @return
 	 */
-	public String getOrPrintErrorMessages(){
-		String errors = "";
-		if (cr!=null){
-			if (cr.getNumberOfErrors()!=0) {
-				errors = "OWASP-Errors: " + cr.getErrorMessages();
-				if (jUnitDebug) System.out.println(errors);
-			}
+	private String getErrorMessages(){
+		if (cr != null && cr.getNumberOfErrors() != 0) {
+			return "OWASP-Errors: " + cr.getErrorMessages();
+		} else {
+			return null;
 		}
-		return errors;
 	}
+
 }

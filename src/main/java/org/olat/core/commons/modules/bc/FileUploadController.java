@@ -149,8 +149,6 @@ public class FileUploadController extends FormBasicController {
 	@Autowired
 	private ImageService imageHelper;
 	@Autowired
-	private FilesInfoMBean fileInfoMBean;
-	@Autowired
 	private VFSLockManager vfsLockManager;
 	@Autowired
 	private MetaInfoFactory metaInfoFactory;
@@ -698,7 +696,6 @@ public class FileUploadController extends FormBasicController {
 		if (success) {
 			String filePath = (uploadRelPath == null ? "" : uploadRelPath + "/") + newFile.getName();
 			finishSuccessfullUpload(filePath, newFile, ureq);
-			fileInfoMBean.logUpload(newFile.getSize());
 			fireEvent(ureq, Event.DONE_EVENT);										
 		} else {
 			showError("failed");
@@ -713,7 +710,6 @@ public class FileUploadController extends FormBasicController {
 		VFSItem item = currentContainer.resolve(filePath);
 		if(item != null) {
 			finishSuccessfullUpload(filePath, item, ureq);
-			fileInfoMBean.logUpload(newFile.getSize());
 		} else {
 			logWarn("Upload with error:" + filePath, null);
 		}
@@ -890,7 +886,7 @@ public class FileUploadController extends FormBasicController {
 		boolean allOk = validateFilename(fileEl);
 		return allOk;
 	}
-	
+
 	private boolean validateFilename(FileElement itemEl) {
 		boolean allOk = true;
 		// validate clean the errors
@@ -904,7 +900,7 @@ public class FileUploadController extends FormBasicController {
 				itemEl.setErrorKey("NoFileChosen", null);
 				allOk &= false;
 			}
-			
+
 			if(uriValidation) {
 				try {
 					new URI(filename);
@@ -912,14 +908,14 @@ public class FileUploadController extends FormBasicController {
 					itemEl.setErrorKey("cfile.name.notvalid.uri", null);
 					allOk &= false;
 				}
-			}	
+			}
 			if(!FileUtils.validateFilename(filename)) {
 				itemEl.setErrorKey("cfile.name.notvalid", null);
 				allOk &= false;
 			}
 			allOk &= validateQuota(itemEl);
 		}
-		
+
 		itemEl.setDeleteEnabled(!allOk);
 		return allOk;
 	}
@@ -932,7 +928,7 @@ public class FileUploadController extends FormBasicController {
 			itemEl.setErrorKey("NoFileChosen", null);
 			allOk &= false;
 		}
-		
+
 		if(uriValidation) {
 			try {
 				new URI(filename);
@@ -940,16 +936,16 @@ public class FileUploadController extends FormBasicController {
 				itemEl.setErrorKey("cfile.name.notvalid.uri", null);
 				allOk &= false;
 			}
-		}	
+		}
 		if(!FileUtils.validateFilename(filename)) {
 			itemEl.setErrorKey("cfile.name.notvalid", null);
 			allOk &= false;
 		}
-		
+
 		allOk &= validateQuota(fileEl);
 		return allOk;
 	}
-	
+
 	private boolean validateQuota(FileElement itemEl) {
 		if (remainingQuotKB != -1  && itemEl.getUploadFile() != null
 				&& itemEl.getUploadFile().length() / 1024 > remainingQuotKB) {

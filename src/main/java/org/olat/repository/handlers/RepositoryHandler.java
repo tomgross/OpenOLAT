@@ -56,6 +56,10 @@ import org.olat.repository.ui.author.CreateRepositoryEntryController;
  * Comment:  
  * 
  */
+/**
+ * TODO sev26
+ * Number of methods should be reduced.
+ */
 public interface RepositoryHandler {
 
 	/**

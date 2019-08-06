@@ -33,6 +33,7 @@ import org.olat.core.gui.UserRequest;
 import org.olat.core.gui.WindowManager;
 import org.olat.core.gui.components.form.flexible.FormItem;
 import org.olat.core.gui.components.form.flexible.FormItemContainer;
+import org.olat.core.gui.components.form.flexible.elements.MultipleSelectionElement;
 import org.olat.core.gui.components.form.flexible.elements.SingleSelection;
 import org.olat.core.gui.components.form.flexible.elements.StaticTextElement;
 import org.olat.core.gui.components.form.flexible.impl.FormBasicController;
@@ -68,7 +69,7 @@ import org.olat.core.util.mail.MailModule;
 public class PreferencesFormController extends FormBasicController {
 	private static final String[] cssFontsizeKeys = new String[] { "80", "90", "100", "110", "120", "140" };
 	private Identity tobeChangedIdentity;
-	private SingleSelection language, fontsize, charset, notificationInterval, mailSystem;
+	private SingleSelection language, fontsize, notificationInterval, mailSystem;
 	private static final String[] mailIntern = new String[]{"intern.only","send.copy"};
 
 	/**
@@ -122,7 +123,6 @@ public class PreferencesFormController extends FormBasicController {
 			showInfo("preferences.unsuccessful");
 		}
 
-		um.setUserCharset(tobeChangedIdentity, charset.getSelectedKey());
 		fireEvent(ureq, Event.DONE_EVENT);
 	}
 
@@ -248,23 +248,6 @@ public class PreferencesFormController extends FormBasicController {
 			} else {
 				mailSystem.select(mailIntern[0], true);
 			}
-		}
-
-		// Text encoding
-		Map<String, Charset> charsets = Charset.availableCharsets();
-		String currentCharset = UserManager.getInstance().getUserCharset(tobeChangedIdentity);
-		String[] csKeys = StringHelper.getMapKeysAsStringArray(charsets);
-		charset = uifactory.addDropdownSingleselect("form.charset", formLayout, csKeys, csKeys, null);
-		charset.setElementCssClass("o_sel_home_settings_charset");
-		if(currentCharset != null) {
-			for(String csKey:csKeys) {
-				if(csKey.equals(currentCharset)) {
-					charset.select(currentCharset, true);
-				}
-			}
-		}
-		if(!charset.isOneSelected() && charsets.containsKey("UTF-8")) {
-			charset.select("UTF-8", true);
 		}
 
 		// Submit and cancel buttons

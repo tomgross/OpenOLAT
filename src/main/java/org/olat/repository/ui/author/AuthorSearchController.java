@@ -55,6 +55,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 public class AuthorSearchController extends FormBasicController implements ExtendedFlexiTableSearchController {
 
 	private static final String[] keys = new String[]{ "my" };
+	static final int MINIMAL_CHAR_LENGTH_SEARCH_FIELD = 3;
+	private static final int MINIMAL_CHAR_LENGTH_AUTHOR_SEARCH_FIELD = 2;
 	
 	private TextElement id; // only for admins
 	private TextElement displayName;
@@ -206,8 +208,17 @@ public class AuthorSearchController extends FormBasicController implements Exten
 	protected boolean validateFormLogic(UserRequest ureq) {
 		if(!enabled) return true;
 		
-		if (displayName.isEmpty() && author.isEmpty() && description.isEmpty() && (id != null && id.isEmpty()))	{
-			showWarning("cif.error.allempty");
+		if (displayName.getValue().length() < MINIMAL_CHAR_LENGTH_SEARCH_FIELD &&
+				author.getValue().length() < MINIMAL_CHAR_LENGTH_AUTHOR_SEARCH_FIELD &&
+				description.getValue().length() < MINIMAL_CHAR_LENGTH_SEARCH_FIELD &&
+				(id != null && id.getValue().length() < MINIMAL_CHAR_LENGTH_SEARCH_FIELD))	{
+			if (displayName.getValue().isEmpty() && author.getValue().isEmpty() && description.getValue().isEmpty() && (id != null && id.getValue().isEmpty())) {
+				showWarning("cif.error.allempty");
+			} else if (displayName.getValue().isEmpty() && !author.getValue().isEmpty() && description.getValue().isEmpty() && (id != null && id.getValue().isEmpty())) {
+				showWarning("cif.error.not.enough.chars", new String[]{Integer.toString(MINIMAL_CHAR_LENGTH_AUTHOR_SEARCH_FIELD)});
+			} else {
+				showWarning("cif.error.not.enough.chars", new String[]{Integer.toString(MINIMAL_CHAR_LENGTH_SEARCH_FIELD)});
+			}
 			return false;
 		}
 		return true;
@@ -229,7 +240,9 @@ public class AuthorSearchController extends FormBasicController implements Exten
 	protected void formInnerEvent (UserRequest ureq, FormItem source, FormEvent event) {
 		if(enabled) {
 			if (source == searchButton) {
-				fireSearchEvent(ureq);
+				if (validateFormLogic(ureq)) {
+					fireSearchEvent(ureq);
+				}
 			}
 		}
 	}
@@ -261,7 +274,11 @@ public class AuthorSearchController extends FormBasicController implements Exten
 		List<String> resources = new ArrayList<String>();
 		resources.add("");
 		for(OrderedRepositoryHandler handler:repositoryHandlerFactory.getOrderRepositoryHandlers()) {
-			resources.add(handler.getHandler().getSupportedType());
+			// filter out disabled types in advanced search
+			// TODO: generalize by using a specific (new) handler-method
+			if (handler.getHandler().isCreate() || handler.getOrder() > 10000 || handler.getOrder() == 42 || handler.getOrder() == 20) {
+				resources.add(handler.getHandler().getSupportedType());
+			}
 		}
 		return resources;
 	}

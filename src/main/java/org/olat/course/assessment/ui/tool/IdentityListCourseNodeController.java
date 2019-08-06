@@ -67,22 +67,24 @@ import org.olat.core.id.context.ContextEntry;
 import org.olat.core.id.context.StateEntry;
 import org.olat.core.util.StringHelper;
 import org.olat.core.util.Util;
+import org.olat.core.util.mail.MailContext;
+import org.olat.core.util.mail.MailContextImpl;
 import org.olat.core.util.resource.OresHelper;
 import org.olat.course.CourseFactory;
 import org.olat.course.ICourse;
 import org.olat.course.assessment.AssessmentModule;
 import org.olat.course.assessment.AssessmentToolManager;
+import org.olat.course.assessment.bulk.BulkAssessmentToolController;
 import org.olat.course.assessment.bulk.PassedCellRenderer;
 import org.olat.course.assessment.model.SearchAssessedIdentityParams;
 import org.olat.course.assessment.ui.tool.IdentityListCourseNodeTableModel.IdentityCourseElementCols;
 import org.olat.course.certificate.CertificateLight;
 import org.olat.course.certificate.CertificatesManager;
 import org.olat.course.certificate.ui.DownloadCertificateCellRenderer;
-import org.olat.course.nodes.AssessableCourseNode;
-import org.olat.course.nodes.CalculatedAssessableCourseNode;
-import org.olat.course.nodes.CourseNode;
-import org.olat.course.nodes.CourseNodeFactory;
-import org.olat.course.nodes.STCourseNode;
+import org.olat.course.nodes.*;
+import org.olat.course.nodes.gta.GTAManager;
+import org.olat.course.nodes.gta.Task;
+import org.olat.course.nodes.gta.TaskList;
 import org.olat.course.run.scoring.ScoreEvaluation;
 import org.olat.course.run.userview.UserCourseEnvironment;
 import org.olat.course.run.userview.UserCourseEnvironmentImpl;
@@ -144,7 +146,11 @@ public class IdentityListCourseNodeController extends FormBasicController implem
 	private CertificatesManager certificatesManager;
 	@Autowired
 	private AssessmentToolManager assessmentToolManager;
-	
+	@Autowired
+	private GTAManager gtaManager;
+
+
+
 	public IdentityListCourseNodeController(UserRequest ureq, WindowControl wControl, TooledStackedPanel stackPanel,
 			RepositoryEntry courseEntry, BusinessGroup group, CourseNode courseNode, UserCourseEnvironment coachCourseEnv,
 			AssessmentToolContainer toolContainer, AssessmentToolSecurityCallback assessmentCallback) {
@@ -473,7 +479,11 @@ public class IdentityListCourseNodeController extends FormBasicController implem
 
 	@Override
 	public void event(UserRequest ureq, Controller source, Event event) {
-		if(currentIdentityCtrl == source) {
+		if (source instanceof BulkAssessmentToolController) {
+			if(event == Event.CHANGED_EVENT) {
+				updateModel(ureq, null, null, null);
+			}
+		} else if(currentIdentityCtrl == source) {
 			if(event instanceof AssessmentFormEvent) {
 				AssessmentFormEvent aee = (AssessmentFormEvent)event;
 				updateModel(ureq, null, null, null);
@@ -671,9 +681,30 @@ public class IdentityListCourseNodeController extends FormBasicController implem
 				ScoreEvaluation doneEval = new ScoreEvaluation(scoreEval.getScore(), scoreEval.getPassed(),
 						AssessmentEntryStatus.done, null, scoreEval.getFullyAssessed(), scoreEval.getAssessmentID());
 				assessableCourseNode.updateUserScoreEvaluation(doneEval, assessedUserCourseEnv, getIdentity(), false);
+
+				// also send mail about grading to all subscribers
+				if (courseNode instanceof GTACourseNode) {
+					GTACourseNode gtaNode = (GTACourseNode) courseNode;
+					RepositoryEntry entry = course.getCourseEnvironment().getCourseGroupManager().getCourseEntry();
+					TaskList taskList = gtaManager.getTaskList(entry, gtaNode);
+					Task task = gtaManager.getTask(assessedIdentity, taskList);
+					if (task != null) {
+						doGradedEmail(courseEntry, gtaNode, task, assessedIdentity);
+					}
+				}
 			}
 			
 			updateModel(ureq, null, null, null);
 		}
+	}
+
+	private void doGradedEmail(RepositoryEntry courseEntry, GTACourseNode gtaNode, Task assignedTask, Identity assessedIdentity) {
+		// Build the list of recipients for the message according to configuration of the course element
+		List<Identity> recipients = gtaManager.addRecipients(courseEntry, gtaNode, assessedIdentity);
+
+		String subject = translate("assessment.email.subject");
+		MailContext context = new MailContextImpl(getWindowControl().getBusinessControl().getAsString());
+
+		gtaManager.sendGradedEmail(gtaNode, assessedIdentity, recipients, subject, assignedTask.getTaskName(), context, getTranslator());
 	}
 }

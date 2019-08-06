@@ -219,8 +219,12 @@ public class ShibbolethDispatcher implements Dispatcher{
 		if (s != null) user.setProperty(UserConstants.INSTITUTIONALNAME, s);		
 		s = ShibbolethHelper.getFirstValueOf(shibbolethModule.getInstitutionalEMail(), attributesMap);
 		if (s != null) user.setProperty(UserConstants.INSTITUTIONALEMAIL, s);
-		s = attributesMap.get(shibbolethModule.getInstitutionalUserIdentifier());
-		if (s != null) user.setProperty(UserConstants.INSTITUTIONALUSERIDENTIFIER, s);
+//		s = attributesMap.get(shibbolethModule.getInstitutionalUserIdentifier());
+//		if (s != null) user.setProperty(UserConstants.INSTITUTIONALUSERIDENTIFIER, s);
+		s = attributesMap.get(shibbolethModule.getInstitutionalEmployeeNumber());
+		if (s != null) user.setProperty(UserConstants.INSTITUTIONAL_EMPLOYEE_NUMBER, s);
+		s = attributesMap.get(shibbolethModule.getInstitutionalMatriculationNumber());
+		if (s != null) user.setProperty(UserConstants.INSTITUTIONAL_MATRICULATION_NUMBER, s);
 		// Optional organization unit property
 		String orgUnitIdent = shibbolethModule.getOrgUnit();
 		if(orgUnitIdent != null) {

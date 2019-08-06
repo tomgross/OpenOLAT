@@ -142,8 +142,9 @@ public class MembersTableController extends FormBasicController {
 	@Override
 	protected void initForm(FormItemContainer formLayout, Controller listener, UserRequest ureq) {
 		FlexiTableColumnModel columnsModel = FlexiTableDataModelFactory.createFlexiTableColumnModel();
-		SortKey defaultSortKey = initColumns(columnsModel);		
-		membersModel = new MemberListTableModel(columnsModel, imModule.isOnlineStatusEnabled());
+		SortKey defaultSortKey = initColumns(columnsModel);
+		//TODO: Do not give businessGroupColumnHeaders here because the export functionality of the table is not enabled. Be aware that the columnHeaders cannot be null if export is enabled
+		membersModel = new MemberListTableModel(columnsModel, imModule.isOnlineStatusEnabled(),null);
 		membersModel.setObjects(membersList);
 		membersTable = uifactory.addTableElement(getWindowControl(), "table", membersModel, pageSize, false, getTranslator(), formLayout);
 		membersTable.setEmtpyTableMessageKey("nomembers");
@@ -269,10 +270,8 @@ public class MembersTableController extends FormBasicController {
 			FlexiColumnModel col;
 			if(UserConstants.FIRSTNAME.equals(propName) || UserConstants.LASTNAME.equals(propName) || UserConstants.EMAIL.equals(propName)) {
 				if (UserConstants.EMAIL.equals(propName)) {
-					myEditAction = "email";
-					if (!canEmail) {
-						continue;
-					}
+					// LMSUZH-566: Do not show email addresses even if email functionality is enabled in course element
+					continue;
 				}
 				col = new DefaultFlexiColumnModel(userPropertyHandler.i18nColumnDescriptorLabelKey(),
 						colPos, myEditAction, true, propName,

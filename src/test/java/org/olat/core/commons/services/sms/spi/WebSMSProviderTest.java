@@ -22,6 +22,7 @@ package org.olat.core.commons.services.sms.spi;
 import java.util.UUID;
 
 import org.junit.Assert;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.olat.test.OlatTestCase;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -36,7 +37,8 @@ public class WebSMSProviderTest extends OlatTestCase {
 	
 	@Autowired
 	private WebSMSProvider webSmsProvider;
-	
+
+	@Ignore
 	@Test
 	public void send() {
 		//webSmsProvider.setCredentials("stephane.rosse@frentix.com", "secret");

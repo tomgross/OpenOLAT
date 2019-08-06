@@ -116,12 +116,6 @@ public class XSSFilterTest {
 		t("b>", "b&gt;");
 		t("<img src=\"foo\"/", "<img src=\"foo\" />");
 		t(">", "&gt;");
-		//FIXME: what to do? it should work if in another tag!
-//		t("foo<b", "foo&lt;b");
-//		t("<span>foo<b</span>", "<span>foo<b</span>");
-//		t("b>foo", "b&gt;foo");
-//		t("><b", "&gt;&lt;b");
-//		t("><f", "&gt;&lt;f");
 		t("b><", "b&gt;&lt;");
 		t("><b>", "&gt;");
 	}
@@ -284,13 +278,13 @@ public class XSSFilterTest {
 	
 	@Test
 	public void test_rawText() {
-		OWASPAntiSamyXSSFilter intlFilter = new OWASPAntiSamyXSSFilter(-1, false, true);
+		OWASPAntiSamyXSSFilter intlFilter = new OWASPAntiSamyXSSFilter(-1, false);
 		t("Stéphane Rossé", "Stéphane Rossé", intlFilter);
 	}
 	
 	@Test
 	public void test_rawTextAttaqu() {
-		OWASPAntiSamyXSSFilter intlFilter = new OWASPAntiSamyXSSFilter(-1, false, true);
+		OWASPAntiSamyXSSFilter intlFilter = new OWASPAntiSamyXSSFilter(-1, false);
 		t("&lt;script&gt;alert('hello');&lt;//script&gt;", "&lt;script&gt;alert('hello');&lt;//script&gt;", intlFilter);
 	}
 

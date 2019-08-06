@@ -151,15 +151,10 @@ public class PackageTranslator implements Translator {
 	@Override
 	public String translate(String key, String[] args, Level missingTranslationLogLevel) {
 		String val = translate(key,args,false );		
-		// if still null -> fallback to default locale (if not in debug mode)
+		// if still null -> fallback to default locale
 		if (val == null) {
-			if (Settings.isDebuging()) {
-				val = getErrorMessage(key);
-			} else {
-				// try with fallBackToDefaultLocale 
-				val = translate(key, args, true );
-			}
-		} 
+			val = translate(key, args, true );
+		}
 		if (val != null){
 			fallBackLevel = 0;
 		}

@@ -58,6 +58,8 @@ import org.olat.core.util.CodeHelper;
 import org.olat.core.util.Formatter;
 import org.olat.core.util.StringHelper;
 import org.olat.core.util.resource.OresHelper;
+import org.olat.course.CourseFactory;
+import org.olat.course.PersistingCourseImpl;
 import org.olat.repository.model.RepositoryEntryLifecycle;
 import org.olat.repository.model.RepositoryEntryStatistics;
 import org.olat.repository.model.RepositoryEntryToGroupRelation;
@@ -74,6 +76,7 @@ import org.olat.resource.OLATResourceImpl;
 	@NamedQuery(name="filterRepositoryEntryMembership", query="select v.key, membership.identity.key from repositoryentry as v inner join v.groups as relGroup inner join relGroup.group as baseGroup inner join baseGroup.members as membership on membership.role in ('owner','coach','participant') where membership.identity.key=:identityKey and v.key in (:repositoryEntryKey)"),
 	@NamedQuery(name="loadRepositoryEntryByKey", query="select v from repositoryentry as v inner join fetch v.olatResource as ores inner join fetch v.statistics as statistics left join fetch v.lifecycle as lifecycle where v.key = :repoKey"),
 	@NamedQuery(name="loadRepositoryEntryByResourceKey", query="select v from repositoryentry as v inner join fetch v.olatResource as ores inner join fetch v.statistics as statistics left join fetch v.lifecycle as lifecycle where ores.key = :resourceKey"),
+	@NamedQuery(name="loadRepositoryEntryByResId", query="select v from repositoryentry as v inner join fetch v.olatResource as ores inner join fetch v.statistics as statistics left join fetch v.lifecycle as lifecycle where ores.resId = :resId"),
 	@NamedQuery(name="getDisplayNameByOlatResourceRedId", query="select v.displayname from repositoryentry v inner join v.olatResource as ores where ores.resId=:resid"),
 	@NamedQuery(name="getDisplayNameByRepositoryEntryKey", query="select v.displayname from repositoryentry v where v.key=:reKey")
 
@@ -212,6 +215,13 @@ public class RepositoryEntry implements CreateInfo, Persistable , RepositoryEntr
 	@Override
 	public Long getKey() {
 		return key;
+	}
+
+	/**
+	 * Key means id.
+	 */
+	public void setKey(Long key) {
+		this.key = key;
 	}
 
 	@Override
@@ -362,8 +372,13 @@ public class RepositoryEntry implements CreateInfo, Persistable , RepositoryEntr
 	 * @param name The name to set.
 	 */
 	public void setResourcename(String name) {
-		if (name.length() > 100)
-			throw new AssertException("resourcename is limited to 100 characters.");
+		/*
+		 * TODO sev26
+		 * The size is now equal to the actual reasonable/possible (see
+		 * varchar index issue of MySQL) database table attribute size.
+		 */
+		if (name.length() > 255)
+			throw new AssertException("resourcename is limited to 255 characters.");
 		this.resourcename = name;
 	}
 
@@ -513,8 +528,11 @@ public class RepositoryEntry implements CreateInfo, Persistable , RepositoryEntr
 	 * @param displayname The displayname to set.
 	 */
 	public void setDisplayname(String displayname) {
-		if (displayname.length() > 100)
-			throw new AssertException("DisplayName is limited to 100 characters.");
+		/*
+		 * See comment of #setResourcename(String)
+		 */
+		if (displayname.length() > 255)
+			throw new AssertException("DisplayName is limited to 255 characters.");
 		this.displayname = displayname;
 	}
 
@@ -561,6 +579,20 @@ public class RepositoryEntry implements CreateInfo, Persistable , RepositoryEntr
 
 	public void setStatistics(RepositoryEntryStatistics statistics) {
 		this.statistics = statistics;
+	}
+
+	public boolean exceedsSizeLimit() {
+		final OLATResource sourceResource = getOlatResource();
+		if (!sourceResource.getResourceableTypeName().equals("CourseModule")) {
+			// only check size of courses, other resourceables are considered small enough
+			return false;
+		}
+		try {
+			PersistingCourseImpl sourceCourse = (PersistingCourseImpl) CourseFactory.loadCourse(sourceResource);
+			return sourceCourse.exceedsSizeLimit(); // possible NullPointerException is caught on the spot
+		} catch (Exception $ex) {
+			return true;
+		}
 	}
 
 	/**

@@ -1,12 +1,12 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <beans xmlns="http://www.springframework.org/schema/beans"
-	xmlns:context="http://www.springframework.org/schema/context"
 	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xmlns:context="http://www.springframework.org/schema/context" 
 	xsi:schemaLocation="
   http://www.springframework.org/schema/beans 
-  http://www.springframework.org/schema/beans/spring-beans.xsd
+  http://www.springframework.org/schema/beans/spring-beans-3.0.xsd 
   http://www.springframework.org/schema/context 
-  http://www.springframework.org/schema/context/spring-context.xsd">
+  http://www.springframework.org/schema/context/spring-context-3.0.xsd">
 
 	<context:component-scan base-package="org.olat.shibboleth" />
 	
@@ -47,14 +47,17 @@
 	<bean name="shibbolethUserMapping" class="java.util.HashMap" scope="prototype" >
 	    <constructor-arg>
 	        <map key-type="java.lang.String" value-type="java.lang.String">
-	            <entry key="FirstName" value="Shib-InetOrgPerson-givenName" />
-				<entry key="LastName" value="Shib-Person-surname" />
-				<entry key="EMail" value="Shib-InetOrgPerson-mail" />
-				<entry key="InstitutionalName" value="Shib-SwissEP-HomeOrganization" />
-				<entry key="InstitutionalEMail" value="Shib-InetOrgPerson-mail" />
-				<entry key="InstitutionalUserIdentifier" value="Shib-InetOrgPerson-employeeNumber" />
-				<!-- <entry key="OrgUnit" value="" /> -->
-				<!-- <entry key="PreferedLanguage" value="" /> -->
+				<!-- NB! make sure that each value is registered as a key in attributeTranslator map below! -->
+			<entry key="FirstName" 			      value="givenName" />
+			<entry key="LastName" 			      value="surname" />
+			<entry key="EMail" 			      value="mail" />
+			<entry key="InstitutionalName" 		      value="homeOrganization" />
+			<entry key="InstitutionalEMail" 	      value="mail" />
+			<entry key="InstitutionalEmployeeNumber"      value="employeeNumber" />
+			<entry key="InstitutionalMatriculationNumber" value="matriculationNumber" />
+
+			<!-- <entry key="OrgUnit" value="" /> -->
+			<!-- <entry key="PreferedLanguage" value="" /> -->
 	        </map>
 	    </constructor-arg>
 	</bean>
@@ -65,7 +68,7 @@
 		<!--
 				Attributes to translate for easier reading/handling within OLAT.
 				Attributes will be available by their translated name (value) within OLAT.
-				
+
 				As an option, for each attribute predefined selectable values can be added as 
 				in the example below. These are used in the course editors easy mode to display
 				a list of items to choose from instead of a text input field.
@@ -82,29 +85,36 @@
 				swissEduPersonHomeOrganization.uzh.ch= University of Zuerich
 				swissEduPersonHomeOrganization.ethz.ch= ETH Zuerich
 				...
+				NB! this map is a base for verification of headers in ShibbolethDispatcher.getShibbolethAttributesFromRequest()
+				 it means that if key is not registered here, the header will be not mapped even if it is listed
+				 in shibbolethUserMapping HashMap bean above!
 			 -->
-			<entry key="Shib-EP-Entitlement" value="eduPersonEntitlement" />
-			<entry key="Shib-SwissEP-UniqueID" value="swissEduPersonUniqueID" />
-			<entry key="Shib-Person-surname" value="surname" />
-			<entry key="Shib-InetOrgPerson-givenName" value="givenName" />
-			<entry key="Shib-InetOrgPerson-mail" value="mail" />
-			<entry key="Shib-SwissEP-HomeOrganization" value="swissEduPersonHomeOrganization" />
-			<entry key="Shib-SwissEP-HomeOrganizationType" value="swissEduPersonHomeOrganizationType" />
-			<entry key="Shib-EP-Affiliation" value="eduPersonAffiliation" />
-			<entry key="Shib-SwissEP-StudyBranch1" value="swissEduPersonStudyBranch1" />
-			<entry key="Shib-SwissEP-StudyBranch2" value="swissEduPersonStudyBranch2" />
-			<entry key="Shib-SwissEP-StudyBranch3" value="swissEduPersonStudyBranch3" />
-			<entry key="Shib-SwissEP-StudyLevel" value="swissEduPersonStudyLevel" />
-			<entry key="Shib-SwissEP-StaffCategory" value="swissEduPersonStaffCategory" />
+			<entry key="entitlement" value="eduPersonEntitlement" />
+			<entry key="uniqueID" value="swissEduPersonUniqueID" />
+			<entry key="surname" value="surname" />
+			<entry key="givenName" value="givenName" />
+			<entry key="mail" value="mail" />
+			<entry key="homeOrganization" value="swissEduPersonHomeOrganization" />
+			<entry key="homeOrganizationType" value="swissEduPersonHomeOrganizationType" />
+			<entry key="affiliation" value="eduPersonAffiliation" />
+			<entry key="studyBranch1" value="swissEduPersonStudyBranch1" />
+			<entry key="studyBranch2" value="swissEduPersonStudyBranch2" />
+			<entry key="studyBranch3" value="swissEduPersonStudyBranch3" />
+			<entry key="studyLevel" value="swissEduPersonStudyLevel" />
+			<entry key="staffCategory" value="swissEduPersonStaffCategory" />
+
 			<!-- Is anyone using these attributes? it's not in the attribute-map.xml
 			<entry key="urn:mace:switch.ch:attribute-def:eduPersonOrgUnitDN" value="eduPersonOrgUnitDN" />		
 			<entry key="urn:mace:dir:attribute-def:eduPersonScopedAffiliation" value="eduPersonScopedAffiliation" /> 
 			<entry key="urn:mace:dir:attribute-def:swissEduPersonGender" value="swissEduPersonGender" />
 			-->
-			<entry key="Shib-OrgPerson-postalAddress" value="postalAddress" />			
-			<entry key="Shib-InetOrgPerson-employeeNumber" value="employeeNumber" />
-			<entry key="Shib-Person-ou" value="organizationalUnit" />
-			<entry key="Shib-InetOrgPerson-preferredLanguage" value="PreferedLanguage" />
+			<entry key="homePostalAddress" value="postalAddress" />
+
+			<entry key="employeeNumber" value="employeeNumber" />
+			<entry key="matriculationNumber"  value="matriculationNumber"/>
+
+			<entry key="ou" value="organizationalUnit" />
+			<entry key="preferredLanguage" value="PreferedLanguage" />
 		</map>
 	</property>
 	<property name="attributeSelectableValues">
@@ -120,6 +130,7 @@
 					<value>hes-so.ch</value>
 					<value>ntb.ch</value>
 					<value>hslu.ch</value>
+                    <value>hfh.ch</value>
 					<value>hsr.ch</value>
 					<value>fh-htwchur.ch</value>
 					<value>hcuge.ch</value>
@@ -554,17 +565,17 @@
 	</property>
 </bean>
 
-	<bean id="switchShibbolethAuthenticationConfigurator" class="org.olat.shibboleth.SwitchShibbolethAuthenticationConfigurator">		
+<bean id="switchShibbolethAuthenticationConfigurator" class="org.olat.shibboleth.SwitchShibbolethAuthenticationConfigurator">		
 		<property name="wayfSPEntityID" value="${shibboleth.wayfSPEntityID}" />	
 		<property name="wayfSPHandlerURL" value="${shibboleth.wayfSPHandlerURL}" />
 		<property name="wayfSPSamlDSURL" value="${shibboleth.wayfSPSamlDSURL}" />
 		<property name="wayfReturnUrl" value="${shibboleth.wayfReturnUrl}" />
 		<property name="wayfReturnMobileUrl" value="${shibboleth.wayfReturnMobileUrl}" />
 		<property name="additionalIdentityProviders" value="${shibboleth.wayf.additionalIDPs}" />	
-	</bean>	
+</bean>	
 
-	<bean id="registrationPresetUsername.byShibbolethAttribute"
-		class="org.olat.shibboleth.ShibbolethUserNameFromAttributeUserNameCreationInterceptor" lazy-init="true">
+<bean id="registrationPresetUsername.byShibbolethAttribute"
+	class="org.olat.shibboleth.ShibbolethUserNameFromAttributeUserNameCreationInterceptor" lazy-init="true">
 		<property name="allowChangeOfUsername" value="${registration.preset.username.allowChanges}"/>
 		<property name="shibUsernameAttr" value="${registration.preset.username.shibbolethAttribute}"/>
 		<property name="regexp">
@@ -572,6 +583,6 @@
 				<value>^[^@]*</value>
 			</list>
 		</property>
-	</bean>
+</bean>
 
 </beans>

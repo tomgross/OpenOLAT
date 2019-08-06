@@ -66,7 +66,7 @@ public class CourseNodeDocument extends OlatDocument {
 		} else {
 			courseNodeDocument.setCssIcon("o_course_icon");
 		}
-		
+
 		if(StringHelper.containsNonWhitespace(courseNode.getShortTitle())) {
 			courseNodeDocument.setTitle(courseNode.getShortTitle());
 		} else if(StringHelper.containsNonWhitespace(courseNode.getLongTitle())) {
@@ -81,8 +81,8 @@ public class CourseNodeDocument extends OlatDocument {
 			objectives = FilterFactory.getHtmlTagsFilter().filter(objectives);
 			courseNodeDocument.setContent(objectives);
 		}
-		
-		// Get dates from parent object via context because course node has no dates 
+
+		// Get dates from parent object via context because course node has no dates
 		courseNodeDocument.setCreatedDate(searchResourceContext.getCreatedDate());
 		courseNodeDocument.setLastChange(searchResourceContext.getLastModified());
 		courseNodeDocument.setParentContextType(searchResourceContext.getParentContextType());

@@ -26,17 +26,39 @@
 
 package org.olat.core.commons.persistence;
 
+import org.olat.core.CoreSpringFactory;
+import org.olat.core.logging.OLog;
+import org.olat.core.logging.Tracing;
+import org.springframework.beans.factory.BeanFactory;
+
+/**
+ * Factories with static method are deprecated because they cannot be
+ * replaced.
+ */
+@Deprecated
 public class DBFactory {
+
+	private static final OLog LOG = Tracing.createLoggerFor(DBFactory.class);
+	private static DB db;
 
 	/**
 	 * !!IMPORTANT!!
 	 * Get the DB instance. The DB Session is lazy initialized.
 	 * Make sure you don't save the instance in a class variable as you do not
 	 * have a guarantee that a Hibernate session is already initialized.
-	 * 
+	 *
 	 * @return the DB instance.
 	 */
 	public static DB getInstance() {
-		return DBImpl.getInstance();
+		if (db == null) {
+			/*
+			 * This is an unstable hack in order that the DB instance can be
+			 * easily replaced/mocked by Spring. Unstable because it depends
+			 * on the initialization order of Spring.
+			 */
+			BeanFactory beanFactory = CoreSpringFactory.getBeanFactory();
+			db = beanFactory.getBean(DB.class);
+		}
+		return db;
 	}
 }

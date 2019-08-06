@@ -270,7 +270,7 @@ public class OpenOLATServlet extends HttpServlet {
 		if (requestBasedLogLevelManager != null) {
 			requestBasedLogLevelManager.activateRequestBasedLogLevel(request);
 		}
-		
+
 		final String dispatcherName = DispatcherModule.getFirstPath(request);
 		if(dispatcherName != null && !dispatcherName.startsWith("/webdav")) {
 			String userAgent = request.getHeader("User-Agent");
@@ -280,7 +280,7 @@ public class OpenOLATServlet extends HttpServlet {
 				return;
 			}
 		}
-		
+
 		if(legacyContext != null && legacyContext.equals(dispatcherName)) {
 			String uri = request.getRequestURI();
 			String redirectUri = uri.substring(legacyContext.length() - 1, uri.length());

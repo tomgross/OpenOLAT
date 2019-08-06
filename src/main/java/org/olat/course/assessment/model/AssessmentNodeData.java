@@ -19,20 +19,6 @@
  */
 package org.olat.course.assessment.model;
 
-import static org.olat.course.assessment.AssessmentHelper.KEY_ATTEMPTS;
-import static org.olat.course.assessment.AssessmentHelper.KEY_DETAILS;
-import static org.olat.course.assessment.AssessmentHelper.KEY_IDENTIFYER;
-import static org.olat.course.assessment.AssessmentHelper.KEY_INDENT;
-import static org.olat.course.assessment.AssessmentHelper.KEY_MAX;
-import static org.olat.course.assessment.AssessmentHelper.KEY_MIN;
-import static org.olat.course.assessment.AssessmentHelper.KEY_PASSED;
-import static org.olat.course.assessment.AssessmentHelper.KEY_SCORE;
-import static org.olat.course.assessment.AssessmentHelper.KEY_SCORE_F;
-import static org.olat.course.assessment.AssessmentHelper.KEY_SELECTABLE;
-import static org.olat.course.assessment.AssessmentHelper.KEY_TITLE_LONG;
-import static org.olat.course.assessment.AssessmentHelper.KEY_TITLE_SHORT;
-import static org.olat.course.assessment.AssessmentHelper.KEY_TYPE;
-
 import java.util.HashMap;
 import java.util.Map;
 
@@ -40,6 +26,8 @@ import org.olat.core.util.StringHelper;
 import org.olat.course.assessment.AssessmentHelper;
 import org.olat.course.nodes.CourseNode;
 import org.olat.modules.assessment.model.AssessmentEntryStatus;
+
+import static org.olat.course.assessment.AssessmentHelper.*;
 
 /**
  * 
@@ -72,7 +60,9 @@ public class AssessmentNodeData {
 	
 	private boolean selectable;
 	private boolean onyx = false;
-	
+
+	private String status;
+
 	public AssessmentNodeData() {
 		//
 	}
@@ -213,6 +203,10 @@ public class AssessmentNodeData {
 		this.onyx = onyx;
 	}
 
+	public void setStatus(String status) {
+		this.status = status;
+	}
+
 	public boolean isSelectable() {
 		return selectable;
 	}
@@ -247,6 +241,9 @@ public class AssessmentNodeData {
 		}
 		if (passed != null) {
 			nodeData.put(KEY_PASSED, passed);
+		}
+		if (status != null) {
+			nodeData.put(KEY_STATUS, status);
 		}
 		nodeData.put(KEY_SELECTABLE, selectable ? Boolean.TRUE : Boolean.FALSE);
 		return nodeData;

@@ -125,7 +125,7 @@ public class MySQLTempStatTableCreator implements IStatisticUpdater {
 						" where " +
 							"actionverb='launch' and actionobject='node' and creationdate>from_unixtime('"+(from.getTime()/1000)+"') and creationdate<=from_unixtime('"+(until.getTime()/1000)+"');");
 
-			long numLoggingActions = jdbcTemplate_.queryForLong("select count(*) from o_stat_temptable;");
+			long numLoggingActions = jdbcTemplate_.queryForObject("select count(*) from o_stat_temptable;", Long.class);
 			log_.info("updateStatistic: insert done. number of logging actions: "+numLoggingActions);
 		} catch(RuntimeException e) {
 			log_.warn("updateStatistic: ran into a RuntimeException: "+e, e);
