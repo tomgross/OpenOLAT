@@ -33,6 +33,7 @@ import javax.inject.Provider;
 import javax.sql.DataSource;
 
 import org.olat.core.commons.persistence.DB;
+import org.olat.core.commons.persistence.DBFactory;
 import org.olat.core.configuration.Initializable;
 import org.olat.core.gui.control.Event;
 import org.olat.core.logging.AssertException;
@@ -61,8 +62,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 
 public abstract class UpgradeManager extends BasicManager implements Initializable, GenericEventListener {
 
-	private final Provider<DB> dbInstance;
-	
 	protected String INSTALLED_UPGRADES_XML = "installed_upgrades.xml";
 	public static final String SYSTEM_DIR = "system";
 
@@ -71,12 +70,6 @@ public abstract class UpgradeManager extends BasicManager implements Initializab
 	protected Map<String, UpgradeHistoryData> upgradesHistories;
 	protected UpgradesDefinitions upgradesDefinitions;
 	protected boolean needsUpgrade = true;
-
-	@Autowired
-	protected UpgradeManager(Provider<DB> dbInstance) {
-		this.dbInstance = dbInstance;
-	}
-
 
 	public DataSource getDataSource() {
   	return dataSource;
@@ -123,7 +116,7 @@ public abstract class UpgradeManager extends BasicManager implements Initializab
 			doPreSystemInitUpgrades();
 			
 			//post system init task are triggered by an event
-			dbInstance.get().commitAndCloseSession();
+			DBFactory.getInstance().commitAndCloseSession();
 		}
 	}
 

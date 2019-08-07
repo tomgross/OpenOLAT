@@ -39,11 +39,6 @@ import javax.inject.Provider;
  */
 public class UpgradeManagerDummy extends UpgradeManager {
 
-	@Autowired
-    public UpgradeManagerDummy(Provider<DB> dbInstance) {
-        super(dbInstance);
-    }
-
     /**
 	 * Execute the pre system init code of all upgrades in the order as they were configured
 	 * in the configuration file

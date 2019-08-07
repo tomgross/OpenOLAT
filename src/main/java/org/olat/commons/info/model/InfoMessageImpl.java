@@ -20,7 +20,15 @@
 
 package org.olat.commons.info.model;
 
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.util.ArrayList;
 import java.util.Date;
+import java.util.List;
+import java.util.UUID;
 
 import javax.persistence.Column;
 import javax.persistence.Entity;
@@ -32,15 +40,20 @@ import javax.persistence.ManyToOne;
 import javax.persistence.Table;
 import javax.persistence.Temporal;
 import javax.persistence.TemporalType;
+import javax.persistence.Transient;
 
 import org.hibernate.annotations.GenericGenerator;
 import org.hibernate.annotations.Parameter;
 import org.olat.basesecurity.IdentityImpl;
+import org.olat.core.commons.modules.bc.vfs.OlatRootFileImpl;
 import org.olat.commons.info.InfoMessage;
+import org.olat.core.commons.modules.bc.vfs.OlatRootFolderImpl;
 import org.olat.core.id.CreateInfo;
 import org.olat.core.id.Identity;
 import org.olat.core.id.OLATResourceable;
 import org.olat.core.id.Persistable;
+import org.olat.core.util.FileUtils;
+import org.olat.core.util.vfs.VFSItem;
 
 /**
  * Initial Date: 17.03.2017
@@ -96,7 +109,10 @@ public class InfoMessageImpl implements InfoMessage, CreateInfo, Persistable {
 	@ManyToOne(targetEntity=IdentityImpl.class, fetch=FetchType.LAZY, optional=true)
 	@JoinColumn(name="fk_modifier_id", nullable=true, insertable=true, updatable=true)
 	private Identity modifier;
-	
+
+	@Transient
+	private File[] attachments = null;
+
 	public InfoMessageImpl() {
 		//
 	}
@@ -154,6 +170,25 @@ public class InfoMessageImpl implements InfoMessage, CreateInfo, Persistable {
 	@Override
 	public void setAttachmentPath(String attachmentPath) {
 		this.attachmentPath = attachmentPath;
+	}
+
+	@Override
+	public File[] getAttachments() {
+		if (attachments == null) { // lazy loading
+			List<File> files = new ArrayList<>();
+			for (Object fileItem : getMediaFolder().getItems().toArray()) {
+				if (fileItem instanceof VFSItem) {
+					files.add(((OlatRootFileImpl) fileItem).getBasefile());
+				}
+			}
+			attachments = files.toArray(new File[0]);
+		}
+		return attachments;
+	}
+
+	@Override
+	public void setAttachments(File[] attachments) {
+		this.attachments = attachments;
 	}
 
 	@Override
@@ -248,4 +283,23 @@ public class InfoMessageImpl implements InfoMessage, CreateInfo, Persistable {
 	public boolean equalsByPersistableKey(Persistable persistable) {
 		return equals(persistable);
 	}
+
+	@Override
+	public OlatRootFolderImpl getMediaFolder() {
+		return new OlatRootFolderImpl("/repository/" + getOLATResourceable().getResourceableId() + "/" + getKey().toString() + "/attachments",  null);
+	}
+
+	@Override
+	public boolean copyAttachmentToMediaFolder(File attachment) {
+		try(
+				InputStream in = new FileInputStream(attachment);
+				OutputStream out = getMediaFolder().createChildLeaf(UUID.randomUUID().toString() + "." + attachment.getName()).getOutputStream(false);
+		) {
+			return FileUtils.copy(in, out);
+		} catch (IOException e) {
+			return false;
+		}
+	}
+
+
 }

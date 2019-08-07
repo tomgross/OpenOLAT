@@ -90,6 +90,7 @@ import org.olat.repository.RepositoryManager;
 import org.olat.repository.RepositoryService;
 import org.olat.repository.handlers.RepositoryHandler;
 import org.olat.repository.handlers.RepositoryHandlerFactory;
+import org.olat.repository.manager.RepositoryEntryDeletionException;
 import org.olat.resource.OLATResource;
 import org.olat.resource.OLATResourceManager;
 import org.olat.resource.accesscontrol.ACService;
@@ -360,8 +361,14 @@ public class CourseWebService {
 		UserRequest ureq = getUserRequest(request);
 		RepositoryService rs = CoreSpringFactory.getImpl(RepositoryService.class);
 		RepositoryEntry re = course.getCourseEnvironment().getCourseGroupManager().getCourseEntry();
-		
-		ErrorList errors = rs.deletePermanently(re, ureq.getIdentity(), ureq.getUserSession().getRoles(), ureq.getLocale());
+
+		ErrorList errors = new ErrorList();
+		try {
+			errors = rs.deletePermanently(re, ureq.getIdentity(), ureq.getUserSession().getRoles(), ureq.getLocale());
+		} catch (RepositoryEntryDeletionException e) {
+			errors.setError(e.getMessage());
+			log.audit(e.getMessage());
+		}
 		if(errors.hasErrors()) {
 			return Response.serverError().status(500).build();
 		}
@@ -416,12 +423,17 @@ public class CourseWebService {
 					LoggingResourceable.wrap(re, OlatResourceableType.genRepoEntry));
 		} else if("deleted".equals(newStatus)) {
 			Identity identity = getIdentity(request);
-			rs.deleteSoftly(re, identity, true, false);
+			try {
+				rs.deleteSoftly(re, identity, true, false);
+			} catch (RepositoryEntryDeletionException e) {
+				log.audit(e.getMessage());
+			}
 			log.audit("REST deleting (soft) course: " + re.getDisplayname() + " [" + re.getKey() + "]");
 			ThreadLocalUserActivityLogger.log(LearningResourceLoggingAction.LEARNING_RESOURCE_TRASH, getClass(),
 					LoggingResourceable.wrap(re, OlatResourceableType.genRepoEntry));
 		} else if("restored".equals(newStatus)) {
-			rs.restoreRepositoryEntry(re);
+			Identity identity = getIdentity(request);
+			rs.restoreRepositoryEntry(re, identity);
 			log.audit("REST restoring course: " + re.getDisplayname() + " [" + re.getKey() + "]");
 			ThreadLocalUserActivityLogger.log(LearningResourceLoggingAction.LEARNING_RESOURCE_RESTORE, getClass(),
 					LoggingResourceable.wrap(re, OlatResourceableType.genRepoEntry));
