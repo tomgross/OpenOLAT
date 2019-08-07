@@ -58,6 +58,8 @@ import org.olat.core.util.CodeHelper;
 import org.olat.core.util.Formatter;
 import org.olat.core.util.StringHelper;
 import org.olat.core.util.resource.OresHelper;
+import org.olat.course.CourseFactory;
+import org.olat.course.PersistingCourseImpl;
 import org.olat.repository.model.RepositoryEntryLifecycle;
 import org.olat.repository.model.RepositoryEntryStatistics;
 import org.olat.repository.model.RepositoryEntryToGroupRelation;
@@ -138,7 +140,7 @@ public class RepositoryEntry implements CreateInfo, Persistable , RepositoryEntr
 			orphanRemoval=true, cascade={CascadeType.PERSIST, CascadeType.REMOVE})
 	@JoinColumn(name="fk_entry_id")
 	private Set<RepositoryEntryToGroupRelation> groups;
-	
+
 	@Column(name="resourcename", nullable=false, insertable=true, updatable=true)
 	private String resourcename; // mandatory
 	@Column(name="displayname", nullable=false, insertable=true, updatable=true)
@@ -563,6 +565,20 @@ public class RepositoryEntry implements CreateInfo, Persistable , RepositoryEntr
 
 	public void setStatistics(RepositoryEntryStatistics statistics) {
 		this.statistics = statistics;
+	}
+
+	public boolean exceedsSizeLimit() {
+		final OLATResource sourceResource = getOlatResource();
+		if (!sourceResource.getResourceableTypeName().equals("CourseModule")) {
+			// only check size of courses, other resourceables are considered small enough
+			return false;
+		}
+		try {
+			PersistingCourseImpl sourceCourse = (PersistingCourseImpl) CourseFactory.loadCourse(sourceResource);
+			return sourceCourse.exceedsSizeLimit(); // possible NullPointerException is caught on the spot
+		} catch (Exception $ex) {
+			return true;
+		}
 	}
 
 	/**

@@ -29,6 +29,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 
+import org.checkerframework.checker.initialization.qual.UnderInitialization;
+import org.checkerframework.checker.initialization.qual.UnknownInitialization;
 import org.olat.core.CoreSpringFactory;
 import org.olat.core.dispatcher.mapper.Mapper;
 import org.olat.core.dispatcher.mapper.MapperService;
@@ -50,8 +52,11 @@ import org.olat.core.id.Identity;
 import org.olat.core.logging.AssertException;
 import org.olat.core.logging.OLog;
 import org.olat.core.logging.Tracing;
+import org.olat.core.util.StringHelper;
 import org.olat.core.util.UserSession;
 import org.olat.core.util.Util;
+
+import javax.annotation.Nullable;
 
 /**
  * Description:<br>
@@ -84,13 +89,7 @@ public abstract class BasicController extends DefaultController {
 	 * @param wControl
 	 */
 	protected BasicController(UserRequest ureq, WindowControl wControl) {
-		super(wControl);
-		setLocale(ureq.getLocale());
-		this.identity = ureq.getIdentity();
-		this.translator = Util.createPackageTranslator(this.getClass(), getLocale());
-		this.fallbackTranslator = null;
-		this.velocity_root = Util.getPackageVelocityRoot(this.getClass());
-		this.logger = Tracing.createLoggerFor(this.getClass());
+		this(ureq, wControl, null);
 	}
 	
 	/**
@@ -110,10 +109,6 @@ public abstract class BasicController extends DefaultController {
 		super(wControl);
 		setLocale(ureq.getLocale());
 		this.identity = ureq.getIdentity();
-		if (fallBackTranslator == null) {
-			throw new AssertException(
-					"please provide a fall translator if using this constructor!!");
-		}
 		this.fallbackTranslator = fallBackTranslator;
 		this.translator = Util.createPackageTranslator(this.getClass(), getLocale(),
 				fallBackTranslator);
@@ -147,7 +142,7 @@ public abstract class BasicController extends DefaultController {
 	 * @throws AssertException
 	 *             if the controller to be added is already contained.
 	 */
-	protected Controller listenTo(Controller controller) {
+	public Controller listenTo(@UnknownInitialization BasicController this, Controller controller) {
 		controller.addControllerListener(this);
 		if (childControllers == null) {
 			childControllers = new ArrayList<Controller>(4);
@@ -249,7 +244,7 @@ public abstract class BasicController extends DefaultController {
 	 *            or "edit". The suffix ".html" gets automatically added to the
 	 *            page name e.g. "index.html".
 	 */
-	protected VelocityContainer createVelocityContainer(String page) {
+	protected VelocityContainer createVelocityContainer(@UnderInitialization(BasicController.class) BasicController this, String page) {
 		return createVelocityContainer(null, page);
 	}
 	
@@ -267,7 +262,7 @@ public abstract class BasicController extends DefaultController {
 				+ ".html", translator, this);
 	}
 
-	protected StackedPanel putInitialPanel(Component initialContent) {
+	protected StackedPanel putInitialPanel(@UnderInitialization(BasicController.class) BasicController this, Component initialContent) {
 		if(initialContent instanceof StackedPanel) {
 			super.setInitialComponent(initialContent);
 			return (StackedPanel)initialContent;
@@ -306,7 +301,7 @@ public abstract class BasicController extends DefaultController {
 	 * @return
 	 */
 	protected DialogBoxController activateYesNoDialog(UserRequest ureq,
-			String title, String text, DialogBoxController dialogCtr) {
+			@Nullable String title, String text, @Nullable DialogBoxController dialogCtr) {
 		if (dialogCtr != null) {
 			removeAsListenerAndDispose(dialogCtr);
 		}
@@ -407,14 +402,14 @@ public abstract class BasicController extends DefaultController {
 	/**
 	 * @return Returns the identity.
 	 */
-	protected Identity getIdentity() {
+	protected Identity getIdentity(@UnknownInitialization BasicController this) {
 		return identity;
 	}
 
 	/**
 	 * @return Returns the translator.
 	 */
-	protected Translator getTranslator() {
+	public Translator getTranslator(@UnknownInitialization BasicController this) {
 		return translator;
 	}
 
@@ -429,7 +424,7 @@ public abstract class BasicController extends DefaultController {
 	 *            the key to use (in the LocalStrings_curlanguage file of your
 	 *            controller)
 	 */
-	protected void showInfo(String key) {
+	protected void showInfo(@UnknownInitialization BasicController this, String key) {
 		getWindowControl().setInfo(getTranslator().translate(key));
 	}
 
@@ -446,7 +441,7 @@ public abstract class BasicController extends DefaultController {
 	 *            controller)
 	 * @param arg
 	 */
-	protected void showInfo(String key, String arg) {
+	protected void showInfo(@UnknownInitialization BasicController this, String key, String arg) {
 		getWindowControl().setInfo(
 				getTranslator().translate(key, new String[] { arg }));
 	}
@@ -463,7 +458,7 @@ public abstract class BasicController extends DefaultController {
 	 *            controller)
 	 * @param args
 	 */
-	protected void showInfo(String key, String[] args) {
+	public void showInfo(@UnknownInitialization BasicController this, String key, String[] args) {
 		getWindowControl().setInfo(getTranslator().translate(key, args));
 	}
 
@@ -480,7 +475,7 @@ public abstract class BasicController extends DefaultController {
 	 *            the key to use (in the LocalStrings_curlanguage file of your
 	 *            controller)
 	 */
-	protected void showWarning(String key) {
+	public void showWarning(@UnknownInitialization BasicController this, String key) {
 		getWindowControl().setWarning(getTranslator().translate(key));
 	}
 
@@ -498,12 +493,12 @@ public abstract class BasicController extends DefaultController {
 	 *            controller)
 	 * @param arg
 	 */
-	protected void showWarning(String key, String arg) {
+	protected void showWarning(@UnknownInitialization BasicController this, String key, @Nullable String arg) {
 		getWindowControl().setWarning(
 				getTranslator().translate(key, new String[] { arg }));
 	}
 	
-	protected void showWarning(String key, String[] args) {
+	protected void showWarning(@UnknownInitialization BasicController this, String key, String[] args) {
 		getWindowControl().setWarning(
 				getTranslator().translate(key, args));
 	}
@@ -519,7 +514,7 @@ public abstract class BasicController extends DefaultController {
 	 *            the key to use (in the LocalStrings_curlanguage file of your
 	 *            controller)
 	 */
-	protected void showError(String key) {
+	public void showError(@UnknownInitialization BasicController this, String key) {
 		getWindowControl().setError(getTranslator().translate(key));
 	}
 
@@ -536,9 +531,19 @@ public abstract class BasicController extends DefaultController {
 	 *            controller)
 	 * @param arg
 	 */
-	protected void showError(String key, String arg) {
+	protected void showError(@UnknownInitialization(BasicController.class) BasicController this, String key, String arg) {
 		getWindowControl().setError(
 				getTranslator().translate(key, new String[] { arg }));
+	}
+
+	protected void showError(@UnknownInitialization BasicController this, String key, String[] args) {
+		if (args != null) {
+			// escape args
+			for (int i = 0; i < args.length; i++) {
+				args[i] = StringHelper.escapeHtml(args[i]);
+			}
+		}
+		getWindowControl().setError(getTranslator().translate(key, args));
 	}
 
 	/**
@@ -564,7 +569,7 @@ public abstract class BasicController extends DefaultController {
 	 *            the key to translate
 	 * @return the translated string
 	 */
-	protected String translate(String key) {
+	protected String translate(@UnknownInitialization BasicController this, String key) {
 		return getTranslator().translate(key);
 	}
 	
@@ -587,7 +592,7 @@ public abstract class BasicController extends DefaultController {
 	 * 
 	 * @param translator
 	 */
-	protected void setTranslator(Translator translator) {
+	protected void setTranslator(@UnderInitialization(BasicController.class) BasicController this, Translator translator) {
 		this.translator = translator;
 	}
 

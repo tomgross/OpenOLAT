@@ -140,7 +140,7 @@ public class MembersTableController extends FormBasicController {
 	protected void initForm(FormItemContainer formLayout, Controller listener, UserRequest ureq) {
 		FlexiTableColumnModel columnsModel = FlexiTableDataModelFactory.createFlexiTableColumnModel();
 		SortKey defaultSortKey = initColumns(columnsModel);		
-		membersModel = new MemberListTableModel(columnsModel, imModule.isOnlineStatusEnabled());
+		membersModel = new MemberListTableModel(columnsModel, imModule.isOnlineStatusEnabled(), null);
 		membersModel.setObjects(membersList);
 		membersTable = uifactory.addTableElement(getWindowControl(), "table", membersModel, pageSize, false, getTranslator(), formLayout);
 		membersTable.setEmtpyTableMessageKey("nomembers");

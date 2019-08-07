@@ -57,6 +57,7 @@ import org.olat.portfolio.model.structel.PortfolioStructureMap;
 import org.olat.portfolio.model.structel.StructureStatusEnum;
 import org.olat.repository.RepositoryEntry;
 import org.olat.repository.RepositoryService;
+import org.olat.repository.manager.RepositoryEntryDeletionException;
 import org.olat.resource.OLATResource;
 import org.olat.test.JunitTestHelper;
 import org.olat.test.OlatTestCase;
@@ -803,7 +804,7 @@ public class EPFrontendManagerTest extends OlatTestCase {
 	 * Delete a portfolio template
 	 */
 	@Test
-	public void deleteMap_template() {
+	public void deleteMap_template() throws RepositoryEntryDeletionException {
 		Identity id = JunitTestHelper.createAndPersistIdentityAsRndUser("frtuse-6");
 		//save parent and 20 children
 		

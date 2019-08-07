@@ -58,8 +58,10 @@ public class CrumbRenderer {
 			
 			// append toplevel node
 			sb.append("<ol class='breadcrumb'><li><a ");
+			String unescapedName = StringHelper.unescapeHtml(fc.getRootContainer().getName()); // avoid double escape of umlaut characters
+			String escapedName = StringHelper.escapeXml(unescapedName); // escape tags and XML entities but not umlaut characters
 			ubu.buildHrefAndOnclick(sb, null, iframePostEnabled, false, true)
-			   .append(">").append(StringHelper.escapeHtml(fc.getRootContainer().getName())).append("</a></li>");
+			   .append(">").append(escapedName).append("</a></li>");
 			
 			String path = fc.getCurrentContainerPath();
 			StringTokenizer st = new StringTokenizer(path, "/", false);
@@ -68,7 +70,7 @@ public class CrumbRenderer {
 				if(pathLink.length() > 0) {
 					pathLink.append("/");
 				}
-				pathLink.append(ubu.encodeUrl(token));
+				pathLink.append(token);
 				if (st.hasMoreElements()) {
 					sb.append("<li><a ");
 					ubu.buildHrefAndOnclick(sb, pathLink.toString(), iframePostEnabled, false, true)

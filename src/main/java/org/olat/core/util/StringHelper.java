@@ -46,7 +46,8 @@ import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-import org.apache.commons.lang.StringEscapeUtils;
+import org.apache.commons.lang3.StringEscapeUtils;
+import org.apache.commons.lang3.text.translate.*;
 import org.olat.core.id.Identity;
 import org.olat.core.logging.AssertException;
 import org.olat.core.logging.OLog;
@@ -81,6 +82,22 @@ public class StringHelper {
 	private static final Pattern ALL_WITHOUT_COMMA_2POINT_STRPNT_PATTERN = Pattern.compile(ALL_WITHOUT_COMMA_2POINT_STRPNT);
 	private static final String X_MAC_ENC = "x-mac-";
 	private static final String MAC_ENC = "mac";
+
+	/**
+	 * Code copied from {@link StringEscapeUtils#ESCAPE_ECMASCRIPT}.
+	 */
+	private static final CharSequenceTranslator OLAT_ESCAPE_ECMASCRIPT =
+		new AggregateTranslator(
+				new LookupTranslator(
+						new String[][] {
+								{"'", "\\x27"},
+								{"\"", "\\x22"},
+								{"\\", "\\\\"},
+								{"/", "\\/"}
+						}),
+				new LookupTranslator(EntityArrays.JAVA_CTRL_CHARS_ESCAPE()),
+				JavaUnicodeEscaper.outsideOf(32, 0x7f)
+		);
 
 	static {
 		DecimalFormatSymbols dfs = new DecimalFormatSymbols();
@@ -181,6 +198,9 @@ public class StringHelper {
 	 * @return formatted float
 	 */
 	public static String formatFloat(float f, int fractionDigits) {
+		if (Float.isNaN(f)) {
+			return "N/A";
+		}
 		numFormatter.setMaximumFractionDigits(fractionDigits);
 		return numFormatter.format(f);
 	}
@@ -393,13 +413,21 @@ public class StringHelper {
 		return tmpDET.toString();
 	}
 	
-	public static final String escapeHtml(String str) {
-		return StringEscapeUtils.escapeHtml(str);
+	public static final String unescapeHtml(String str) {
+		return StringEscapeUtils.UNESCAPE_HTML4.translate(str);
 	}
 	
+	public static final String escapeXml(String str) {
+		return StringEscapeUtils.ESCAPE_XML11.translate(str);
+	}
+
+	public static final String escapeHtml(String str) {
+		return StringEscapeUtils.ESCAPE_HTML4.translate(str);
+	}
+
 	public static final void escapeHtml(Writer writer, String str) {
 		try {
-			StringEscapeUtils.escapeHtml(writer, str);
+			StringEscapeUtils.ESCAPE_HTML4.translate(str, writer);
 		} catch (IOException e) {
 			log.error("Error escaping HTML", e);
 		}
@@ -422,12 +450,12 @@ public class StringHelper {
 	}
 	
 	public static final String escapeJavaScript(String str) {
-		return StringEscapeUtils.escapeJavaScript(str);
+		return OLAT_ESCAPE_ECMASCRIPT.translate(str);
 	}
 	
 	public static final void escapeJavaScript(Writer writer, String str) {
 		try {
-			StringEscapeUtils.escapeJavaScript(writer, str);
+			OLAT_ESCAPE_ECMASCRIPT.translate(str, writer);
 		} catch (IOException e) {
 			log.error("Error escaping JavaScript", e);
 		}

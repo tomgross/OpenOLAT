@@ -39,6 +39,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.zip.Adler32;
@@ -763,7 +764,38 @@ public class MailManagerImpl implements MailManager, InitializingBean  {
 		File[] attachments = checkedFiles.toArray(new File[checkedFiles.size()]);
 		return new SimpleMailContent(subject, body, attachments);
 	}
-	
+
+	public MailContent createContentFromTemplate(Identity recipient, MailTemplate template, MailerResult result) {
+		VelocityContext context;
+		if(template != null && template.getContext() != null) {
+			context = new VelocityContext(template.getContext());
+		} else {
+			context = new VelocityContext();
+		}
+
+		StringWriter subjectWriter = new StringWriter();
+		StringWriter bodyWriter = new StringWriter();
+		List<File> checkedFiles = new ArrayList<>();
+
+		if (template != null) {
+			template.putVariablesInMailContext(context, recipient);
+			// merge subject template with context variables
+			evaluate(context, template.getSubjectTemplate(), subjectWriter, result);
+			// merge body template with context variables
+			evaluate(context, template.getBodyTemplate(), bodyWriter, result);
+			// check for errors - exit
+			if (result.getReturnCode() != MailerResult.OK) {
+				return null;
+			}
+			checkedFiles = MailHelper.checkAttachments(template.getAttachments(), result);
+		}
+
+		String subject = subjectWriter.toString();
+		String body = bodyWriter.toString();
+		File[] attachments = checkedFiles.toArray(new File[checkedFiles.size()]);
+		return new SimpleMailContent(subject, body, attachments);
+	}
+
 	/**
 	 * Internal Helper: merges a velocity context with a template.
 	 * 
@@ -1751,7 +1783,15 @@ public class MailManagerImpl implements MailManager, InitializingBean  {
 			log.warn("Could not send mail", e);
 		}
 	}
-	
+
+	public void sendToRecipientsList(MailContext context, MailTemplate template, List<Identity> recipients) {
+		if (recipients.size() > 0) {
+			MailerResult result = new MailerResult();
+			MailBundle[] bundles = makeMailBundles(context, recipients, template, null, UUID.randomUUID().toString(), result);
+			sendMessage(bundles);
+		}
+	}
+
 	private void logMessage(MimeMessage msg) throws MessagingException {
 		try {
 			log.info("E-mail send: " + msg.getSubject());

@@ -29,8 +29,10 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import javax.inject.Provider;
 import javax.sql.DataSource;
 
+import org.olat.core.commons.persistence.DB;
 import org.olat.core.commons.persistence.DBFactory;
 import org.olat.core.configuration.Initializable;
 import org.olat.core.gui.control.Event;
@@ -42,6 +44,7 @@ import org.olat.core.util.event.FrameworkStartedEvent;
 import org.olat.core.util.event.FrameworkStartupEventChannel;
 import org.olat.core.util.event.GenericEventListener;
 import org.olat.core.util.xml.XStreamHelper;
+import org.springframework.beans.factory.annotation.Autowired;
 
 /**
  * 
@@ -58,7 +61,7 @@ import org.olat.core.util.xml.XStreamHelper;
  */
 
 public abstract class UpgradeManager extends BasicManager implements Initializable, GenericEventListener {
-	
+
 	protected String INSTALLED_UPGRADES_XML = "installed_upgrades.xml";
 	public static final String SYSTEM_DIR = "system";
 
@@ -68,8 +71,7 @@ public abstract class UpgradeManager extends BasicManager implements Initializab
 	protected UpgradesDefinitions upgradesDefinitions;
 	protected boolean needsUpgrade = true;
 
-	
-  public DataSource getDataSource() {
+	public DataSource getDataSource() {
   	return dataSource;
   }
   

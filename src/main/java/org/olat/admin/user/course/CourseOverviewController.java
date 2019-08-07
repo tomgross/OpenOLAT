@@ -64,16 +64,14 @@ import org.olat.core.util.mail.MailHelper;
 import org.olat.core.util.mail.MailPackage;
 import org.olat.core.util.mail.MailerResult;
 import org.olat.course.CourseModule;
+import org.olat.course.assessment.manager.UserCourseInformationsManager;
 import org.olat.group.BusinessGroup;
 import org.olat.group.BusinessGroupManagedFlag;
 import org.olat.group.BusinessGroupMembership;
 import org.olat.group.BusinessGroupService;
 import org.olat.group.BusinessGroupShort;
 import org.olat.group.model.BGRepositoryEntryRelation;
-import org.olat.group.ui.main.CourseMembership;
-import org.olat.group.ui.main.CourseMembershipComparator;
-import org.olat.group.ui.main.EditSingleMembershipController;
-import org.olat.group.ui.main.MemberPermissionChangeEvent;
+import org.olat.group.ui.main.*;
 import org.olat.repository.RepositoryEntry;
 import org.olat.repository.RepositoryEntryManagedFlag;
 import org.olat.repository.RepositoryManager;
@@ -123,7 +121,9 @@ public class CourseOverviewController extends BasicController  {
 	private RepositoryService repositoryService;
 	@Autowired
 	private BusinessGroupService businessGroupService;
-	
+	@Autowired
+	private UserCourseInformationsManager userInfosMgr;
+
 	public CourseOverviewController(UserRequest ureq, WindowControl wControl, Identity identity) {
 		super(ureq, wControl, Util.createPackageTranslator(CourseMembership.class, ureq.getLocale()));
 		this.setTranslator(Util.createPackageTranslator(RepositoryService.class, getLocale(), getTranslator()));
@@ -291,16 +291,20 @@ public class CourseOverviewController extends BasicController  {
 		for(RepositoryEntry entry:entries) {
 			entryKeyToRepoEntryMap.put(entry.getKey(), entry);
 		}
-		
+
+		Map<Long,Date> lastLaunchDates = userInfosMgr.getRecentLaunchDates(editedIdentity);
 		for(CourseMemberView memberView:repoKeyToViewMap.values()) {
 			RepositoryEntry entry = entryKeyToRepoEntryMap.get(memberView.getRepoKey());
-			if(entry != null) {
+			if (entry != null) {
 				memberView.setEntry(entry);
-				
+				Long resourceKey = entry.getOlatResource().getKey();
+				if (lastLaunchDates.containsKey(resourceKey)) {
+					memberView.setLastTime(lastLaunchDates.get(resourceKey));
+				}
 				boolean managedMembersRepo = RepositoryEntryManagedFlag.isManaged(entry,
 						RepositoryEntryManagedFlag.membersmanagement);
 				memberView.getMembership().setManagedMembersRepo(managedMembersRepo);
-			}	
+			}
 		}
 		
 		List<CourseMemberView> views = new ArrayList<CourseMemberView>(repoKeyToViewMap.values());

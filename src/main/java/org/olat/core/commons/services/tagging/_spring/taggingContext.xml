@@ -6,13 +6,8 @@
   		http://www.springframework.org/schema/beans/spring-beans.xsd">
   
 	<!-- Tagging service -->
-	<bean id="taggingManager" class="org.olat.core.commons.services.tagging.manager.TaggingManagerImpl">
-		<property name="dbInstance" ref="database"/>
-		<property name="proposalManager" ref="simpleTagProposalManager"/>
-	</bean>
-	
-	<bean id="simpleTagProposalManager" class="org.olat.core.commons.services.tagging.manager.SimpleTagProposalManager">
-		<property name="dbInstance" ref="database"/>
-	</bean>
+	<bean id="taggingManager" class="org.olat.core.commons.services.tagging.manager.TaggingManagerImpl"/>
+
+	<bean id="simpleTagProposalManager" class="org.olat.core.commons.services.tagging.manager.SimpleTagProposalManager"/>
 	
 </beans>

@@ -30,9 +30,7 @@ import org.olat.core.commons.persistence.SortKey;
 import org.olat.core.gui.components.form.flexible.elements.FlexiTableFilter;
 import org.olat.core.gui.components.form.flexible.impl.elements.table.FlexiTableDataSourceDelegate;
 import org.olat.core.util.StringHelper;
-import org.olat.core.util.vfs.VFSLeaf;
 import org.olat.repository.RepositoryEntryMyView;
-import org.olat.repository.RepositoryManager;
 import org.olat.repository.RepositoryService;
 import org.olat.repository.model.SearchMyRepositoryEntryViewParams;
 import org.olat.repository.model.SearchMyRepositoryEntryViewParams.Filter;
@@ -53,27 +51,24 @@ import org.olat.resource.accesscontrol.ui.PriceFormat;
  *
  */
 public class DefaultRepositoryEntryDataSource implements FlexiTableDataSourceDelegate<RepositoryEntryRow> {
-	
-	private final RepositoryEntryDataSourceUIFactory uifactory;
+
+	private final RepositoryEntryRowsFactory repositoryEntryRowsFactory;
 	private final SearchMyRepositoryEntryViewParams searchParams;
-	
 
 	private final ACService acService;
 	private final AccessControlModule acModule;
 	private final RepositoryService repositoryService;
-	private final RepositoryManager repositoryManager;
 	
 	private Integer count;
 	
 	public DefaultRepositoryEntryDataSource(SearchMyRepositoryEntryViewParams searchParams,
-			RepositoryEntryDataSourceUIFactory uifactory) {
-		this.uifactory = uifactory;
+											RepositoryEntryRowsFactory repositoryEntryRowsFactory) {
+		this.repositoryEntryRowsFactory = repositoryEntryRowsFactory;
 		this.searchParams = searchParams;
-		
+
 		acService = CoreSpringFactory.getImpl(ACService.class);
 		acModule = CoreSpringFactory.getImpl(AccessControlModule.class);
 		repositoryService = CoreSpringFactory.getImpl(RepositoryService.class);
-		repositoryManager = CoreSpringFactory.getImpl(RepositoryManager.class);
 	}
 	
 	public void setFilters(List<Filter> filters) {
@@ -103,11 +98,11 @@ public class DefaultRepositoryEntryDataSource implements FlexiTableDataSourceDel
 	}
 
 	@Override
-	public final ResultInfos<RepositoryEntryRow> getRows(String query, List<FlexiTableFilter> filters, 
-			List<String> condQueries, int firstResult, int maxResults, SortKey... orderBy) {
-		
-		if(filters != null && filters.size() > 0 && filters.get(0) != null) {
-			String filter = filters.get(0).getFilter();
+    public final ResultInfos<RepositoryEntryRow> getRows(String query, List<FlexiTableFilter> filters,
+            List<String> condQueries, int firstResult, int maxResults, SortKey... orderBy) {
+
+        if(filters != null && filters.size() > 0 && filters.get(0) != null) {
+            String filter = filters.get(0).getFilter();
 			if(StringHelper.containsNonWhitespace(filter)) {
 				searchParams.setFilters(Collections.singletonList(Filter.valueOf(filter)));
 			} else {
@@ -142,7 +137,9 @@ public class DefaultRepositoryEntryDataSource implements FlexiTableDataSourceDel
 		List<Long> repoKeys = new ArrayList<>(repoEntries.size());
 		List<OLATResource> resourcesWithAC = new ArrayList<>(repoEntries.size());
 		for(RepositoryEntryMyView entry:repoEntries) {
-			repoKeys.add(entry.getKey());
+			if (entry.getKey() != null) {
+				repoKeys.add(entry.getKey());
+			}
 			if(entry.isValidOfferAvailable()) {
 				resourcesWithAC.add(entry.getOlatResource());
 			}
@@ -150,19 +147,28 @@ public class DefaultRepositoryEntryDataSource implements FlexiTableDataSourceDel
 		List<OLATResourceAccess> resourcesWithOffer = acService.filterResourceWithAC(resourcesWithAC);
 		repositoryService.filterMembership(searchParams.getIdentity(), repoKeys);
 
-		List<RepositoryEntryRow> items = new ArrayList<RepositoryEntryRow>();
-		for(RepositoryEntryMyView entry:repoEntries) {
-			RepositoryEntryRow row = new RepositoryEntryRow(entry);
+		LinkedHashMap<RepositoryEntryMyView, RepositoryEntryRow> mapOfRepositoryEntryViewsAndRepositoryEntryRows =
+				repositoryEntryRowsFactory.create(repoEntries);
 
-			VFSLeaf image = repositoryManager.getImage(entry);
-			if(image != null) {
-				row.setThumbnailRelPath(uifactory.getMapperThumbnailUrl() + "/" + image.getName());
-			}
+		List<RepositoryEntryRow> items = new ArrayList<>();
+		for (Map.Entry<RepositoryEntryMyView, RepositoryEntryRow> mapEntry : mapOfRepositoryEntryViewsAndRepositoryEntryRows.entrySet()) {
+
+			RepositoryEntryMyView entry = mapEntry.getKey();
+			RepositoryEntryRow row = mapEntry.getValue();
 
 			List<PriceMethod> types = new ArrayList<PriceMethod>();
 			if (entry.isMembersOnly()) {
 				// members only always show lock icon
-				types.add(new PriceMethod("", "o_ac_membersonly_icon", uifactory.getTranslator().translate("cif.access.membersonly.short")));
+				/**
+				 * TODO sev26
+				 * Accessing {@link RepositoryEntryDataSourceUIFactory} this
+				 * way because the entire block here should be in the factory
+				 * class or better in the {@link RepositoryEntryRow} class.
+				 */
+				types.add(new PriceMethod("", "o_ac_membersonly_icon",
+						repositoryEntryRowsFactory.getUiFactory()
+								.getTranslator()
+								.translate("cif.access.membersonly.short")));
 			} else {
 				// collect access control method icons
 				OLATResource resource = entry.getOlatResource();
@@ -172,26 +178,21 @@ public class DefaultRepositoryEntryDataSource implements FlexiTableDataSourceDel
 							String type = (bundle.getMethod().getMethodCssClass() + "_icon").intern();
 							String price = bundle.getPrice() == null || bundle.getPrice().isEmpty() ? "" : PriceFormat.fullFormat(bundle.getPrice());
 							AccessMethodHandler amh = acModule.getAccessMethodHandler(bundle.getMethod().getType());
-							String displayName = amh.getMethodName(uifactory.getTranslator().getLocale());
+							String displayName = amh.getMethodName(
+									repositoryEntryRowsFactory.getUiFactory()
+											.getTranslator().getLocale());
 							types.add(new PriceMethod(price, type, displayName));
 						}
 					}
 				}
 			}
-			
+
 			row.setMember(repoKeys.contains(entry.getKey()));
-			
+
 			if(!types.isEmpty()) {
 				row.setAccessTypes(types);
 			}
-			
-			uifactory.forgeMarkLink(row);
-			uifactory.forgeSelectLink(row);
-			uifactory.forgeStartLink(row);
-			uifactory.forgeDetails(row);
-			uifactory.forgeRatings(row);
-			uifactory.forgeComments(row);
-			
+
 			items.add(row);
 		}
 		return items;

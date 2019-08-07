@@ -45,6 +45,7 @@ import org.olat.fileresource.types.VideoFileResource;
 import org.olat.repository.RepositoryEntry;
 import org.olat.repository.RepositoryEntryMyView;
 import org.olat.repository.RepositoryModule;
+import org.olat.repository.manager.coursequery.MyCourseRepositoryQuery;
 import org.olat.repository.model.CatalogEntryImpl;
 import org.olat.repository.model.RepositoryEntryMyCourseImpl;
 import org.olat.repository.model.RepositoryEntryStatistics;
@@ -67,7 +68,15 @@ import org.springframework.stereotype.Service;
  *
  */
 @Service
-public class RepositoryEntryMyCourseQueries {
+/**
+ * TODO sev26
+ * Rename class from "Queries" to "Query". Names in plural are not best
+ * practice.
+ *
+ * In addition, move this class into the
+ * {@link org.olat.repository.manager.coursequery} package.
+ */
+public class RepositoryEntryMyCourseQueries implements MyCourseRepositoryQuery {
 	
 	private static final OLog log = Tracing.createLoggerFor(RepositoryEntryMyCourseQueries.class);
 	
@@ -77,36 +86,42 @@ public class RepositoryEntryMyCourseQueries {
 	private RepositoryModule repositoryModule;
 	@Autowired
 	private EfficiencyStatementManager efficiencyStatementManager;
-	
+
+	@Override
 	public int countViews(SearchMyRepositoryEntryViewParams params) {
 		if(params.getIdentity() == null) {
 			log.error("No identity defined for query");
 			return 0;
 		}
 		
-		TypedQuery<Number> query = creatMyViewQuery(params, Number.class);
+		TypedQuery<Number> query = createMyViewQuery(params, Number.class);
 		Number count = query.getSingleResult();
 		return count == null ? 0 : count.intValue();
 	}
 
+	@Override
 	public List<RepositoryEntryMyView> searchViews(SearchMyRepositoryEntryViewParams params, int firstResult, int maxResults) {
 		if(params.getIdentity() == null) {
 			log.error("No identity defined for query");
 			return Collections.emptyList();
 		}
 
-		TypedQuery<Object[]> query = creatMyViewQuery(params, Object[].class);
+		TypedQuery<Object[]> query = createMyViewQuery(params, Object[].class);
 		query.setFirstResult(firstResult);
 		if(maxResults > 0) {
 			query.setMaxResults(maxResults);
 		}
 
+		/*
+		 * TODO sev26
+		 * Put this functionality into the {@link RepositoryModule} class.
+		 */
 		// we don't need statistics when rating and comments are disabled unless
 		// were searching for videos, there we want to see the launch counter
 		// from the statistics
 		boolean needStats = repositoryModule.isRatingEnabled() || repositoryModule.isCommentEnabled() ||
 				(params.getResourceTypes() != null && params.getResourceTypes().contains(VideoFileResource.TYPE_NAME));
-		
+
 		List<Long> effKeys = new ArrayList<>();
 		List<Object[]> objects = query.getResultList();
 		List<RepositoryEntryMyView> views = new ArrayList<>(objects.size());
@@ -118,7 +133,12 @@ public class RepositoryEntryMyCourseQueries {
 			Number numOffers = (Number)object[2];
 			long offers = numOffers == null ? 0l : numOffers.longValue();
 			Integer myRating = (Integer)object[3];
-			
+
+			/**
+			 * TODO sev26
+			 * Pass {@link neddStats} ot the
+			 * {@link RepositoryEntryMyCourseImpl} class constructor.
+			 */
 			RepositoryEntryStatistics stats;
 			if (needStats) {
 				stats = re.getStatistics();
@@ -147,8 +167,7 @@ public class RepositoryEntryMyCourseQueries {
 		return views;
 	}
 
-	protected <T> TypedQuery<T> creatMyViewQuery(SearchMyRepositoryEntryViewParams params,
-			Class<T> type) {
+	private <T> TypedQuery<T> createMyViewQuery(SearchMyRepositoryEntryViewParams params, Class<T> type) {
 
 		Roles roles = params.getRoles();
 		Identity identity = params.getIdentity();
@@ -203,6 +222,11 @@ public class RepositoryEntryMyCourseQueries {
 		
 		// join seems to be quicker
 		if(params.getMarked() != null && params.getMarked().booleanValue()) {
+			sb.append(" inner join ").append(MarkImpl.class.getName()).append(" as mark2 on (mark2.creator.key=:identityKey and mark2.resId=v.key and mark2.resName='RepositoryEntry')");
+		}
+
+		// join seems to be quicker
+		if(params.getMarked() != null && params.getMarked()) {
 			sb.append(" inner join ").append(MarkImpl.class.getName()).append(" as mark2 on (mark2.creator.key=:identityKey and mark2.resId=v.key and mark2.resName='RepositoryEntry')");
 		}
 
@@ -610,7 +634,7 @@ public class RepositoryEntryMyCourseQueries {
 		}
 	}
 	
-	private final StringBuilder appendAsc(StringBuilder sb, boolean asc) {
+	private StringBuilder appendAsc(StringBuilder sb, boolean asc) {
 		if(asc) {
 			sb.append(" asc");
 		} else {

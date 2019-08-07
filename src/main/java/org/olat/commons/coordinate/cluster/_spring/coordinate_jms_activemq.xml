@@ -8,9 +8,10 @@
 	<bean id="sysbus.topic" class="org.apache.activemq.command.ActiveMQTopic">
 		<constructor-arg value="olat/${instance.id}/sysbus" />
 	</bean>
-  
+
 	<bean id="jmsConnectionFactory" class="org.apache.activemq.spring.ActiveMQConnectionFactory">
 		<property name="brokerURL" value="${jms.broker.url}" />
+		<property name="trustAllPackages" value="true" />
 	</bean>
 
 </beans>	

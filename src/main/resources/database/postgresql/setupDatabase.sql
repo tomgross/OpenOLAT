@@ -51,7 +51,8 @@ create table o_bs_group_member (
    g_role varchar(50) not null,
    fk_group_id int8 not null,
    fk_identity_id int8 not null,
-   primary key (id)
+   primary key (id),
+   unique (g_role, fk_group_id, fk_identity_id)
 );
 
 create table o_bs_grant (
@@ -328,6 +329,10 @@ create table o_user (
    u_genericcheckboxproperty2 varchar(255),
    u_genericcheckboxproperty3 varchar(255),
 
+   u_institutional_employee_number varchar(255),
+   u_institutional_matriculation_number varchar(255),
+   u_matriculation_number varchar(255),
+
    fk_identity int8,
    primary key (user_id)
 );
@@ -464,7 +469,8 @@ create table o_re_to_group (
    r_defgroup boolean not null,
    fk_group_id int8 not null,
    fk_entry_id int8 not null,
-   primary key (id)
+   primary key (id),
+   unique (r_defgroup, fk_group_id, fk_entry_id)
 );
 create table o_repositoryentry_cycle (
    id int8 not null,

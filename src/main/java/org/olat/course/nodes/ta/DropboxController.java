@@ -61,6 +61,7 @@ import org.olat.core.gui.control.generic.modal.DialogBoxController;
 import org.olat.core.gui.render.velocity.VelocityHelper;
 import org.olat.core.id.Identity;
 import org.olat.core.id.UserConstants;
+import org.olat.core.id.context.BusinessControlFactory;
 import org.olat.core.util.FileUtils;
 import org.olat.core.util.Formatter;
 import org.olat.core.util.mail.MailBundle;
@@ -83,6 +84,8 @@ import org.olat.course.run.userview.UserCourseEnvironment;
 import org.olat.modules.ModuleConfiguration;
 import org.olat.modules.assessment.Role;
 import org.olat.user.UserManager;
+
+import javax.ws.rs.core.UriBuilder;
 
 /**
  * Initial Date:  02.09.2004
@@ -213,7 +216,6 @@ public class DropboxController extends BasicController {
 	/**
 	 * Get upload limit for dropbox of a certain user. The upload can be limited 
 	 * by available-folder space, max folder size or configurated upload-limit.
-	 * @param ureq
 	 * @return max upload limit in KB
 	 */
 	private int getUploadLimit() {
@@ -261,7 +263,7 @@ public class DropboxController extends BasicController {
 					return;
 				}
 				
-				if(fOut instanceof MetaTagged) {
+				if (fOut instanceof MetaTagged) {
 					MetaInfo info = ((MetaTagged)fOut).getMetaInfo();
 					if(info != null) {
 						info.setAuthor(ureq.getIdentity());
@@ -278,7 +280,7 @@ public class DropboxController extends BasicController {
 					Boolean sendEmail = (Boolean)config.get(TACourseNode.CONF_DROPBOX_ENABLEMAIL);
 					if (sendEmail == null) sendEmail = Boolean.FALSE;
 					boolean sendMailError = false;
-					if (sendEmail.booleanValue()) {
+					if (sendEmail) {
 						//send mail
 						MailContext context = new MailContextImpl(getWindowControl().getBusinessControl().getAsString());
 						MailBundle bundle = new MailBundle();
@@ -295,9 +297,8 @@ public class DropboxController extends BasicController {
 							String title = MailHelper.getTitleForFailedUsersError(ureq.getLocale());
 							String message = MailHelper.getMessageForFailedUsersError(ureq.getLocale(), disabledIdentities);
 							// add dropbox specific error message
-							message += "\n<br />"+translate("conf.mail.error");
-							//FIXME:FG:6.2: fix problem in info message, not here
-							message += "\n<br />\n<br />"+confirmation.replace("\n", "&#10;").replace("\r", "&#10;").replace("\u2028", "&#10;");
+							message += ("\n<br />" + translate("conf.mail.error"));
+							message += ("\n<br />\n<br />" + confirmation);
 							DialogBoxController noUsersErrorCtr = null;
 							noUsersErrorCtr = activateGenericDialog(ureq, title, message, myButtons, noUsersErrorCtr);
 							sendMailError = true;
@@ -307,8 +308,7 @@ public class DropboxController extends BasicController {
 							myButtons.add(translate("back"));
 							DialogBoxController noUsersErrorCtr = null;
 							String message = translate("conf.mail.error");
-							//FIXME:FG:6.2: fix problem in info message, not here
-							message += "\n<br />\n<br />"+confirmation.replace("\n", "&#10;").replace("\r", "&#10;").replace("\u2028", "&#10;");
+							message += "\n<br />\n<br />"+confirmation;
 							noUsersErrorCtr = activateGenericDialog(ureq, translate("error.header"), message, myButtons, noUsersErrorCtr);
 							sendMailError = true;
 						} 
@@ -319,9 +319,8 @@ public class DropboxController extends BasicController {
 						NotificationsManager.getInstance().markPublisherNews(subsContext, ureq.getIdentity(), true);
 					}													
 					// configuration is already translated, don't use showInfo(i18nKey)! 
-					//FIXME:FG:6.2: fix problem in info message, not here
 					if(!sendMailError) {
-						getWindowControl().setInfo(confirmation.replace("\n", "&#10;").replace("\r", "&#10;").replace("\u2028", "&#10;"));
+						getWindowControl().setInfo(confirmation);
 					}
 				} else {
 					showInfo("dropbox.upload.failed");
@@ -344,10 +343,11 @@ public class DropboxController extends BasicController {
 		String tStamp = new SimpleDateFormat("yyMMdd-HHmmss").format(new Date());
 		return body + "." + tStamp + ext;
 	}
-	
+
 	private String getConfirmation(UserRequest ureq, String filename) {
-	  //grab confirmation-text from bb-config
-		String confirmation = config.getStringValue(TACourseNode.CONF_DROPBOX_CONFIRMATION);
+		//grab confirmation-text from bb-config
+		// OLATNG-327: Avoid NullPointerException by providing the default value
+		String confirmation = config.getStringValue(TACourseNode.CONF_DROPBOX_CONFIRMATION, translate("conf.stdtext"));
 		
 		Context c = new VelocityContext();
 		Identity identity = ureq.getIdentity();
@@ -360,7 +360,7 @@ public class DropboxController extends BasicController {
 		Formatter f = Formatter.getInstance(ureq.getLocale());
 		c.put("date", f.formatDate(now));
 		c.put("time", f.formatTime(now));
-		
+
 		// update attempts counter for this user: one file - one attempts
 		AssessableCourseNode acn = (AssessableCourseNode) node;
 		acn.incrementUserAttempts(userCourseEnv, Role.user);
@@ -369,7 +369,8 @@ public class DropboxController extends BasicController {
 		UserNodeAuditManager am = userCourseEnv.getCourseEnvironment().getAuditManager();
 		am.appendToUserNodeLog(node, identity, identity, "FILE UPLOADED: " + filename, null);
 
-		return VelocityHelper.getInstance().evaluateVTL(confirmation, c);
+		String processedConfirmation = VelocityHelper.getInstance().evaluateVTL(confirmation, c);
+		return processedConfirmation.replace("\n", "&#10;").replace("\r", "&#10;").replace("\u2028", "&#10;");
 	}
 	
 	/**

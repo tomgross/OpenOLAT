@@ -51,6 +51,7 @@ import org.olat.core.logging.AssertException;
 import org.olat.core.logging.OLog;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.UserSession;
+import org.olat.core.util.servlets.OlatUrlDecoder;
 import org.olat.core.util.session.UserSessionManager;
 
 /**
@@ -212,14 +213,7 @@ public class UserRequestImpl implements UserRequest {
 	 * remaining params make up key/value pairs.
 	 */
 	private void parseRequest(HttpServletRequest hreq) {
-		String uri = hreq.getRequestURI();
-		String decodedUri;
-		try {
-			hreq.setCharacterEncoding("utf-8");
-			decodedUri = URLDecoder.decode(uri, "UTF-8");
-		} catch (UnsupportedEncodingException e) {
-			throw new AssertException("utf-8 encoding not supported!!!!");
-		}
+		String decodedUri = OlatUrlDecoder.getFullUri(hreq);
 
 		// log the http request headers, but do not parse the parameters (could destroy data for file upload)
 		if (log.isDebug()) {
@@ -296,7 +290,6 @@ public class UserRequestImpl implements UserRequest {
 		// get moduleURI
 		if (nextSlash + 1 < nonParsedUri.length()) {
 			moduleURI = nonParsedUri.substring(nextSlash + 1);
-			if (moduleURI.indexOf("../") != -1) throw new AssertException("a non-normalized url encountered "+moduleURI);
 		}
 	}
 

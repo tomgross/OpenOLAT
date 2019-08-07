@@ -154,4 +154,12 @@ public interface DB {
 	 * @return
 	 */
 	public EntityManager getCurrentEntityManager();
+
+	void commitTransactionAndCloseEntityManager();
+
+	void rollbackTransactionAndCloseEntityManager();
+
+	void flush();
+
+	void clear();
 }
