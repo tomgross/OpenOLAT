@@ -67,9 +67,7 @@ public class HttpItemInput implements ItemInput, Serializable {
 		if (l == null) {
 			l = new ArrayList<String>();
 		}
-		// OLATNG-199 (back-porting OLAT-6989: filter html tags)
-		String filteredValue = FilterFactory.getStripHtmlTagsFilter().filter(value.trim());
-		l.add(filteredValue);
+		l.add(value.trim());
 		return m.put(key, l);
 	}
 	

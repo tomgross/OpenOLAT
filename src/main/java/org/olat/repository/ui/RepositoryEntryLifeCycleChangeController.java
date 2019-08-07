@@ -52,6 +52,7 @@ import org.olat.repository.handlers.RepositoryHandler;
 import org.olat.repository.model.RepositoryEntrySecurity;
 import org.olat.repository.ui.author.ConfirmCloseController;
 import org.olat.repository.ui.author.ConfirmDeleteSoftlyController;
+import org.springframework.beans.factory.annotation.Autowired;
 
 /**
  * Offers a way to change the repo entry life cycle / status: close and delete a
@@ -79,27 +80,26 @@ public class RepositoryEntryLifeCycleChangeController extends BasicController{
 	private ConfirmCloseController confirmCloseCtrl;
 	private ConfirmDeleteSoftlyController confirmDeleteCtrl;
 
-	private final DB dbInstance;
-	protected final RepositoryService repositoryService;
+	@Autowired
+	private DB dbInstance;
+	@Autowired
+	private RepositoryModule repositoryModule;
+	@Autowired
+	private RepositoryService repositoryService;
+	@Autowired
+	private RepositoryManager repositoryManager;
 
-	public RepositoryEntryLifeCycleChangeController(DB dbInstance,
-													RepositoryService repositoryService,
-													RepositoryManager repositoryManager,
-													RepositoryModule repositoryModule,
-													UserRequest ureq,
+	public RepositoryEntryLifeCycleChangeController(UserRequest ureq,
 													WindowControl wControl,
 													RepositoryEntry re,
 													RepositoryEntrySecurity reSecurity,
 													RepositoryHandler handler) {
 
 		super(ureq, wControl);
-		this.dbInstance = dbInstance;
-		this.repositoryService = repositoryService;
+		setTranslator(Util.createPackageTranslator(RepositoryService.class, getLocale(), getTranslator()));
 		this.re = re;
 		this.reSecurity = reSecurity;
 
-		setTranslator(Util.createPackageTranslator(RepositoryService.class, ureq.getLocale(), null));
-		
 		lifeCycleVC = createVelocityContainer("lifecycle_change");
 		putInitialPanel(lifeCycleVC);
 		
