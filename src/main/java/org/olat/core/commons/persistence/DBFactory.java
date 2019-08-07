@@ -50,15 +50,6 @@ public class DBFactory {
 	 * @return the DB instance.
 	 */
 	public static DB getInstance() {
-		if (db == null) {
-			/*
-			 * This is an unstable hack in order that the DB instance can be
-			 * easily replaced/mocked by Spring. Unstable because it depends
-			 * on the initialization order of Spring.
-			 */
-			BeanFactory beanFactory = CoreSpringFactory.getBeanFactory();
-			db = beanFactory.getBean(DB.class);
-		}
-		return db;
+		return DBImpl.getInstance();
 	}
 }
