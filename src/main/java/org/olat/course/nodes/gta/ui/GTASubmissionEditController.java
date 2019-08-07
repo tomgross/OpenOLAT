@@ -42,12 +42,7 @@ import org.olat.modules.ModuleConfiguration;
 public class GTASubmissionEditController extends FormBasicController {
 	
 	private static final String[] enableKeys = new String[] { "on" };
-	private static final String[] emailRecipientKeys = new String[] {
-			GTACourseNode.GTASK_ASSIGNMENT_MAIL_CONFIRMATION_OWNER,
-			GTACourseNode.GTASK_ASSIGNMENT_MAIL_CONFIRMATION_COACH_COURSE,
-			GTACourseNode.GTASK_ASSIGNMENT_MAIL_CONFIRMATION_COACH_GROUP,
-			GTACourseNode.GTASK_ASSIGNMENT_MAIL_CONFIRMATION_PARTICIPANT
-	};
+	private static final String[] emailRecipientKeys = GTACourseNode.emailRecipientKeys;
 	
 	private RichTextElement emailTextEl;
 	private TextElement maxNumberOfDocsEl;

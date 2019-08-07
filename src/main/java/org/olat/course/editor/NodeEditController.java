@@ -89,6 +89,21 @@ public class NodeEditController extends ActivateableTabbableDefaultController im
 	public static final Event NODECONFIG_CHANGED_EVENT = new Event("nodeconfigchanged");
 	private static final String[] paneKeys = { PANE_TAB_VISIBILITY, PANE_TAB_GENERAL };
 
+
+	/**
+	 * @param ureq
+	 * @param editorModel
+	 * @param course
+	 * @param luNode
+	 * @param groupMgr
+	 */
+	@Deprecated
+	public NodeEditController(UserRequest ureq, WindowControl wControl, CourseEditorTreeModel editorModel, ICourse course, CourseNode luNode,
+							  UserCourseEnvironment euce, TabbableController childTabsController) {
+		this(ureq, wControl, editorModel, course, euce, childTabsController, null);
+
+	}
+
 	public NodeEditController(UserRequest ureq, WindowControl wControl,
 							  CourseEditorTreeModel editorModel,
 							  ICourse course, UserCourseEnvironment euce,

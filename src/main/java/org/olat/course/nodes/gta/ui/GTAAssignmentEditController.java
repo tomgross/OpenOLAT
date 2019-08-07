@@ -47,12 +47,7 @@ public class GTAAssignmentEditController extends AbstractAssignmentEditControlle
 	private static final String[] previewKeys = new String[] { "enabled", "disabled" };
 	private static final String[] samplingKeys = new String[] { GTACourseNode.GTASK_SAMPLING_UNIQUE, GTACourseNode.GTASK_SAMPLING_REUSE };
 	private static final String[] enableKeys = new String[] { "on" };
-	private static final String[] emailRecipientKeys = new String[] {
-			GTACourseNode.GTASK_ASSIGNMENT_MAIL_CONFIRMATION_OWNER,
-			GTACourseNode.GTASK_ASSIGNMENT_MAIL_CONFIRMATION_COACH_COURSE,
-			GTACourseNode.GTASK_ASSIGNMENT_MAIL_CONFIRMATION_COACH_GROUP,
-			GTACourseNode.GTASK_ASSIGNMENT_MAIL_CONFIRMATION_PARTICIPANT
-	};
+	private static final String[] emailRecipientKeys = GTACourseNode.emailRecipientKeys;
 
 	private RichTextElement textEl, emailTextEl;
 	private SingleSelection typeEl, previewEl, samplingEl;

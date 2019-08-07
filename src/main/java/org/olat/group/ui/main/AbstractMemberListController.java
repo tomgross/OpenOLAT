@@ -90,6 +90,7 @@ import org.olat.group.BusinessGroup;
 import org.olat.group.BusinessGroupManagedFlag;
 import org.olat.group.BusinessGroupMembership;
 import org.olat.group.BusinessGroupModule;
+import org.olat.group.BusinessGroupOrder;
 import org.olat.group.BusinessGroupService;
 import org.olat.group.BusinessGroupShort;
 import org.olat.group.model.BusinessGroupMembershipChange;
@@ -149,6 +150,7 @@ public abstract class AbstractMemberListController extends FormBasicController i
 	private CloseableCalloutWindowController toolsCalloutCtrl;
 	private EditSingleMembershipController editSingleMemberCtrl;
 	private final List<UserPropertyHandler> userPropertyHandlers;
+	private List<BusinessGroup> businessGroupColumnHeaders = new ArrayList<>();
 
 	private final AtomicInteger counter = new AtomicInteger();
 	protected final RepositoryEntry repoEntry;
@@ -212,7 +214,12 @@ public abstract class AbstractMemberListController extends FormBasicController i
 		isAdministrativeUser = securityModule.isUserAllowedAdminProps(roles);
 		isLastVisitVisible = securityModule.isUserLastVisitVisible(roles);
 		userPropertyHandlers = userManager.getUserPropertyHandlersFor(USER_PROPS_ID, isAdministrativeUser);
-		
+
+		if (repoEntry != null) {
+			// Ascending sorted
+			businessGroupColumnHeaders = businessGroupService.findBusinessGroups(null, repoEntry, 0, -1, BusinessGroupOrder.nameAsc);
+		}
+
 		initForm(ureq);
 	}
 	
@@ -230,7 +237,7 @@ public abstract class AbstractMemberListController extends FormBasicController i
 		FlexiTableColumnModel columnsModel = FlexiTableDataModelFactory.createFlexiTableColumnModel();
 		SortKey defaultSortKey = initColumns(columnsModel);
 		
-		memberListModel = new MemberListTableModel(columnsModel, imModule.isOnlineStatusEnabled());
+		memberListModel = new MemberListTableModel(columnsModel, imModule.isOnlineStatusEnabled(), businessGroupColumnHeaders);
 		membersTable = uifactory.addTableElement(getWindowControl(), "memberList", memberListModel, 20, false, getTranslator(), formLayout);
 		membersTable.setMultiSelect(true);
 		membersTable.setEmtpyTableMessageKey("nomembers");
