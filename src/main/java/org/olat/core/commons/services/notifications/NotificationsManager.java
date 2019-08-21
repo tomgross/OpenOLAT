@@ -120,7 +120,7 @@ public abstract class NotificationsManager {
 	 * 
 	 * @param ores
 	 */
-	public abstract void deletePublishersOf(OLATResourceable ores);
+	public abstract int deletePublishersOf(OLATResourceable ores);
 
 
 	/**
@@ -223,15 +223,6 @@ public abstract class NotificationsManager {
 	 *         deleted)
 	 */
 	public abstract boolean isPublisherValid(Publisher pub);
-
-	/**
-	 * no match if: a) not the same publisher b) a deleted publisher
-	 * 
-	 * @param p
-	 * @param subscriptionContext
-	 * @return true when the subscriptionContext refers to the publisher p
-	 */
-	//public abstract boolean matches(Publisher p, SubscriptionContext subscriptionContext);
 
 	/**
 	 * @param subscriber

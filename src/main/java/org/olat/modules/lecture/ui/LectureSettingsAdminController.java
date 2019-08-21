@@ -49,16 +49,33 @@ public class LectureSettingsAdminController extends FormBasicController {
 	
 	private static final String[] onKeys = new String[] { "on" };
 	private static final String[] yesNoKeys = new String[] { "yes", "no" };
+	private static final String[] showKeys = new String[] { "all", "mine" };
 	
+	private SingleSelection showAllTeachersLecturesEl;
 	private SingleSelection canOverrideStandardConfigEl;
-	private TextElement attendanceRateEl, appealPeriodEl, reminderPeriodEl,
-		autoClosePeriodEl;
-	private MultipleSelectionElement enableEl, calculateAttendanceRateEnableEl,
-		appealAbsenceEnableEl, statusEnabledEl, partiallyDoneEnabledEl,
-		authorizedAbsenceEnableEl, absenceDefaultAuthorizedEl,
-		countAuthorizedAbsenceAsAttendantEl, syncTeachersCalendarEnableEl,
-		syncCourseCalendarEnableEl, teacherCanAuthorizeAbsenceEl,
-		reminderEnableEl, rollCallEnableEl;
+	private TextElement appealPeriodEl;
+	private TextElement reminderPeriodEl;
+	private TextElement attendanceRateEl;
+	private TextElement autoClosePeriodEl;
+	private TextElement assessmentIpsEl;
+	private TextElement assessmentLeadTimeEl;
+	private TextElement assessmentFollowupTimeEl;
+	private TextElement assessmentSafeExamBrowserEl;
+	private MultipleSelectionElement enableEl;
+	private MultipleSelectionElement enableAssessmentModeEl;
+	private MultipleSelectionElement calculateAttendanceRateEnableEl;
+	private MultipleSelectionElement appealAbsenceEnableEl;
+	private MultipleSelectionElement statusEnabledEl;
+	private MultipleSelectionElement partiallyDoneEnabledEl;
+	private MultipleSelectionElement authorizedAbsenceEnableEl;
+	private MultipleSelectionElement absenceDefaultAuthorizedEl;
+	private MultipleSelectionElement countAuthorizedAbsenceAsAttendantEl;
+	private MultipleSelectionElement syncTeachersCalendarEnableEl;
+	private MultipleSelectionElement syncCourseCalendarEnableEl;
+	private MultipleSelectionElement teacherCanAuthorizeAbsenceEl;
+	private MultipleSelectionElement courseOwnersCanViewAllCoursesInCurriculumEl;
+	private MultipleSelectionElement reminderEnableEl;
+	private MultipleSelectionElement rollCallEnableEl;
 	private FormLayoutContainer globalCont;
 	
 	@Autowired
@@ -88,11 +105,9 @@ public class LectureSettingsAdminController extends FormBasicController {
 
 		String[] yesNoValues = new String[]{ translate("yes"), translate("no") };
 		canOverrideStandardConfigEl = uifactory.addRadiosHorizontal("lecture.can.override.standard.configuration", courseCont, yesNoKeys, yesNoValues);
-		canOverrideStandardConfigEl.addActionListener(FormEvent.ONCHANGE);
 
 		// roll call enabled
 		rollCallEnableEl = uifactory.addCheckboxesHorizontal("lecture.rollcall.default.enabled", courseCont, onKeys, onValues);
-		rollCallEnableEl.addActionListener(FormEvent.ONCHANGE);
 
 		// calculate attendance
 		calculateAttendanceRateEnableEl = uifactory.addCheckboxesHorizontal("lecture.calculate.attendance.rate.default.enabled", courseCont, onKeys, onValues);
@@ -104,6 +119,15 @@ public class LectureSettingsAdminController extends FormBasicController {
 		// sync calendars
 		syncTeachersCalendarEnableEl = uifactory.addCheckboxesHorizontal("sync.teachers.calendar.enabled", courseCont, onKeys, onValues);
 		syncCourseCalendarEnableEl = uifactory.addCheckboxesHorizontal("sync.course.calendar.enabled", courseCont, onKeys, onValues);
+		
+		// assessment mode
+		enableAssessmentModeEl = uifactory.addCheckboxesHorizontal("lecture.assessment.mode.enabled", courseCont, onKeys, onValues);
+		enableAssessmentModeEl.addActionListener(FormEvent.ONCHANGE);
+		
+		assessmentLeadTimeEl = uifactory.addTextElement("lecture.assessment.mode.leading.time", "lecture.assessment.mode.leading.time", 8, "", courseCont);
+		assessmentFollowupTimeEl = uifactory.addTextElement("lecture.assessment.mode.followup.time", "lecture.assessment.mode.followup.time", 8, "", courseCont);
+		assessmentIpsEl = uifactory.addTextElement("lecture.assessment.mode.ips", "lecture.assessment.mode.ips", 8, "", courseCont);
+		assessmentSafeExamBrowserEl = uifactory.addTextElement("lecture.assessment.mode.seb", "lecture.assessment.mode.seb", 8, "", courseCont);
 
 		//global configuration
 		globalCont = FormLayoutContainer.createDefaultFormLayout("global", getTranslator());
@@ -136,13 +160,20 @@ public class LectureSettingsAdminController extends FormBasicController {
 		countAuthorizedAbsenceAsAttendantEl = uifactory.addCheckboxesHorizontal("lecture.count.authorized.absence.attendant", globalCont, onKeys, onValues);
 		absenceDefaultAuthorizedEl = uifactory.addCheckboxesHorizontal("lecture.absence.default.authorized", globalCont, onKeys, onValues);
 		teacherCanAuthorizeAbsenceEl = uifactory.addCheckboxesHorizontal("lecture.teacher.can.authorize.absence", globalCont, onKeys, onValues);
+		courseOwnersCanViewAllCoursesInCurriculumEl = uifactory.addCheckboxesHorizontal("lecture.owner.can.view.all.curriculum.elements", globalCont, onKeys, onValues);
 
 		// appeal enabled
 		appealAbsenceEnableEl = uifactory.addCheckboxesHorizontal("lecture.appeal.absence.enabled", globalCont, onKeys, onValues);
 		appealAbsenceEnableEl.addActionListener(FormEvent.ONCHANGE);
 		appealPeriodEl = uifactory.addTextElement("lecture.appeal.absence.period", "lecture.appeal.absence.period", 16, "", globalCont);
 		appealPeriodEl.setMandatory(true);
-
+		
+		String[] showValues = new String[] {
+				translate("lecture.show.all.teachers.all"), translate("lecture.show.all.teachers.mine")
+		};
+		showAllTeachersLecturesEl = uifactory.addRadiosVertical("lecture.show.all.teachers", "lecture.show.all.teachers",
+				globalCont, showKeys, showValues);
+		
 		//buttons
 		FormLayoutContainer buttonsWrapperCont = FormLayoutContainer.createDefaultFormLayout("global", getTranslator());
 		buttonsWrapperCont.setRootForm(mainForm);
@@ -240,10 +271,24 @@ public class LectureSettingsAdminController extends FormBasicController {
 		} else {
 			teacherCanAuthorizeAbsenceEl.uncheckAll();
 		}
+		teacherCanAuthorizeAbsenceEl.setVisible(authorizedAbsenceEnableEl.isVisible() && authorizedAbsenceEnableEl.isAtLeastSelected(1));
+		
+		if(lectureModule.isOwnerCanViewAllCoursesInCurriculum()) {
+			courseOwnersCanViewAllCoursesInCurriculumEl.select(onKeys[0], true);
+		} else {
+			courseOwnersCanViewAllCoursesInCurriculumEl.uncheckAll();
+		}
+		
 		if(lectureModule.isAbsenceAppealEnabled()) {
 			appealAbsenceEnableEl.select(onKeys[0], true);
 		} else {
 			appealAbsenceEnableEl.uncheckAll();
+		}
+		
+		if(lectureModule.isShowLectureBlocksAllTeachersDefault()) {
+			showAllTeachersLecturesEl.select(showKeys[0], true);
+		} else {
+			showAllTeachersLecturesEl.select(showKeys[1], true);
 		}
 		
 		String appealPeriod = "";
@@ -251,6 +296,25 @@ public class LectureSettingsAdminController extends FormBasicController {
 			appealPeriod = Integer.toString(lectureModule.getAbsenceAppealPeriod());
 		}
 		appealPeriodEl.setValue(appealPeriod);
+		
+		if(lectureModule.isAssessmentModeEnabledDefault()) {
+			enableAssessmentModeEl.select(onKeys[0], true);
+		} else {
+			enableAssessmentModeEl.uncheckAll();
+		}
+		
+		assessmentIpsEl.setValue(lectureModule.getAssessmentModeAdmissibleIps());
+		if(lectureModule.getAssessmentModeLeadTime() >= 0) {
+			assessmentLeadTimeEl.setValue(Integer.toString(lectureModule.getAssessmentModeLeadTime()));
+		} else {
+			assessmentLeadTimeEl.setValue("");
+		}
+		if(lectureModule.getAssessmentModeFollowupTime() >= 0) {
+			assessmentFollowupTimeEl.setValue(Integer.toString(lectureModule.getAssessmentModeFollowupTime()));
+		} else {
+			assessmentFollowupTimeEl.setValue("");
+		}
+		assessmentSafeExamBrowserEl.setValue(lectureModule.getAssessmentModeSebKeys());
 	}
 	
 	private void updateUI() {
@@ -262,6 +326,13 @@ public class LectureSettingsAdminController extends FormBasicController {
 		reminderEnableEl.setVisible(enabled);
 		syncTeachersCalendarEnableEl.setVisible(enabled);
 		syncCourseCalendarEnableEl.setVisible(enabled);
+		enableAssessmentModeEl.setVisible(enabled);
+		
+		boolean assessmentModeEnabled = enableAssessmentModeEl.isVisible() && enableAssessmentModeEl.isAtLeastSelected(1);
+		assessmentLeadTimeEl.setVisible(assessmentModeEnabled);
+		assessmentFollowupTimeEl.setVisible(assessmentModeEnabled);
+		assessmentIpsEl.setVisible(assessmentModeEnabled);
+		assessmentSafeExamBrowserEl.setVisible(assessmentModeEnabled);
 		
 		globalCont.setVisible(enabled);
 		autoClosePeriodEl.setVisible(enabled);
@@ -283,10 +354,9 @@ public class LectureSettingsAdminController extends FormBasicController {
 		//
 	}
 	
-	
 	@Override
 	protected boolean validateFormLogic(UserRequest ureq) {
-		boolean allOk = true;
+		boolean allOk = super.validateFormLogic(ureq);
 		
 		attendanceRateEl.clearError();
 		if(StringHelper.containsNonWhitespace(attendanceRateEl.getValue())) {
@@ -306,6 +376,8 @@ public class LectureSettingsAdminController extends FormBasicController {
 		}
 		
 		allOk &= validateInt(autoClosePeriodEl);
+		allOk &= validateInt(assessmentLeadTimeEl);
+		allOk &= validateInt(assessmentFollowupTimeEl);
 		
 		appealPeriodEl.clearError();
 		if(appealAbsenceEnableEl.isVisible() && appealAbsenceEnableEl.isAtLeastSelected(1)) {
@@ -317,14 +389,16 @@ public class LectureSettingsAdminController extends FormBasicController {
 			allOk &= validateInt(reminderPeriodEl);
 		}
 		
-		return allOk & super.validateFormLogic(ureq);
+		return allOk;
 	}
 	
 	private boolean validateInt(TextElement el) {
 		boolean allOk = true;
 		
 		el.clearError();
-		if(StringHelper.containsNonWhitespace(el.getValue())) {
+		if(!el.isVisible()) {
+			// OK
+		} else if(StringHelper.containsNonWhitespace(el.getValue())) {
 			try {
 				int val = Integer.parseInt(el.getValue());
 				if(val <= 0) {
@@ -350,7 +424,8 @@ public class LectureSettingsAdminController extends FormBasicController {
 				initializeValues();
 			}
 			updateUI();
-		} else if(appealAbsenceEnableEl == source || reminderEnableEl == source || authorizedAbsenceEnableEl == source) {
+		} else if(appealAbsenceEnableEl == source || reminderEnableEl == source
+				|| authorizedAbsenceEnableEl == source || enableAssessmentModeEl == source) {
 			updateUI();
 		}
 		super.formInnerEvent(ureq, source, event);
@@ -360,13 +435,15 @@ public class LectureSettingsAdminController extends FormBasicController {
 	protected void formOK(UserRequest ureq) {
 		boolean enabled = enableEl.isAtLeastSelected(1);
 		lectureModule.setEnabled(enabled);
+		boolean assessmentModeEnabled = enabled && enableAssessmentModeEl.isAtLeastSelected(1);
+		lectureModule.setAssessmentModeEnabledDefault(assessmentModeEnabled);
 		
 		if(enabled) {
 			lectureModule.setCanOverrideStandardConfiguration(canOverrideStandardConfigEl.isSelected(0));
 
 			//enabled user tool
 			Set<String> availableTools = userToolsModule.getAvailableUserToolSet();
-			if(availableTools.size() > 0) {
+			if(!availableTools.isEmpty()) {
 				if(!availableTools.contains("org.olat.home.HomeMainController:org.olat.modules.lecture.ui.LecturesToolController")) {
 					availableTools.add("org.olat.home.HomeMainController:org.olat.modules.lecture.ui.LecturesToolController");
 				}
@@ -392,13 +469,14 @@ public class LectureSettingsAdminController extends FormBasicController {
 			lectureModule.setCountAuthorizedAbsenceAsAttendant(authorizedAbsenceenabled && countAuthorizedAbsenceAsAttendantEl.isAtLeastSelected(1));
 			lectureModule.setTeacherCanAuthorizedAbsence(authorizedAbsenceenabled && teacherCanAuthorizeAbsenceEl.isAtLeastSelected(1));
 			
+			lectureModule.setOwnerCanViewAllCoursesInCurriculum(courseOwnersCanViewAllCoursesInCurriculumEl.isAtLeastSelected(1));
+			
 			lectureModule.setAbsenceAppealEnabled(appealAbsenceEnableEl.isAtLeastSelected(1));
 			if(appealAbsenceEnableEl.isAtLeastSelected(1)) {
 				int period = Integer.parseInt(appealPeriodEl.getValue());
 				lectureModule.setAbsenceAppealPeriod(period);
 			}
 			lectureModule.setAbsenceDefaultAuthorized(absenceDefaultAuthorizedEl.isAtLeastSelected(1));
-			
 			
 			lectureModule.setRollCallReminderEnabled(reminderEnableEl.isAtLeastSelected(1));
 			if(reminderEnableEl.isAtLeastSelected(1)) {
@@ -415,6 +493,18 @@ public class LectureSettingsAdminController extends FormBasicController {
 	
 			lectureModule.setTeacherCalendarSyncEnabledDefault(syncTeachersCalendarEnableEl.isAtLeastSelected(1));
 			lectureModule.setCourseCalendarSyncEnabledDefault(syncCourseCalendarEnableEl.isAtLeastSelected(1));
+			
+			lectureModule.setShowLectureBlocksAllTeachersDefault(showAllTeachersLecturesEl.isSelected(0));
+		}
+		
+		if(assessmentModeEnabled) {
+			lectureModule.setAssessmentModeAdmissibleIps(assessmentIpsEl.getValue());
+			lectureModule.setAssessmentModeSebKeys(assessmentSafeExamBrowserEl.getValue());
+			lectureModule.setAssessmentModeLeadTime(Integer.parseInt(assessmentLeadTimeEl.getValue()));
+			lectureModule.setAssessmentModeFollowupTime(Integer.parseInt(assessmentFollowupTimeEl.getValue()));
+		} else {
+			lectureModule.setAssessmentModeSebKeys("");
+			lectureModule.setAssessmentModeAdmissibleIps("");
 		}
 	}
 }

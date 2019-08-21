@@ -42,9 +42,9 @@ import java.util.zip.ZipOutputStream;
 
 import org.apache.commons.codec.binary.Base64;
 import org.apache.commons.io.IOUtils;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.CoreSpringFactory;
 import org.olat.core.commons.modules.bc.FolderConfig;
-import org.olat.core.commons.modules.bc.vfs.OlatRootFolderImpl;
 import org.olat.core.commons.services.taskexecutor.TaskExecutorManager;
 import org.olat.core.gui.UserRequest;
 import org.olat.core.gui.components.stack.BreadcrumbPanel;
@@ -56,12 +56,12 @@ import org.olat.core.gui.control.generic.tabbable.TabbableController;
 import org.olat.core.gui.translator.PackageTranslator;
 import org.olat.core.gui.translator.Translator;
 import org.olat.core.id.Identity;
+import org.olat.core.id.Organisation;
 import org.olat.core.id.Roles;
 import org.olat.core.id.context.BusinessControl;
 import org.olat.core.id.context.BusinessControlFactory;
 import org.olat.core.logging.AssertException;
 import org.olat.core.logging.OLATRuntimeException;
-import org.olat.core.logging.OLog;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.DirectoryFilter;
 import org.olat.core.util.ExportUtil;
@@ -71,10 +71,12 @@ import org.olat.core.util.Formatter;
 import org.olat.core.util.Util;
 import org.olat.core.util.ZipUtil;
 import org.olat.core.util.vfs.LocalFileImpl;
+import org.olat.core.util.vfs.LocalFolderImpl;
 import org.olat.core.util.vfs.VFSContainer;
 import org.olat.core.util.vfs.VFSItem;
 import org.olat.core.util.vfs.VFSLeaf;
 import org.olat.core.util.vfs.VFSManager;
+import org.olat.core.util.vfs.filters.VFSSystemItemFilter;
 import org.olat.core.util.xml.XStreamHelper;
 import org.olat.course.ICourse;
 import org.olat.course.assessment.AssessmentManager;
@@ -130,7 +132,7 @@ import com.thoughtworks.xstream.XStream;
 public class ProjectBrokerCourseNode extends GenericCourseNode implements PersistentAssessableCourseNode {
 
 	private static final long serialVersionUID = -8177448874150049173L;
-	private static final OLog log = Tracing.createLoggerFor(ProjectBrokerCourseNode.class);
+	private static final Logger log = Tracing.createLoggerFor(ProjectBrokerCourseNode.class);
 
 	private transient static final String PACKAGE_PROJECTBROKER = Util.getPackageName(ProjectListController.class);
 	private transient static final String PACKAGE = Util.getPackageName(ProjectBrokerCourseNode.class);
@@ -269,6 +271,7 @@ public class ProjectBrokerCourseNode extends GenericCourseNode implements Persis
 	/**
 	 * @see org.olat.course.nodes.CourseNode#getReferencedRepositoryEntry()
 	 */
+	@Override
 	public RepositoryEntry getReferencedRepositoryEntry() {
 		return null;
 	}
@@ -276,6 +279,7 @@ public class ProjectBrokerCourseNode extends GenericCourseNode implements Persis
 	/**
 	 * @see org.olat.course.nodes.CourseNode#needsReferenceToARepositoryEntry()
 	 */
+	@Override
 	public boolean needsReferenceToARepositoryEntry() {
 		return false;
 	}
@@ -283,6 +287,7 @@ public class ProjectBrokerCourseNode extends GenericCourseNode implements Persis
 	/**
 	 * @see org.olat.course.nodes.CourseNode#isConfigValid()
 	 */
+	@Override
 	public StatusDescription isConfigValid() {
 		/*
 		 * first check the one click cache
@@ -730,16 +735,22 @@ public class ProjectBrokerCourseNode extends GenericCourseNode implements Persis
 		am.updateLastModifications(this, assessedIdentity, userCourseEnvironment, by);
 	}
 
-	/**
-	 * @see org.olat.course.nodes.AssessableCourseNode#getDetailsEditController(org.olat.core.gui.UserRequest,
-	 *      org.olat.core.gui.control.WindowControl,
-	 *      org.olat.course.run.userview.UserCourseEnvironment)
-	 */
 	@Override
 	public Controller getDetailsEditController(UserRequest ureq, WindowControl wControl, BreadcrumbPanel stackPanel,
 			UserCourseEnvironment coachCourseEnv, UserCourseEnvironment assessedUserCourseEnv) {
 		// prepare file component
 		throw new AssertException("ProjectBroker does not support AssessmentTool");
+	}
+
+	@Override
+	public boolean hasResultsDetails() {
+		return false;
+	}
+
+	@Override
+	public Controller getResultDetailsController(UserRequest ureq, WindowControl wControl,
+			UserCourseEnvironment assessedUserCourseEnv) {
+		return null;
 	}
 	
 	@Override
@@ -856,9 +867,8 @@ public class ProjectBrokerCourseNode extends GenericCourseNode implements Persis
 			}
 			projectBrokerManager.updateProject(project);
 
-			// get the attachment directory within the project
-			// directory
-			File attachmentDir = new File(projectDir, "attachment");// .getParentFile().listFiles(attachmentFilter);
+			// get the attachment directory within the project directory
+			File attachmentDir = new File(projectDir, "attachment");
 			if (attachmentDir.exists()) {
 				File[] attachment = attachmentDir.listFiles();
 				if (attachment.length > 0) {
@@ -874,8 +884,8 @@ public class ProjectBrokerCourseNode extends GenericCourseNode implements Persis
 	}
 
 	@Override
-	public void importNode(File importDirectory, ICourse course, Identity owner, Locale locale, boolean withReferences) {
-		super.importNode(importDirectory, course, owner, locale, withReferences);
+	public void importNode(File importDirectory, ICourse course, Identity owner, Organisation organisation, Locale locale, boolean withReferences) {
+		super.importNode(importDirectory, course, owner, organisation, locale, withReferences);
 	}
 
 	@Override
@@ -904,7 +914,7 @@ public class ProjectBrokerCourseNode extends GenericCourseNode implements Persis
 			// create a hashmap with the project configuration and insert the
 			// project data
 			File projectFile = new File(projectFolder, project.getKey() + ".xml");
-			HashMap<String, Object> projectData = new HashMap<String, Object>();
+			HashMap<String, Object> projectData = new HashMap<>();
 			projectData.put("title", project.getTitle());
 			projectData.put("description", project.getDescription());
 			projectData.put("customFieldSize", project.getCustomFieldSize());
@@ -921,7 +931,7 @@ public class ProjectBrokerCourseNode extends GenericCourseNode implements Persis
 			// writeout the project data
 			XStreamHelper.writeObject(xstream, projectFile, projectData);
 			// add attachment file
-			OlatRootFolderImpl rootFolder = new OlatRootFolderImpl(projectBrokerManager.getAttamchmentRelativeRootPath(project, course.getCourseEnvironment(), this), null);
+			LocalFolderImpl rootFolder = VFSManager.olatRootContainer(projectBrokerManager.getAttamchmentRelativeRootPath(project, course.getCourseEnvironment(), this), null);
 			VFSItem item = rootFolder.resolve(project.getAttachmentFileName());
 			if (item instanceof VFSLeaf) {
 				VFSLeaf itemLeaf = (VFSLeaf) item;
@@ -944,18 +954,20 @@ public class ProjectBrokerCourseNode extends GenericCourseNode implements Persis
 	
 	
 	@Override
-	public boolean archiveNodeData(Locale locale, ICourse course, ArchiveOptions options, ZipOutputStream exportStream, String charset) {
+	public boolean archiveNodeData(Locale locale, ICourse course, ArchiveOptions options,
+			ZipOutputStream exportStream, String archivePath, String charset) {
 		boolean dataFound = false;
 		String dropboxPath = DropboxController.getDropboxPathRelToFolderRoot(course.getCourseEnvironment(),this);
-		OlatRootFolderImpl dropboxDir = new OlatRootFolderImpl(dropboxPath, null);
+		VFSContainer dropboxDir = VFSManager.olatRootContainer(dropboxPath, null);
 		String returnboxPath = ReturnboxController.getReturnboxPathRelToFolderRoot(course.getCourseEnvironment(),this);
-		OlatRootFolderImpl returnboxDir = new OlatRootFolderImpl(returnboxPath, null);
+		VFSContainer returnboxDir = VFSManager.olatRootContainer(returnboxPath, null);
 		if (!dropboxDir.exists() && !returnboxDir.exists()) {
 			return false;
 		}
 		
 		String exportDirName = "projectbroker_" + Formatter.makeStringFilesystemSave(getShortName())
 				  + "_" + Formatter.formatDatetimeFilesystemSave(new Date(System.currentTimeMillis()));
+		exportDirName = ZipUtil.concat(archivePath, exportDirName);
 
 		try {
 			String projectBrokerTableExport = ProjectBrokerExportGenerator.createCourseResultsOverviewTable(this, course, locale);
@@ -970,9 +982,9 @@ public class ProjectBrokerCourseNode extends GenericCourseNode implements Persis
 		// copy dropboxes to tmp dir
 		if (dropboxDir.exists()) {
 			//OLAT-6426 archive only dropboxes of users that handed in at least one file -> prevent empty folders in archive 
-			for(VFSItem themaItem: dropboxDir.getItems()) {
+			for(VFSItem themaItem: dropboxDir.getItems(new VFSSystemItemFilter())) {
 				if (!(themaItem instanceof VFSContainer)) continue;
-				List<VFSItem> userFolderArray = ((VFSContainer)themaItem).getItems();
+				List<VFSItem> userFolderArray = ((VFSContainer)themaItem).getItems(new VFSSystemItemFilter());
 				for (VFSItem userFolder : userFolderArray){
 					if (!VFSManager.isDirectoryAndNotEmpty(userFolder)) continue;
 					String path  = exportDirName + "/dropboxes/" + themaItem.getName();
@@ -983,9 +995,9 @@ public class ProjectBrokerCourseNode extends GenericCourseNode implements Persis
 			
 		// copy returnboxes to tmp dir
 		if (returnboxDir.exists()) {
-			for (VFSItem themaItem:returnboxDir.getItems()) {
+			for (VFSItem themaItem:returnboxDir.getItems(new VFSSystemItemFilter())) {
 				if (!(themaItem instanceof VFSContainer)) continue;
-				List<VFSItem> userFolderArray = ((VFSContainer)themaItem).getItems();
+				List<VFSItem> userFolderArray = ((VFSContainer)themaItem).getItems(new VFSSystemItemFilter());
 				for (VFSItem userFolder : userFolderArray){
 					if (!VFSManager.isDirectoryAndNotEmpty(userFolder)) continue;
 					String path = exportDirName + "/returnboxes/" + themaItem.getName();
@@ -1125,7 +1137,7 @@ public class ProjectBrokerCourseNode extends GenericCourseNode implements Persis
 				projectGroupManager.setDeselectionAllowed(newProject, project.getProjectGroup().isAllowToLeave());
 				projectBrokerManager.updateProject(newProject);
 				// attachment file
-				OlatRootFolderImpl rootFolder = new OlatRootFolderImpl(projectBrokerManager.getAttamchmentRelativeRootPath(project, sourceCourse.getCourseEnvironment(), this), null);
+				VFSContainer rootFolder = VFSManager.olatRootContainer(projectBrokerManager.getAttamchmentRelativeRootPath(project, sourceCourse.getCourseEnvironment(), this), null);
 				VFSItem item = rootFolder.resolve(project.getAttachmentFileName());
 				if (item instanceof VFSLeaf) {
 					projectBrokerManager.saveAttachedFile(newProject, project.getAttachmentFileName(), (VFSLeaf) item, course.getCourseEnvironment(), this);
@@ -1187,7 +1199,7 @@ public class ProjectBrokerCourseNode extends GenericCourseNode implements Persis
 				projectBrokerManager.updateProject(newProject);
 
 				// attachment file
-				OlatRootFolderImpl rootFolder = new OlatRootFolderImpl(projectBrokerManager.getAttamchmentRelativeRootPath(project, course.getCourseEnvironment(), this), null);
+				VFSContainer rootFolder = VFSManager.olatRootContainer(projectBrokerManager.getAttamchmentRelativeRootPath(project, course.getCourseEnvironment(), this), null);
 				VFSItem item = rootFolder.resolve(project.getAttachmentFileName());
 				if (item instanceof VFSLeaf) {
 					projectBrokerManager.saveAttachedFile(newProject, project.getAttachmentFileName(), (VFSLeaf) item, course.getCourseEnvironment(), copyInstance);

@@ -26,7 +26,6 @@
 package org.olat.ims.qti;
 
 import org.olat.core.configuration.AbstractSpringModule;
-import org.olat.core.util.StringHelper;
 import org.olat.core.util.coordinate.CoordinatorManager;
 import org.olat.ims.qti.repository.handlers.QTISurveyHandler;
 import org.olat.ims.qti.repository.handlers.QTITestHandler;
@@ -41,12 +40,14 @@ import org.springframework.stereotype.Service;
  * @author Mike Stock
  */
 @Service
-public class QTIModule extends AbstractSpringModule {	
-	
-	private static final String CREATE_RESOURCES_ENABLED = "qti12.create.resources.enabled";
+public class QTIModule extends AbstractSpringModule {
 
 	@Value("${qti12.create.resources.enabled:false}")
 	private boolean createResourcesEnabled;
+	@Value("${qti12.survey.create.resources.enabled:false}")
+	private boolean createSurveyResourcesEnabled;
+	@Value("${qti12.edit.resources.enabled:false}")
+	private boolean createEditResourcesEnabled;
 
 	@Autowired
 	public QTIModule(CoordinatorManager coordinatorManager) {
@@ -62,18 +63,18 @@ public class QTIModule extends AbstractSpringModule {
 
 	@Override
 	protected void initFromChangedProperties() {
-		String mathExtensionObj = getStringPropertyValue(CREATE_RESOURCES_ENABLED, true);
-		if(StringHelper.containsNonWhitespace(mathExtensionObj)) {
-			createResourcesEnabled = "true".equals(mathExtensionObj);
-		}
+		//
 	}
 
 	public boolean isCreateResourcesEnabled() {
 		return createResourcesEnabled;
 	}
-
-	public void setCreateResourcesEnabled(boolean enabled) {
-		createResourcesEnabled = enabled;
-		setStringProperty(CREATE_RESOURCES_ENABLED, enabled ? "true" : "false", true);
+	
+	public boolean isCreateSurveyResourcesEnabled() {
+		return createSurveyResourcesEnabled;
+	}
+	
+	public boolean isEditResourcesEnabled() {
+		return createEditResourcesEnabled;
 	}
 }

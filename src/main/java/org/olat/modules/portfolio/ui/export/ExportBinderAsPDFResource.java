@@ -35,8 +35,9 @@ import java.util.UUID;
 import javax.servlet.http.HttpServletResponse;
 
 import org.apache.commons.io.IOUtils;
-import org.cyberneko.html.parsers.SAXParser;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.CoreSpringFactory;
+import org.olat.core.commons.services.pdf.PdfService;
 import org.olat.core.dispatcher.DispatcherModule;
 import org.olat.core.dispatcher.mapper.Mapper;
 import org.olat.core.dispatcher.mapper.MapperService;
@@ -55,7 +56,6 @@ import org.olat.core.gui.translator.Translator;
 import org.olat.core.gui.util.SyntheticUserRequest;
 import org.olat.core.gui.util.WindowControlMocker;
 import org.olat.core.helpers.Settings;
-import org.olat.core.logging.OLog;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.FileUtils;
 import org.olat.core.util.StringHelper;
@@ -67,10 +67,14 @@ import org.olat.modules.portfolio.Page;
 import org.olat.modules.portfolio.PortfolioService;
 import org.olat.modules.portfolio.model.ExtendedMediaRenderingHints;
 import org.olat.modules.portfolio.ui.BinderOnePageController;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.xml.sax.Attributes;
 import org.xml.sax.InputSource;
 import org.xml.sax.SAXException;
 import org.xml.sax.helpers.DefaultHandler;
+
+import nu.validator.htmlparser.common.XmlViolationPolicy;
+import nu.validator.htmlparser.sax.HtmlParser;
 
 /**
  * It makes a flat html file, copy all medias around it
@@ -84,7 +88,7 @@ import org.xml.sax.helpers.DefaultHandler;
  */
 public class ExportBinderAsPDFResource implements MediaResource {
 	
-	private static final OLog log = Tracing.createLoggerFor(ExportBinderAsPDFResource.class);
+	private static final Logger log = Tracing.createLoggerFor(ExportBinderAsPDFResource.class);
 	
 	private File htmlDir;
 	private File pdfFile;
@@ -93,26 +97,28 @@ public class ExportBinderAsPDFResource implements MediaResource {
 	private final Page selectedPage;
 	private final BinderRef binderRef;
 	private final Translator translator;
-	private final MapperService mapperService;
 	
-	private final PortfolioService portfolioService;
+	@Autowired
+	private PdfService pdfService;
+	@Autowired
+	private MapperService mapperService;
+	@Autowired
+	private PortfolioService portfolioService;
 	
 	public ExportBinderAsPDFResource(BinderRef binderRef, UserRequest ureq, Locale locale) {
+		CoreSpringFactory.autowireObject(this);
+		translator = Util.createPackageTranslator(ExportBinderAsPDFResource.class, locale);	
 		this.ureq = new SyntheticUserRequest(ureq.getIdentity(), locale, ureq.getUserSession());
 		this.binderRef = binderRef;
 		selectedPage = null;
-		translator = Util.createPackageTranslator(ExportBinderAsPDFResource.class, locale);	
-		portfolioService = CoreSpringFactory.getImpl(PortfolioService.class);
-		mapperService = CoreSpringFactory.getImpl(MapperService.class);
 	}
 	
 	public ExportBinderAsPDFResource(Page selectedPage, UserRequest ureq, Locale locale) {
+		CoreSpringFactory.autowireObject(this);
+		translator = Util.createPackageTranslator(ExportBinderAsPDFResource.class, locale);	
 		this.ureq = new SyntheticUserRequest(ureq.getIdentity(), locale, ureq.getUserSession());
 		binderRef = null;
 		this.selectedPage = selectedPage;
-		translator = Util.createPackageTranslator(ExportBinderAsPDFResource.class, locale);	
-		portfolioService = CoreSpringFactory.getImpl(PortfolioService.class);
-		mapperService = CoreSpringFactory.getImpl(MapperService.class);
 	}
 	
 	@Override
@@ -166,7 +172,6 @@ public class ExportBinderAsPDFResource implements MediaResource {
 		}
 
 		htmlDir = prepareHtml();
-		pdfFile = renderPdf(htmlDir);
 
 		String label;
 		if(selectedPage != null) {
@@ -181,6 +186,12 @@ public class ExportBinderAsPDFResource implements MediaResource {
 		String file = secureLabel + ".pdf";
 		hres.setHeader("Content-Disposition", "attachment; filename*=UTF-8''" + StringHelper.urlEncodeUTF8(file));			
 		hres.setHeader("Content-Description", StringHelper.urlEncodeUTF8(label));
+		
+		try(OutputStream out = hres.getOutputStream()) {
+			pdfService.convert(htmlDir, "index.html", out);
+		} catch(IOException e) {
+			log.error("", e);
+		}
 	}
 	
 	private File prepareHtml() {
@@ -198,7 +209,6 @@ public class ExportBinderAsPDFResource implements MediaResource {
 		String html = createResultHTML(content);
 		
 		File indexHtml = new File(outputDir, "index.html");
-		exportCSSAndJs(outputDir);
 		html = exportMedia(html, outputDir);
 		try(OutputStream out= new FileOutputStream(indexHtml)) {
 			IOUtils.write(html, out, "UTF-8");
@@ -208,47 +218,29 @@ public class ExportBinderAsPDFResource implements MediaResource {
 		printCtrl.dispose();
 		return outputDir;
 	}
-	
-	private File renderPdf(File outputDir) {
-		File indexHtml = new File(outputDir, "index.html");
-		BinderPhantomWorker worker = new BinderPhantomWorker();
-		File filePdf = worker.fill(indexHtml, outputDir, "portfolio.pdf");
-		return filePdf;
-	}
 
 	private String createResultHTML(Component content) {
 		String pagePath = Util.getPackageVelocityRoot(this.getClass()) + "/export.html";
 		VelocityContainer mainVC = new VelocityContainer("html", pagePath, translator, null);
 		mainVC.put("cmp", content);
 		mainVC.contextPut("bodyCssClass", "o_portfolio_export");
-		
-		StringOutput sb = new StringOutput(32000);
+
 		URLBuilder ubu = new URLBuilder("auth", "1", "0");
 		Renderer renderer = Renderer.getInstance(mainVC, translator, ubu, new RenderResult(), new DefaultGlobalSettings());
-		VelocityRenderDecorator vrdec = new VelocityRenderDecorator(renderer, mainVC, sb);
-		mainVC.contextPut("r", vrdec);
-		renderer.render(sb, mainVC, null);
-		return sb.toString();
-	}
-	
-	private void exportCSSAndJs(File outputDir) {
-		//Copy resource files or file trees to export file tree 
-		File sasstheme = new File(WebappHelper.getContextRealPath("/static/themes/light"));
-		File lightDir = new File(new File(outputDir.getAbsolutePath(), "css"), "offline");
-		FileUtils.copyDirToDir(sasstheme, lightDir, "Copy theme");
-		
-		File fontawesome = new File(WebappHelper.getContextRealPath("/static/font-awesome"));
-		File fontDir = new File(outputDir, "css");
-		FileUtils.copyDirToDir(fontawesome, fontDir, "Copy font awesome");
-		
-		File js = new File(WebappHelper.getContextRealPath("/static/js/jquery/"));
-		File jsDir = new File(outputDir, "js");
-		FileUtils.copyDirToDir(js, jsDir, "Copy javascripts");
+		try(StringOutput sb = new StringOutput(32000);
+				VelocityRenderDecorator vrdec = new VelocityRenderDecorator(renderer, mainVC, sb)) {
+			mainVC.contextPut("r", vrdec);
+			renderer.render(sb, mainVC, null);
+			return sb.toString();
+		} catch(IOException e) {
+			log.error("", e);
+			return "";
+		}
 	}
 	
 	public String exportMedia(String html, File outputDir) {
 		try {
-			SAXParser parser = new SAXParser();
+			HtmlParser parser = new HtmlParser(XmlViolationPolicy.ALTER_INFOSET);
 			ExportMedia contentHandler = new ExportMedia(outputDir);
 			parser.setContentHandler(contentHandler);
 			parser.parse(new InputSource(new StringReader(html)));
@@ -256,8 +248,6 @@ public class ExportBinderAsPDFResource implements MediaResource {
 			 for(Map.Entry<String,String> replacement:replaces.entrySet()) {
 				 html = html.replace(replacement.getKey(), replacement.getValue());
 			 }
-		} catch (SAXException | IOException e) {
-			log.error("", e);
 		} catch (Exception e) {
 			log.error("", e);
 		}

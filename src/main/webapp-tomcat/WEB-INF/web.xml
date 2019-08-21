@@ -65,18 +65,8 @@
 
 	<!-- 3. Listeners -->
     <!-- triggers the above spring files to be processed by the spring framework  -->
-    <listener>
-            <listener-class>
-                    org.springframework.web.context.ContextLoaderListener
-            </listener-class>
-    </listener>
-	
-	<!-- this only works in an expanded war file: Comment on spring website:  
-	If you want to keep your WAR unexpanded or don't need application-specific log files within the WAR directory, 
-	don't use log4j setup within the application (thus, don't use Log4jConfigListener or Log4jConfigServlet). 
-	Instead, use a global, VM-wide log4j setup (for example, in JBoss) or JDK 1.4's java.util.logging (which is global too). -->
 	<listener>
-		<listener-class>org.springframework.web.util.Log4jConfigListener</listener-class>
+		<listener-class>org.springframework.web.context.ContextLoaderListener</listener-class>
 	</listener>
 	<listener>
 		<listener-class>org.olat.restapi.security.RestApiSessionListener</listener-class>
@@ -84,29 +74,8 @@
 	<listener>
 		<listener-class>org.olat.core.dispatcher.mapper.MapperSessionListener</listener-class>
 	</listener>
-	<listener>
-		<listener-class>org.olat.core.servlets.OLATContextListener</listener-class>
-	</listener>
     
-  <!-- 4. Servlets -->
-  <servlet>
-    <servlet-name>log4j-init</servlet-name>
-    <servlet-class>org.olat.core.servlets.Log4JInitServlet</servlet-class>
-
-    <init-param>
-      <param-name>log4j-init-file</param-name>
-      <param-value>log4j.xml</param-value>
-      
-      <!-- this is the default for lazy developers to have output on eclipse console.
-		Overwrite it with -Dlog4j.configuration="file:/tmp/mylog4j.xml" (java system property) and specifie a path for your logging config.
-		See olat3/conf for an example file  -->
-      
-    </init-param>
-
-    <load-on-startup>1</load-on-startup>
-  </servlet>
-    
-    
+    <!-- 4. Servlets -->
 	<!-- OLAT servlet -->
 	<servlet>
 		<servlet-name>openolatservlet</servlet-name>
@@ -121,24 +90,19 @@
 		<load-on-startup>1</load-on-startup>
 	</servlet>
 	
-	<!-- Jersey REST Servlet -->
+	<!-- Apache CXF Servlet -->
 	<servlet>
-		<servlet-name>RESTServletAdaptor</servlet-name>
-		<servlet-class>com.sun.jersey.spi.container.servlet.ServletContainer</servlet-class>
-		<init-param>
-			<param-name>com.sun.jersey.config.feature.Redirect</param-name>
-			<param-value>true</param-value>
-		</init-param>
-		<init-param>
-			<param-name>javax.ws.rs.Application</param-name>
-			<param-value>org.olat.restapi.support.OlatRestApplication</param-value>
-		</init-param>
-		<load-on-startup>1</load-on-startup>
-		<multipart-config>
+        <servlet-name>RESTServletAdaptor</servlet-name>
+        <display-name>CXF Servlet</display-name>
+        <servlet-class>
+            org.apache.cxf.transport.servlet.CXFServlet
+        </servlet-class>
+        <load-on-startup>1</load-on-startup>
+        	<multipart-config>
 			<file-size-threshold>10240</file-size-threshold>
 		</multipart-config>
-	</servlet>
-	
+    </servlet>
+ 
 	<!-- RSS feed requests -->
 	<servlet>
 		<servlet-name>rss</servlet-name>
@@ -199,9 +163,101 @@
 	<session-config>
 		<session-timeout>60</session-timeout>
     </session-config>
-    
+ 	
+ 	<error-page>
+		<error-code>400</error-code>
+    	<location>/errors/error.html</location>
+    </error-page>
+ 	<error-page>
+		<error-code>401</error-code>
+    	<location>/errors/error.html</location>
+    </error-page>
+ 	<error-page>
+		<error-code>402</error-code>
+    	<location>/errors/error.html</location>
+    </error-page>
+ 	<error-page>
+		<error-code>403</error-code>
+    	<location>/errors/error.html</location>
+    </error-page>
+ 	<error-page>
+		<error-code>404</error-code>
+    	<location>/errors/error.html</location>
+    </error-page>
+ 	<error-page>
+		<error-code>405</error-code>
+    	<location>/errors/error.html</location>
+    </error-page>
+ 	<error-page>
+		<error-code>406</error-code>
+    	<location>/errors/error.html</location>
+    </error-page>
+ 	<error-page>
+		<error-code>407</error-code>
+    	<location>/errors/error.html</location>
+    </error-page>
+ 	<error-page>
+		<error-code>408</error-code>
+    	<location>/errors/error.html</location>
+    </error-page>
+ 	<error-page>
+		<error-code>409</error-code>
+    	<location>/errors/error.html</location>
+    </error-page>
+ 	<error-page>
+		<error-code>410</error-code>
+    	<location>/errors/error.html</location>
+    </error-page>
+ 	<error-page>
+		<error-code>411</error-code>
+    	<location>/errors/error.html</location>
+    </error-page>
+ 	<error-page>
+		<error-code>412</error-code>
+    	<location>/errors/error.html</location>
+    </error-page>
+ 	<error-page>
+		<error-code>413</error-code>
+    	<location>/errors/error.html</location>
+    </error-page>
+ 	<error-page>
+		<error-code>414</error-code>
+    	<location>/errors/error.html</location>
+    </error-page>
+ 	<error-page>
+		<error-code>415</error-code>
+    	<location>/errors/error.html</location>
+    </error-page>
+ 	<error-page>
+		<error-code>416</error-code>
+    	<location>/errors/error.html</location>
+    </error-page>
+ 	<error-page>
+		<error-code>417</error-code>
+    	<location>/errors/error.html</location>
+    </error-page>
 	<error-page>
 		<error-code>500</error-code>
+    	<location>/errors/error.html</location>
+    </error-page>
+	<error-page>
+		<error-code>501</error-code>
+    	<location>/errors/error.html</location>
+    </error-page>
+	<error-page>
+		<error-code>502</error-code>
+    	<location>/errors/error.html</location>
+    </error-page>
+	<error-page>
+		<error-code>503</error-code>
+    	<location>/errors/error.html</location>
+    </error-page>
+	<error-page>
+		<error-code>504</error-code>
+    	<location>/errors/error.html</location>
+    </error-page>
+	<error-page>
+		<error-code>505</error-code>
     	<location>/errors/error.html</location>
     </error-page>
     <error-page>

@@ -34,6 +34,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.zip.ZipOutputStream;
 
+import org.apache.logging.log4j.Logger;
 import org.olat.core.CoreSpringFactory;
 import org.olat.core.gui.UserRequest;
 import org.olat.core.gui.components.stack.BreadcrumbPanel;
@@ -45,10 +46,10 @@ import org.olat.core.gui.control.generic.tabbable.TabbableController;
 import org.olat.core.gui.translator.Translator;
 import org.olat.core.id.Identity;
 import org.olat.core.id.OLATResourceable;
+import org.olat.core.id.Organisation;
 import org.olat.core.id.Roles;
 import org.olat.core.logging.DBRuntimeException;
 import org.olat.core.logging.KnownIssueException;
-import org.olat.core.logging.OLog;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.Util;
 import org.olat.core.util.coordinate.CoordinatorManager;
@@ -77,6 +78,7 @@ import org.olat.course.run.userview.NodeEvaluation;
 import org.olat.course.run.userview.UserCourseEnvironment;
 import org.olat.course.statistic.StatisticResourceOption;
 import org.olat.course.statistic.StatisticResourceResult;
+import org.olat.course.statistic.StatisticType;
 import org.olat.fileresource.FileResourceManager;
 import org.olat.fileresource.types.ImsQTI21Resource;
 import org.olat.group.BusinessGroup;
@@ -98,7 +100,6 @@ import org.olat.ims.qti.process.FilePersister;
 import org.olat.ims.qti.resultexport.QTI12ResultsExportMediaResource;
 import org.olat.ims.qti.statistics.QTIStatisticResourceResult;
 import org.olat.ims.qti.statistics.QTIStatisticSearchParams;
-import org.olat.ims.qti.statistics.QTIType;
 import org.olat.ims.qti21.AssessmentTestSession;
 import org.olat.ims.qti21.QTI21DeliveryOptions;
 import org.olat.ims.qti21.QTI21Service;
@@ -135,7 +136,7 @@ import uk.ac.ed.ph.jqtiplus.resolution.ResolvedAssessmentTest;
  */
 public class IQTESTCourseNode extends AbstractAccessableCourseNode implements PersistentAssessableCourseNode, QTICourseNode {
 	private static final long serialVersionUID = 5806292895738005387L;
-	private static final OLog log = Tracing.createLoggerFor(IQTESTCourseNode.class);
+	private static final Logger log = Tracing.createLoggerFor(IQTESTCourseNode.class);
 	private static final String translatorStr = Util.getPackageName(IQEditController.class);
 	private static final String TYPE = "iqtest";
 
@@ -146,10 +147,6 @@ public class IQTESTCourseNode extends AbstractAccessableCourseNode implements Pe
 		updateModuleConfigDefaults(true);
 	}
 	
-	/**
-	 * @see org.olat.course.nodes.CourseNode#createEditController(org.olat.core.gui.UserRequest,
-	 *      org.olat.core.gui.control.WindowControl, org.olat.course.ICourse)
-	 */
 	@Override
 	public TabbableController createEditController(UserRequest ureq, WindowControl wControl, BreadcrumbPanel stackPanel, ICourse course, UserCourseEnvironment euce) {
 		updateModuleConfigDefaults(false);
@@ -312,8 +309,8 @@ public class IQTESTCourseNode extends AbstractAccessableCourseNode implements Pe
 
 	@Override
 	public StatisticResourceResult createStatisticNodeResult(UserRequest ureq, WindowControl wControl,
-			UserCourseEnvironment userCourseEnv, StatisticResourceOption options, QTIType... types) {
-		if(!isQTITypeAllowed(types)) return null;
+			UserCourseEnvironment userCourseEnv, StatisticResourceOption options, StatisticType type) {
+		if(!isStatisticTypeAllowed(type)) return null;
 		
 		Long courseId = userCourseEnv.getCourseEnvironment().getCourseResourceableId();
 		OLATResourceable courseOres = OresHelper.createOLATResourceableInstance("CourseModule", courseId);
@@ -336,18 +333,13 @@ public class IQTESTCourseNode extends AbstractAccessableCourseNode implements Pe
 	}
 	
 	@Override
-	public boolean isStatisticNodeResultAvailable(UserCourseEnvironment userCourseEnv, QTIType... types) {
-		return isQTITypeAllowed(types);
+	public boolean isStatisticNodeResultAvailable(UserCourseEnvironment userCourseEnv, StatisticType type) {
+		return isStatisticTypeAllowed(type);
 	}
 	
-	private boolean isQTITypeAllowed(QTIType... types) {
-		if(types == null) return true;
-		if(types.length == 0 || (types.length == 1 && types[0] == null)) return true;
-		
-		for(QTIType type:types) {
-			if(QTIType.test.equals(type) || QTIType.onyx.equals(type) || QTIType.qtiworks.equals(type)) {
-				return true;
-			}
+	private boolean isStatisticTypeAllowed(StatisticType type) {
+		if(StatisticType.TEST.equals(type)) {
+			return true;
 		}
 		return false;
 	}
@@ -712,7 +704,9 @@ public class IQTESTCourseNode extends AbstractAccessableCourseNode implements Pe
 	}
 
 	@Override
-	public boolean archiveNodeData(Locale locale, ICourse course, ArchiveOptions options, ZipOutputStream exportStream, String charset) {
+	public boolean archiveNodeData(Locale locale, ICourse course, ArchiveOptions options,
+			ZipOutputStream exportStream, String archivePath, String charset) {
+		
 		String repositorySoftKey = (String)getModuleConfiguration().get(IQEditController.CONFIG_KEY_REPOSITORY_SOFTKEY);
 		Long courseResourceableId = course.getResourceableId();
 
@@ -726,17 +720,17 @@ public class IQTESTCourseNode extends AbstractAccessableCourseNode implements Pe
 			} else if(ImsQTI21Resource.TYPE_NAME.equals(re.getOlatResource().getResourceableTypeName())) {
 				// 2a) create export resource
 				List<Identity> identities = ScoreAccountingHelper.loadUsers(courseEnv, options);
-				new QTI21ResultsExportMediaResource(courseEnv, identities, this, locale).exportTestResults(exportStream);
+				new QTI21ResultsExportMediaResource(courseEnv, identities, this, archivePath, locale).exportTestResults(exportStream);
 				// excel results
 				RepositoryEntry courseEntry = course.getCourseEnvironment().getCourseGroupManager().getCourseEntry();
 				QTI21StatisticSearchParams searchParams = new QTI21StatisticSearchParams(options, re, courseEntry, getIdent());
 				QTI21ArchiveFormat qaf = new QTI21ArchiveFormat(locale, searchParams);
-				qaf.exportCourseElement(exportStream);
+				qaf.exportCourseElement(exportStream, archivePath);
 				return true;	
 			} else {
 				// 2b) create export resource
 				List<Identity> identities = ScoreAccountingHelper.loadUsers(courseEnv, options);
-				new QTI12ResultsExportMediaResource(courseEnv, locale, identities, this).exportTestResults(exportStream);
+				new QTI12ResultsExportMediaResource(courseEnv, identities, this, archivePath, locale).exportTestResults(exportStream);
 				// excel results
 				String shortTitle = getShortTitle();
 				QTIExportManager qem = QTIExportManager.getInstance();
@@ -750,7 +744,7 @@ public class IQTESTCourseNode extends AbstractAccessableCourseNode implements Pe
 					}
 					qef.setMapWithExportItemConfigs(itemConfigs);
 				}
-				return qem.selectAndExportResults(qef, courseResourceableId, shortTitle, getIdent(), re, exportStream, locale, ".xls");
+				return qem.selectAndExportResults(qef, courseResourceableId, shortTitle, getIdent(), re, exportStream, archivePath, locale, ".xls");
 			}
 		} catch (IOException e) {
 			log.error("", e);
@@ -776,7 +770,7 @@ public class IQTESTCourseNode extends AbstractAccessableCourseNode implements Pe
 	}
 
 	@Override
-	public void importNode(File importDirectory, ICourse course, Identity owner, Locale locale, boolean withReferences) {
+	public void importNode(File importDirectory, ICourse course, Identity owner, Organisation organisation, Locale locale, boolean withReferences) {
 		RepositoryEntryImportExport rie = new RepositoryEntryImportExport(importDirectory, getIdent());
 		if(withReferences && rie.anyExportedPropertiesAvailable()) {
 			File file = rie.importGetExportedFile();
@@ -785,13 +779,13 @@ public class IQTESTCourseNode extends AbstractAccessableCourseNode implements Pe
 			RepositoryEntry re;
 			if(handlerQTI21.acceptImport(file, "repo.zip").isValid()) {
 				re = handlerQTI21.importResource(owner, rie.getInitialAuthor(), rie.getDisplayName(),
-						rie.getDescription(), false, locale, rie.importGetExportedFile(), null);
+						rie.getDescription(), false, organisation, locale, rie.importGetExportedFile(), null);
 
 				getModuleConfiguration().set(IQEditController.CONFIG_KEY_TYPE_QTI, IQEditController.CONFIG_VALUE_QTI21);
 			} else {
 				RepositoryHandler handlerQTI = RepositoryHandlerFactory.getInstance().getRepositoryHandler(TestFileResource.TYPE_NAME);
 				re = handlerQTI.importResource(owner, rie.getInitialAuthor(), rie.getDisplayName(),
-						rie.getDescription(), false, locale, rie.importGetExportedFile(), null);
+						rie.getDescription(), false, organisation, locale, rie.importGetExportedFile(), null);
 			}
 			IQEditController.setIQReference(re, getModuleConfiguration());
 		} else {
@@ -799,9 +793,6 @@ public class IQTESTCourseNode extends AbstractAccessableCourseNode implements Pe
 		}
 	}
 
-	/**
-	 * @see org.olat.course.nodes.AssessableCourseNode#getUserAttempts(org.olat.course.run.userview.UserCourseEnvironment)
-	 */
 	@Override
 	public Integer getUserAttempts(UserCourseEnvironment userCourseEnvironment) {
 		AssessmentManager am = userCourseEnvironment.getCourseEnvironment().getAssessmentManager();
@@ -809,19 +800,11 @@ public class IQTESTCourseNode extends AbstractAccessableCourseNode implements Pe
 		return am.getNodeAttempts(this, mySelf);
 	}
 
-	/**
-	 * @see org.olat.course.nodes.AssessableCourseNode#hasAttemptsConfigured()
-	 */
 	@Override
 	public boolean hasAttemptsConfigured() {
 		return true;
 	}
 
-	/**
-	 * @see org.olat.course.nodes.AssessableCourseNode#updateUserAttempts(java.lang.Integer,
-	 *      org.olat.course.run.userview.UserCourseEnvironment,
-	 *      org.olat.core.id.Identity)
-	 */
 	@Override
 	public void updateUserAttempts(Integer userAttempts, UserCourseEnvironment userCourseEnvironment, Identity coachingIdentity, Role by) {
 		if (userAttempts != null) {
@@ -911,25 +894,27 @@ public class IQTESTCourseNode extends AbstractAccessableCourseNode implements Pe
 		return detailsCtrl;
 	}
 
-	/**
-	 * @see org.olat.course.nodes.AssessableCourseNode#getDetailsListView(org.olat.course.run.userview.UserCourseEnvironment)
-	 */
+	@Override
+	public boolean hasResultsDetails() {
+		return false;
+	}
+
+	@Override
+	public Controller getResultDetailsController(UserRequest ureq, WindowControl wControl,
+			UserCourseEnvironment assessedUserCourseEnv) {
+		return null;
+	}
+
 	@Override
 	public String getDetailsListView(UserCourseEnvironment userCourseEnvironment) {
 		return null;
 	}
 
-	/**
-	 * @see org.olat.course.nodes.AssessableCourseNode#getDetailsListViewHeaderKey()
-	 */
 	@Override
 	public String getDetailsListViewHeaderKey() {
 		return null;
 	}
 
-	/**
-	 * @see org.olat.course.nodes.AssessableCourseNode#hasDetails()
-	 */
 	@Override
 	public boolean hasDetails() {
 		return true;

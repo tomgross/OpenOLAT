@@ -25,10 +25,12 @@ import java.util.List;
 import java.util.Map;
 
 import org.olat.basesecurity.BaseSecurity;
+import org.olat.basesecurity.GroupRoles;
 import org.olat.basesecurity.IdentityShort;
 import org.olat.core.CoreSpringFactory;
 import org.olat.core.gui.control.generic.ajax.autocompletion.ListProvider;
 import org.olat.core.gui.control.generic.ajax.autocompletion.ListReceiver;
+import org.olat.core.id.Organisation;
 import org.olat.core.id.UserConstants;
 import org.olat.user.UserManager;
 
@@ -42,13 +44,25 @@ public class UserSearchListProvider implements ListProvider {
 	
 	private final BaseSecurity securityManager;
 	private final UserManager userManager;
+	private final List<Organisation> searchableOrganisations;
+	private final GroupRoles repositoryEntryRole;
 	
-	public UserSearchListProvider() {
+	public UserSearchListProvider(List<Organisation> searchableOrganisations) {
+		this(searchableOrganisations, null);
+	}
+	
+	public UserSearchListProvider(List<Organisation> searchableOrganisations, GroupRoles repositoryEntryRole) {
+		this.searchableOrganisations = searchableOrganisations;
+		this.repositoryEntryRole = repositoryEntryRole;
 		securityManager = CoreSpringFactory.getImpl(BaseSecurity.class);
 		userManager = CoreSpringFactory.getImpl(UserManager.class);
 	}
 	
-	
+	@Override
+	public int getMaxEntries() {
+		return MAX_ENTRIES;
+	}
+
 	@Override
 	public void getResult(String searchValue, ListReceiver receiver) {
 		Map<String, String> userProperties = new HashMap<>();
@@ -60,7 +74,7 @@ public class UserSearchListProvider implements ListProvider {
 		// Search in all fileds -> non intersection search
 
 		int maxEntries = MAX_ENTRIES;
-		List<IdentityShort> res = securityManager.searchIdentityShort(searchValue, maxEntries);
+		List<IdentityShort> res = securityManager.searchIdentityShort(searchValue, searchableOrganisations, repositoryEntryRole, maxEntries);
 
 		boolean hasMore = false;
 		for (Iterator<IdentityShort> it_res = res.iterator(); (hasMore=it_res.hasNext()) && maxEntries > 0;) {
@@ -70,7 +84,7 @@ public class UserSearchListProvider implements ListProvider {
 			String displayKey = ident.getName();
 			String displayText = userManager.getUserDisplayName(ident);
 			receiver.addEntry(key, displayKey, displayText, null);
-		}					
+		}
 		if(hasMore){
 			receiver.addEntry(".....",".....");
 		}

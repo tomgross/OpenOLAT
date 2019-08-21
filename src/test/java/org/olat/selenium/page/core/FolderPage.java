@@ -29,6 +29,7 @@ import org.openqa.selenium.By;
 import org.openqa.selenium.WebDriver;
 import org.openqa.selenium.WebElement;
 import org.openqa.selenium.interactions.Actions;
+import org.openqa.selenium.support.ui.Select;
 
 /**
  * 
@@ -85,17 +86,31 @@ public class FolderPage {
 		By newFileBy = By.className("b_bc_newfile");
 		browser.findElement(newFileBy).click();
 		OOGraphene.waitBusy(browser);
+		OOGraphene.waitModalDialog(browser);
 		
-		By filenameBy = By.cssSelector(".o_sel_folder_new_file_name input[type='text']");
-		OOGraphene.waitElement(filenameBy, browser);
+		// create a new HTML document
+		By typeBy = By.cssSelector(".o_sel_folder_new_doc_type select");
+		OOGraphene.waitElement(typeBy, browser);
+		Select selectType = new Select(browser.findElement(typeBy));
+		List<WebElement> typeEls = selectType.getOptions();
+		for(WebElement typeEl:typeEls) {
+			if(typeEl.getText().toLowerCase().contains("html")) {
+				selectType.selectByValue(typeEl.getAttribute("value"));
+				break;
+			}
+		}
+		
+		By filenameBy = By.cssSelector(".o_sel_folder_new_doc_name input[type='text']");
 		browser.findElement(filenameBy).sendKeys(name);
-		
+
 		By createBy = By.cssSelector(".o_sel_folder_new_file button.btn-primary");
 		browser.findElement(createBy).click();
 		OOGraphene.waitBusy(browser);
+		OOGraphene.waitModalDialogDisappears(browser);
 		
+		// wait the HTML document
 		OOGraphene.tinymce(content, browser);
-		
+		// save the HTML document
 		By saveAndCloseButton = By.cssSelector("#o_button_saveclose a.btn");
 		OOGraphene.clickAndWait(saveAndCloseButton, browser);
 		OOGraphene.waitBusy(browser);
@@ -115,6 +130,7 @@ public class FolderPage {
 		By saveButtonBy = By.cssSelector("div.o_sel_upload_buttons button.btn-primary");
 		browser.findElement(saveButtonBy).click();
 		OOGraphene.waitBusy(browser);
+		OOGraphene.waitModalDialogDisappears(browser);
 		return this;
 	}
 	
@@ -141,8 +157,7 @@ public class FolderPage {
 	
 	public FolderPage assertOnFile(String filename) {
 		By fileBy = By.xpath("//table[contains(@class,'o_bc_table')]//a[contains(text(),'" + filename + "')]");
-		List<WebElement> fileEls = browser.findElements(fileBy);
-		Assert.assertFalse(fileEls.isEmpty());
+		OOGraphene.waitElement(fileBy, browser);
 		return this;
 	}
 }

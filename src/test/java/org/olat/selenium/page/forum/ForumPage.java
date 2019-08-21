@@ -203,7 +203,8 @@ public class ForumPage {
 	
 	public ForumPage replyToMessageNoWait(String reference, String title, String reply) {
 		By replyBy = By.xpath("//div[contains(@class,'o_forum_message')][//h4[contains(text(),'" + reference + "')]]//a[contains(@class,'o_sel_forum_reply')]");
-		browser.findElement(replyBy).click();
+		OOGraphene.waitElement(replyBy, browser);
+		OOGraphene.click(replyBy, browser);
 		OOGraphene.waitBusy(browser);
 		OOGraphene.waitModalDialog(browser);
 		

@@ -1,4 +1,5 @@
 /**
+
  * <a href="http://www.openolat.org">
  * OpenOLAT - Online Learning and Training</a><br>
  * <p>
@@ -29,10 +30,14 @@ import org.olat.basesecurity.Group;
 import org.olat.basesecurity.IdentityRef;
 import org.olat.core.id.Identity;
 import org.olat.core.id.OLATResourceable;
+import org.olat.core.id.Organisation;
+import org.olat.core.id.OrganisationRef;
 import org.olat.core.id.Roles;
 import org.olat.core.util.resource.OresHelper;
 import org.olat.core.util.vfs.VFSLeaf;
 import org.olat.repository.manager.RepositoryEntryDeletionException;
+import org.olat.modules.taxonomy.TaxonomyLevel;
+import org.olat.modules.taxonomy.TaxonomyLevelRef;
 import org.olat.repository.model.SearchAuthorRepositoryEntryViewParams;
 import org.olat.repository.model.SearchMyRepositoryEntryViewParams;
 import org.olat.resource.OLATResource;
@@ -53,14 +58,16 @@ public interface RepositoryService {
 
 
 	public RepositoryEntry create(Identity initialAuthor, String initialAuthorAlt,
-			String resourceName, String displayname, String description, OLATResource resource, int access);
-
-	public RepositoryEntry create(String initialAuthor, String resourceName,
-			String displayname, String description, OLATResource resource);
+			String resourceName, String displayname, String description,
+			OLATResource resource, RepositoryEntryStatusEnum status, Organisation organisation);
 
 	public RepositoryEntry copy(RepositoryEntry sourceEntry, Identity author, String displayname);
+	
+	public boolean canCopy(RepositoryEntry entryToCopy, Identity identity);
 
 	public RepositoryEntry loadByKey(Long key);
+	
+	public List<RepositoryEntry> loadByKeys(Collection<Long> keys);
 
 	public RepositoryEntry loadByResourceKey(Long key);
 
@@ -81,8 +88,10 @@ public interface RepositoryService {
 	 * @return The olat resource of the repository entry
 	 */
 	public OLATResource loadRepositoryEntryResourceBySoftKey(String softkey);
+	
+	public List<RepositoryEntry> loadRepositoryEntries(int firstResult, int maxResult);
 
-	public VFSLeaf getIntroductionImage(RepositoryEntry re);
+	public VFSLeaf getIntroductionImage(RepositoryEntryRef re);
 
 	public VFSLeaf getIntroductionMovie(RepositoryEntry re);
 
@@ -115,7 +124,7 @@ public interface RepositoryService {
 	 * @param locale
 	 * @return
 	 */
-	public ErrorList deletePermanently(RepositoryEntry entry, Identity identity, Roles roles, Locale locale) throws RepositoryEntryDeletionException;
+	public ErrorList deletePermanently(RepositoryEntryRef entryRef, Identity identity, Roles roles, Locale locale) throws RepositoryEntryDeletionExceptionM;
 
 	/**
 	 * Delete only the database object
@@ -137,15 +146,6 @@ public interface RepositoryService {
 
 	public RepositoryEntry uncloseRepositoryEntry(RepositoryEntry entry);
 
-	/**
-	 * The unpublish will remove the users (coaches and participants) but will let
-	 * the owners. Catalog entries will be removed and the relations to the business groups
-	 * will be deleted.
-	 *
-	 * @param entry
-	 * @return
-	 */
-	public RepositoryEntry unpublishRepositoryEntry(RepositoryEntry entry);
 
 	/**
 	 * Increment the launch counter and the last usage date.
@@ -179,12 +179,21 @@ public interface RepositoryService {
 	 */
 	public boolean isMember(IdentityRef identity, RepositoryEntryRef entry);
 
-	public void filterMembership(IdentityRef identity, List<Long> entries);
-
-	public int countMembers(RepositoryEntryRef re, String... roles);
+	public void filterMembership(IdentityRef identity, Collection<Long> entries);
 
 	/**
-	 * Count all members (following up to business groups wainting list)
+	 * Count the number of member with the specified role.
+	 * 
+	 * @param re The repository entry
+	 * @param role The role (mandatory)
+	 * @return
+	 */
+	public int countMembers(RepositoryEntryRef re, String role);
+
+	/**
+	 * Count all members (following up to business groups waiting list) with the following
+	 * roles: owner, coach, participant, waiting 
+	 * 
 	 * @param res
 	 * @param excludeMe Exclude to user which call the method (optional)
 	 * @return
@@ -222,38 +231,40 @@ public interface RepositoryService {
 
 	/**
 	 * Get the members of the repository entry (the method doesn't
-	 * follow the business groups).
+	 * follow automatically the business groups or other relations).
 	 *
-	 * @param re
-	 * @param roles
-	 * @return
+	 * @param re The repository entry
+	 * @param relationType Type of relations to follow
+	 * @param roles The roles to search for
+	 * @return A list of identities which have at least one of the specified role
 	 */
-	public List<Identity> getMembers(RepositoryEntryRef re, String... roles);
+	public List<Identity> getMembers(RepositoryEntryRef re, RepositoryEntryRelationType relationType, String... roles);
 
 	/**
-	 * Get the
-	 * @param re
-	 * @param followBusinessGroups
-	 * @param roles
-	 * @return
+	 * Get the members of a list of repository entries.
+	 * 
+	 * @param re The repository entry
+	 * @param relationType Type of relations to follow
+	 * @param roles The roles to search for
+	 * @return A list of identities which have at least one of the specified role
 	 */
 	public List<Identity> getMembers(List<? extends RepositoryEntryRef> re, RepositoryEntryRelationType relationType, String... roles);
-
+	
 	/**
-	 * Return all the identities the specified role linked to a repository
-	 * entry.
-	 *
-	 *
-	 * @param rolle
-	 * @return
+	 * The participants the specified user can coach. The method is specific to
+	 * the coach role, but follow the business groups and curriculums.
+	 * 
+	 * @param coach The coach
+	 * @param re The repository entry
+	 * @return A list of identities
 	 */
-	public List<Identity> getIdentitiesWithRole(String role);
+	public List<Identity> getCoachedParticipants(IdentityRef coach, RepositoryEntryRef re);
 
 	/**
-	 * Get the role in the specified resource, business group are included in
-	 * the query.
+	 * Get the role in the specified resource, business group and curriculums are
+	 * included in the query but not organizations.
 	 *
-	 * @return The list of roles
+	 * @return The list of roles (not deduplicated)
 	 */
 	public List<String> getRoles(Identity identity, RepositoryEntryRef re);
 
@@ -263,13 +274,21 @@ public interface RepositoryService {
 	 * @return True if the specified role(s) was found.
 	 */
 	public boolean hasRole(Identity identity, RepositoryEntryRef re, String... roles);
-
+	
 	/**
-	 * Has specific role in any resource (follow or not the business groups).
+	 * Has specific role in the specified resource (via the resource itself or a
+	 * business group, organization or a curriculum element).
 	 *
 	 * @return True if the specified role(s) was found.
 	 */
-	public boolean hasRole(Identity identity, boolean followBusinessGroups, String... roles);
+	public boolean hasRoleExpanded(Identity identity, RepositoryEntryRef re, String... roles);
+
+	/**
+	 * Has specific role in any resource (follow or not the business groups, organizations an).
+	 *
+	 * @return True if the specified role(s) was found.
+	 */
+	public boolean hasRoleExpanded(Identity identity, String... roles);
 
 
 	public void addRole(Identity identity, RepositoryEntry re, String role);
@@ -293,5 +312,79 @@ public interface RepositoryService {
 
 	public int countAuthorView(SearchAuthorRepositoryEntryViewParams params);
 
-	public List<RepositoryEntryAuthorView> searchAuthorView(SearchAuthorRepositoryEntryViewParams params, int firstResult, int maxResults);
+	public RepositoryEntryAuthorViewResults searchAuthorView(SearchAuthorRepositoryEntryViewParams params, int firstResult, int maxResults);
+	
+	
+	/**
+	 * Hold the organizations via the group relation.
+	 * 
+	 * @param entry The repository entry
+	 * @return A list of organization
+	 */
+	public List<Organisation> getOrganisations(RepositoryEntryRef entry);
+	
+	/**
+	 * Add a link between organization and the specified repository entry.
+	 * 
+	 * @param entry The repository entry
+	 * @param organisation The organization
+	 */
+	public void addOrganisation(RepositoryEntry entry, Organisation organisation);
+	
+	/**
+	 * Remove the link between organization and repository entry
+	 * @param entry The repository entry
+	 * @param organisation The organization
+	 */
+	public void removeOrganisation(RepositoryEntry entry, Organisation organisation);
+	
+	/**
+	 * 
+	 * @param entry
+	 * @return
+	 */
+	public List<OrganisationRef> getOrganisationReferences(RepositoryEntryRef entry);
+	
+	/**
+	 * Retrieve where the repository entry is linked in taxonomy.
+	 * 
+	 * @param entry A repository entry
+	 * @return A list of taxonomy level
+	 */
+	public List<TaxonomyLevel> getTaxonomy(RepositoryEntry entry);
+	
+	/**
+	 * Add a link between a taxonomy level and the specified repository entry.
+	 * 
+	 * @param entry The repository entry
+	 * @param level
+	 */
+	public void addTaxonomyLevel(RepositoryEntry entry, TaxonomyLevel level);
+	
+	/**
+	 * Remove the link between the taxonomy level and repository entry
+	 * @param entry The repository entry
+	 * @param level
+	 */
+	public void removeTaxonomyLevel(RepositoryEntry entry, TaxonomyLevel level);
+	
+	/**
+	 * Retrieve the list of repository entries link to a specific level
+	 * of the taxonomy.
+	 * 
+	 * @param taxonomyLevel The taxonomy level
+	 * @return A list of repository entries
+	 */
+	public List<RepositoryEntry> getRepositoryEntryByTaxonomy(TaxonomyLevelRef taxonomyLevel);
+	
+	/**
+	 * Search the repository entries of the specified organization
+	 * @param organisation An organization
+	 * @return A list of repository entries
+	 */
+	public List<RepositoryEntry> getRepositoryEntryByOrganisation(OrganisationRef organisation);
+	
+	
+	
+	
 }

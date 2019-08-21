@@ -23,6 +23,7 @@ import java.io.File;
 
 import org.junit.Assert;
 import org.olat.selenium.page.course.CoursePageFragment;
+import org.olat.selenium.page.course.CourseSettingsPage;
 import org.olat.selenium.page.course.CourseWizardPage;
 import org.olat.selenium.page.graphene.OOGraphene;
 import org.openqa.selenium.By;
@@ -41,6 +42,7 @@ public class AuthoringEnvPage {
 	
 	public static final By createMenuCaretBy = By.cssSelector("a.o_sel_author_create");
 	public static final By createMenuBy = By.cssSelector("ul.o_sel_author_create");
+	public static final By generaltabBy = By.className("o_sel_edit_repositoryentry");
 	
 	private WebDriver browser;
 	
@@ -61,39 +63,38 @@ public class AuthoringEnvPage {
 		return this;
 	}
 	
-	public RepositoryEditDescriptionPage createCP(String title) {
+	public RepositorySettingsPage createCP(String title) {
 		return openCreateDropDown()
 			.clickCreate(ResourceType.cp)
-			.fillCreateForm(title)
-			.assertOnGeneralTab();
+			.fillCreateForm(title);
 	}
 	
-	public RepositoryEditDescriptionPage createWiki(String title) {
+	public RepositorySettingsPage createWiki(String title) {
 		return openCreateDropDown()
 			.clickCreate(ResourceType.wiki)
-			.fillCreateForm(title)
-			.assertOnGeneralTab();
+			.fillCreateForm(title);
 	}
 	
-	public RepositoryEditDescriptionPage createCourse(String title) {
-		return openCreateDropDown()
+	public CourseSettingsPage createCourse(String title) {
+		openCreateDropDown()
 			.clickCreate(ResourceType.course)
 			.fillCreateForm(title)
-			.assertOnGeneralTab();
+			.assertOnInfos();
+		return new CourseSettingsPage(browser);
 	}
 	
 	public RepositoryEditDescriptionPage createPortfolioBinder(String title) {
 		return openCreateDropDown()
 			.clickCreate(ResourceType.portfolio)
 			.fillCreateForm(title)
-			.assertOnGeneralTab();
+			.assertOnInfos();
 	}
 	
 	public RepositoryEditDescriptionPage createQTI21Test(String title) {
 		return openCreateDropDown()
 			.clickCreate(ResourceType.qti21Test)
 			.fillCreateForm(title)
-			.assertOnGeneralTab();
+			.assertOnInfos();
 	}
 	
 	/**
@@ -101,10 +102,9 @@ public class AuthoringEnvPage {
 	 * @return
 	 */
 	public AuthoringEnvPage openCreateDropDown() {
-		WebElement createMenuCaret = browser.findElement(createMenuCaretBy);
-		Assert.assertTrue(createMenuCaret.isDisplayed());
-		createMenuCaret.click();
-		OOGraphene.waitElement(createMenuBy, 5, browser);
+		OOGraphene.waitElement(createMenuCaretBy, browser);
+		browser.findElement(createMenuCaretBy).click();
+		OOGraphene.waitElement(createMenuBy, browser);
 		return this;
 	}
 
@@ -128,16 +128,17 @@ public class AuthoringEnvPage {
 	 * @param displayName
 	 * @return
 	 */
-	public RepositoryEditDescriptionPage fillCreateForm(String displayName) {
+	public RepositorySettingsPage fillCreateForm(String displayName) {
 		OOGraphene.waitModalDialog(browser);
 		By inputBy = By.cssSelector("div.modal.o_sel_author_create_popup div.o_sel_author_displayname input");
 		browser.findElement(inputBy).sendKeys(displayName);
 		By submitBy = By.cssSelector("div.modal.o_sel_author_create_popup .o_sel_author_create_submit");
 		browser.findElement(submitBy).click();
 		OOGraphene.waitBusy(browser);
-		OOGraphene.waitElement(RepositoryEditDescriptionPage.generaltabBy, browser);
-		return new RepositoryEditDescriptionPage(browser)
-				.assertOnGeneralTab();
+		OOGraphene.waitModalDialogDisappears(browser);
+		OOGraphene.waitElement(generaltabBy, browser);
+		OOGraphene.waitTinymce(browser);
+		return new RepositorySettingsPage(browser);
 	}
 	
 	/**
@@ -163,7 +164,7 @@ public class AuthoringEnvPage {
 		RepositoryEditDescriptionPage editDescription = openCreateDropDown()
 			.clickCreate(ResourceType.course)
 			.fillCreateForm(title)
-			.assertOnGeneralTab();
+			.assertOnInfos();
 			
 		//from description editor, back to details and launch the course
 		editDescription
@@ -198,7 +199,8 @@ public class AuthoringEnvPage {
 			saveButton.click();
 			OOGraphene.waitBusy(browser);
 			OOGraphene.waitModalDialogDisappears(browser);
-			OOGraphene.waitElement(RepositoryEditDescriptionPage.generaltabBy, browser);
+			OOGraphene.waitElement(generaltabBy, browser);
+			OOGraphene.waitTinymce(browser);
 		}
 		return this;
 	}
@@ -228,10 +230,7 @@ public class AuthoringEnvPage {
 	 * @return
 	 */
 	public CoursePageFragment clickToolbarRootCrumb() {
-		By toolbarBackBy = By.xpath("//div[contains(@class,'o_breadcrumb')]/ol[contains(@class,'breadcrumb')]/li/a[contains(@onclick,'crumb_0')]");
-		OOGraphene.waitingALittleBit();// firefox will click the button without effect
-		browser.findElement(toolbarBackBy).click();
-		OOGraphene.waitBusy(browser);
+		OOGraphene.clickBreadcrumbBack(browser);
 		return new CoursePageFragment(browser);
 	}
 	

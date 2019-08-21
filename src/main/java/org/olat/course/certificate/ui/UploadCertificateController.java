@@ -196,10 +196,10 @@ public class UploadCertificateController extends FormBasicController {
 				formatEl.setVisible(allOk);
 				orientationEl.setVisible(allOk);
 			} else {
-				fileEl.setErrorKey("upload.error.no.phantomjs", null);
+				fileEl.setErrorKey("upload.error.no.html.templates", null);
 				allOk &= false;
 			}
-		} catch (IOException e) {
+		} catch (Exception e) {
 			logError("", e);
 			fileEl.setErrorKey("upload.unkown.error", null);
 			allOk = false;

@@ -28,12 +28,12 @@ package org.olat.search.service.document.file;
 import java.io.IOException;
 import java.io.InputStream;
 
+import org.apache.logging.log4j.Logger;
 import org.apache.lucene.document.Document;
 import org.olat.core.gui.util.CSSHelper;
-import org.olat.core.logging.OLog;
 import org.olat.core.logging.Tracing;
-import org.olat.core.util.filter.impl.NekoHTMLFilter;
-import org.olat.core.util.filter.impl.NekoHTMLFilter.NekoContent;
+import org.olat.core.util.filter.impl.HtmlFilter;
+import org.olat.core.util.filter.impl.HtmlFilter.HtmlContent;
 import org.olat.core.util.vfs.VFSLeaf;
 import org.olat.search.service.SearchResourceContext;
 
@@ -43,7 +43,7 @@ import org.olat.search.service.SearchResourceContext;
  */
 public class HtmlDocument extends FileDocument {
 	private static final long serialVersionUID = 4816587780227792396L;
-	private static final OLog log = Tracing.createLoggerFor(HtmlDocument.class);
+	private static final Logger log = Tracing.createLoggerFor(HtmlDocument.class);
 
 	public static final String FILE_TYPE = "type.file.html";
 
@@ -56,7 +56,7 @@ public class HtmlDocument extends FileDocument {
 		htmlDocument.init(leafResourceContext, leaf);
 		htmlDocument.setFileType(FILE_TYPE);
 		htmlDocument.setCssIcon(CSSHelper.createFiletypeIconCssClassFor(leaf.getName()));
-		if (log.isDebug() ) log.debug(htmlDocument.toString());
+		if (log.isDebugEnabled() ) log.debug(htmlDocument.toString());
 		return htmlDocument.getLuceneDocument();
 	}
 	
@@ -64,8 +64,8 @@ public class HtmlDocument extends FileDocument {
 	protected FileContent readContent(VFSLeaf leaf) throws DocumentException {
 		try(InputStream is = leaf.getInputStream()) {
 			// Remove all HTML and &nbsp; Tags
-			NekoContent output = new NekoHTMLFilter().filter(is);
-			if (log.isDebug())
+			HtmlContent output = new HtmlFilter().filter(is);
+			if (log.isDebugEnabled())
 				log.debug("HTML content without tags :" + output);
 	
 			return new FileContent(output.getTitle(), output.getContent());

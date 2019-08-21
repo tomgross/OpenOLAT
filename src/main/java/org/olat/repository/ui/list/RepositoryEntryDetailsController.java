@@ -21,12 +21,14 @@ package org.olat.repository.ui.list;
 
 import java.util.ArrayList;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
 import org.olat.NewControllerFactory;
 import org.olat.admin.restapi.RestapiAdminController;
 import org.olat.basesecurity.GroupRoles;
+import org.olat.basesecurity.OrganisationModule;
 import org.olat.core.commons.persistence.DBFactory;
 import org.olat.core.commons.services.commentAndRating.CommentAndRatingDefaultSecurityCallback;
 import org.olat.core.commons.services.commentAndRating.CommentAndRatingSecurityCallback;
@@ -57,6 +59,7 @@ import org.olat.core.gui.control.generic.modal.DialogBoxController;
 import org.olat.core.gui.control.generic.modal.DialogBoxUIFactory;
 import org.olat.core.helpers.Settings;
 import org.olat.core.id.OLATResourceable;
+import org.olat.core.id.Organisation;
 import org.olat.core.id.Roles;
 import org.olat.core.logging.activity.ThreadLocalUserActivityLogger;
 import org.olat.core.util.Formatter;
@@ -80,6 +83,10 @@ import org.olat.group.BusinessGroup;
 import org.olat.group.BusinessGroupService;
 import org.olat.group.model.SearchBusinessGroupParams;
 import org.olat.login.LoginModule;
+import org.olat.modules.curriculum.Curriculum;
+import org.olat.modules.curriculum.CurriculumElement;
+import org.olat.modules.curriculum.CurriculumModule;
+import org.olat.modules.curriculum.CurriculumService;
 import org.olat.repository.CatalogEntry;
 import org.olat.repository.LeavingStatusList;
 import org.olat.repository.RepositoryEntry;
@@ -163,6 +170,13 @@ public class RepositoryEntryDetailsController extends FormBasicController {
 	private LicenseModule licenseModule;
 	@Autowired
 	private RepositoryEntryLicenseHandler licenseHandler;
+	@Autowired
+	private OrganisationModule organisationModule;
+	@Autowired
+	private CurriculumService curriculumService;
+	@Autowired
+	private CurriculumModule curriculumModule;
+
 	
 	private String baseUrl;
 	private final boolean guestOnly;
@@ -215,11 +229,11 @@ public class RepositoryEntryDetailsController extends FormBasicController {
 		if(formLayout instanceof FormLayoutContainer) {
 			FormLayoutContainer layoutCont = (FormLayoutContainer)formLayout;
 			layoutCont.contextPut("v", entry);
-			layoutCont.contextPut("guestOnly", new Boolean(guestOnly));
+			layoutCont.contextPut("guestOnly", Boolean.valueOf(guestOnly));
 			String cssClass = RepositoyUIFactory.getIconCssClass(entry);
 			layoutCont.contextPut("cssClass", cssClass);
-			boolean closed = entry.getRepositoryEntryStatus().isClosed() || entry.getRepositoryEntryStatus().isUnpublished();
-			layoutCont.contextPut("closed", new Boolean(closed));
+			boolean closed = entry.getEntryStatus().decommissioned();
+			layoutCont.contextPut("closed", Boolean.valueOf(closed));
 			
 			RepositoryHandler handler = RepositoryHandlerFactory.getInstance().getRepositoryHandler(entry);
 			VFSContainer mediaContainer = handler.getMediaContainer(entry);
@@ -314,7 +328,7 @@ public class RepositoryEntryDetailsController extends FormBasicController {
             		|| memberRoles.contains(GroupRoles.participant.name());
 			if (isMember) {
 				isAuthor = authorKeys.contains(getIdentity().getKey());
-				layoutCont.contextPut("isEntryAuthor", new Boolean(isAuthor));
+				layoutCont.contextPut("isEntryAuthor", Boolean.valueOf(isAuthor));
 			}
 			// push roles to velocity as well
             Roles roles = ureq.getUserSession().getRoles();
@@ -329,25 +343,22 @@ public class RepositoryEntryDetailsController extends FormBasicController {
 
 			//access control
 			String accessI18n = null;
-			List<PriceMethod> types = new ArrayList<PriceMethod>();
-			if (entry.isMembersOnly()) {
-				// members only
-				if(isMember) {
-					String linkText = translate("start.with.type", translate(entry.getOlatResource().getResourceableTypeName()));
-					startLink = uifactory.addFormLink("start", "start", linkText, null, layoutCont, Link.BUTTON_LARGE + Link.NONTRANSLATED);
-					startLink.setElementCssClass("o_start btn-block");
-					startLink.setIconRightCSS("o_icon o_icon_start o_icon-lg");
-					startLink.setPrimary(true);
-
+			List<PriceMethod> types = new ArrayList<>();
+			if(entry.isAllUsers() || entry.isGuests()) {
+				String linkText = translate("start.with.type", translate(entry.getOlatResource().getResourceableTypeName()));
+				startLink = uifactory.addFormLink("start", "start", linkText, null, layoutCont, Link.BUTTON_LARGE + Link.NONTRANSLATED);
+				startLink.setElementCssClass("o_start btn-block");
+				if(guestOnly) {
+					startLink.setVisible(entry.isGuests());
 				}
-				accessI18n = translate("cif.access.membersonly");
-			} else {
+				accessI18n = translate("cif.status.".concat(entry.getEntryStatus().name()));
+			} else if(entry.isBookable()) {
 				AccessResult acResult = acService.isAccessible(entry, getIdentity(), isMember, false);
 				if(acResult.isAccessible()) {
 					String linkText = translate("start.with.type", translate(entry.getOlatResource().getResourceableTypeName()));
 					startLink = uifactory.addFormLink("start", "start", linkText, null, layoutCont, Link.BUTTON_LARGE + Link.NONTRANSLATED);
 					startLink.setElementCssClass("o_start btn-block");
-				} else if (acResult.getAvailableMethods().size() > 0) {
+				} else if (!acResult.getAvailableMethods().isEmpty()) {
 					for(OfferAccess access:acResult.getAvailableMethods()) {
 						AccessMethod method = access.getMethod();
 						String type = (method.getMethodCssClass() + "_icon").intern();
@@ -357,44 +368,31 @@ public class RepositoryEntryDetailsController extends FormBasicController {
 						String displayName = amh.getMethodName(getLocale());
 						types.add(new PriceMethod(price, type, displayName));
 					}
-					String linkText = guestOnly ? translate("start.with.type", translate(entry.getOlatResource().getResourceableTypeName())) 
-							: translate("book.with.type", translate(entry.getOlatResource().getResourceableTypeName()));
+					String linkText = translate("book.with.type", translate(entry.getOlatResource().getResourceableTypeName()));
 					startLink = uifactory.addFormLink("start", "start", linkText, null, layoutCont, Link.BUTTON_LARGE + Link.NONTRANSLATED);
 					startLink.setCustomEnabledLinkCSS("btn btn-success"); // custom style
 					startLink.setElementCssClass("o_book btn-block");
-					if(guestOnly) {
-						if(entry.getAccess() == RepositoryEntry.ACC_USERS_GUESTS) {
-							startLink.setVisible(true);
-						} else {
-							startLink.setVisible(false);
-						}
-					} else {
-						startLink.setVisible(true);
-					}
-				} else {
-					String linkText = translate("start.with.type", translate(entry.getOlatResource().getResourceableTypeName()));
-					startLink = uifactory.addFormLink("start", "start", linkText, null, layoutCont, Link.BUTTON_LARGE + Link.NONTRANSLATED);
-					//startLink.setEnabled(false);
-					startLink.setElementCssClass("o_start btn-block");
 					startLink.setVisible(!guestOnly);
+				} else {
+					// booking not available -> button not visible
+					String linkText = translate("book.with.type", translate(entry.getOlatResource().getResourceableTypeName()));
+					startLink = uifactory.addFormLink("start", "start", linkText, null, layoutCont, Link.BUTTON_LARGE + Link.NONTRANSLATED);
+					startLink.setVisible(false);
 				}
-				startLink.setIconRightCSS("o_icon o_icon_start o_icon-lg");
-				startLink.setPrimary(true);
-				startLink.setFocus(true);
-				
-				switch (entry.getAccess()) {
-					case 0: accessI18n = "ERROR";
-						break;
-					case 1: accessI18n = translate("cif.access.owners");			
-						break;
-					case 2: accessI18n = translate("cif.access.owners_authors");
-						break;
-					case 3: accessI18n = translate("cif.access.users");
-						break;
-					case 4: accessI18n = translate("cif.access.users_guests");
-						break;
-				}
+				accessI18n = translate("cif.status.".concat(entry.getEntryStatus().name()));
+			} else {
+				// visible only to members only
+				String linkText = translate("start.with.type", translate(entry.getOlatResource().getResourceableTypeName()));
+				startLink = uifactory.addFormLink("start", "start", linkText, null, layoutCont, Link.BUTTON_LARGE + Link.NONTRANSLATED);
+				startLink.setElementCssClass("o_start btn-block");
+				startLink.setVisible(isMember);
+				accessI18n = translate("cif.access.membersonly");
 			}
+			
+			startLink.setIconRightCSS("o_icon o_icon_start o_icon-lg");
+			startLink.setPrimary(true);
+			startLink.setFocus(true);
+
 			layoutCont.contextPut("accessI18n", accessI18n);
 			
 			if(!types.isEmpty()) {
@@ -457,9 +455,9 @@ public class RepositoryEntryDetailsController extends FormBasicController {
             layoutCont.contextPut("numUsers", numUsers);
             
             // Where is it in use
-            if(isAuthor || roles.isOLATAdmin() || roles.isInstitutionalResourceManager()) {
+            if(isAuthor || roles.isAdministrator() || roles.isLearnResourceManager()) {
 				List<RepositoryEntry> refs = referenceManager.getRepositoryReferencesTo(entry.getOlatResource());
-				if(refs.size() > 0) {
+				if(!refs.isEmpty()) {
 					List<String> refLinks = new ArrayList<>(refs.size());
 					int count = 0;
 					for(RepositoryEntry ref:refs) {
@@ -474,16 +472,23 @@ public class RepositoryEntryDetailsController extends FormBasicController {
 				}
             }
             
+            if(organisationModule.isEnabled()) {
+            	String organisations = getOrganisationsToString();
+            	layoutCont.contextPut("organisations", organisations);
+            }
+            if(curriculumModule.isEnabled()) {
+            	List<String> curriculums = getCurriculumsToString();
+            	layoutCont.contextPut("curriculums", curriculums);
+            }
+            
             // Link to bookmark entry
             String url = Settings.getServerContextPathURI() + "/url/RepositoryEntry/" + entry.getKey();
             layoutCont.contextPut("extlink", url);
-            Boolean guestAllowed = (entry.getAccess() >= RepositoryEntry.ACC_USERS_GUESTS && loginModule.isGuestLoginLinksEnabled())
-            		? Boolean.TRUE : Boolean.FALSE;
+            Boolean guestAllowed = Boolean.valueOf(entry.isGuests() && loginModule.isGuestLoginLinksEnabled());
             layoutCont.contextPut("isGuestAllowed", guestAllowed);
 
-
 			//Owners
-			List<String> authorLinkNames = new ArrayList<String>(authorKeys.size());
+			List<String> authorLinkNames = new ArrayList<>(authorKeys.size());
 			Map<Long,String> authorNames = userManager.getUserDisplayNamesByKey(authorKeys);
 			int counter = 0;
 			for(Map.Entry<Long, String> author:authorNames.entrySet()) {
@@ -510,6 +515,37 @@ public class RepositoryEntryDetailsController extends FormBasicController {
 				layoutCont.contextPut("licSwitch", Boolean.FALSE);
 			}
 		}
+	}
+	
+	private List<String> getCurriculumsToString() {
+		List<CurriculumElement> curriculumElements = curriculumService.getCurriculumElements(entry);
+    	Map<Curriculum, StringBuilder> curriculumToElementsMap = new HashMap<>();
+    	for(CurriculumElement curriculumElement:curriculumElements) {
+    		Curriculum curriculum = curriculumElement.getCurriculum();
+    		StringBuilder sc = curriculumToElementsMap.computeIfAbsent(curriculum, c -> {
+    			StringBuilder sb = new StringBuilder(64);
+    			sb.append(StringHelper.escapeHtml(c.getDisplayName())).append(" (");
+    			return sb;
+    		});
+    		sc.append(StringHelper.escapeHtml(curriculumElement.getDisplayName())).append(", ");
+    	}
+    	
+    	List<String> curriculumList = new ArrayList<>(curriculumToElementsMap.size());
+    	for(StringBuilder sb:curriculumToElementsMap.values()) {
+    		String line = sb.toString().substring(0, sb.length() -2).concat(")");
+    		curriculumList.add(line);
+    	}
+    	return curriculumList;
+	}
+	
+	private String getOrganisationsToString() {
+		List<Organisation> organisations = repositoryService.getOrganisations(entry);
+    	StringBuilder sb = new StringBuilder(64);
+    	for(Organisation organisation:organisations) {
+    		if(sb.length() > 0) sb.append(", ");
+    		sb.append(StringHelper.escapeHtml(organisation.getDisplayName()));
+    	}
+    	return sb.toString();
 	}
 	
 	@Override

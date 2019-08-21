@@ -26,26 +26,27 @@
 package org.olat.admin.quota;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 import org.olat.basesecurity.BaseSecurity;
-import org.olat.basesecurity.BaseSecurityManager;
-import org.olat.basesecurity.Constants;
+import org.olat.basesecurity.OrganisationRoles;
 import org.olat.core.commons.modules.bc.FolderConfig;
-import org.olat.core.commons.persistence.DBFactory;
-import org.olat.core.commons.persistence.DBQuery;
+import org.olat.core.commons.persistence.DB;
 import org.olat.core.gui.UserRequest;
 import org.olat.core.gui.control.Controller;
 import org.olat.core.gui.control.WindowControl;
 import org.olat.core.id.Identity;
+import org.olat.core.id.OrganisationRef;
+import org.olat.core.id.Roles;
 import org.olat.core.logging.OLATRuntimeException;
 import org.olat.core.logging.OLATSecurityException;
-import org.olat.core.logging.OLog;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
+import org.olat.core.util.StringHelper;
 import org.olat.core.util.resource.OresHelper;
 import org.olat.core.util.vfs.Quota;
 import org.olat.core.util.vfs.QuotaManager;
@@ -53,8 +54,14 @@ import org.olat.core.util.vfs.VFSContainer;
 import org.olat.core.util.vfs.VFSManager;
 import org.olat.properties.Property;
 import org.olat.properties.PropertyManager;
+import org.olat.repository.RepositoryEntryRef;
+import org.olat.repository.manager.RepositoryEntryRelationDAO;
+import org.olat.repository.model.RepositoryEntryRefImpl;
 import org.olat.resource.OLATResource;
 import org.olat.resource.OLATResourceManager;
+import org.springframework.beans.factory.InitializingBean;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
 
 /**
  * <h3>Description:</h3>
@@ -65,46 +72,47 @@ import org.olat.resource.OLATResourceManager;
  * 
  * @author Florian Gnaegi, frentix GmbH, http://www.frentix.com
  */
-public class QuotaManagerImpl extends QuotaManager {
-	private static final OLog log = Tracing.createLoggerFor(QuotaManagerImpl.class);
+@Service("org.olat.core.util.vfs.QuotaManager")
+public class QuotaManagerImpl implements QuotaManager, InitializingBean {
+	private static final Logger log = Tracing.createLoggerFor(QuotaManagerImpl.class);
 
 	private static final String QUOTA_CATEGORY = "quot";
 	private OLATResource quotaResource;
-	private OLATResourceManager resourceManager;
-	private PropertyManager propertyManager;
-	private static Map<String,Quota> defaultQuotas;
+	private final Map<String,Quota> defaultQuotas = new ConcurrentHashMap<>();
 	
-	/**
-	 * [used by spring]
-	 */
-	private QuotaManagerImpl(OLATResourceManager resourceManager, PropertyManager propertyManager) {
-		this.resourceManager = resourceManager;
-		this.propertyManager = propertyManager;
-		INSTANCE = this;
-	}
+	@Autowired
+	private DB dbInstance;
+	@Autowired
+	private BaseSecurity securityManager;
+	@Autowired
+	private PropertyManager propertyManager;
+	@Autowired
+	private OLATResourceManager resourceManager;
+	@Autowired
+	private RepositoryEntryRelationDAO repositoryEntryRelationDao;
 
-	/**
-	 * @see org.olat.core.util.vfs.QuotaManager#createQuota(java.lang.String, java.lang.Long, java.lang.Long)
-	 */
 	@Override
 	public Quota createQuota(String path, Long quotaKB, Long ulLimitKB) {
+		if(quotaKB == null && ulLimitKB == null) {
+			String defaultIdentifier = getDefaultQuotaIdentifier(path);
+			Quota defQuota = getDefaultQuota(defaultIdentifier);
+			if(defQuota != null) {
+				quotaKB = defQuota.getQuotaKB();
+				ulLimitKB = defQuota.getUlLimitKB();
+			}
+		}
 		return new QuotaImpl(path, quotaKB, ulLimitKB);
 	}
 
-	/**
-	 * [called by spring]
-	 *
-	 */
 	@Override
-	public void init() {
+	public void afterPropertiesSet() throws Exception {
 		quotaResource = resourceManager.findOrPersistResourceable(OresHelper.lookupType(Quota.class));
 		initDefaultQuotas(); // initialize default quotas
-		DBFactory.getInstance().intermediateCommit();
+		dbInstance.intermediateCommit();
 		log.info("Successfully initialized Quota Manager");
 	}
 
 	private void initDefaultQuotas() {
-		defaultQuotas = new HashMap<String,Quota>();
 		Quota defaultQuotaUsers = initDefaultQuota(QuotaConstants.IDENTIFIER_DEFAULT_USERS);
 		defaultQuotas.put(QuotaConstants.IDENTIFIER_DEFAULT_USERS, defaultQuotaUsers);
 		Quota defaultQuotaPowerusers = initDefaultQuota(QuotaConstants.IDENTIFIER_DEFAULT_POWER);
@@ -132,23 +140,24 @@ public class QuotaManagerImpl extends QuotaManager {
 	private Quota initDefaultQuota(String quotaIdentifier) {
 		Quota q = null;
 		Property p = propertyManager.findProperty(null, null, quotaResource, QUOTA_CATEGORY, quotaIdentifier);
-		if (p != null) q = parseQuota(p);
-		if (q != null) return q;
+		if (p != null) {
+			q = parseQuota(p);
+		}
+		if (q != null) {
+			return q;
+		}
 		// initialize default quota
-		q = createQuota(quotaIdentifier, new Long(FolderConfig.getDefaultQuotaKB()), new Long(FolderConfig.getLimitULKB()));
+		q = createQuota(quotaIdentifier, Long.valueOf(FolderConfig.getDefaultQuotaKB()), Long.valueOf(FolderConfig.getLimitULKB()));
 		setCustomQuotaKB(q);
 		return q;
 	}
 
 	/**
-	 * Get the identifyers for the default quotas
+	 * Get the identifiers for the default quotas
 	 * @return
 	 */
 	@Override
 	public Set<String> getDefaultQuotaIdentifyers() {
-		if (defaultQuotas == null) {
-			throw new OLATRuntimeException(QuotaManagerImpl.class, "Quota manager has not been initialized properly! Must call init() first.", null);
-		}
 		return defaultQuotas.keySet();
 	}
 	
@@ -161,10 +170,10 @@ public class QuotaManagerImpl extends QuotaManager {
 	 */
 	@Override
 	public Quota getDefaultQuota(String identifyer) {
-		if (defaultQuotas == null) {
-			throw new OLATRuntimeException(QuotaManagerImpl.class, "Quota manager has not been initialized properly! Must call init() first.", null);
+		if(StringHelper.containsNonWhitespace(identifyer)) {
+			return defaultQuotas.get(identifyer);
 		}
-		return defaultQuotas.get(identifyer);
+		return null;
 	}
 
 	/**
@@ -176,10 +185,6 @@ public class QuotaManagerImpl extends QuotaManager {
 	 */
 	@Override
 	public Quota getCustomQuota(String path) {
-		if (defaultQuotas == null) {
-			throw new OLATRuntimeException(QuotaManagerImpl.class, "Quota manager has not been initialized properly! Must call init() first.", null);
-		}
-		
 		StringBuilder query = new StringBuilder();
 		query.append("select prop.name, prop.stringValue from ").append(Property.class.getName()).append(" as prop where ")
 		     .append(" prop.category='").append(QUOTA_CATEGORY).append("'")
@@ -188,11 +193,11 @@ public class QuotaManagerImpl extends QuotaManager {
 		     .append(" and prop.name=:name")
 		     .append(" and prop.identity is null and prop.grp is null");
 		
-		DBQuery dbquery = DBFactory.getInstance().createQuery(query.toString());
-		dbquery.setString("name", path);
-		dbquery.setCacheable(true);
-		@SuppressWarnings("unchecked")
-		List<Object[]> props = dbquery.list();
+		List<Object[]> props = dbInstance.getCurrentEntityManager()
+				.createQuery(query.toString(), Object[].class)
+				.setParameter("name", path)
+				.setHint("org.hibernate.cacheable", Boolean.TRUE)
+				.getResultList();
 		if(props.isEmpty()) {
 			return null;
 		}
@@ -208,9 +213,6 @@ public class QuotaManagerImpl extends QuotaManager {
 	 */
 	@Override
 	public void setCustomQuotaKB(Quota quota) {
-		if (defaultQuotas == null) {
-			throw new OLATRuntimeException(QuotaManagerImpl.class, "Quota manager has not been initialized properly! Must call init() first.", null);
-		}
 		PropertyManager pm = PropertyManager.getInstance();
 		Property p = pm.findProperty(null, null, quotaResource, QUOTA_CATEGORY, quota.getPath());
 		if (p == null) { // create new entry
@@ -253,13 +255,9 @@ public class QuotaManagerImpl extends QuotaManager {
 	 */
 	@Override
 	public List<Quota> listCustomQuotasKB() {
-		if (defaultQuotas == null) {
-			throw new OLATRuntimeException(QuotaManagerImpl.class, "Quota manager has not been initialized properly! Must call init() first.", null);
-		}
-		List<Quota> results = new ArrayList<Quota>();
-		PropertyManager pm = PropertyManager.getInstance();
-		List<Property> props = pm.listProperties(null, null, quotaResource, QUOTA_CATEGORY, null);
-		if (props == null || props.size() == 0) return results;
+		List<Quota> results = new ArrayList<>();
+		List<Property> props = propertyManager.listProperties(null, null, quotaResource, QUOTA_CATEGORY, null);
+		if (props == null || props.isEmpty()) return results;
 		for (Iterator<Property> iter = props.iterator(); iter.hasNext();) {
 			Property prop = iter.next();
 			results.add(parseQuota(prop));
@@ -287,8 +285,8 @@ public class QuotaManagerImpl extends QuotaManager {
 		if (delim == -1) return null;
 		Quota q = null;
 		try {
-			Long quotaKB = new Long(s.substring(0, delim));
-			Long ulLimitKB = new Long(s.substring(delim + 1));
+			Long quotaKB = Long.valueOf(s.substring(0, delim));
+			Long ulLimitKB = Long.valueOf(s.substring(delim + 1));
 			q = createQuota(name, quotaKB, ulLimitKB);
 		} catch (NumberFormatException e) {
 			// will return null if quota parsing failed
@@ -308,9 +306,10 @@ public class QuotaManagerImpl extends QuotaManager {
 	 * @return
 	 */
 	@Override
-	public Quota getDefaultQuotaDependingOnRole(Identity identity) {
-		if (BaseSecurityManager.getInstance().isIdentityPermittedOnResourceable(identity, Constants.PERMISSION_HASROLE, Constants.ORESOURCE_AUTHOR)) { return getDefaultQuotaPowerUsers(); }
-		if (BaseSecurityManager.getInstance().isIdentityPermittedOnResourceable(identity, Constants.PERMISSION_HASROLE, Constants.ORESOURCE_ADMIN)) { return getDefaultQuotaPowerUsers(); }
+	public Quota getDefaultQuotaDependingOnRole(Identity identity, Roles roles) {
+		if (isPowerUser(roles)) {
+			return getDefaultQuotaPowerUsers();
+		}
 		return getDefaultQuotaUsers();
 	}
 
@@ -322,18 +321,17 @@ public class QuotaManagerImpl extends QuotaManager {
 	 * @return custom quota or quota depending on role
 	 */
 	@Override
-	public Quota getCustomQuotaOrDefaultDependingOnRole(Identity identity, String relPath) {
+	public Quota getCustomQuotaOrDefaultDependingOnRole(Identity identity, Roles roles, String relPath) {
 		Quota quota = getCustomQuota(relPath);
 		if (quota == null) { // no custom quota
-			if (BaseSecurityManager.getInstance().isIdentityPermittedOnResourceable(identity, Constants.PERMISSION_HASROLE, Constants.ORESOURCE_AUTHOR)) {
-				return createQuota(relPath, getDefaultQuotaPowerUsers().getQuotaKB(), getDefaultQuotaPowerUsers().getUlLimitKB());
-			}
-			if (BaseSecurityManager.getInstance().isIdentityPermittedOnResourceable(identity, Constants.PERMISSION_HASROLE, Constants.ORESOURCE_ADMIN)) {
-				return createQuota(relPath, getDefaultQuotaPowerUsers().getQuotaKB(), getDefaultQuotaPowerUsers().getUlLimitKB());
-			}
-			return createQuota(relPath, getDefaultQuotaUsers().getQuotaKB(), getDefaultQuotaUsers().getUlLimitKB());
+			Quota defQuota = isPowerUser(roles) ? getDefaultQuotaPowerUsers() : getDefaultQuotaUsers();
+			return createQuota(relPath, defQuota.getQuotaKB(), defQuota.getUlLimitKB());
 		}
 		return quota;
+	}
+	
+	private boolean isPowerUser(Roles roles) {
+		return roles.isAdministrator() || roles.isLearnResourceManager() || roles.isAuthor();
 	}
 
 	/**
@@ -344,9 +342,6 @@ public class QuotaManagerImpl extends QuotaManager {
 	 * @return Quota
 	 */
 	private Quota getDefaultQuotaUsers() {
-		if (defaultQuotas == null) {
-			throw new OLATRuntimeException(QuotaManagerImpl.class, "Quota manager has not been initialized properly! Must call init() first.", null);
-		}
 		return defaultQuotas.get(QuotaConstants.IDENTIFIER_DEFAULT_USERS);
 	}
 
@@ -358,9 +353,6 @@ public class QuotaManagerImpl extends QuotaManager {
 	 * @return Quota
 	 */
 	private Quota getDefaultQuotaPowerUsers() {
-		if (defaultQuotas == null) {
-			throw new OLATRuntimeException(QuotaManagerImpl.class, "Quota manager has not been initialized properly! Must call init() first.", null);
-		}
 		return defaultQuotas.get(QuotaConstants.IDENTIFIER_DEFAULT_POWER);
 	}
 
@@ -413,9 +405,10 @@ public class QuotaManagerImpl extends QuotaManager {
 	}
 
 	@Override
-	public Controller getQuotaEditorInstance(UserRequest ureq, WindowControl wControl, String relPath) {
+	public Controller getQuotaEditorInstance(UserRequest ureq, WindowControl wControl, String relPath,
+			boolean withLegend, boolean withCancel) {
 		try {
-			return new GenericQuotaEditController(ureq, wControl, relPath);
+			return new GenericQuotaEditController(ureq, wControl, relPath, withLegend, withCancel);
 		} catch (OLATSecurityException e) {
 			log.warn("Try to access the quota editor without enough privilege", e);
 			GenericQuotaViewController viewCtrl = new GenericQuotaViewController(ureq, wControl, relPath);
@@ -424,20 +417,163 @@ public class QuotaManagerImpl extends QuotaManager {
 		}
 	}
 	
-
 	@Override
 	public Controller getQuotaViewInstance(UserRequest ureq, WindowControl wControl, String relPath) {
 		return new GenericQuotaViewController(ureq, wControl, relPath);
 	}
-
+	
 	@Override
-	public boolean hasQuotaEditRights(Identity identity) {
-		BaseSecurity mgr = BaseSecurityManager.getInstance();
-		boolean hasQuoaRights = mgr.isIdentityPermittedOnResourceable(
-				identity, 
-				Constants.PERMISSION_ACCESS, 
-				OresHelper.lookupType(GenericQuotaEditController.class));
-		return hasQuoaRights;
+	public boolean hasMinimalRolesToEditquota(Roles roles) {
+		return roles.isAdministrator() || roles.isSystemAdmin()
+				|| roles.isRolesManager() || roles.isUserManager()
+				|| roles.isLearnResourceManager();
 	}
 
+	@Override
+	public boolean hasQuotaEditRights(Identity identity, Roles roles, Quota quota) {
+		if(identity == null || roles == null || quota == null || quota.getPath() == null) {
+			return false;
+		}
+
+		String path = quota.getPath();
+		if(path.startsWith("::DEFAULT")) {
+			return roles.isSystemAdmin();
+		} else if(path.startsWith("/cts/folders/BusinessGroup/")) {
+			return roles.isSystemAdmin() || roles.isAdministrator();
+		} else if(path.startsWith("/repository/")) {
+			return canEditRepositoryResources(path, identity, roles);
+		} else if(path.startsWith("/course/")) {
+			return canEditRepositoryResources(path, identity, roles) ;
+		} else if(path.startsWith("/homes/")) {
+			return canEditUser(path, roles);
+		}
+		
+		return roles.isSystemAdmin();
+	}
+	
+	private boolean canEditUser(String path, Roles roles) {
+		if(!roles.isAdministrator() && !roles.isSystemAdmin() && !roles.isRolesManager() && !roles.isUserManager()) {
+			return false;
+		}
+		
+		try {
+			int start = "/homes/".length();
+			int index = path.indexOf('/', start + 1);
+			if(index >= 0 && start < path.length()) {
+				String username = path.substring(start, index);
+				return canEditUsername(username, roles);
+			} else if(index == -1 && path.length() > start) {
+				String username = path.substring(start);
+				return canEditUsername(username, roles);
+			}
+			return false;
+		} catch (NumberFormatException e) {
+			log.error("Cannot parse this quota path: " + path, e);
+			return false;
+		}
+	}
+	
+	private boolean canEditUsername(String username, Roles roles) {
+		Identity editedIdentity = securityManager.findIdentityByName(username);
+		Roles editedRoles = securityManager.getRoles(editedIdentity);
+		return (roles.isAdministrator() && roles.isManagerOf(OrganisationRoles.administrator, editedRoles))
+				|| (roles.isSystemAdmin() && roles.isManagerOf(OrganisationRoles.sysadmin, editedRoles))
+				|| (roles.isRolesManager() && roles.isManagerOf(OrganisationRoles.rolesmanager, editedRoles))
+				|| (roles.isUserManager() && roles.isManagerOf(OrganisationRoles.usermanager, editedRoles));
+	}
+	
+	private boolean canEditRepositoryResources(String path, Identity identity, Roles roles) {
+		if(!roles.isAdministrator() && !roles.isSystemAdmin() && !roles.isLearnResourceManager()) {
+			return false;
+		}
+		
+		try {
+			int start = path.indexOf('/', 2) + 1;
+			int index = path.indexOf('/', start + 1);
+			if(index == -1) {
+				index = path.length();
+			}
+			if(start >= 0 && start <= path.length() && index >= 0 && index <= path.length()) {
+				String resIdString = path.substring(start, index);
+				Long resId = Long.valueOf(resIdString);
+				RepositoryEntryRef re = getRepositoryEntryKey(resId);
+				return re != null && repositoryEntryRelationDao.hasRole(identity, re, true,
+						OrganisationRoles.administrator.name(), OrganisationRoles.sysadmin.name(), OrganisationRoles.learnresourcemanager.name());
+			}
+			return false;
+		} catch (NumberFormatException e) {
+			log.error("Cannot parse this quota path: " + path, e);
+			return false;
+		}
+	}
+	
+	private RepositoryEntryRef getRepositoryEntryKey(Long resId) {
+		String query = "select v.key from repositoryentry v inner join v.olatResource as ores where ores.resId=:resId";
+		List<Long> keys = dbInstance.getCurrentEntityManager()
+				.createQuery(query, Long.class)
+				.setParameter("resId", resId)
+				.getResultList();
+		if(!keys.isEmpty()) {
+			return new RepositoryEntryRefImpl(keys.get(0));
+		}
+		return null;
+	}
+
+	@Override
+	public boolean hasQuotaEditRights(Identity identity, Roles roles, List<OrganisationRef> organisationOwnerships) {
+		return roles.hasRole(organisationOwnerships, OrganisationRoles.administrator)
+				|| roles.hasRole(organisationOwnerships, OrganisationRoles.sysadmin)
+				|| roles.hasRole(organisationOwnerships, OrganisationRoles.rolesmanager)
+				|| roles.hasRole(organisationOwnerships, OrganisationRoles.usermanager)
+				|| roles.hasRole(organisationOwnerships, OrganisationRoles.learnresourcemanager);
+	}
+	
+	@Override
+	public String getDefaultQuotaIdentifier(Quota quota) {
+		if(quota == null) return QuotaConstants.IDENTIFIER_DEFAULT;
+		String path = quota.getPath();
+		return getDefaultQuotaIdentifier(path);
+	}
+
+	private String getDefaultQuotaIdentifier(String path) {
+		String identifier = QuotaConstants.IDENTIFIER_DEFAULT;
+		if(path == null || path.startsWith(QuotaConstants.IDENTIFIER_DEFAULT)) {
+			identifier = path;
+		} else if(path.startsWith("/cts/folders/BusinessGroup/")) {
+			identifier = QuotaConstants.IDENTIFIER_DEFAULT_GROUPS;
+		} else if(path.startsWith("/repository/")) {
+			if(path.indexOf("/_unzipped_") >= 0 || path.indexOf("/_sharedfolder_") >= 0) {
+				identifier = QuotaConstants.IDENTIFIER_DEFAULT_REPO;
+			} else if(endWithLong(path)) {
+				identifier = QuotaConstants.IDENTIFIER_DEFAULT_FEEDS;
+			} else {
+				identifier = QuotaConstants.IDENTIFIER_DEFAULT_REPO;
+			}
+		} else if(path.startsWith("/course/")) {
+			if(path.indexOf("/foldernodes/") >= 0) {
+				identifier = QuotaConstants.IDENTIFIER_DEFAULT_NODES;
+			} else if(path.indexOf("/coursefolder") >= 0) {
+				identifier = QuotaConstants.IDENTIFIER_DEFAULT_COURSE;
+			} else if(path.indexOf("/participantfolder/") >= 0) {
+				identifier = QuotaConstants.IDENTIFIER_DEFAULT_PFNODES;
+			} else if(path.indexOf("/returnboxes/") >= 0) {
+				identifier = QuotaConstants.IDENTIFIER_DEFAULT_POWER;
+			} else {
+				identifier = QuotaConstants.IDENTIFIER_DEFAULT_COURSE;
+			}
+		} else if(path.startsWith("/homes/")) {
+			identifier = QuotaConstants.IDENTIFIER_DEFAULT_USERS;
+		}
+		return identifier;
+	}
+	
+	private boolean endWithLong(String path) {
+		boolean ok = false;
+		int index = path.lastIndexOf('/');
+		if(index > 0) {
+			String lastToken = path.substring(index + 1, path.length());
+			ok = StringHelper.isLong(lastToken);
+		}
+		return ok;
+	}
 }

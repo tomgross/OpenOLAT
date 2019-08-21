@@ -42,8 +42,9 @@ import org.olat.core.gui.translator.PackageTranslator;
 import org.olat.core.gui.translator.Translator;
 import org.olat.core.id.Identity;
 import org.olat.core.id.OLATResourceable;
+import org.olat.core.id.Organisation;
 import org.olat.core.id.Roles;
-import org.olat.core.logging.OLog;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.Util;
 import org.olat.core.util.coordinate.CoordinatorManager;
@@ -63,6 +64,7 @@ import org.olat.course.run.userview.NodeEvaluation;
 import org.olat.course.run.userview.UserCourseEnvironment;
 import org.olat.course.statistic.StatisticResourceOption;
 import org.olat.course.statistic.StatisticResourceResult;
+import org.olat.course.statistic.StatisticType;
 import org.olat.fileresource.types.ImsQTI21Resource;
 import org.olat.ims.qti.QTIResultManager;
 import org.olat.ims.qti.export.QTIExportFormatter;
@@ -72,7 +74,6 @@ import org.olat.ims.qti.fileresource.SurveyFileResource;
 import org.olat.ims.qti.process.AssessmentInstance;
 import org.olat.ims.qti.statistics.QTIStatisticResourceResult;
 import org.olat.ims.qti.statistics.QTIStatisticSearchParams;
-import org.olat.ims.qti.statistics.QTIType;
 import org.olat.ims.qti21.QTI21DeliveryOptions;
 import org.olat.ims.qti21.QTI21Service;
 import org.olat.ims.qti21.model.QTI21StatisticSearchParams;
@@ -95,7 +96,7 @@ import org.olat.repository.handlers.RepositoryHandlerFactory;
 public class IQSURVCourseNode extends AbstractAccessableCourseNode implements QTICourseNode {
 
 	private static final long serialVersionUID = 1672009454920536416L;
-	private static final OLog log = Tracing.createLoggerFor(IQSURVCourseNode.class);
+	private static final Logger log = Tracing.createLoggerFor(IQSURVCourseNode.class);
 
 	private static final String TYPE = "iqsurv";
 	/** category that is used to persist the node properties */
@@ -166,8 +167,8 @@ public class IQSURVCourseNode extends AbstractAccessableCourseNode implements QT
 
 	@Override
 	public StatisticResourceResult createStatisticNodeResult(UserRequest ureq, WindowControl wControl,
-			UserCourseEnvironment userCourseEnv, StatisticResourceOption options, QTIType... types) {
-		if(!isQTITypeAllowed(types)) return null;
+			UserCourseEnvironment userCourseEnv, StatisticResourceOption options, StatisticType type) {
+		if(!isStatisticTypeAllowed(type)) return null;
 		
 		Long courseId = userCourseEnv.getCourseEnvironment().getCourseResourceableId();
 		OLATResourceable courseOres = OresHelper.createOLATResourceableInstance("CourseModule", courseId);
@@ -190,25 +191,17 @@ public class IQSURVCourseNode extends AbstractAccessableCourseNode implements QT
 	}
 	
 	@Override
-	public boolean isStatisticNodeResultAvailable(UserCourseEnvironment userCourseEnv, QTIType... types) {
-		return isQTITypeAllowed(types);
+	public boolean isStatisticNodeResultAvailable(UserCourseEnvironment userCourseEnv, StatisticType type) {
+		return isStatisticTypeAllowed(type);
 	}
 	
-	private boolean isQTITypeAllowed(QTIType... types) {
-		if(types == null) return true;
-		if(types.length == 0 || (types.length == 1 && types[0] == null)) return true;
-		
-		for(QTIType type:types) {
-			if(QTIType.survey.equals(type)) {
-				return true;
-			}
+	private boolean isStatisticTypeAllowed(StatisticType type) {
+		if(StatisticType.SURVEY.equals(type)) {
+			return true;
 		}
 		return false;
 	}
 
-	/**
-	 * @see org.olat.course.nodes.CourseNode#isConfigValid()
-	 */
 	@Override
 	public StatusDescription isConfigValid() {
 		/*
@@ -307,14 +300,15 @@ public class IQSURVCourseNode extends AbstractAccessableCourseNode implements QT
 	}
 
 	@Override
-	public boolean archiveNodeData(Locale locale, ICourse course, ArchiveOptions options, ZipOutputStream exportStream, String charset) {
+	public boolean archiveNodeData(Locale locale, ICourse course, ArchiveOptions options,
+			ZipOutputStream exportStream, String archivePath, String charset) {
 		QTIExportManager qem = QTIExportManager.getInstance();
 		String repositorySoftKey = (String) getModuleConfiguration().get(IQEditController.CONFIG_KEY_REPOSITORY_SOFTKEY);
 		RepositoryEntry re = RepositoryManager.getInstance().lookupRepositoryEntryBySoftkey(repositorySoftKey, true);
 
 		QTIExportFormatter qef = new QTIExportFormatterCSVType3(locale, null,"\t", "\"", "\r\n", false);
 		try {
-			return qem.selectAndExportResults(qef, course.getResourceableId(), getShortTitle(), getIdent(), re, exportStream, locale, ".xls");
+			return qem.selectAndExportResults(qef, course.getResourceableId(), getShortTitle(), getIdent(), re, exportStream, archivePath, locale, ".xls");
 		} catch (IOException e) {
 			log.error("", e);
 			return false;
@@ -339,12 +333,12 @@ public class IQSURVCourseNode extends AbstractAccessableCourseNode implements QT
 	}
 
 	@Override
-	public void importNode(File importDirectory, ICourse course, Identity owner, Locale locale, boolean withReferences) {
+	public void importNode(File importDirectory, ICourse course, Identity owner, Organisation organisation, Locale locale, boolean withReferences) {
 		RepositoryEntryImportExport rie = new RepositoryEntryImportExport(importDirectory, getIdent());
 		if(withReferences && rie.anyExportedPropertiesAvailable()) {
 			RepositoryHandler handler = RepositoryHandlerFactory.getInstance().getRepositoryHandler(SurveyFileResource.TYPE_NAME);
 			RepositoryEntry re = handler.importResource(owner, rie.getInitialAuthor(), rie.getDisplayName(),
-				rie.getDescription(), false, locale, rie.importGetExportedFile(), null);
+				rie.getDescription(), false, organisation, locale, rie.importGetExportedFile(), null);
 			IQEditController.setIQReference(re, getModuleConfiguration());
 		} else {
 			IQEditController.removeIQReference(getModuleConfiguration());

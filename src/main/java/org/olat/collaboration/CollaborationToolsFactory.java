@@ -27,17 +27,18 @@ package org.olat.collaboration;
 
 import java.util.ArrayList;
 
+import org.apache.logging.log4j.Logger;
 import org.olat.commons.calendar.CalendarModule;
 import org.olat.core.CoreSpringFactory;
 import org.olat.core.id.OLATResourceable;
 import org.olat.core.logging.AssertException;
-import org.olat.core.logging.OLog;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.ArrayHelper;
 import org.olat.core.util.cache.CacheWrapper;
 import org.olat.core.util.coordinate.CoordinatorManager;
 import org.olat.group.BusinessGroup;
 import org.olat.instantMessaging.InstantMessagingModule;
+import org.olat.modules.adobeconnect.AdobeConnectModule;
 import org.olat.modules.openmeetings.OpenMeetingsModule;
 import org.olat.modules.portfolio.PortfolioV2Module;
 import org.olat.modules.wiki.WikiModule;
@@ -54,7 +55,7 @@ import org.olat.portfolio.PortfolioModule;
  * @author guido
  */
 public class CollaborationToolsFactory {
-	private static final OLog log = Tracing.createLoggerFor(CollaborationToolsFactory.class);
+	private static final Logger log = Tracing.createLoggerFor(CollaborationToolsFactory.class);
 	private static CollaborationToolsFactory instance;
 	private CacheWrapper<String,CollaborationTools> cache;
 	private CoordinatorManager coordinatorManager;
@@ -81,7 +82,7 @@ public class CollaborationToolsFactory {
 	 * configuration.
 	 */
 	public synchronized void initAvailableTools() {
-		ArrayList<String> toolArr = new ArrayList<String>();
+		ArrayList<String> toolArr = new ArrayList<>();
 		toolArr.add(CollaborationTools.TOOL_NEWS);
 		toolArr.add(CollaborationTools.TOOL_CONTACT);
 		CalendarModule calendarModule = CoreSpringFactory.getImpl(CalendarModule.class);
@@ -105,6 +106,10 @@ public class CollaborationToolsFactory {
 		OpenMeetingsModule openMeetingsModule = CoreSpringFactory.getImpl(OpenMeetingsModule.class);
 		if(openMeetingsModule.isEnabled()) {
 			toolArr.add(CollaborationTools.TOOL_OPENMEETINGS);
+		}
+		AdobeConnectModule adobeConnectModule = CoreSpringFactory.getImpl(AdobeConnectModule.class);
+		if(adobeConnectModule.isEnabled() && adobeConnectModule.isGroupsEnabled()) {
+			toolArr.add(CollaborationTools.TOOL_ADOBECONNECT);
 		}
 		TOOLS = ArrayHelper.toArray(toolArr);				
 	}
@@ -138,8 +143,8 @@ public class CollaborationToolsFactory {
 	public CollaborationTools getOrCreateCollaborationTools(final BusinessGroup ores) {
 		if (ores == null) throw new AssertException("Null is not allowed here, you have to provide an existing ores here!");
 		
-		final String cacheKey = Long.valueOf(ores.getResourceableId()).toString();
-		boolean debug = log.isDebug();
+		final String cacheKey = Long.toString(ores.getResourceableId().longValue());
+		boolean debug = log.isDebugEnabled();
 		//sync operation cluster wide
 
 		CollaborationTools collabTools = cache.get(cacheKey);
@@ -173,7 +178,7 @@ public class CollaborationToolsFactory {
 	 * @return
 	 */
 	public CollaborationTools getCollaborationToolsIfExists(OLATResourceable ores) {
-		String cacheKey = Long.valueOf(ores.getResourceableId()).toString();
+		String cacheKey = Long.toString(ores.getResourceableId().longValue());
 		return cache.get(cacheKey);
 	}
 

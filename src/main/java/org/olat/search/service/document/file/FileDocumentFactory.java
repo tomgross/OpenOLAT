@@ -28,15 +28,15 @@ package org.olat.search.service.document.file;
 import java.io.IOException;
 import java.util.Date;
 
+import org.apache.logging.log4j.Logger;
 import org.apache.lucene.document.DateTools;
 import org.apache.lucene.document.Document;
 import org.apache.lucene.queryparser.classic.ParseException;
 import org.olat.core.CoreSpringFactory;
-import org.olat.core.commons.modules.bc.meta.MetaInfo;
-import org.olat.core.commons.modules.bc.meta.tagged.MetaTagged;
-import org.olat.core.logging.OLog;
+import org.olat.core.commons.services.vfs.VFSMetadata;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.vfs.LocalImpl;
+import org.olat.core.util.vfs.VFSConstants;
 import org.olat.core.util.vfs.VFSLeaf;
 import org.olat.search.QueryException;
 import org.olat.search.SearchModule;
@@ -62,26 +62,26 @@ import org.olat.search.service.SearchServiceImpl;
  */
 public class FileDocumentFactory {
 	
-	private static OLog log = Tracing.createLoggerFor(FileDocumentFactory.class);
+	private static final Logger log = Tracing.createLoggerFor(FileDocumentFactory.class);
 
-	private final static String PDF_SUFFIX = "pdf";
-	private final static String EXCEL_SUFFIX = "xls";
-	private final static String WORD_SUFFIX = "doc";
-	private final static String POWERPOINT_SUFFIX = "ppt";
-	private final static String EXCEL_X_SUFFIX = "xlsx";
-	private final static String WORD_X_SUFFIX = "docx";
-	private final static String POWERPOINT_X_SUFFIX = "pptx";
-	private final static String OD_TEXT_SUFFIX = "odt";
-	private final static String OD_SPREADSHEET_SUFFIX = "ods";
-	private final static String OD_PRESENTATION_SUFFIX = "odp";
-	private final static String OD_FORMULA_SUFFIX = "odf";
-	private final static String OD_GRAPHIC_SUFFIX = "odg";
+	private static final String PDF_SUFFIX = "pdf";
+	private static final String EXCEL_SUFFIX = "xls";
+	private static final String WORD_SUFFIX = "doc";
+	private static final String POWERPOINT_SUFFIX = "ppt";
+	private static final String EXCEL_X_SUFFIX = "xlsx";
+	private static final String WORD_X_SUFFIX = "docx";
+	private static final String POWERPOINT_X_SUFFIX = "pptx";
+	private static final String OD_TEXT_SUFFIX = "odt";
+	private static final String OD_SPREADSHEET_SUFFIX = "ods";
+	private static final String OD_PRESENTATION_SUFFIX = "odp";
+	private static final String OD_FORMULA_SUFFIX = "odf";
+	private static final String OD_GRAPHIC_SUFFIX = "odg";
 
-	private final static String HTML_SUFFIX = "htm html xhtml";
-	private final static String XML_SUFFIX = "xml";
-	private final static String TEXT_SUFFIX = "txt tex readme csv";
+	private static final String HTML_SUFFIX = "htm html xhtml";
+	private static final String XML_SUFFIX = "xml";
+	private static final String TEXT_SUFFIX = "txt tex readme csv";
   
-	//as a special parser;
+	// IMS manifest has a special parser
 	private static final String IMS_MANIFEST_FILE = "imsmanifest.xml";
   
 	private int excludedFileSizeCount = 0;
@@ -112,9 +112,9 @@ public class FileDocumentFactory {
 				if(timestamp != null) {
 					Date indexLastModification = DateTools.stringToDate(timestamp);
 					Date docLastModificationDate = new Date(leaf.getLastModified());
-					if(leaf instanceof MetaTagged) {
-						MetaInfo metaInfo = ((MetaTagged)leaf).getMetaInfo();
-						Date metaDate = metaInfo.getMetaLastModified();
+					if(leaf.canMeta() == VFSConstants.YES) {
+						VFSMetadata metaInfo = leaf.getMetaInfo();
+						Date metaDate = metaInfo.getLastModified();
 						if(metaDate != null && metaDate.after(docLastModificationDate)) {
 							docLastModificationDate = metaDate;
 						}
@@ -142,7 +142,7 @@ public class FileDocumentFactory {
 			Document doc = null;
 			String fileName = leaf.getName();
 			String suffix = FileTypeDetector.getSuffix(leaf);
-			if (log.isDebug()) log.debug("suffix=" + suffix);
+			log.debug("suffix={}", suffix);
 			
 			if (PDF_SUFFIX.indexOf(suffix) >= 0) {
 				if(searchModule.getPdfFileEnabled()) {

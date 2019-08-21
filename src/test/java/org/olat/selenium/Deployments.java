@@ -19,10 +19,19 @@
  */
 package org.olat.selenium;
 
+import java.io.IOException;
+import java.util.HashMap;
+import java.util.Map;
+
+import org.apache.logging.log4j.Logger;
 import org.eu.ingwar.tools.arquillian.extension.suite.annotations.ArquillianSuiteDeployment;
 import org.jboss.arquillian.container.test.api.Deployment;
 import org.jboss.shrinkwrap.api.spec.WebArchive;
+import org.junit.After;
+import org.olat.core.logging.Tracing;
 import org.olat.test.ArquillianDeployments;
+
+import com.dumbster.smtp.SimpleSmtpServer;
 
 /**
  * 
@@ -33,9 +42,37 @@ import org.olat.test.ArquillianDeployments;
 @ArquillianSuiteDeployment
 public class Deployments {
 	
+	private static final Logger log = Tracing.createLoggerFor(Deployments.class);
+
+	private static SimpleSmtpServer dumbster;
+	static {
+		try {
+			dumbster = SimpleSmtpServer.start(SimpleSmtpServer.AUTO_SMTP_PORT);
+		} catch (IOException e) {
+			log.error("", e);
+		}
+	}
+	
 	@Deployment(testable = false)
 	public static WebArchive createDeployment() {
-		return ArquillianDeployments.createDeployment();
+		Map<String,String> overrideSettings = new HashMap<>();
+		if(dumbster != null) {
+			overrideSettings.put("smtp.port", String.valueOf(dumbster.getPort()));
+			overrideSettings.put("smtp.host", "localhost");
+			log.info("Simple smtp server started on port: " + dumbster.getPort());
+		}
+		overrideSettings.put("ldap.enable", "false");
+		return ArquillianDeployments.createDeployment(overrideSettings);
 	}
-
+	
+	@After
+	public void afterTest() {
+		if(dumbster != null) {
+			dumbster.reset();
+		}
+	}
+	
+	protected SimpleSmtpServer getSmtpServer() {
+		return dumbster;
+	}
 }

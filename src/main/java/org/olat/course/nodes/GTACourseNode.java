@@ -31,6 +31,7 @@ import java.util.Set;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
+import org.apache.logging.log4j.Logger;
 import org.olat.basesecurity.GroupRoles;
 import org.olat.basesecurity.IdentityRef;
 import org.olat.core.CoreSpringFactory;
@@ -45,9 +46,9 @@ import org.olat.core.gui.control.generic.messages.MessageUIFactory;
 import org.olat.core.gui.control.generic.tabbable.TabbableController;
 import org.olat.core.gui.translator.Translator;
 import org.olat.core.id.Identity;
+import org.olat.core.id.Organisation;
 import org.olat.core.id.Roles;
 import org.olat.core.logging.OLATRuntimeException;
-import org.olat.core.logging.OLog;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.ExportUtil;
 import org.olat.core.util.FileUtils;
@@ -58,7 +59,7 @@ import org.olat.core.util.ZipUtil;
 import org.olat.core.util.io.ShieldOutputStream;
 import org.olat.core.util.vfs.VFSContainer;
 import org.olat.core.util.vfs.VFSItem;
-import org.olat.core.util.vfs.filters.SystemItemFilter;
+import org.olat.core.util.vfs.filters.VFSSystemItemFilter;
 import org.olat.course.CourseFactory;
 import org.olat.course.ICourse;
 import org.olat.course.archiver.ScoreAccountingHelper;
@@ -106,7 +107,7 @@ import org.olat.user.UserManager;
  */
 public class GTACourseNode extends AbstractAccessableCourseNode implements PersistentAssessableCourseNode {
 	
-	private static final OLog log = Tracing.createLoggerFor(GTACourseNode.class);
+	private static final Logger log = Tracing.createLoggerFor(GTACourseNode.class);
 	private static final String PACKAGE_GTA = Util.getPackageName(GTAEditController.class);
 
 	private static final long serialVersionUID = 1L;
@@ -131,6 +132,7 @@ public class GTACourseNode extends AbstractAccessableCourseNode implements Persi
 	public static final String GTASK_SAMPLE_SOLUTION = "grouptask.solution";
 	public static final String GTASK_SAMPLE_SOLUTION_VISIBLE_AFTER = "grouptask.solution.visible.after";
 	public static final String GTASK_SAMPLE_SOLUTION_VISIBLE_ALL = "grouptask.solution.visible.all";
+	
 	public static final String GTASK_SAMPLE_SOLUTION_VISIBLE_AFTER_RELATIVE = "grouptask.solution.visible.after.relative";
 	public static final String GTASK_SAMPLE_SOLUTION_VISIBLE_AFTER_RELATIVE_TO = "grouptask.solution.visible.after.relative.to";
 	public static final String GTASK_GRADING = "grouptask.grading";
@@ -231,8 +233,8 @@ public class GTACourseNode extends AbstractAccessableCourseNode implements Persi
 			config.setStringValue(GTACourseNode.GTASK_SAMPLING, GTACourseNode.GTASK_SAMPLING_REUSE);
 			//configure grading
 			config.set(MSCourseNode.CONFIG_KEY_HAS_SCORE_FIELD, Boolean.FALSE);
-			config.set(MSCourseNode.CONFIG_KEY_SCORE_MIN, new Float(0));
-			config.set(MSCourseNode.CONFIG_KEY_SCORE_MAX, new Float(0));
+			config.set(MSCourseNode.CONFIG_KEY_SCORE_MIN, Float.valueOf(0.0f));
+			config.set(MSCourseNode.CONFIG_KEY_SCORE_MAX, Float.valueOf(0.0f));
 			config.set(MSCourseNode.CONFIG_KEY_HAS_PASSED_FIELD, Boolean.TRUE);
 			config.set(MSCourseNode.CONFIG_KEY_HAS_COMMENT_FIELD, Boolean.TRUE);
 		}
@@ -349,7 +351,7 @@ public class GTACourseNode extends AbstractAccessableCourseNode implements Persi
 			}
 			
 			List<IdentityRef> participants = gtaManager.getDuplicatedMemberships(this);
-			if(participants.size() > 0) {
+			if(!participants.isEmpty()) {
 				UserManager um = CoreSpringFactory.getImpl(UserManager.class);
 				StringBuilder sb = new StringBuilder();
 				for(IdentityRef participant:participants) {
@@ -421,7 +423,7 @@ public class GTACourseNode extends AbstractAccessableCourseNode implements Persi
 	}
 	
 	@Override
-	public void importNode(File importDirectory, ICourse course, Identity owner, Locale locale, boolean withReferences) {
+	public void importNode(File importDirectory, ICourse course, Identity owner, Organisation organisation, Locale locale, boolean withReferences) {
 		File fNodeImportDir = new File(importDirectory, getIdent());
 		GTAManager gtaManager = CoreSpringFactory.getImpl(GTAManager.class);
 		
@@ -536,7 +538,7 @@ public class GTACourseNode extends AbstractAccessableCourseNode implements Persi
 	}
 
 	@Override
-	public boolean archiveNodeData(Locale locale, ICourse course, ArchiveOptions options, ZipOutputStream exportStream, String charset) {
+	public boolean archiveNodeData(Locale locale, ICourse course, ArchiveOptions options, ZipOutputStream exportStream, String path, String charset) {
 		final GTAManager gtaManager = CoreSpringFactory.getImpl(GTAManager.class);
 		final ModuleConfiguration config =  getModuleConfiguration();
 
@@ -547,9 +549,14 @@ public class GTACourseNode extends AbstractAccessableCourseNode implements Persi
 			prefix = "ita_";
 		}
 	
-		String dirName = prefix
+		String dirName;
+		if(StringHelper.containsNonWhitespace(path)) {
+			dirName = path;
+		} else {
+			dirName = prefix
 				+ StringHelper.transformDisplayNameToFileSystemName(getShortName())
 				+ "_" + Formatter.formatDatetimeFilesystemSave(new Date(System.currentTimeMillis()));
+		}
 		
 		TaskList taskList = gtaManager.getTaskList(course.getCourseEnvironment().getCourseGroupManager().getCourseEntry(), this);
 
@@ -600,7 +607,7 @@ public class GTACourseNode extends AbstractAccessableCourseNode implements Persi
 			VFSContainer solutions = gtaManager.getSolutionsContainer(course.getCourseEnvironment(), this);
 			if (solutions.exists()) {
 				String solutionDirName = dirName + "/solutions";
-				for(VFSItem solution:solutions.getItems(new SystemItemFilter())) {
+				for(VFSItem solution:solutions.getItems(new VFSSystemItemFilter())) {
 					ZipUtil.addToZip(solution, solutionDirName, exportStream);
 				}
 			}
@@ -753,13 +760,19 @@ public class GTACourseNode extends AbstractAccessableCourseNode implements Persi
 		gtaManager.deleteTaskList(entry, this);
 		
 		//clean subscription
-		SubscriptionContext subscriptionContext = gtaManager.getSubscriptionContext(course.getCourseEnvironment(), this);
+		SubscriptionContext markedSubscriptionContext = gtaManager.getSubscriptionContext(course.getCourseEnvironment(), this, true);
+		NotificationsManager.getInstance().delete(markedSubscriptionContext);
+		SubscriptionContext subscriptionContext = gtaManager.getSubscriptionContext(course.getCourseEnvironment(), this, false);
 		NotificationsManager.getInstance().delete(subscriptionContext);
 	}
 
 	@Override
 	public boolean isAssessedBusinessGroups() {
 		return GTAType.group.name().equals(getModuleConfiguration().getStringValue(GTACourseNode.GTASK_TYPE));
+	}
+	
+	public boolean isOptional() {
+		return getModuleConfiguration().getBooleanSafe(MSCourseNode.CONFIG_KEY_OPTIONAL);
 	}
 
 	@Override
@@ -877,6 +890,17 @@ public class GTACourseNode extends AbstractAccessableCourseNode implements Persi
 			ICourse course, UserCourseEnvironment euce) {
 		GTAEditController editCtrl = new GTAEditController(ureq, wControl, this, course, euce);
 		return new NodeEditController(ureq, wControl, course.getEditorTreeModel(), course, euce, editCtrl);
+	}
+
+	@Override
+	public boolean hasResultsDetails() {
+		return false;
+	}
+
+	@Override
+	public Controller getResultDetailsController(UserRequest ureq, WindowControl wControl,
+			UserCourseEnvironment assessedUserCourseEnv) {
+		return null;
 	}
 
 	@Override

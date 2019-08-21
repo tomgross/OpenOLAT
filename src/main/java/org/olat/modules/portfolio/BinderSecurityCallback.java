@@ -82,15 +82,37 @@ public interface BinderSecurityCallback {
 	
 	/**
 	 * 
-	 * @return true if the user can instantiate and begin to fill a page from the assignment
+	 * @return true if the user can instantiate and begin to fill a page
+	 * 			from the assignment
 	 */
 	public boolean canInstantiateAssignment();
+	
+	/**
+	 * 
+	 * @return true if the user can instantiate and begin to fill a page
+	 * 			from the assignment found in the templates folder
+	 */
+	public boolean canInstantianteBinderAssignment();
+	
+	/**
+	 * 
+	 * @return
+	 */
+	public boolean canNewPageWithoutAssignment();
 	
 	/**
 	 * 
 	 * @return true if the user can create a new assignment (limited to the template).
 	 */
 	public boolean canNewAssignment();
+	
+	/**
+	 * 
+	 * @return true if the user can create a new assignment in the templates folder
+	 */
+	public boolean canNewBinderAssignment();
+	
+	
 	
 	public boolean canEditAccessRights(PortfolioElement element);
 	

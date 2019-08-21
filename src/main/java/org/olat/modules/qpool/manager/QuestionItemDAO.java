@@ -29,10 +29,10 @@ import javax.persistence.EntityManager;
 import javax.persistence.LockModeType;
 import javax.persistence.TypedQuery;
 
-import org.olat.basesecurity.BaseSecurity;
 import org.olat.basesecurity.GroupRoles;
 import org.olat.basesecurity.SecurityGroup;
 import org.olat.basesecurity.SecurityGroupMembershipImpl;
+import org.olat.basesecurity.manager.SecurityGroupDAO;
 import org.olat.core.commons.persistence.DB;
 import org.olat.core.commons.services.mark.impl.MarkImpl;
 import org.olat.core.id.Identity;
@@ -64,9 +64,9 @@ public class QuestionItemDAO {
 	@Autowired
 	private DB dbInstance;
 	@Autowired
-	private QPoolFileStorage qpoolFileStorage;
+	private SecurityGroupDAO securityGroupDao;
 	@Autowired
-	private BaseSecurity securityManager;
+	private QPoolFileStorage qpoolFileStorage;
 	
 	
 	public QuestionItemImpl create(String title, String format, String dir, String rootFilename) {
@@ -106,12 +106,12 @@ public class QuestionItemDAO {
 	
 	public void persist(Identity owner, QuestionItemImpl item) {
 		if(item.getOwnerGroup() == null) {
-			SecurityGroup ownerGroup = securityManager.createAndPersistSecurityGroup();
+			SecurityGroup ownerGroup = securityGroupDao.createAndPersistSecurityGroup();
 			item.setOwnerGroup(ownerGroup);
 		}
 		dbInstance.getCurrentEntityManager().persist(item);
 		if(owner != null) {
-			securityManager.addIdentityToSecurityGroup(owner, item.getOwnerGroup());
+			securityGroupDao.addIdentityToSecurityGroup(owner, item.getOwnerGroup());
 		}
 	}
 	
@@ -173,8 +173,8 @@ public class QuestionItemDAO {
 		
 		SecurityGroup secGroup = lockedItem.getOwnerGroup();
 		for(Identity author:authors) {
-			if(!securityManager.isIdentityInSecurityGroup(author, secGroup)) {
-				securityManager.addIdentityToSecurityGroup(author, secGroup);
+			if(!securityGroupDao.isIdentityInSecurityGroup(author, secGroup)) {
+				securityGroupDao.addIdentityToSecurityGroup(author, secGroup);
 			}
 		}
 		dbInstance.commit();
@@ -186,8 +186,8 @@ public class QuestionItemDAO {
 		
 		SecurityGroup secGroup = lockedItem.getOwnerGroup();
 		for(Identity author:authors) {
-			if(securityManager.isIdentityInSecurityGroup(author, secGroup)) {
-				securityManager.removeIdentityFromSecurityGroup(author, secGroup);
+			if(securityGroupDao.isIdentityInSecurityGroup(author, secGroup)) {
+				securityGroupDao.removeIdentityFromSecurityGroup(author, secGroup);
 			}
 		}
 		dbInstance.commit();
@@ -339,11 +339,10 @@ public class QuestionItemDAO {
 		  .append(" left join fetch item.type itemType")
 		  .append(" left join fetch item.educationalContext educationalContext")
 		  .append(" where item.key in (:keys)");
-		List<QuestionItemFull> items = dbInstance.getCurrentEntityManager()
+		return dbInstance.getCurrentEntityManager()
 				.createQuery(sb.toString(), QuestionItemFull.class)
 				.setParameter("keys", key)
 				.getResultList();
-		return items;
 	}
 	
 	public QuestionItemImpl loadForUpdate(QuestionItemShort item) {

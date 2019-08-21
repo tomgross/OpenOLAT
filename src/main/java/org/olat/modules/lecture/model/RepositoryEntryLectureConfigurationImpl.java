@@ -29,7 +29,6 @@ import javax.persistence.GenerationType;
 import javax.persistence.Id;
 import javax.persistence.JoinColumn;
 import javax.persistence.ManyToOne;
-import javax.persistence.NamedQueries;
 import javax.persistence.NamedQuery;
 import javax.persistence.Table;
 import javax.persistence.Temporal;
@@ -47,9 +46,7 @@ import org.olat.repository.RepositoryEntry;
  */
 @Entity(name="lectureentryconfig")
 @Table(name="o_lecture_entry_config")
-@NamedQueries(
-	@NamedQuery(name="lectureconfigByRepositoryEntry", query="select config from lectureentryconfig config where config.entry.key=:entryKey")
-)
+@NamedQuery(name="lectureconfigByRepositoryEntry", query="select config from lectureentryconfig config where config.entry.key=:entryKey")
 public class RepositoryEntryLectureConfigurationImpl implements Persistable, RepositoryEntryLectureConfiguration {
 
 	private static final long serialVersionUID = -728141275261361935L;
@@ -82,6 +79,17 @@ public class RepositoryEntryLectureConfigurationImpl implements Persistable, Rep
 	private Boolean participantCalendarSyncEnabled;
 	@Column(name="l_sync_calendar_course", nullable=true, insertable=true, updatable=true)
 	private Boolean courseCalendarSyncEnabled;
+	
+	@Column(name="l_assessment_mode", nullable=true, insertable=true, updatable=true)
+	private Boolean assessmentModeEnabled;
+	@Column(name="l_assessment_mode_lead", nullable=true, insertable=true, updatable=true)
+	private Integer assessmentModeLeadTime;
+	@Column(name="l_assessment_mode_followup", nullable=true, insertable=true, updatable=true)
+	private Integer assessmentModeFollowupTime;
+	@Column(name="l_assessment_mode_ips", nullable=true, insertable=true, updatable=true)
+	private String assessmentModeAdmissibleIps;
+	@Column(name="l_assessment_mode_seb", nullable=true, insertable=true, updatable=true)
+	private String assessmentModeSebKeys;
 	
 	@ManyToOne(targetEntity=RepositoryEntry.class,fetch=FetchType.LAZY,optional=false)
 	@JoinColumn(name="fk_entry", nullable=false, insertable=true, updatable=false, unique=true)
@@ -189,6 +197,56 @@ public class RepositoryEntryLectureConfigurationImpl implements Persistable, Rep
 	@Override
 	public void setCourseCalendarSyncEnabled(Boolean courseCalendarSyncEnabled) {
 		this.courseCalendarSyncEnabled = courseCalendarSyncEnabled;
+	}
+
+	@Override
+	public Boolean getAssessmentModeEnabled() {
+		return assessmentModeEnabled;
+	}
+
+	@Override
+	public void setAssessmentModeEnabled(Boolean assessmentModeEnabled) {
+		this.assessmentModeEnabled = assessmentModeEnabled;
+	}
+
+	@Override
+	public Integer getAssessmentModeLeadTime() {
+		return assessmentModeLeadTime;
+	}
+
+	@Override
+	public void setAssessmentModeLeadTime(Integer assessmentModeLeadTime) {
+		this.assessmentModeLeadTime = assessmentModeLeadTime;
+	}
+
+	@Override
+	public Integer getAssessmentModeFollowupTime() {
+		return assessmentModeFollowupTime;
+	}
+
+	@Override
+	public void setAssessmentModeFollowupTime(Integer assessmentModeFollowupTime) {
+		this.assessmentModeFollowupTime = assessmentModeFollowupTime;
+	}
+
+	@Override
+	public String getAssessmentModeAdmissibleIps() {
+		return assessmentModeAdmissibleIps;
+	}
+
+	@Override
+	public void setAssessmentModeAdmissibleIps(String assessmentModeAdmissibleIps) {
+		this.assessmentModeAdmissibleIps = assessmentModeAdmissibleIps;
+	}
+
+	@Override
+	public String getAssessmentModeSebKeys() {
+		return assessmentModeSebKeys;
+	}
+
+	@Override
+	public void setAssessmentModeSebKeys(String assessmentModeSebKeys) {
+		this.assessmentModeSebKeys = assessmentModeSebKeys;
 	}
 
 	@Override

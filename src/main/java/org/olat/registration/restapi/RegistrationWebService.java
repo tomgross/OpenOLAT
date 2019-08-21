@@ -39,10 +39,10 @@ import javax.ws.rs.core.Response.ResponseBuilder;
 import javax.ws.rs.core.Response.Status;
 import javax.ws.rs.core.UriBuilder;
 
+import org.apache.logging.log4j.Logger;
 import org.olat.core.CoreSpringFactory;
 import org.olat.core.gui.translator.Translator;
 import org.olat.core.helpers.Settings;
-import org.olat.core.logging.OLog;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.Util;
 import org.olat.core.util.i18n.I18nModule;
@@ -55,6 +55,7 @@ import org.olat.registration.RegistrationModule;
 import org.olat.registration.TemporaryKey;
 import org.olat.user.UserManager;
 import org.olat.user.UserModule;
+import org.springframework.stereotype.Component;
 
 
 /**
@@ -67,10 +68,11 @@ import org.olat.user.UserModule;
  *
  * @author srosse, stephane.rosse@frentix.com, http://www.frentix.com
  */
+@Component
 @Path("registration")
 public class RegistrationWebService {
 	
-	private OLog log = Tracing.createLoggerFor(RegistrationWebService.class);
+	private static final Logger log = Tracing.createLoggerFor(RegistrationWebService.class);
 
 	private static final String SEPARATOR = "____________________________________________________________________\n";
 	
@@ -109,6 +111,7 @@ public class RegistrationWebService {
 		MailManager mailM = CoreSpringFactory.getImpl(MailManager.class);
 		UserManager userManager = UserManager.getInstance();
 		RegistrationManager rm = CoreSpringFactory.getImpl(RegistrationManager.class);
+		RegistrationModule rModule = CoreSpringFactory.getImpl(RegistrationModule.class);
 		
 		boolean foundUser = userManager.findUniqueIdentityByEmail(email) != null;
 		boolean noNewUserWithEmail = !userManager.isEmailAllowed(email);
@@ -126,7 +129,7 @@ public class RegistrationWebService {
 				tk = rm.loadTemporaryKeyByEmail(email);
 			}
 			if (tk == null) {
-				tk = rm.loadOrCreateTemporaryKeyByEmail(email, ip, RegistrationManager.REGISTRATION);
+				tk = rm.loadOrCreateTemporaryKeyByEmail(email, ip, RegistrationManager.REGISTRATION, rModule.getValidUntilHoursRest());
 			}
 			String today = DateFormat.getDateInstance(DateFormat.LONG, locale).format(new Date());
 			String[] bodyAttrs = new String[] {

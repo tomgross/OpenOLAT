@@ -47,7 +47,6 @@ import org.olat.core.gui.control.generic.clone.CloneableController;
 import org.olat.core.gui.control.generic.dtabs.Activateable2;
 import org.olat.core.gui.control.generic.iframe.DeliveryOptions;
 import org.olat.core.id.OLATResourceable;
-import org.olat.core.id.Roles;
 import org.olat.core.id.context.ContextEntry;
 import org.olat.core.id.context.StateEntry;
 import org.olat.core.logging.AssertException;
@@ -62,9 +61,7 @@ import org.olat.course.nodes.TitledWrapperHelper;
 import org.olat.course.run.userview.UserCourseEnvironment;
 import org.olat.course.tree.CourseInternalLinkTreeModel;
 import org.olat.modules.ModuleConfiguration;
-import org.olat.repository.RepositoryManager;
 import org.olat.util.logging.activity.LoggingResourceable;
-import org.springframework.beans.factory.annotation.Autowired;
 
 /**
  * Description:<br>
@@ -90,14 +87,11 @@ public class SPRunController extends BasicController implements Activateable2 {
 	
 	private final boolean hasEditRights;
 	private CustomLinkTreeModel linkTreeModel;
-	private CloneController cloneC;
+	private Long repoKey;
 
 	private final UserCourseEnvironment userCourseEnv;
 	
 	private static final String[] EDITABLE_TYPES = new String[] { "html", "htm", "xml", "xhtml" };
-
-	@Autowired
-	private RepositoryManager repositoryManager;
 	
 	/**
 	 * Constructor for single page run controller 
@@ -113,6 +107,7 @@ public class SPRunController extends BasicController implements Activateable2 {
 		this.courseNode = courseNode;
 		this.config = courseNode.getModuleConfiguration();
 		this.userCourseEnv = userCourseEnv;
+		this.repoKey = userCourseEnv.getCourseEnvironment().getCourseGroupManager().getCourseEntry().getKey();
 				
 		addLoggingResourceable(LoggingResourceable.wrap(courseNode));
 
@@ -121,7 +116,7 @@ public class SPRunController extends BasicController implements Activateable2 {
 		if (fileName == null) throw new AssertException("bad configuration at lauchtime: fileName cannot be null in SinglePage!");
 		this.courseFolderContainer = courseFolderContainer;
 		
-		hasEditRights = hasEditRights(ureq);
+		hasEditRights = hasEditRights();
 
 		if (hasEditRights) {
 			linkTreeModel = new CourseInternalLinkTreeModel(userCourseEnv.getCourseEnvironment().getRunStructure().getRootNode());
@@ -133,7 +128,7 @@ public class SPRunController extends BasicController implements Activateable2 {
 		putInitialPanel(main);
 	}
 	
-	private boolean hasEditRights(UserRequest ureq) {
+	private boolean hasEditRights() {
 		if(userCourseEnv.isCourseReadOnly()) return false;
 		
 		if(fileName != null && fileName.startsWith("/_sharedfolder")) {
@@ -143,23 +138,10 @@ public class SPRunController extends BasicController implements Activateable2 {
 		}
 		
 		if(isFileTypeEditable(fileName)) {
-			Roles roles = ureq.getUserSession().getRoles();
-			if(roles.isOLATAdmin()) {
-				return true;
-			}
-
 			CourseGroupManager cgm = userCourseEnv.getCourseEnvironment().getCourseGroupManager();
-			if(roles.isInstitutionalResourceManager() &&
-				repositoryManager.isInstitutionalRessourceManagerFor(getIdentity(), roles, cgm.getCourseEntry())) {
-				return true;
-			}
-			if(config.getBooleanSafe(SPEditController.CONFIG_KEY_ALLOW_COACH_EDIT, false)){
-				if(cgm.isIdentityCourseCoach(ureq.getIdentity())){
-					return true;
-				}
-			}
-			return cgm.isIdentityCourseAdministrator(getIdentity())
-					|| cgm.hasRight(getIdentity(), CourseRights.RIGHT_COURSEEDITOR);
+			return (config.getBooleanSafe(SPEditController.CONFIG_KEY_ALLOW_COACH_EDIT, false) && userCourseEnv.isCoach())
+					|| userCourseEnv.isAdmin() || cgm.hasRight(getIdentity(), CourseRights.RIGHT_COURSEEDITOR);
+
 		}
 		return false;
 	}
@@ -201,7 +183,7 @@ public class SPRunController extends BasicController implements Activateable2 {
 
 		DeliveryOptions deliveryOptions = (DeliveryOptions)config.get(SPEditController.CONFIG_KEY_DELIVERYOPTIONS);
 		spCtr = new SinglePageController(ureq, getWindowControl(), courseFolderContainer, fileName,
-				allowRelativeLinks, null, ores, deliveryOptions, userCourseEnv.getCourseEnvironment().isPreview());
+				allowRelativeLinks, null, ores, deliveryOptions, userCourseEnv.getCourseEnvironment().isPreview(), repoKey);
 		spCtr.setAllowDownload(true);
 		
 		// only for inline integration: register for controller event to forward a olatcmd to the course,
@@ -218,8 +200,10 @@ public class SPRunController extends BasicController implements Activateable2 {
 
 		// create clone wrapper layout
 		CloneLayoutControllerCreatorCallback clccc = new CloneLayoutControllerCreatorCallback() {
+			@Override
 			public ControllerCreator createLayoutControllerCreator(UserRequest uureq, final ControllerCreator contentControllerCreator) {
 				return BaseFullWebappPopupLayoutFactory.createAuthMinimalPopupLayout(uureq, new ControllerCreator() {
+					@Override
 					public Controller createController(UserRequest lureq, WindowControl lwControl) {
 						// Wrap in column layout, popup window needs a layout controller
 						Controller ctr = contentControllerCreator.createController(lureq, lwControl);
@@ -235,7 +219,7 @@ public class SPRunController extends BasicController implements Activateable2 {
 		
 		Controller ctrl = TitledWrapperHelper.getWrapper(ureq, getWindowControl(), spCtr, courseNode, "o_sp_icon");
 		if(ctrl instanceof CloneableController) {
-			cloneC= new CloneController(ureq, getWindowControl(), (CloneableController)ctrl, clccc);
+			CloneController cloneC= new CloneController(ureq, getWindowControl(), (CloneableController)ctrl, clccc);
 			listenTo(cloneC);
 			main.setContent(cloneC.getInitialComponent());
 		} else {
@@ -256,6 +240,7 @@ public class SPRunController extends BasicController implements Activateable2 {
 	 * 
 	 * @see org.olat.core.gui.control.DefaultController#doDispose(boolean)
 	 */
+	@Override
 	protected void doDispose() {
 		//child controller registered with listenTo gets disposed in BasicController
 	}

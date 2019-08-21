@@ -63,6 +63,7 @@ import org.olat.group.BusinessGroupService;
 import org.olat.group.BusinessGroupShort;
 import org.olat.modules.ModuleConfiguration;
 import org.olat.restapi.repository.course.AbstractCourseNodeWebService;
+import org.springframework.stereotype.Component;
 
 /**
  * 
@@ -74,6 +75,7 @@ import org.olat.restapi.repository.course.AbstractCourseNodeWebService;
  * @author srosse, stephane.rosse@frentix.com
  * @author Dirk Furrer
  */
+@Component
 @Path("repo/courses/{courseId}/elements/contact")
 public class COWebService extends AbstractCourseNodeWebService {
 	
@@ -298,7 +300,7 @@ public class COWebService extends AbstractCourseNodeWebService {
 		
 		
 		private List<String> getEmails(String to) {
-			List<String> eList = new ArrayList<String>();
+			List<String> eList = new ArrayList<>();
 			if(StringHelper.containsNonWhitespace(to)) {
 				String[] emailAdress = to.split(";");
 				if ((emailAdress != null) && (emailAdress.length > 0) && (!"".equals(emailAdress[0]))) {
@@ -313,9 +315,8 @@ public class COWebService extends AbstractCourseNodeWebService {
 			return eList;
 		}
 		
-		// fxdiff
 		private String getGroupNamesToString(List<String> groupNames) {
-			StringBuffer buffer = new StringBuffer();
+			StringBuilder buffer = new StringBuilder();
 			for(String groupName:groupNames) {
 				if(buffer.length() > 0) {
 					buffer.append(',');
@@ -326,19 +327,19 @@ public class COWebService extends AbstractCourseNodeWebService {
 		}
 		
 		private List<String> getGroupNames(String groupIds) {
-			List<String> groupNames = new ArrayList<String>();
+			List<String> groupNames = new ArrayList<>();
 			
 			if(StringHelper.containsNonWhitespace(groupIds)) {
 				String[] groupIdArr = groupIds.split(";");
 				BusinessGroupService bgm = CoreSpringFactory.getImpl(BusinessGroupService.class);
 				
-				List<Long> keys = new ArrayList<Long>();
+				List<Long> keys = new ArrayList<>();
 				for(String groupId:groupIdArr) {
-					Long groupKey = new Long(groupId);
+					Long groupKey = Long.valueOf(groupId);
 					keys.add(groupKey);
 				}
-				List<BusinessGroupShort> groups = bgm.loadShortBusinessGroups(keys);
-				for(BusinessGroupShort bg:groups) {
+				List<BusinessGroupShort> businessGroups = bgm.loadShortBusinessGroups(keys);
+				for(BusinessGroupShort bg:businessGroups) {
 					groupNames.add(bg.getName());
 				}
 			}

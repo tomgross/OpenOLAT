@@ -30,12 +30,13 @@ import java.io.OutputStream;
 import java.io.StringReader;
 import java.io.StringWriter;
 import java.io.UnsupportedEncodingException;
-import java.util.Arrays;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.Date;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
@@ -83,16 +84,17 @@ import org.olat.core.commons.services.notifications.PublisherData;
 import org.olat.core.commons.services.notifications.Subscriber;
 import org.olat.core.commons.services.notifications.SubscriptionContext;
 import org.olat.core.commons.services.taskexecutor.model.DBSecureRunnable;
+import org.olat.core.helpers.GUISettings;
 import org.olat.core.helpers.Settings;
 import org.olat.core.id.Identity;
 import org.olat.core.id.OLATResourceable;
 import org.olat.core.id.UserConstants;
-import org.olat.core.logging.OLog;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.Encoder;
 import org.olat.core.util.StringHelper;
 import org.olat.core.util.WebappHelper;
-import org.olat.core.util.filter.impl.NekoHTMLFilter;
+import org.olat.core.util.filter.impl.HtmlFilter;
 import org.olat.core.util.mail.ContactList;
 import org.olat.core.util.mail.MailAttachment;
 import org.olat.core.util.mail.MailBundle;
@@ -137,7 +139,7 @@ import com.sun.mail.smtp.SMTPMessage;
 @Service("mailManager")
 public class MailManagerImpl implements MailManager, InitializingBean  {
 	
-	private static final OLog log = Tracing.createLoggerFor(MailManagerImpl.class);
+	private static final Logger log = Tracing.createLoggerFor(MailManagerImpl.class);
 
 	public static final String MAIL_TEMPLATE_FOLDER = "/customizing/mail/";
 	
@@ -150,6 +152,8 @@ public class MailManagerImpl implements MailManager, InitializingBean  {
 	@Autowired
 	private NotificationsManager notificationsManager;
 	private final MailModule mailModule;
+	@Autowired
+	private GUISettings guiSettings;
 
 	private FileStorage attachmentStorage;
 	
@@ -167,16 +171,13 @@ public class MailManagerImpl implements MailManager, InitializingBean  {
 		SubscriptionContext scontext = getSubscriptionContext();
 		notificationsManager.getOrCreatePublisher(scontext, pdata);
 		
-		Properties p = null;
+		Properties p = new Properties();
 		try {
 			velocityEngine = new VelocityEngine();
-			p = new Properties();
-			p.setProperty(RuntimeConstants.RUNTIME_LOG_LOGSYSTEM_CLASS, "org.apache.velocity.runtime.log.SimpleLog4JLogSystem");
 			p.setProperty(RuntimeConstants.RESOURCE_MANAGER_CACHE_CLASS, "org.olat.core.gui.render.velocity.InfinispanResourceCache");
-			p.setProperty("runtime.log.logsystem.log4j.category", "syslog");
 			velocityEngine.init(p);
 		} catch (Exception e) {
-			throw new RuntimeException("config error " + p.toString());
+			throw new RuntimeException("config error " + p);
 		}
 	}
 	
@@ -447,7 +448,7 @@ public class MailManagerImpl implements MailManager, InitializingBean  {
 
 	private void deleteMail(DBMailLight mail, Identity identity, boolean forceRemoveRecipient) {
 		boolean delete = true;
-		List<DBMailRecipient> updates = new ArrayList<DBMailRecipient>();
+		List<DBMailRecipient> updates = new ArrayList<>();
 		if(mail.getFrom() != null && mail.getFrom().getRecipient() != null) {
 			if(identity.equalsByPersistableKey(mail.getFrom().getRecipient())) {
 				DBMailRecipient from = mail.getFrom();
@@ -477,7 +478,7 @@ public class MailManagerImpl implements MailManager, InitializingBean  {
 		}
 		
 		if(delete) {
-			Set<String> paths = new HashSet<String>();
+			Set<String> paths = new HashSet<>();
 			
 			//all marked as deleted -> delete the mail
 			List<DBMailAttachment> attachments = getAttachments(mail);
@@ -599,7 +600,7 @@ public class MailManagerImpl implements MailManager, InitializingBean  {
 
 	@Override
 	public String getMailTemplate() {
-		File baseFolder = new File(WebappHelper.getUserDataRoot(), MAIL_TEMPLATE_FOLDER);	
+		File baseFolder = new File(WebappHelper.getUserDataRoot(), MAIL_TEMPLATE_FOLDER);
 		File template = new File(baseFolder, "mail_template.html");
 		if(template.exists()) {
 			try(InputStream in = new FileInputStream(template)) {
@@ -624,6 +625,19 @@ public class MailManagerImpl implements MailManager, InitializingBean  {
 			IOUtils.copy(reader, out, "UTF-8");
 		} catch (IOException e) {
 			log.error("", e);
+		}
+	}
+	
+	@Override
+	public void deleteCustomMailTemplate() {
+		File baseFolder = new File(WebappHelper.getUserDataRoot(), MAIL_TEMPLATE_FOLDER);
+		File customTemplate = new File(baseFolder, "mail_template.html");
+		if (customTemplate.exists()) {
+			try {
+				customTemplate.delete();
+			} catch (Exception e) {
+				log.error("", e);
+			}
 		}
 	}
 
@@ -654,20 +668,20 @@ public class MailManagerImpl implements MailManager, InitializingBean  {
 	}
 
 	@Override
-	public MailBundle makeMailBundle(MailContext ctxt, Identity recipientTO,
+	public MailBundle makeMailBundle(MailContext ctxt, Identity recipientTo,
 			MailTemplate template, Identity sender, String metaId, MailerResult result) {	
 
 		MailBundle bundle;
-		if(MailHelper.isDisabledMailAddress(recipientTO, result)) {
+		if(recipientTo != null && MailHelper.isDisabledMailAddress(recipientTo, result)) {
 			bundle = null;//email disabled, nothing to do
 		} else {
-			MailContent msg = createWithContext(recipientTO, template, result);
+			MailContent msg = createWithContext(recipientTo, template, result);
 			if(msg != null && result.getReturnCode() == MailerResult.OK){
 				// send mail
 				bundle = new MailBundle();
 				bundle.setContext(ctxt);
 				bundle.setFromId(sender);
-				bundle.setToId(recipientTO);
+				bundle.setToId(recipientTo);
 				bundle.setMetaId(metaId);
 				bundle.setContent(msg);
 			} else {
@@ -708,11 +722,15 @@ public class MailManagerImpl implements MailManager, InitializingBean  {
 		return result;
 	}
 	
-	protected MailContent decorateMail(MailBundle bundle) {
+	@Override
+	public MailContent decorateMail(MailBundle bundle) {
 		MailContent content = bundle.getContent();
 
 		String template = getMailTemplate();
 		boolean htmlTemplate = StringHelper.isHtml(template);
+		if (htmlTemplate) {
+			template = decorateStyle(template);
+		}
 		String body = content.getBody();
 		boolean htmlContent =  StringHelper.isHtml(body);
 		if(htmlTemplate && !htmlContent) {
@@ -738,6 +756,63 @@ public class MailManagerImpl implements MailManager, InitializingBean  {
 		return new SimpleMailContent(content.getSubject(), decoratedBody, content.getAttachments());
 	}
 	
+	@Override
+	public MailContent evaluateTemplate(MailTemplate template) {
+		VelocityContext context;
+		if(template.getContext() != null) {
+			context = new VelocityContext(template.getContext());
+		} else {
+			context = new VelocityContext();
+		}
+		template.putVariablesInMailContext(context, null);
+		context.put("server", Settings.getServerContextPathURI());
+
+		MailerResult result = new MailerResult();
+		StringWriter subjectWriter = new StringWriter(2000);
+		evaluate(context, template.getSubjectTemplate(), subjectWriter, result);
+		StringWriter bodyWriter = new StringWriter(2000);
+		evaluate(context, template.getBodyTemplate(), bodyWriter, result);
+		return new SimpleMailContent(subjectWriter.toString(), bodyWriter.toString(), template.getAttachments());
+	}
+
+	public String decorateMailBody(String body, Locale locale) {
+		String template = getMailTemplate();
+		boolean htmlTemplate = StringHelper.isHtml(template);
+		if (htmlTemplate) {
+			template = decorateStyle(template);
+		}
+		boolean htmlContent =  StringHelper.isHtml(body);
+		if(htmlTemplate && !htmlContent) {
+			body = body.replace("&", "&amp;");
+			body = body.replace("<", "&lt;");
+			body = body.replace("\n", "<br />");
+		}
+		VelocityContext context = new VelocityContext();
+		context.put("content", body);
+		context.put("footer", MailHelper.getMailFooter(locale));
+		context.put("server", Settings.getServerContextPathURI());
+
+		StringWriter writer = new StringWriter(2000);
+		MailerResult result = new MailerResult();
+		evaluate(context, template, writer, result);
+		
+		String decoratedBody;
+		if(result.isSuccessful()) {
+			decoratedBody = writer.toString();
+		} else {
+			decoratedBody =body;
+		}
+		return decoratedBody;
+	}
+	
+	private String decorateStyle(String template) {
+		String emailCss = guiSettings.getGuiTheme().getEmailCss();
+		return new StringBuilder()
+				.append("<head><style>").append(emailCss).append("</style></head>")
+				.append(template)
+				.toString();
+	}
+
 	protected MailContent createWithContext(Identity recipient, MailTemplate template, MailerResult result) {
 		VelocityContext context;
 		if(template != null && template.getContext() != null) {
@@ -806,12 +881,17 @@ public class MailManagerImpl implements MailManager, InitializingBean  {
 	 */
 	protected void evaluate(Context context, String template, StringWriter writer, MailerResult mailerResult) {
 		try {
-			boolean result = velocityEngine.evaluate(context, writer, "mailTemplate", template);
-			if (result) {
-				mailerResult.setReturnCode(MailerResult.OK);
+			if(StringHelper.containsNonWhitespace(template)) {
+				boolean result = velocityEngine.evaluate(context, writer, "mailTemplate", template);
+				if (result) {
+					mailerResult.setReturnCode(MailerResult.OK);
+				} else {
+					log.warn("can't send email from user template with no reason");
+					mailerResult.setReturnCode(MailerResult.TEMPLATE_GENERAL_ERROR);
+				}
 			} else {
-				log.warn("can't send email from user template with no reason", null);
-				mailerResult.setReturnCode(MailerResult.TEMPLATE_GENERAL_ERROR);
+				// template is empty
+				mailerResult.setReturnCode(MailerResult.OK);
 			}
 		} catch (ParseErrorException e) {
 			log.warn("can't send email from user template", e);
@@ -907,9 +987,9 @@ public class MailManagerImpl implements MailManager, InitializingBean  {
 			
 			boolean makeRealMail = makeRealMail(toId, cc, bccLists);
 			Address fromAddress = null;
-			List<Address> toAddress = new ArrayList<Address>();
-			List<Address> ccAddress = new ArrayList<Address>();
-			List<Address> bccAddress = new ArrayList<Address>();
+			List<Address> toAddress = new ArrayList<>();
+			List<Address> ccAddress = new ArrayList<>();
+			List<Address> bccAddress = new ArrayList<>();
 			
 			if(fromId != null) {
 				DBMailRecipient fromRecipient = new DBMailRecipient();
@@ -944,13 +1024,13 @@ public class MailManagerImpl implements MailManager, InitializingBean  {
 			mail.setMetaId(metaId);
 			String subject = content.getSubject();
 			if(subject != null && subject.length() > 500) {
-				log.warn("Cut a too long subkect in name. Size: " + subject.length(), null);
+				log.warn("Cut a too long subkect in name. Size: " + subject.length());
 				subject = subject.substring(0, 500);
 			}
 			mail.setSubject(subject);
 			String body = content.getBody();
 			if(body != null && body.length() > 16777210) {
-				log.warn("Cut a too long body in mail. Size: " + body.length(), null);
+				log.warn("Cut a too long body in mail. Size: " + body.length());
 				body = body.substring(0, 16000000);
 			}
 			mail.setBody(body);
@@ -961,7 +1041,7 @@ public class MailManagerImpl implements MailManager, InitializingBean  {
 				if(ores != null) {
 					String resName = ores.getResourceableTypeName();
 					if(resName != null && resName.length() > 50) {
-						log.warn("Cut a too long resourceable type name in mail context: " + resName, null);
+						log.warn("Cut a too long resourceable type name in mail context: " + resName);
 						resName = resName.substring(0, 49);
 					}
 					mail.getContext().setResName(ores.getResourceableTypeName());
@@ -970,14 +1050,14 @@ public class MailManagerImpl implements MailManager, InitializingBean  {
 				
 				String resSubPath = context.getResSubPath();
 				if(resSubPath != null && resSubPath.length() > 2000) {
-					log.warn("Cut a too long resSubPath in mail context: " + resSubPath, null);
+					log.warn("Cut a too long resSubPath in mail context: " + resSubPath);
 					resSubPath = resSubPath.substring(0, 2000);
 				}
 				mail.getContext().setResSubPath(resSubPath);
 				
 				String businessPath = context.getBusinessPath();
 				if(businessPath != null && businessPath.length() > 2000) {
-					log.warn("Cut a too long resSubPath in mail context: " + businessPath, null);
+					log.warn("Cut a too long resSubPath in mail context: " + businessPath);
 					businessPath = businessPath.substring(0, 2000);
 				}
 				mail.getContext().setBusinessPath(businessPath);
@@ -1260,11 +1340,11 @@ public class MailManagerImpl implements MailManager, InitializingBean  {
 				// fxdiff: change from/replyto, see FXOLAT-74 . if no from is set, use default sysadmin-address (adminemail).
 				from = createAddress(WebappHelper.getMailConfig("mailReplyTo"));
 				if(from == null) {
-					log.error("MailConfigError: mailReplyTo is not set", null);
+					log.error("MailConfigError: mailReplyTo is not set");
 				}
 			}
 
-			List<Address> toList = new ArrayList<Address>();
+			List<Address> toList = new ArrayList<>();
 			if(StringHelper.containsNonWhitespace(to)) {
 				Address[] toAddresses = InternetAddress.parse(to);
 				for(Address toAddress:toAddresses) {
@@ -1277,7 +1357,7 @@ public class MailManagerImpl implements MailManager, InitializingBean  {
 				} 
 			}
 			
-			List<Address> ccList = new ArrayList<Address>();
+			List<Address> ccList = new ArrayList<>();
 			if(ccId != null) {
 				Address ccAddress = createAddress(ccId, result, true);
 				if(ccAddress != null) {
@@ -1509,7 +1589,7 @@ public class MailManagerImpl implements MailManager, InitializingBean  {
 					if (attachment == null || attachment.getSize()  <= 0) {
 						result.setReturnCode(MailerResult.ATTACHMENT_INVALID);
 						log.error("Tried to send mail wit attachment that does not exist::"
-								+ (attachment == null ? null : attachment.getName()), null);
+								+ (attachment == null ? null : attachment.getName()));
 						return msg;
 					}
 					BodyPart messageBodyPart = new MimeBodyPart();
@@ -1596,7 +1676,7 @@ public class MailManagerImpl implements MailManager, InitializingBean  {
 			p.put("mail.smtp.auth", "true");
 			mailSession = Session.getDefaultInstance(p, smtpAuth); 
 		}
-		if (log.isDebug()) {
+		if (log.isDebugEnabled()) {
 			// enable mail session debugging on console
 			mailSession.setDebug(true);
 		}
@@ -1690,7 +1770,7 @@ public class MailManagerImpl implements MailManager, InitializingBean  {
 					if (attachmentFile == null || !attachmentFile.exists()) {
 						result.setReturnCode(MailerResult.ATTACHMENT_INVALID);
 						log.error("Tried to send mail wit attachment that does not exist::"
-								+ (attachmentFile == null ? null : attachmentFile.getAbsolutePath()), null);
+								+ (attachmentFile == null ? null : attachmentFile.getAbsolutePath()));
 						return msg;
 					}
 					BodyPart filePart = new MimeBodyPart();
@@ -1729,7 +1809,7 @@ public class MailManagerImpl implements MailManager, InitializingBean  {
 	
 	private Multipart createMultipartAlternative(String text)
 	throws MessagingException {
-		String pureText = new NekoHTMLFilter().filter(text, true);
+		String pureText = new HtmlFilter().filter(text, true);
 		MimeBodyPart textPart = new MimeBodyPart();
 		textPart.setText(pureText, "utf-8");
 		
@@ -1758,9 +1838,7 @@ public class MailManagerImpl implements MailManager, InitializingBean  {
 		}
 
 		try{
-			if(Settings.isJUnitTest()) {
-				//we want not send really e-mails
-			} else if (mailModule.isMailHostEnabled() && result.getReturnCode() == MailerResult.OK) {
+			if (mailModule.isMailHostEnabled() && result.getReturnCode() == MailerResult.OK) {
 				// now send the mail
 				if(Settings.isDebuging()) {
 					logMessage(msg);

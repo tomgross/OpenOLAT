@@ -35,19 +35,22 @@ import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
+import org.apache.logging.log4j.Logger;
 import org.junit.Assert;
 import org.junit.Test;
+import org.olat.basesecurity.OrganisationService;
 import org.olat.core.CoreSpringFactory;
 import org.olat.core.commons.persistence.DBFactory;
 import org.olat.core.id.OLATResourceable;
+import org.olat.core.id.Organisation;
 import org.olat.core.logging.AssertException;
-import org.olat.core.logging.OLog;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.coordinate.CoordinatorManager;
 import org.olat.core.util.coordinate.SyncerCallback;
 import org.olat.core.util.coordinate.SyncerExecutor;
 import org.olat.core.util.resource.OresHelper;
 import org.olat.repository.RepositoryEntry;
+import org.olat.repository.RepositoryEntryStatusEnum;
 import org.olat.repository.RepositoryService;
 import org.olat.resource.OLATResource;
 import org.olat.resource.OLATResourceManager;
@@ -57,11 +60,13 @@ import org.springframework.beans.factory.annotation.Autowired;
 
 public class CoordinatorTest extends OlatTestCase {
 	
-	private static final OLog log = Tracing.createLoggerFor(CoordinatorTest.class);
+	private static final Logger log = Tracing.createLoggerFor(CoordinatorTest.class);
 
 	
 	@Autowired
 	private RepositoryService repositoryService;
+	@Autowired
+	private OrganisationService organisationService;
 	
 
 	/**
@@ -342,7 +347,9 @@ public class CoordinatorTest extends OlatTestCase {
 		OLATResource r =  CoreSpringFactory.getImpl(OLATResourceManager.class).findOrPersistResourceable(ores);
 		int maxLoop = 500;
 
-		final RepositoryEntry re = repositoryService.create("test", "perfTest", "testPerf", "perfTest description", r);
+		Organisation defOrganisation = organisationService.getDefaultOrganisation();
+		final RepositoryEntry re = repositoryService.create(null, "test", "perfTest", "testPerf", "perfTest description",
+				r, RepositoryEntryStatusEnum.trash, defOrganisation);
 		// create security group
 		repositoryService.update(re);
 		DBFactory.getInstance().commitAndCloseSession();
@@ -361,6 +368,7 @@ public class CoordinatorTest extends OlatTestCase {
 		long startTimeDoInSync = System.currentTimeMillis();
 		for (int i = 0; i<maxLoop ; i++) {
 			CoordinatorManager.getInstance().getCoordinator().getSyncer().doInSync(ores, new SyncerExecutor(){
+				@Override
 				public void execute() {
 					doTestPerformanceJob(re);
 				}

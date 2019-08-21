@@ -25,8 +25,8 @@
 package org.olat.course.editor;
 
 import java.io.File;
-import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.HashSet;
@@ -36,15 +36,13 @@ import java.util.Locale;
 import java.util.Set;
 import java.util.zip.ZipOutputStream;
 
-import org.apache.commons.io.IOUtils;
-import org.olat.basesecurity.BaseSecurityManager;
 import org.olat.core.CoreSpringFactory;
 import org.olat.core.commons.persistence.DBFactory;
 import org.olat.core.gui.translator.Translator;
 import org.olat.core.id.Identity;
 import org.olat.core.id.OLATResourceable;
 import org.olat.core.logging.AssertException;
-import org.olat.core.logging.OLog;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.Formatter;
 import org.olat.core.util.ObjectCloner;
@@ -74,6 +72,7 @@ import org.olat.course.tree.PublishTreeModel;
 import org.olat.properties.Property;
 import org.olat.repository.CatalogEntry;
 import org.olat.repository.RepositoryEntry;
+import org.olat.repository.RepositoryEntryStatusEnum;
 import org.olat.repository.RepositoryManager;
 import org.olat.repository.RepositoryService;
 import org.olat.repository.controllers.EntryChangedEvent;
@@ -97,7 +96,7 @@ import org.olat.user.UserManager;
  */
 public class PublishProcess {
 	
-	private static final OLog log = Tracing.createLoggerFor(PublishProcess.class);
+	private static final Logger log = Tracing.createLoggerFor(PublishProcess.class);
 	
 	private static final String PACKAGE = Util.getPackageName(PublishProcess.class);
 	private final Translator translator;
@@ -163,9 +162,9 @@ public class PublishProcess {
 		 * several book keeping lists which are also used to modify the course
 		 * editor model after the new runstructure is generated into ram.
 		 */
-		editorModelDeletedNodes = new ArrayList<CourseEditorTreeNode>();
-		editorModelInsertedNodes = new ArrayList<CourseEditorTreeNode>();
-		editorModelModifiedNodes = new ArrayList<CourseEditorTreeNode>();
+		editorModelDeletedNodes = new ArrayList<>();
+		editorModelInsertedNodes = new ArrayList<>();
+		editorModelModifiedNodes = new ArrayList<>();
 		resultingCourseRun = new Structure();
 		// has side effect on the above editorModelxxxNodes and the
 		// resultingCourseRun;
@@ -239,14 +238,14 @@ public class PublishProcess {
 	public PublishSetInformations testPublishSet(Locale locale) {
 		//check for valid references to tests, resource folder, wiki
 		List<StatusDescription> damagedRefsInsertedNodes = checkRefs(editorModelInsertedNodes);
-		if (damagedRefsInsertedNodes.size() > 0) {
+		if (!damagedRefsInsertedNodes.isEmpty()) {
 			// abort testing as a blocking error found!
 			StatusDescription[] status = new StatusDescription[damagedRefsInsertedNodes.size()];
 			status = damagedRefsInsertedNodes.toArray(status);
 			return new PublishSetInformations(status);
 		}
 		List<StatusDescription> damagedRefsModifiedNodes = checkRefs(editorModelModifiedNodes);
-		if (damagedRefsModifiedNodes.size() > 0) {
+		if (!damagedRefsModifiedNodes.isEmpty()) {
 			// abort testing as a blocking error found
 			StatusDescription[] status = new StatusDescription[damagedRefsModifiedNodes.size()];
 			status = damagedRefsModifiedNodes.toArray(status);
@@ -278,7 +277,7 @@ public class PublishProcess {
 		StatusDescription[] status = tmpCEV.getCourseStatus();
 		// check if the resulting course contains cycles.
 		Set<String> nodesInCycle = tmpCEV.listCycles();
-		if (nodesInCycle.size() > 0) {
+		if (!nodesInCycle.isEmpty()) {
 			// there are nodes generating cylces -> error! this is not a publishable
 			// set!
 			StringBuilder sb = new StringBuilder();
@@ -324,7 +323,7 @@ public class PublishProcess {
 	 */
 	private List<StatusDescription> checkRefs(List<CourseEditorTreeNode> courseEditorTreeNodes) {
 		// course Editor Nodes With Damaged Reference
-		List<StatusDescription> cetnDamaged = new ArrayList<StatusDescription>();
+		List<StatusDescription> cetnDamaged = new ArrayList<>();
 		for (Iterator<CourseEditorTreeNode> iter = courseEditorTreeNodes.iterator(); iter.hasNext();) {
 			CourseEditorTreeNode cetn = iter.next();
 			CourseNode cn = cetn.getCourseNode();
@@ -344,12 +343,12 @@ public class PublishProcess {
 	}
 	
 	private List<StatusDescription> checkUpdates(List<CourseEditorTreeNode> courseEditorTreeNodes, CourseEditorEnv cev) {
-		List<StatusDescription> notifications = new ArrayList<StatusDescription>();
+		List<StatusDescription> notifications = new ArrayList<>();
 		for (Iterator<CourseEditorTreeNode> iter = courseEditorTreeNodes.iterator(); iter.hasNext();) {
 			CourseEditorTreeNode cetn = iter.next();
 			CourseNode cn = cetn.getCourseNode();
 			List<StatusDescription> nodeNotes = cn.publishUpdatesExplanations(cev);
-			if(nodeNotes != null && nodeNotes.size() > 0) {
+			if(nodeNotes != null && !nodeNotes.isEmpty()) {
 				notifications.addAll(nodeNotes);
 			}
 		}
@@ -386,24 +385,24 @@ public class PublishProcess {
 		/*
 		 * use book keeping lists for publish event
 		 */
-		Set<String> deletedCourseNodeIds = new HashSet<String>();
-		if (editorModelDeletedNodes.size() > 0) {
+		Set<String> deletedCourseNodeIds = new HashSet<>();
+		if (!editorModelDeletedNodes.isEmpty()) {
 			for (Iterator<CourseEditorTreeNode> iter = editorModelDeletedNodes.iterator(); iter.hasNext();) {
 				CourseEditorTreeNode cetn = iter.next();
 				CourseNode cn = cetn.getCourseNode();
 				deletedCourseNodeIds.add(cn.getIdent());
 			}
 		}
-		Set<String> insertedCourseNodeIds = new HashSet<String>();
-		if (editorModelInsertedNodes.size() > 0) {
+		Set<String> insertedCourseNodeIds = new HashSet<>();
+		if (!editorModelInsertedNodes.isEmpty()) {
 			for (Iterator<CourseEditorTreeNode> iter = editorModelInsertedNodes.iterator(); iter.hasNext();) {
 				CourseEditorTreeNode cetn = iter.next();
 				CourseNode cn = cetn.getCourseNode();
 				insertedCourseNodeIds.add(cn.getIdent());
 			}
 		}
-		Set<String> modifiedCourseNodeIds = new HashSet<String>();
-		if (editorModelModifiedNodes.size() > 0) {
+		Set<String> modifiedCourseNodeIds = new HashSet<>();
+		if (!editorModelModifiedNodes.isEmpty()) {
 			for (Iterator<CourseEditorTreeNode> iter = editorModelModifiedNodes.iterator(); iter.hasNext();) {
 				CourseEditorTreeNode cetn = iter.next();
 				CourseNode cn = cetn.getCourseNode();
@@ -434,7 +433,7 @@ public class PublishProcess {
 		 */		
 		UserManager um = UserManager.getInstance();
 		String charset = um.getUserCharset(identity);
-		if (editorModelDeletedNodes.size() > 0) {
+		if (!editorModelDeletedNodes.isEmpty()) {
 			for (Iterator<CourseEditorTreeNode> iter = editorModelDeletedNodes.iterator(); iter.hasNext();) {
 				CourseEditorTreeNode cetn = iter.next();
 				CourseNode cn = cetn.getCourseNode();
@@ -458,7 +457,7 @@ public class PublishProcess {
 		/*
 		 * mark modified ones as no longer dirty
 		 */
-		if (editorModelModifiedNodes.size() > 0) {
+		if (!editorModelModifiedNodes.isEmpty()) {
 			for (Iterator<CourseEditorTreeNode> iter = editorModelModifiedNodes.iterator(); iter.hasNext();) {
 				CourseEditorTreeNode cetn = iter.next();
 				CourseNode cn = cetn.getCourseNode();
@@ -476,7 +475,7 @@ public class PublishProcess {
 		/*
 		 * mark newly published ones is no longer new and dirty
 		 */
-		if (editorModelInsertedNodes.size() > 0) {
+		if (!editorModelInsertedNodes.isEmpty()) {
 			for (Iterator<CourseEditorTreeNode> iter = editorModelInsertedNodes.iterator(); iter.hasNext();) {
 				CourseEditorTreeNode cetn = iter.next();
 				CourseNode cn = cetn.getCourseNode();
@@ -531,19 +530,13 @@ public class PublishProcess {
 		String archiveName = cn.getType() + "_"
 				+ StringHelper.transformDisplayNameToFileSystemName(cn.getShortName())
 				+ "_" + Formatter.formatDatetimeFilesystemSave(new Date(System.currentTimeMillis())) + ".zip";
-		
-		FileOutputStream fileStream = null;
-		ZipOutputStream exportStream = null;
-		try {
-			File exportFile = new File(exportDirectory, archiveName);
-			fileStream = new FileOutputStream(exportFile);
-			exportStream = new ZipOutputStream(fileStream);
-			oldCn.archiveNodeData(locale, course, null, exportStream, charset);
-		} catch (FileNotFoundException e) {
+
+		File exportFile = new File(exportDirectory, archiveName);
+		try(FileOutputStream fileStream = new FileOutputStream(exportFile);
+				ZipOutputStream exportStream = new ZipOutputStream(fileStream)) {
+			oldCn.archiveNodeData(locale, course, null, exportStream, "", charset);
+		} catch (IOException e) {
 			log.error("", e);
-		} finally {
-			IOUtils.closeQuietly(exportStream);
-			IOUtils.closeQuietly(fileStream);
 		}
 	}
 
@@ -631,8 +624,6 @@ public class PublishProcess {
 						break a_a;
 					}
 				}
-				
-				category.setOwnerGroup(BaseSecurityManager.getInstance().createAndPersistSecurityGroup());
 				cm.addCatalogEntry(parentCategory, category);
 			} else {
 				for(Iterator<CatalogEntry> refIt=refParentCategories.iterator(); refIt.hasNext(); ) {
@@ -667,7 +658,7 @@ public class PublishProcess {
 			msg.append(translator.translate("pbl.confirm"));
 		}
 		
-		if(nodeIdsToPublish != null && nodeIdsToPublish.size() > 0) {
+		if(nodeIdsToPublish != null && !nodeIdsToPublish.isEmpty()) {
 			msg.append("<ul class='list-unstyled'>");
 
 			CourseEditorTreeModel cetm = course.getEditorTreeModel();
@@ -701,38 +692,49 @@ public class PublishProcess {
 		return publishTreeModel;
 	}
 
-	public void changeGeneralAccess(Identity author, int access, boolean membersOnly) {
-		RepositoryManager.getInstance().setAccess(repositoryEntry, access, membersOnly);
+	public void changeGeneralAccess(Identity author, RepositoryEntryStatusEnum access, boolean allUsers, boolean guests) {
+		RepositoryManager.getInstance().setAccess(repositoryEntry, access, allUsers, guests);
 		MultiUserEvent modifiedEvent = new EntryChangedEvent(repositoryEntry, author, Change.modifiedAtPublish, "publish");
 		CoordinatorManager.getInstance().getCoordinator().getEventBus().fireEventToListenersOf(modifiedEvent, repositoryEntry);
 	}
 	
 	public void changeAccessAndProperties(Identity author, CourseAccessAndProperties accessAndProps) {
+		ACService acService = CoreSpringFactory.getImpl(ACService.class);
 		RepositoryManager manager = RepositoryManager.getInstance();
 		
-		manager.setAccessAndProperties(accessAndProps.getRepositoryEntry(), accessAndProps.getAccess(),
-				accessAndProps.isMembersOnly(), accessAndProps.isCanCopy(), accessAndProps.isCanReference(),
-				accessAndProps.isCanDownload());
-		manager.setLeaveSetting(accessAndProps.getRepositoryEntry(), accessAndProps.getSetting());
+		RepositoryEntry entry = accessAndProps.getRepositoryEntry();
+		
+		entry = manager.setAccess(entry,
+				accessAndProps.isAllUsers(), accessAndProps.isGuests(), accessAndProps.isBookable(),
+				accessAndProps.getSetting(), accessAndProps.getOrganisations());
+		
+		entry = manager.setAccessAndProperties(entry, accessAndProps.getStatus(),
+				accessAndProps.isAllUsers(), accessAndProps.isGuests(),
+				accessAndProps.isCanCopy(), accessAndProps.isCanReference(), accessAndProps.isCanDownload());
 		
 		List<OfferAccess> offerAccess = accessAndProps.getOfferAccess();
-		// 1: add new and update existing offerings
-		ACService acService = CoreSpringFactory.getImpl(ACService.class);
-		for (OfferAccess newLink : offerAccess) {
-			if(accessAndProps.getConfirmationEmail() != null) {
-				Offer offer = newLink.getOffer();
-				boolean confirmation = accessAndProps.getConfirmationEmail().booleanValue();
-				if(offer.isConfirmationEmail() != confirmation) {
-					offer.setConfirmationEmail(confirmation);
-					if(offer.getKey() != null) {
-						offer = acService.save(offer);
+		List<Offer> deletedOffers = accessAndProps.getDeletedOffer();
+		if(entry.isBookable()) {
+			// 1: add new and update existing offerings
+			for (OfferAccess newLink : offerAccess) {
+				if(accessAndProps.getConfirmationEmail() != null) {
+					Offer offer = newLink.getOffer();
+					boolean confirmation = accessAndProps.getConfirmationEmail().booleanValue();
+					if(offer.isConfirmationEmail() != confirmation) {
+						offer.setConfirmationEmail(confirmation);
+						if(offer.getKey() != null) {
+							acService.save(offer);
+						}
 					}
 				}
+				acService.saveOfferAccess(newLink);
 			}
-			acService.saveOfferAccess(newLink);
+		} else {
+			for (OfferAccess deletedOffer : offerAccess) {
+				acService.deleteOffer(deletedOffer.getOffer());
+			}
 		}
 		// 2: remove offerings not available anymore
-		List<Offer> deletedOffers = accessAndProps.getDeletedOffer();
 		for (Offer deletedOffer : deletedOffers) {
 			acService.deleteOffer(deletedOffer);
 		}
@@ -785,7 +787,7 @@ public class PublishProcess {
 			this.existingRun = existingRun;
 			this.publishNodeIds = userSelectedNodeIdsToPublish;
 			// internal use
-			this.skippableNodes = new ArrayList<CourseEditorTreeNode>();
+			this.skippableNodes = new ArrayList<>();
 		}
 
 		@Override
@@ -829,11 +831,10 @@ public class PublishProcess {
 				if (unchanged) {
 					// already published, add it as it is. Silent "re-publish"
 					addNodeTo(resultingCourseRun, cetn);
-        } else {
-        	// changed in edit but not published => take old from existingRun
-        	addNodeTo(resultingCourseRun, existingRun.getNode(cetn.getIdent()), cetn);
-        }
-				return;
+				} else {
+					// changed in edit but not published => take old from existingRun
+					addNodeTo(resultingCourseRun, existingRun.getNode(cetn.getIdent()), cetn);
+				}
 			} else if (publishNode && !alreadyInRun) {
 				if (dirtyOnly) {
 					// publish modified node which was in the run once. Then moved under a
@@ -843,7 +844,7 @@ public class PublishProcess {
 				} else if (cetn.isDeleted()) {
 					// publish deletion of a new node
 					editorModelDeletedNodes.add(cetn);
-					List<CourseEditorTreeNode> getsAlsoDeleted = new ArrayList<CourseEditorTreeNode>();
+					List<CourseEditorTreeNode> getsAlsoDeleted = new ArrayList<>();
 					collectSubTreeNodesStartingFrom(cetn, getsAlsoDeleted);
 					// whole subtree added, marked as being deleted
 					editorModelDeletedNodes.addAll(getsAlsoDeleted);
@@ -870,7 +871,7 @@ public class PublishProcess {
 				} else if (cetn.isDeleted()) {
 					// publish deletion of a node
 					editorModelDeletedNodes.add(cetn);
-					List<CourseEditorTreeNode> getsAlsoDeleted = new ArrayList<CourseEditorTreeNode>();
+					List<CourseEditorTreeNode> getsAlsoDeleted = new ArrayList<>();
 					collectSubTreeNodesStartingFrom(cetn, getsAlsoDeleted);
 					// whole subtree added, marked as being deleted
 					editorModelDeletedNodes.addAll(getsAlsoDeleted);
@@ -889,19 +890,18 @@ public class PublishProcess {
 					log.error(cetn.getTitle() + " - try to publish node which is in an unkown state (OO-249: publish do nothing).");
 				}
 			} else {
-				// ...(!publishNode && !alreadyInRun){
+				// !publishNode && !alreadyInRun
 				// check condition, and add all subnodes to be skipped
 				if (!cetn.isNewnode()) { 
 					log.warn(cetn.getTitle()+" - node is not to publish and not in run -> hence it should be isNewnode() == true, but it is not (OO-249: ignore it until explicitly published)!!");
 				}
-				List<CourseEditorTreeNode> skippable = new ArrayList<CourseEditorTreeNode>();
+				List<CourseEditorTreeNode> skippable = new ArrayList<>();
 				collectSubTreeNodesStartingFrom(cetn, skippable);
 				// remember this new node with its subtree as not being published
 				// there may float a dirty node in the subtree, which got there by
 				// moving
 				// this node would get published if we do not keep book here.
 				skippableNodes.addAll(skippable);
-				return;
 			}
 		}
 

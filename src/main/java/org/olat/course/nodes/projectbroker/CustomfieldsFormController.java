@@ -90,7 +90,7 @@ public class CustomfieldsFormController extends FormBasicController {
 	}
 
 	/**
-	 * @see org.olat.core.gui.components.Form#validate(org.olat.core.gui.UserRequest)
+	 * @see org.olat.core.gui.components.Form#validate(org.olat.core.gui.UserRequest, Identity)
 	 */
 	public boolean validate() {
 		return true;
@@ -178,6 +178,7 @@ public class CustomfieldsFormController extends FormBasicController {
 		customFieldNameElementList.add(nameElement);
 		
 		TextElement valueElement = uifactory.addTextAreaElement("customfield_value_" + i, "customfield.value.label", 2500, 5, 2, true, customField.getValue(), formLayout);
+		valueElement.setLabel("customfield.value.label", null);
 		if (i == 0)  valueElement.setExampleKey("customfield.example.value", null);
 		customFieldValueElementList.add(valueElement);
 		

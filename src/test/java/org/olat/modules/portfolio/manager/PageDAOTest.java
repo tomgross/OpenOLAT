@@ -33,9 +33,11 @@ import org.olat.modules.portfolio.PortfolioRoles;
 import org.olat.modules.portfolio.PortfolioService;
 import org.olat.modules.portfolio.Section;
 import org.olat.modules.portfolio.model.BinderImpl;
+import org.olat.modules.portfolio.model.EvaluationFormPart;
 import org.olat.modules.portfolio.model.HTMLPart;
 import org.olat.modules.portfolio.model.SpacerPart;
 import org.olat.modules.portfolio.model.TitlePart;
+import org.olat.repository.RepositoryEntry;
 import org.olat.test.JunitTestHelper;
 import org.olat.test.OlatTestCase;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -245,7 +247,7 @@ public class PageDAOTest extends OlatTestCase {
 	}
 	
 	@Test
-	public void getLastPage() {
+	public void getLastPages() {
 		//an owned binder
 		Identity author = JunitTestHelper.createAndPersistIdentityAsRndUser("pf-1");
 		Binder binder = portfolioService.createNewBinder("Binder p2", "A binder with 2 page", null, author);
@@ -262,14 +264,17 @@ public class PageDAOTest extends OlatTestCase {
 		Assert.assertNotNull(page1);
 		
 		//reload
-		Page lastBinderPage = pageDao.getLastPage(author, true);
-		Assert.assertNotNull(lastBinderPage);
-		Assert.assertEquals(page2, lastBinderPage);
+		List<Page> lastPage = pageDao.getLastPages(author, 1);
+		Assert.assertNotNull(lastPage);
+		Assert.assertEquals(1, lastPage.size());
+		Assert.assertEquals(page3, lastPage.get(0));
 		
 		//reload
-		Page lastFloatingPage = pageDao.getLastPage(author, false);
-		Assert.assertNotNull(lastFloatingPage);
-		Assert.assertEquals(page3, lastFloatingPage);
+		List<Page> lastPages = pageDao.getLastPages(author, 2);
+		Assert.assertNotNull(lastPages);
+		Assert.assertEquals(2, lastPages.size());
+		Assert.assertTrue(lastPages.contains(page3));
+		Assert.assertTrue(lastPages.contains(page2));
 	}
 	
 	@Test
@@ -379,5 +384,24 @@ public class PageDAOTest extends OlatTestCase {
 		Page reloadedPage = pageDao.loadByKey(page.getKey());
 		pageDao.deletePage(reloadedPage);
 		dbInstance.commit();
+	}
+	
+	@Test
+	public void isFormEntryInUse() {
+		RepositoryEntry formRe = JunitTestHelper.createAndPersistRepositoryEntry();
+		RepositoryEntry re = JunitTestHelper.createAndPersistRepositoryEntry();
+		Page page = pageDao.createAndPersist("Page 11", "A page with repo.", null, null, true, null, null);
+		dbInstance.commitAndCloseSession();
+		
+		EvaluationFormPart evaluationPart = new EvaluationFormPart();
+		evaluationPart.setFormEntry(formRe);
+		PageBody reloadedBody = pageDao.loadPageBodyByKey(page.getBody().getKey());
+		pageDao.persistPart(reloadedBody, evaluationPart);
+		dbInstance.commitAndCloseSession();
+		
+		boolean formIsUsed = pageDao.isFormEntryInUse(formRe);
+		Assert.assertTrue(formIsUsed);
+		boolean isNotUsed = pageDao.isFormEntryInUse(re);
+		Assert.assertFalse(isNotUsed);
 	}
 }

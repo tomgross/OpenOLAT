@@ -25,6 +25,8 @@ import org.olat.core.gui.render.Renderer;
 import org.olat.core.gui.render.StringOutput;
 import org.olat.core.gui.render.URLBuilder;
 import org.olat.core.gui.translator.Translator;
+import org.olat.modules.lecture.model.LectureBlockAndRollCall;
+import org.olat.modules.lecture.ui.AppealRollCallRow;
 import org.olat.modules.lecture.ui.LectureBlockAndRollCallRow;
 
 /**
@@ -42,16 +44,23 @@ public class LecturesCompulsoryRenderer implements FlexiCellRenderer {
 			Object obj = source.getFlexiTableElement().getTableDataModel().getObject(row);
 			if(obj instanceof LectureBlockAndRollCallRow) {
 				LectureBlockAndRollCallRow rollCallRow = (LectureBlockAndRollCallRow)obj;
-				if(!rollCallRow.getRow().isCompulsory()) {
-					target.append("<span class='o_lecture_free'>")
-					      .append(cellValue.toString())
-					      .append(" *</span>");
-				} else {
-					target.append(cellValue.toString());
-				}
+				render(target, cellValue, rollCallRow.getRow());
+			} else if(obj instanceof AppealRollCallRow) {
+				AppealRollCallRow rollCallRow = (AppealRollCallRow)obj;
+				render(target, cellValue, rollCallRow.getLectureBlockAndRollCall());
 			} else {
 				target.append(cellValue.toString());
 			}
+		}
+	}
+	
+	private void render(StringOutput target, Object cellValue, LectureBlockAndRollCall rollCallRow) {
+		if(!rollCallRow.isCompulsory()) {
+			target.append("<span class='o_lecture_free'>")
+			      .append(cellValue.toString())
+			      .append(" *</span>");
+		} else {
+			target.append(cellValue.toString());
 		}
 	}
 }

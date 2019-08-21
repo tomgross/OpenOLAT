@@ -185,6 +185,10 @@
 			}
 			color: $text-muted;
 		}
+		
+		.o_curriculum_displayname, .o_curriculum_root_el_identifier, .o_curriculum_root_el_displayname {
+			font-size: 12px;
+		}
 	}
 	
 	.o_cmember a.o_mail {
@@ -315,5 +319,24 @@ div.o_correction_navigation {
 				display: none;
 			}
 		}
+	}
+}
+.o_ms_stack_panel {
+	.o_toolbar {
+		margin-top: 0px;
+	}
+}
+.o_ms_bold {
+	font-weight: bold;
+}
+.o_ms_legend {
+	padding: 5px;
+	
+	li {
+		display: block;
+		font-size: 90%;
+	}
+	.ident {
+		font-weight: bold;
 	}
 }

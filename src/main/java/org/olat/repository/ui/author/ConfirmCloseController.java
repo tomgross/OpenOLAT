@@ -97,7 +97,7 @@ public class ConfirmCloseController extends FormBasicController {
 			notificationEl = uifactory.addCheckboxesHorizontal("notifications", "details.notifications.acknowledge", layoutCont, new String[]{ "" },  notifications);
 			if(repositoryModule.isLifecycleNotificationByCloseDeleteEnabled()) {
 				notificationEl.select("", true);
-				notificationEl.setEnabled(ureq.getUserSession().getRoles().isOLATAdmin());
+				notificationEl.setEnabled(ureq.getUserSession().getRoles().isSystemAdmin());
 			}
 			
 			FormLayoutContainer buttonsCont = FormLayoutContainer.createButtonLayout("buttons", getTranslator());

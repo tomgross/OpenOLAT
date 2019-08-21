@@ -65,7 +65,7 @@ public class ImageRenderer extends DefaultComponentRenderer {
 	}
 	
 	private void renderMovie(StringOutput sb, ImageComponent ic) {
-		// Use configured calculated scaled size, fallback to default size
+		// Use configured calculated scaled size, fallback to default size / ratio
 		int width = 320;
 		int height = 240;
 		Size size = ic.getScaledSize();
@@ -92,7 +92,15 @@ public class ImageRenderer extends DefaultComponentRenderer {
 		sb.append("<div id='").append(compId).append("' class='o_video'>"); // START component
 		// The inner component 
 		String imgId = "mov_" + ic.getDispatchID();
-		sb.append("<div id='").append(imgId).append("' name='").append(imgId).append("' style='width:").append(width).append("px; height:").append(height).append("px;' class='o_video_wrapper'></div>")
+		sb.append("<div id='").append(imgId).append("' name='").append(imgId).append("' style='width:");
+		if(size != null) {
+			sb.append(width).append("px; height:").append(height).append("px;");
+		} else {
+			// if no size available, scale to full width
+			sb.append("100%;");
+
+		}
+		sb.append("' class='o_video_wrapper'></div>")
 		  .append("<script type='text/javascript'>")
 		  .append("/* <![CDATA[ */")
 		  .append("BPlayer.insertPlayer('").append(Settings.createServerURI()).append(mapperUrl);
@@ -128,6 +136,9 @@ public class ImageRenderer extends DefaultComponentRenderer {
 		// The inner component 
 		String imgId = divWrapper ? "o_img" + ic.getDispatchID() : compId;
 		sb.append("<img").append(" id='").append(imgId).append("'");
+		if(StringHelper.containsNonWhitespace(ic.getCssClasses())) {
+			sb.append(" class=\"").append(ic.getCssClasses()).append("\"");
+		}
 		if (scaledSize != null) {
 			sb.append(" width=\"").append(scaledSize.getWidth()).append("\"");
 			sb.append(" height=\"").append(scaledSize.getHeight()).append("\"");

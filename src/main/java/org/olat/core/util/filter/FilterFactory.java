@@ -22,13 +22,12 @@ package org.olat.core.util.filter;
 
 import org.olat.core.util.filter.impl.AddBaseURLToMediaRelativeURLFilter;
 import org.olat.core.util.filter.impl.ConditionalHTMLCommentsFilter;
-import org.olat.core.util.filter.impl.NekoHTMLFilter;
+import org.olat.core.util.filter.impl.HtmlFilter;
 import org.olat.core.util.filter.impl.OWASPAntiSamyXSSFilter;
 import org.olat.core.util.filter.impl.SimpleHTMLTagsFilter;
 import org.olat.core.util.filter.impl.SmileysCssToDataUriFilter;
 import org.olat.core.util.filter.impl.XMLValidCharacterFilter;
 import org.olat.core.util.filter.impl.XMLValidEntityFilter;
-import org.olat.core.util.filter.impl.OWASPAntiSamyXSSFilter.Variant;
 
 /**
  * Description:<br>
@@ -44,7 +43,7 @@ import org.olat.core.util.filter.impl.OWASPAntiSamyXSSFilter.Variant;
 public class FilterFactory {
 	// the html tag filter is static, not stateful
 	private static final Filter htmlTagsFilter = new SimpleHTMLTagsFilter();
-	private static final Filter htmlTagsAndDesescapingFilter = new NekoHTMLFilter();
+	private static final Filter htmlTagsAndDesescapingFilter = new HtmlFilter();
 	private static final Filter conditionalCommentsFilter = new ConditionalHTMLCommentsFilter();
 	private static final Filter xmlValidCharacterFilter = new XMLValidCharacterFilter();
 	private static final Filter smileysCssToDataUriFilter = new SmileysCssToDataUriFilter();
@@ -97,24 +96,9 @@ public class FilterFactory {
 	 * @param set the maximum length allowed by the xss filter, -1 take the default value from the policy file
 	 * @return
 	 */
-	public static Filter getXSSFilter(int maxLength) {
+	public static Filter getXSSFilter() {
 		// currently the XSS filter is statefull
-		return new OWASPAntiSamyXSSFilter(maxLength, false);
-	}
-	
-	/**
-	 * 
-	 * @param maxLength
-	 * @return
-	 */
-	public static Filter getXSSFilterForTextField(int maxLength) {
-		// currently the XSS filter is statefull
-		return new OWASPAntiSamyXSSFilter(maxLength, false, Variant.tinyMce, false);
-	}
-	
-	public static Filter getXSSFilterForWiki(int maxLength) {
-		// currently the XSS filter is statefull
-		return new OWASPAntiSamyXSSFilter(maxLength, false, Variant.wiki, false);
+		return new OWASPAntiSamyXSSFilter();
 	}
 
 	/**

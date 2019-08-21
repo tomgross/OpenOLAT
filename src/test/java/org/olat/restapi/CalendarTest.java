@@ -22,6 +22,7 @@ package org.olat.restapi;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
+import static org.olat.test.JunitTestHelper.random;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -42,13 +43,15 @@ import org.apache.http.client.methods.HttpGet;
 import org.apache.http.client.methods.HttpPost;
 import org.apache.http.client.methods.HttpPut;
 import org.apache.http.util.EntityUtils;
-import org.codehaus.jackson.map.ObjectMapper;
-import org.codehaus.jackson.type.TypeReference;
+import org.apache.logging.log4j.Logger;
+import org.assertj.core.api.SoftAssertions;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 import org.olat.basesecurity.GroupRoles;
+import org.olat.commons.calendar.CalendarManagedFlag;
 import org.olat.commons.calendar.CalendarManager;
+import org.olat.commons.calendar.model.Kalendar;
 import org.olat.commons.calendar.model.KalendarEvent;
 import org.olat.commons.calendar.restapi.CalendarVO;
 import org.olat.commons.calendar.restapi.EventVO;
@@ -56,23 +59,29 @@ import org.olat.commons.calendar.restapi.EventVOes;
 import org.olat.commons.calendar.ui.components.KalendarRenderWrapper;
 import org.olat.core.commons.persistence.DB;
 import org.olat.core.id.Identity;
+import org.olat.core.logging.Tracing;
 import org.olat.course.CourseFactory;
 import org.olat.course.ICourse;
 import org.olat.course.config.CourseConfig;
 import org.olat.repository.RepositoryEntry;
+import org.olat.repository.RepositoryEntryStatusEnum;
 import org.olat.repository.RepositoryManager;
 import org.olat.repository.RepositoryService;
-import org.olat.restapi.repository.course.CoursesWebService;
 import org.olat.restapi.support.vo.CourseConfigVO;
 import org.olat.test.JunitTestHelper;
-import org.olat.test.OlatJerseyTestCase;
+import org.olat.test.OlatRestTestCase;
 import org.springframework.beans.factory.annotation.Autowired;
+
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 /**
  * 
  * @author srosse, stephane.rosse@frentix.com, http://www.frentix.com
  */
-public class CalendarTest extends OlatJerseyTestCase {
+public class CalendarTest extends OlatRestTestCase {
+	
+	private static final Logger log = Tracing.createLoggerFor(CalendarTest.class);
 
 	private static ICourse course1, course2;
 	private static Identity id1, id2;
@@ -89,17 +98,19 @@ public class CalendarTest extends OlatJerseyTestCase {
 	@Before
 	public void startup() {
 		if(id1 == null) {
-			id1 = JunitTestHelper.createAndPersistIdentityAsUser("cal-1-" + UUID.randomUUID().toString());
+			id1 = JunitTestHelper.createAndPersistIdentityAsRndUser("cal-1");
 		}
 		if(id2 == null) {
-			id2 = JunitTestHelper.createAndPersistIdentityAsUser("cal-2-" + UUID.randomUUID().toString());
+			id2 = JunitTestHelper.createAndPersistIdentityAsRndUser("cal-2");
 		}
 		
 		if(course1 == null) {
 			//create a course with a calendar
 			CourseConfigVO config = new CourseConfigVO();
 			config.setCalendar(Boolean.TRUE);
-			course1 = CoursesWebService.createEmptyCourse(id1, "Cal course", "Cal course", config);
+			RepositoryEntry courseEntry = JunitTestHelper.deployBasicCourse(id1,
+					RepositoryEntryStatusEnum.preparation, false, false);
+			course1 = CourseFactory.loadCourse(courseEntry);
 			dbInstance.commit();
 			
 			ICourse course = CourseFactory.loadCourse(course1.getResourceableId());
@@ -126,7 +137,7 @@ public class CalendarTest extends OlatJerseyTestCase {
 			calendarManager.addEventTo(calendarWrapper.getKalendar(), event2);
 			
 			RepositoryEntry entry = repositoryManager.lookupRepositoryEntry(course1, false);
-			entry = repositoryManager.setAccess(entry, RepositoryEntry.ACC_USERS, false);
+			entry = repositoryManager.setAccess(entry, RepositoryEntryStatusEnum.published, true, false);
 			repositoryService.addRole(id1, entry, GroupRoles.participant.name());
 			
 			dbInstance.commit();
@@ -136,14 +147,16 @@ public class CalendarTest extends OlatJerseyTestCase {
 			//create a course with a calendar
 			CourseConfigVO config = new CourseConfigVO();
 			config.setCalendar(Boolean.TRUE);
-			course2 = CoursesWebService.createEmptyCourse(id2, "Cal course - 2", "Cal course - 2", config);
+			RepositoryEntry courseEntry = JunitTestHelper.deployBasicCourse(id2,
+					RepositoryEntryStatusEnum.preparation, false, false);
+			course2 = CourseFactory.loadCourse(courseEntry);
 			dbInstance.commit();
 
 			KalendarRenderWrapper calendarWrapper = calendarManager.getCourseCalendar(course2);
 			Assert.assertNotNull(calendarWrapper);
 
 			RepositoryEntry entry = repositoryManager.lookupRepositoryEntry(course2, false);
-			entry = repositoryManager.setAccess(entry, RepositoryEntry.ACC_USERS, false);
+			entry = repositoryManager.setAccess(entry, RepositoryEntryStatusEnum.published, true, false);
 			dbInstance.commit();
 		}
 	}
@@ -424,15 +437,6 @@ public class CalendarTest extends OlatJerseyTestCase {
 		RestConnection conn = new RestConnection();
 		assertTrue(conn.login(id2.getName(), "A6B7C8"));
 		
-		URI calUri = UriBuilder.fromUri(getContextURI()).path("users").path(id2.getKey().toString()).path("calendars").build();
-		HttpGet calMethod = conn.createGet(calUri, MediaType.APPLICATION_JSON, true);
-		HttpResponse response = conn.execute(calMethod);
-		assertEquals(200, response.getStatusLine().getStatusCode());
-		List<CalendarVO> vos = parseArray(response);
-		assertNotNull(vos);
-		assertTrue(2 <= vos.size());
-		CalendarVO calendarCourse_1 = getCourseCalendar(vos, course1);
-		
 		//create an event
 		EventVO event = new EventVO();
 		Calendar cal = Calendar.getInstance();
@@ -442,8 +446,11 @@ public class CalendarTest extends OlatJerseyTestCase {
 		String subject = UUID.randomUUID().toString();
 		event.setSubject(subject);
 
+		KalendarRenderWrapper calendarWrapper = calendarManager.getCourseCalendar(course1);
+		String calendarCourse1Id = "course_" + calendarWrapper.getKalendar().getCalendarID();
+
 		URI eventUri = UriBuilder.fromUri(getContextURI()).path("users").path(id2.getKey().toString())
-				.path("calendars").path(calendarCourse_1.getId()).path("event").build();
+				.path("calendars").path(calendarCourse1Id).path("event").build();
 		HttpPut putEventMethod = conn.createPut(eventUri, MediaType.APPLICATION_JSON, true);
 		conn.addJsonEntity(putEventMethod, event);
 		HttpResponse putEventResponse = conn.execute(putEventMethod);
@@ -496,6 +503,81 @@ public class CalendarTest extends OlatJerseyTestCase {
 		Assert.assertTrue(found);
 
 		conn.shutdown();
+	}
+	
+	@Test
+	public void testAttributeMapping() throws IOException, URISyntaxException {
+		// create a user and login
+		Identity identtiy = JunitTestHelper.createAndPersistIdentityAsRndUser("cal-3");
+		RestConnection conn = new RestConnection();
+		conn.login(identtiy.getName(), JunitTestHelper.PWD);
+		
+		//create a course with a calendar
+		CourseConfigVO config = new CourseConfigVO();
+		config.setCalendar(Boolean.TRUE);
+		RepositoryEntry courseEntry = JunitTestHelper.deployBasicCourse(identtiy, RepositoryEntryStatusEnum.published,
+				false, false);
+		ICourse course = CourseFactory.loadCourse(courseEntry);
+		dbInstance.commit();
+		
+		// load the calendar
+		URI calUri = UriBuilder.fromUri(getContextURI()).path("users").path(identtiy.getKey().toString()).path("calendars").build();
+		HttpGet calMethod = conn.createGet(calUri, MediaType.APPLICATION_JSON, true);
+		HttpResponse response = conn.execute(calMethod);
+		List<CalendarVO> vos = parseArray(response);
+		CalendarVO calendar = getCourseCalendar(vos, course);
+		
+		// Add an calendar event
+		EventVO event = new EventVO();
+		Calendar cal = Calendar.getInstance();
+		event.setBegin(cal.getTime());
+		cal.add(Calendar.HOUR_OF_DAY, 1);
+		event.setEnd(cal.getTime());
+		event.setSubject(random());
+		event.setAllDayEvent(true);
+		event.setDescription(random());
+		event.setExternalId(random());
+		event.setExternalSource(random());
+		event.setLocation(random());
+		event.setManagedFlags(CalendarManagedFlag.description.name());
+		event.setLiveStreamUrl(random());
+
+		URI eventUri = UriBuilder.fromUri(getContextURI()).path("users").path(identtiy.getKey().toString())
+				.path("calendars").path(calendar.getId()).path("event").build();
+		HttpPost postEventMethod = conn.createPost(eventUri, MediaType.APPLICATION_JSON);
+		conn.addJsonEntity(postEventMethod, event);
+		conn.execute(postEventMethod);
+		
+		// Load the calendar from the manager and compare the event attributes
+		Kalendar kalendar = calendarManager.getCourseCalendar(course).getKalendar();
+		KalendarEvent kalendarEvent = kalendar.getEvents().get(0);
+		SoftAssertions softly = new SoftAssertions();
+		softly.assertThat(kalendarEvent.getBegin()).isEqualTo(event.getBegin());
+		softly.assertThat(kalendarEvent.getEnd()).isEqualTo(event.getEnd());
+		softly.assertThat(kalendarEvent.getSubject()).isEqualTo(event.getSubject());
+		softly.assertThat(kalendarEvent.isAllDayEvent()).isEqualTo(event.isAllDayEvent());
+		softly.assertThat(kalendarEvent.getDescription()).isEqualTo(event.getDescription());
+		softly.assertThat(kalendarEvent.getExternalId()).isEqualTo(event.getExternalId());
+		softly.assertThat(kalendarEvent.getLocation()).isEqualTo(event.getLocation());
+		softly.assertThat(kalendarEvent.getManagedFlags()).containsExactly(CalendarManagedFlag.description);
+		softly.assertThat(kalendarEvent.getLiveStreamUrl()).isEqualTo(event.getLiveStreamUrl());
+		
+		// Load the calendar from REST again and compare the event attributes
+		eventUri = UriBuilder.fromUri(getContextURI()).path("users").path(identtiy.getKey().toString())
+				.path("calendars").path(calendar.getId()).path("events").build();
+		HttpGet eventMethod = conn.createGet(eventUri, MediaType.APPLICATION_JSON, true);
+		HttpResponse eventResponse = conn.execute(eventMethod);
+		EventVO reloadedEvent = parseEventArray(eventResponse).get(0);
+		softly.assertThat(reloadedEvent.getBegin()).isEqualTo(event.getBegin());
+		softly.assertThat(reloadedEvent.getEnd()).isEqualTo(event.getEnd());
+		softly.assertThat(reloadedEvent.getSubject()).isEqualTo(event.getSubject());
+		softly.assertThat(reloadedEvent.isAllDayEvent()).isEqualTo(event.isAllDayEvent());
+		softly.assertThat(reloadedEvent.getDescription()).isEqualTo(event.getDescription());
+		softly.assertThat(reloadedEvent.getExternalId()).isEqualTo(event.getExternalId());
+		softly.assertThat(reloadedEvent.getLocation()).isEqualTo(event.getLocation());
+		softly.assertThat(reloadedEvent.getManagedFlags()).isEqualTo(event.getManagedFlags());
+		softly.assertThat(reloadedEvent.getLiveStreamUrl()).isEqualTo(event.getLiveStreamUrl());
+		softly.assertAll();
 	}
 	
 	@Test
@@ -591,23 +673,21 @@ public class CalendarTest extends OlatJerseyTestCase {
 	}
 	
 	protected List<CalendarVO> parseArray(HttpResponse response) {
-		try {
-			InputStream body = response.getEntity().getContent();
+		try(InputStream body = response.getEntity().getContent()) {
 			ObjectMapper mapper = new ObjectMapper(jsonFactory); 
 			return mapper.readValue(body, new TypeReference<List<CalendarVO>>(){/* */});
 		} catch (Exception e) {
-			e.printStackTrace();
+			log.error("", e);
 			return null;
 		}
 	}
 	
 	protected List<EventVO> parseEventArray(HttpResponse response) {
-		try {
-			InputStream body = response.getEntity().getContent();
+		try(InputStream body = response.getEntity().getContent()) {
 			ObjectMapper mapper = new ObjectMapper(jsonFactory); 
 			return mapper.readValue(body, new TypeReference<List<EventVO>>(){/* */});
 		} catch (Exception e) {
-			e.printStackTrace();
+			log.error("", e);
 			return null;
 		}
 	}

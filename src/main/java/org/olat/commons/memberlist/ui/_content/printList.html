@@ -1,4 +1,3 @@
-<div class="clearfix">
 <h4>$label</h4>
 #foreach($member in $members)
 	<div class="o_cmember $typecss o_print_break_avoid col-xs-3 col-sm-3 col-md-3">
@@ -25,7 +24,15 @@
 							<div class="o_prop o_${userPropertyHandler.name}">$prop</div>
 						#end
 					#end
-					
+				#end
+				
+				#if($r.isNotNull($member.curriculumElementInfos))
+					<div class="o_prop o_curriculum_displayname">$member.curriculumDisplayName</div>
+					#if($r.isNotEmpty($member.curriculumRootElementIdentifier))
+						<div class="o_prop o_curriculum_root_el_identifier">$member.curriculumRootElementIdentifier</div>
+					#else if($r.isNotEmpty($member.curriculumRootElementDisplayName))
+						<div class="o_prop o_curriculum_root_el_displayname">$member.curriculumRootElementDisplayName</div>
+					#end
 				#end
 			</div>
 		</div>
@@ -34,4 +41,4 @@
 		<div class="clearfix"> </div>
 	#end
 #end
-</div>
+<div class="clearfix"> </div>

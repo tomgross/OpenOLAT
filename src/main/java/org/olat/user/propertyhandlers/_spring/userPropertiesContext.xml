@@ -28,7 +28,6 @@
 				<ref bean="userPropertySmsTelMobile" />
 				<ref bean="userPropertyTelOffice" />
 				<ref bean="userPropertySkype" />
-				<ref bean="userPropertyMSN" />
                 <ref bean="userPropertyXing" />
                 <ref bean="userPropertyICQ" />
 				<ref bean="userPropertyHomepage" />
@@ -114,7 +113,6 @@
 								<ref bean="userPropertyTelMobile" />
 								<ref bean="userPropertyTelOffice" />
 								<ref bean="userPropertySkype" />
-								<ref bean="userPropertyMSN" />
 								<ref bean="userPropertyXing" />
 								<ref bean="userPropertyICQ" />
 								<ref bean="userPropertyHomepage" />
@@ -181,7 +179,6 @@
 								<ref bean="userPropertyTelMobile" />
 								<ref bean="userPropertyTelOffice" />
 								<ref bean="userPropertySkype" />
-								<ref bean="userPropertyMSN" />
                                 <ref bean="userPropertyXing" />
                                 <ref bean="userPropertyICQ" />
 								<ref bean="userPropertyHomepage" />
@@ -572,7 +569,6 @@
 								<ref bean="userPropertyTelMobile" />
 								<ref bean="userPropertyTelOffice" />
 								<ref bean="userPropertySkype" />
-								<ref bean="userPropertyMSN" />
                                 <ref bean="userPropertyXing" />
                                 <ref bean="userPropertyICQ" />
 								<ref bean="userPropertyHomepage" />
@@ -606,7 +602,6 @@
 								<ref bean="userPropertyTelMobile" />
 								<ref bean="userPropertyTelOffice" />
 								<ref bean="userPropertySkype" />
-								<ref bean="userPropertyMSN" />
                                 <ref bean="userPropertyXing" />
                                 <ref bean="userPropertyICQ" />
 								<ref bean="userPropertyHomepage" />
@@ -692,6 +687,7 @@
 				<!--  RegistrationForm2 is used in the self registration process -->
 				<entry key="org.olat.registration.RegistrationForm2">
 					<bean class="org.olat.user.propertyhandlers.UserPropertyUsageContext">
+						<property name="description" value="Registration form for self-registrated users" />
 						<property name="propertyHandlers">
 							<list>
 								<!--
@@ -707,6 +703,19 @@
 								<ref bean="userPropertyFirstName" />
 								<ref bean="userPropertyLastName" />
 							</set>
+						</property>
+					</bean>
+				</entry>
+				
+				<!--  RegistrationForm2 is used in the self registration process -->
+				<entry key="org.olat.registration.RegistrationAdditionalForm">
+					<bean class="org.olat.user.propertyhandlers.UserPropertyUsageContext">
+						<property name="description" value="Additional registration form for self-registrated users (if empty, the step doesn't appear)" />
+						<property name="propertyHandlers">
+							<list />
+						</property>
+						<property name="mandatoryProperties">
+							<set />
 						</property>
 					</bean>
 				</entry>
@@ -770,7 +779,6 @@
 								<ref bean="userPropertyTelMobile" />
 								<ref bean="userPropertyTelOffice" />
 								<ref bean="userPropertySkype" />
-								<ref bean="userPropertyMSN" />
                                 <ref bean="userPropertyXing" />
                                 <ref bean="userPropertyICQ" />
 								<ref bean="userPropertyHomepage" />
@@ -804,9 +812,8 @@
 								<ref bean="userPropertyTelMobile" />
 								<ref bean="userPropertyTelOffice" />
 								<ref bean="userPropertySkype" />
-								<ref bean="userPropertyMSN" />
-                                	<ref bean="userPropertyXing" />
-                                	<ref bean="userPropertyICQ" />
+								<ref bean="userPropertyXing" />
+								<ref bean="userPropertyICQ" />
 								<ref bean="userPropertyHomepage" />
 								<ref bean="userPropertyStreet" />
 								<ref bean="userPropertyExtendedAddress" />
@@ -856,7 +863,6 @@
 								<ref bean="userPropertyTelMobile" />
 								<ref bean="userPropertyTelOffice" />
 								<ref bean="userPropertySkype" />
-								<ref bean="userPropertyMSN" />
                                 <ref bean="userPropertyXing" />
                                 <ref bean="userPropertyICQ" />
 								<ref bean="userPropertyHomepage" />
@@ -904,7 +910,6 @@
 								<ref bean="userPropertyTelMobile" />
 								<ref bean="userPropertyTelOffice" />
 								<ref bean="userPropertySkype" />
-								<ref bean="userPropertyMSN" />
                                 <ref bean="userPropertyXing" />
                                 <ref bean="userPropertyICQ" />
 								<ref bean="userPropertyHomepage" />
@@ -938,7 +943,6 @@
 								<ref bean="userPropertyTelMobile" />
 								<ref bean="userPropertyTelOffice" />
 								<ref bean="userPropertySkype" />
-								<ref bean="userPropertyMSN" />
                                 <ref bean="userPropertyXing" />
                                 <ref bean="userPropertyICQ" />
 								<ref bean="userPropertyHomepage" />
@@ -976,7 +980,6 @@
 								<ref bean="userPropertyTelMobile" />
 								<ref bean="userPropertyTelOffice" />
 								<ref bean="userPropertySkype" />
-								<ref bean="userPropertyMSN" />
                                 <ref bean="userPropertyXing" />
                                 <ref bean="userPropertyICQ" />
 								<ref bean="userPropertyHomepage" />
@@ -1047,6 +1050,22 @@
 						</property>
 					</bean>
 				</entry>
+				
+				<entry key="org.olat.user.ui.identity.UserRelationsController">
+					<bean class="org.olat.user.propertyhandlers.UserPropertyUsageContext">
+					<property name="description" value="Relations user to user" />
+						<property name="propertyHandlers">
+							<list>
+								<ref bean="userPropertyFirstName" />
+								<ref bean="userPropertyLastName" />
+								<ref bean="userPropertyEmail" />
+								<ref bean="userPropertyInstitutionalName" />
+								<ref bean="userPropertyInstitutionalUserIdentifier" />
+								<ref bean="userPropertyInstitutionalEmail" />
+							</list>
+						</property>
+					</bean>
+				</entry>
 
 				<entry key="org.olat.group.BusinessGroupArchiver">
 					<bean class="org.olat.user.propertyhandlers.UserPropertyUsageContext">
@@ -1101,8 +1120,7 @@
 						<property name="description" value="Short description of a user" />
 						<property name="propertyHandlers">
 							<list>
-								<ref bean="userPropertyFirstName" />
-								<ref bean="userPropertyLastName" />
+								<ref bean="userPropertyUserDisplayName" />
 								<ref bean="userPropertyEmail" />
 							</list>
 						</property>
@@ -1273,7 +1291,6 @@
 								<ref bean="userPropertyTelMobile" />
 								<ref bean="userPropertyTelOffice" />
 								<ref bean="userPropertySkype" />
-								<ref bean="userPropertyMSN" />
 								<ref bean="userPropertyXing" />
 								<ref bean="userPropertyICQ" />
 								<ref bean="userPropertyHomepage" />
@@ -1474,6 +1491,29 @@
 							<set>
 								<ref bean="userPropertyFirstName" />
 								<ref bean="userPropertyLastName" />
+							</set>
+						</property>
+						<property name="adminViewOnlyProperties">
+							<set></set>
+						</property>
+					</bean>
+				</entry>
+				
+				<entry key="org.olat.modules.quality.ui.QualityMainController">
+					<bean class="org.olat.user.propertyhandlers.UserPropertyUsageContext">
+						<property name="description" value="Properties used in the quality management" />
+						<property name="propertyHandlers">
+							<list>
+								<ref bean="userPropertyFirstName" />
+								<ref bean="userPropertyLastName" />
+								<ref bean="userPropertyEmail" />
+							</list>
+						</property>
+						<property name="mandatoryProperties">
+							<set>
+								<ref bean="userPropertyFirstName" />
+								<ref bean="userPropertyLastName" />
+								<ref bean="userPropertyEmail" />
 							</set>
 						</property>
 						<property name="adminViewOnlyProperties">

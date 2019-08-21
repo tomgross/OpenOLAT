@@ -26,7 +26,6 @@
 package org.olat.course;
 
 import java.io.File;
-import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
@@ -42,16 +41,18 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.zip.ZipOutputStream;
 
-import org.apache.commons.io.IOUtils;
+import org.apache.logging.log4j.Logger;
 import org.olat.admin.quota.QuotaConstants;
+import org.olat.basesecurity.GroupRoles;
+import org.olat.basesecurity.OrganisationRoles;
 import org.olat.commons.calendar.CalendarManager;
 import org.olat.commons.calendar.CalendarNotificationManager;
 import org.olat.commons.calendar.manager.ImportToCalendarManager;
 import org.olat.commons.calendar.ui.components.KalendarRenderWrapper;
+import org.olat.commons.info.InfoMessageFrontendManager;
 import org.olat.core.CoreSpringFactory;
 import org.olat.core.commons.fullWebApp.LayoutMain3ColsController;
 import org.olat.core.commons.modules.bc.FolderConfig;
-import org.olat.core.commons.modules.bc.vfs.OlatRootFolderImpl;
 import org.olat.core.commons.persistence.DBFactory;
 import org.olat.core.commons.services.notifications.NotificationsManager;
 import org.olat.core.commons.services.notifications.Publisher;
@@ -71,7 +72,6 @@ import org.olat.core.id.context.BusinessControlFactory;
 import org.olat.core.id.context.ContextEntry;
 import org.olat.core.logging.AssertException;
 import org.olat.core.logging.OLATRuntimeException;
-import org.olat.core.logging.OLog;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.CodeHelper;
 import org.olat.core.util.ExportUtil;
@@ -91,6 +91,7 @@ import org.olat.core.util.nodes.INode;
 import org.olat.core.util.resource.OresHelper;
 import org.olat.core.util.tree.TreeVisitor;
 import org.olat.core.util.tree.Visitor;
+import org.olat.core.util.vfs.LocalFolderImpl;
 import org.olat.core.util.vfs.Quota;
 import org.olat.core.util.vfs.QuotaManager;
 import org.olat.core.util.vfs.VFSConstants;
@@ -100,7 +101,7 @@ import org.olat.core.util.vfs.VFSStatus;
 import org.olat.core.util.xml.XStreamHelper;
 import org.olat.course.archiver.ScoreAccountingHelper;
 import org.olat.course.config.CourseConfig;
-import org.olat.course.config.CourseConfigManagerImpl;
+import org.olat.course.config.CourseConfigManager;
 import org.olat.course.config.ui.courselayout.CourseLayoutHelper;
 import org.olat.course.editor.EditorMainController;
 import org.olat.course.editor.PublishProcess;
@@ -127,11 +128,9 @@ import org.olat.group.BusinessGroup;
 import org.olat.instantMessaging.InstantMessagingService;
 import org.olat.instantMessaging.manager.ChatLogHelper;
 import org.olat.repository.RepositoryEntry;
-import org.olat.repository.RepositoryEntryImportExport;
+import org.olat.repository.RepositoryEntryStatusEnum;
 import org.olat.repository.RepositoryManager;
 import org.olat.repository.RepositoryService;
-import org.olat.repository.handlers.RepositoryHandler;
-import org.olat.repository.handlers.RepositoryHandlerFactory;
 import org.olat.repository.model.RepositoryEntrySecurity;
 import org.olat.resource.OLATResource;
 import org.olat.resource.OLATResourceManager;
@@ -153,27 +152,22 @@ import org.olat.util.logging.activity.LoggingResourceable;
 public class CourseFactory {
 
 	private static CacheWrapper<Long,PersistingCourseImpl> loadedCourses;
-	private static ConcurrentMap<Long, ModifyCourseEvent> modifyCourseEvents = new ConcurrentHashMap<Long, ModifyCourseEvent>();
+	private static ConcurrentMap<Long, ModifyCourseEvent> modifyCourseEvents = new ConcurrentHashMap<>();
 
 	public static final boolean USE_SYSTEM_UNZIP = false;
 	public static final String COURSE_EDITOR_LOCK = "courseEditLock";
   //this is the lock that must be aquired at course editing, copy course, export course, configure course.
-	private static Map<Long,PersistingCourseImpl> courseEditSessionMap = new ConcurrentHashMap<Long,PersistingCourseImpl>();
-	private static final OLog log = Tracing.createLoggerFor(CourseFactory.class);
-	private static RepositoryManager repositoryManager;
+	private static Map<Long,PersistingCourseImpl> courseEditSessionMap = new ConcurrentHashMap<>();
+	private static final Logger log = Tracing.createLoggerFor(CourseFactory.class);
 	private static ReferenceManager referenceManager;
-	private static RepositoryService repositoryService;
 
 
 	/**
 	 * [used by spring]
 	 */
-	private CourseFactory(CoordinatorManager coordinatorManager, RepositoryManager repositoryManager,
-			RepositoryService repositoryService, ReferenceManager referenceManager) {
+	private CourseFactory(CoordinatorManager coordinatorManager, ReferenceManager referenceManager) {
 		loadedCourses = coordinatorManager.getCoordinator().getCacher().getCache(CourseFactory.class.getSimpleName(), "courses");
-		CourseFactory.repositoryManager = repositoryManager;
 		CourseFactory.referenceManager = referenceManager;
-		CourseFactory.repositoryService = repositoryService;
 	}
 
 	/**
@@ -372,7 +366,7 @@ public class CourseFactory {
 		// delete course configuration (not really usefull, the config is in
 		// the course folder which is deleted right after)
 		if(course != null) {
-			CourseConfigManagerImpl.getInstance().deleteConfigOf(course);
+			CoreSpringFactory.getImpl(CourseConfigManager.class).deleteConfigOf(course);
 		}
 
 		CoreSpringFactory.getImpl(TaskExecutorManager.class).delete(res);
@@ -391,6 +385,8 @@ public class CourseFactory {
 		CoreSpringFactory.getImpl(InstantMessagingService.class).deleteMessages(res);
 		//delete tasks
 		CoreSpringFactory.getImpl(GTAManager.class).deleteAllTaskLists(entry);
+		//delete the storage folder of info messages attachments
+		CoreSpringFactory.getImpl(InfoMessageFrontendManager.class).deleteStorage(course);
 
 		// cleanup cache
 		removeFromCache(res.getResourceableId());
@@ -465,14 +461,15 @@ public class CourseFactory {
 	public static OLATResourceable copyCourse(OLATResourceable sourceRes, OLATResource targetRes, boolean isResetEmailNodes) {
 		PersistingCourseImpl sourceCourse = (PersistingCourseImpl)loadCourse(sourceRes);
 		PersistingCourseImpl targetCourse = new PersistingCourseImpl(targetRes);
-		File fTargetCourseBasePath = targetCourse.getCourseBaseContainer().getBasefile();
+		LocalFolderImpl fTargetCourseBaseContainer = targetCourse.getCourseBaseContainer();
+		File fTargetCourseBasePath = fTargetCourseBaseContainer.getBasefile();
 
 		//close connection before file copy
 		DBFactory.getInstance().commitAndCloseSession();
 
 		synchronized (sourceCourse) { // o_clusterNOK - cannot be solved with doInSync since could take too long (leads to error: "Lock wait timeout exceeded")
 			// copy configuration
-			CourseConfig courseConf = CourseConfigManagerImpl.getInstance().copyConfigOf(sourceCourse);
+			CourseConfig courseConf = CoreSpringFactory.getImpl(CourseConfigManager.class).copyConfigOf(sourceCourse);
 			targetCourse.setCourseConfig(courseConf);
 			// save structures
 			targetCourse.setRunStructure((Structure) XStreamHelper.xstreamClone(sourceCourse.getRunStructure()));
@@ -481,14 +478,27 @@ public class CourseFactory {
 			targetCourse.saveEditorTreeModel();
 
 			// copy course folder
-			File fSourceCourseFolder = sourceCourse.getIsolatedCourseBaseFolder();
-			if (fSourceCourseFolder.exists()) FileUtils.copyDirToDir(fSourceCourseFolder, fTargetCourseBasePath, false, "copy course folder");
+			VFSContainer sourceCourseContainer = sourceCourse.getIsolatedCourseBaseContainer();
+			if (sourceCourseContainer.exists()) {
+				targetCourse.getIsolatedCourseBaseContainer()
+					.copyContentOf(sourceCourseContainer);
+			}
 
 			// copy folder nodes directories
+<<<<<<< HEAD
 			File fSourceFoldernodesFolder = new File(
 					FolderConfig.getCanonicalRoot() + BCCourseNode.getFoldernodesPathRelToFolderBase(sourceCourse.getCourseEnvironment())
 			);
 			if (fSourceFoldernodesFolder.exists()) FileUtils.copyDirToDir(fSourceFoldernodesFolder, fTargetCourseBasePath, false, "copy folder nodes directories");
+=======
+			VFSContainer sourceFoldernodesContainer = VFSManager
+					.olatRootContainer(BCCourseNode.getFoldernodesPathRelToFolderBase(sourceCourse.getCourseEnvironment()));
+			if (sourceFoldernodesContainer.exists()) {
+				VFSContainer targetFoldernodesContainer = VFSManager
+						.olatRootContainer(BCCourseNode.getFoldernodesPathRelToFolderBase(targetCourse.getCourseEnvironment()));
+				targetFoldernodesContainer.copyContentOf(sourceFoldernodesContainer);
+			}
+>>>>>>> OpenOLAT_14.0.2
 
 			// copy task folder directories
 			File fSourceTaskfoldernodesFolder = new File(
@@ -510,7 +520,7 @@ public class CourseFactory {
 			Quota sourceQuota = VFSManager.isTopLevelQuotaContainer(sourceCourse.getCourseFolderContainer());
 			Quota targetQuota = VFSManager.isTopLevelQuotaContainer(targetCourse.getCourseFolderContainer());
 			if (sourceQuota != null && targetQuota != null) {
-				QuotaManager qm = QuotaManager.getInstance();
+				QuotaManager qm = CoreSpringFactory.getImpl(QuotaManager.class);
 				if (sourceQuota.getQuotaKB() != qm.getDefaultQuota(QuotaConstants.IDENTIFIER_DEFAULT_COURSE).getQuotaKB()) {
 					targetQuota = qm.createQuota(targetQuota.getPath(), sourceQuota.getQuotaKB(), sourceQuota.getUlLimitKB());
 					qm.setCustomQuotaKB(targetQuota);
@@ -562,7 +572,7 @@ public class CourseFactory {
 	 * @param fTargetZIP
 	 * @return true if successfully exported, false otherwise.
 	 */
-	public static void exportCourseToZIP(OLATResourceable sourceRes, File fTargetZIP, boolean runtimeDatas, boolean backwardsCompatible) {
+	public static void exportCourseToZIP(OLATResourceable sourceRes, File fTargetZIP, boolean runtimeDatas) {
 		PersistingCourseImpl sourceCourse = (PersistingCourseImpl) loadCourse(sourceRes);
 
 		// add files to ZIP
@@ -599,21 +609,29 @@ public class CourseFactory {
 	public static ICourse importCourseFromZip(OLATResource ores, File zipFile) {
 		// Generate course with filesystem
 		PersistingCourseImpl newCourse = new PersistingCourseImpl(ores);
-		CourseConfigManagerImpl.getInstance().deleteConfigOf(newCourse);
+		
+		CourseConfigManager courseConfigMgr = CoreSpringFactory.getImpl(CourseConfigManager.class);
+		courseConfigMgr.deleteConfigOf(newCourse);
 
 		// Unzip course structure in new course
-		File fCanonicalCourseBasePath = newCourse.getCourseBaseContainer().getBasefile();
-		boolean unzipped = USE_SYSTEM_UNZIP
-				? unzipCourse(zipFile, fCanonicalCourseBasePath)
-				: ZipUtil.unzip(zipFile, fCanonicalCourseBasePath);
-		if (unzipped) {
+		LocalFolderImpl courseBaseContainer = newCourse.getCourseBaseContainer();
+		File fCanonicalCourseBasePath = courseBaseContainer.getBasefile();
+		if (ZipUtil.unzip(zipFile, fCanonicalCourseBasePath)) {
 			// Load course structure now
 			try {
 				newCourse.load();
-				CourseConfig cc = CourseConfigManagerImpl.getInstance().loadConfigFor(newCourse);
+				CourseConfig cc = courseConfigMgr.loadConfigFor(newCourse);
 				//newCourse is not in cache yet, so we cannot call setCourseConfig()
 				newCourse.setCourseConfig(cc);
 				loadedCourses.put(newCourse.getResourceableId(), newCourse);
+				
+				//course folder
+				File courseFolderZip = new File(fCanonicalCourseBasePath, "oocoursefolder.zip");
+				if(courseFolderZip.exists()) {
+					VFSContainer courseFolder = VFSManager.getOrCreateContainer(courseBaseContainer, PersistingCourseImpl.COURSEFOLDER);
+					ZipUtil.unzipNonStrict(courseFolderZip, courseFolder, null, false);
+					FileUtils.deleteFile(courseFolderZip);
+				}
 				return newCourse;
 			} catch (AssertException ae) {
 				// ok failed, cleanup below
@@ -639,61 +657,20 @@ public class CourseFactory {
 	}
 
 	/**
-	 * Deploys a course from an exported course ZIP file. This process is unatended and
-	 * therefore relies on some default assumptions on how to setup the entry and add
-	 * any referenced resources to the repository.
-	 *
-	 * @param exportedCourseZIPFile
-	 */
-	public static RepositoryEntry deployCourseFromZIP(File exportedCourseZIPFile, String softKey, int access) {
-
-		RepositoryEntryImportExport importExport = new RepositoryEntryImportExport(exportedCourseZIPFile);
-		if(!StringHelper.containsNonWhitespace(softKey)) {
-			softKey = importExport.getSoftkey();
-		}
-		RepositoryEntry existingEntry = repositoryManager.lookupRepositoryEntryBySoftkey(softKey, false);
-		if (existingEntry != null) {
-			log.info("RepositoryEntry with softkey " + softKey + " already exists. Course will not be deployed.");
-			return existingEntry;
-		}
-
-
-		RepositoryHandler courseHandler = RepositoryHandlerFactory.getInstance().getRepositoryHandler(CourseModule.getCourseTypeName());
-		RepositoryEntry re = courseHandler.importResource(null, importExport.getInitialAuthor(), importExport.getDisplayName(), importExport.getDescription(),
-				true, Locale.ENGLISH, exportedCourseZIPFile, exportedCourseZIPFile.getName());
-
-		re.setSoftkey(softKey);
-		repositoryService.update(re);
-
-		ICourse course = loadCourse(re);
-		publishCourse(course, access, false,  null, Locale.ENGLISH);
-		return re;
-	}
-
-
-	/**
 	 * Publish the course with some standard options
 	 * @param course
 	 * @param locale
 	 * @param identity
 	 */
-	public static void publishCourse(ICourse course, int access, boolean membersOnly, Identity identity, Locale locale) {
+	public static void publishCourse(ICourse course, RepositoryEntryStatusEnum accessStatus, boolean allUsers, boolean guests,
+			Identity identity, Locale locale) {
 		 CourseEditorTreeModel cetm = course.getEditorTreeModel();
 		 PublishProcess publishProcess = PublishProcess.getInstance(course, cetm, locale);
 		 PublishTreeModel publishTreeModel = publishProcess.getPublishTreeModel();
-
-		 int newAccess = (access < RepositoryEntry.ACC_OWNERS || access > RepositoryEntry.ACC_USERS_GUESTS)
-				 ? RepositoryEntry.ACC_USERS : access;
-		 //access rule -> all users can the see course
-		 //RepositoryEntry.ACC_OWNERS
-		 //only owners can the see course
-		 //RepositoryEntry.ACC_OWNERS_AUTHORS //only owners and authors can the see course
-		 //RepositoryEntry.ACC_USERS_GUESTS // users and guests can see the course
-		 //fxdiff VCRP-1,2: access control of resources
-		 publishProcess.changeGeneralAccess(identity, newAccess, membersOnly);
+		 publishProcess.changeGeneralAccess(identity, accessStatus, allUsers, guests);
 
 		 if (publishTreeModel.hasPublishableChanges()) {
-			 List<String>nodeToPublish = new ArrayList<String>();
+			 List<String>nodeToPublish = new ArrayList<>();
 			 visitPublishModel(publishTreeModel.getRootNode(), publishTreeModel, nodeToPublish);
 
 			 publishProcess.createPublishSetFor(nodeToPublish);
@@ -738,8 +715,7 @@ public class CourseFactory {
 			Translator translator = Util.createPackageTranslator(CourseFactory.class, ureq.getLocale());
 			wControl.setError(translator.translate("error.helpcourse.not.configured"));
 			// create empty main controller
-			LayoutMain3ColsController emptyCtr = new LayoutMain3ColsController(ureq, wControl, null, null, null);
-			return emptyCtr;
+			return new LayoutMain3ColsController(ureq, wControl, null, null, null);
 		} else {
 			// Increment launch counter
 			rs.incrementLaunchCounter(entry);
@@ -747,9 +723,8 @@ public class CourseFactory {
 
 			ContextEntry ce = BusinessControlFactory.getInstance().createContextEntry(entry);
 			WindowControl bwControl = BusinessControlFactory.getInstance().createBusinessWindowControl(ce, wControl);
-			RepositoryEntrySecurity reSecurity = new RepositoryEntrySecurity(false, false, false, false, false, false, false, true, false);
-			RunMainController launchC = new RunMainController(ureq, bwControl, null, course, entry, reSecurity, null);
-			return launchC;
+			RepositoryEntrySecurity reSecurity = new RepositoryEntrySecurity(false, false, false, false, false, false, false, false, false, false, false, false, true, false);
+			return new RunMainController(ureq, bwControl, null, course, entry, reSecurity, null);
 		}
 	}
 
@@ -766,10 +741,14 @@ public class CourseFactory {
 		RepositoryEntry courseRe = RepositoryManager.getInstance().lookupRepositoryEntry(res, false);
 		PersistingCourseImpl course = (PersistingCourseImpl) loadCourse(res);
 		File exportDirectory = CourseFactory.getOrCreateDataExportDirectory(identity, course.getCourseTitle());
-		boolean isOLATAdmin = roles.isOLATAdmin();
-		boolean isOresOwner = RepositoryManager.getInstance().isOwnerOfRepositoryEntry(identity, courseRe);
-		boolean isOresInstitutionalManager = RepositoryManager.getInstance().isInstitutionalRessourceManagerFor(identity, roles, courseRe);
-		archiveCourse(identity, course, charset, locale, exportDirectory, isOLATAdmin, isOresOwner, isOresInstitutionalManager);
+		
+		RepositoryService repositoryService = CoreSpringFactory.getImpl(RepositoryService.class);
+		boolean isAdministrator = roles.isAdministrator()
+				&& repositoryService.hasRoleExpanded(identity, courseRe, OrganisationRoles.administrator.name());
+		boolean isOresOwner = repositoryService.hasRole(identity, courseRe, GroupRoles.owner.name());
+		boolean isOresInstitutionalManager = roles.isLearnResourceManager()
+				&& repositoryService.hasRoleExpanded(identity, courseRe, OrganisationRoles.learnresourcemanager.name());
+		archiveCourse(identity, course, charset, locale, exportDirectory, isAdministrator, isOresOwner, isOresInstitutionalManager);
 	}
 
 	/**
@@ -781,7 +760,7 @@ public class CourseFactory {
 	 * @param locale
 	 * @param identity
 	 */
-	public static void archiveCourse(Identity archiveOnBehalfOf, ICourse course, String charset, Locale locale, File exportDirectory, boolean isOLATAdmin, boolean... oresRights) {
+	public static void archiveCourse(Identity archiveOnBehalfOf, ICourse course, String charset, Locale locale, File exportDirectory, boolean isAdministrator, boolean... oresRights) {
 		// archive course results overview
 		List<Identity> users = ScoreAccountingHelper.loadUsers(course.getCourseEnvironment());
 		List<AssessableCourseNode> nodes = ScoreAccountingHelper.loadAssessableNodes(course.getCourseEnvironment());
@@ -803,9 +782,9 @@ public class CourseFactory {
 		boolean isOresOwner = (oresRights.length > 0)?oresRights[0]:false;
 		boolean isOresInstitutionalManager = (oresRights.length > 1)?oresRights[1]:false;
 
-		boolean aLogV = isOresOwner || isOresInstitutionalManager || isOLATAdmin;
-		boolean uLogV = isOLATAdmin;
-		boolean sLogV = isOresOwner || isOresInstitutionalManager || isOLATAdmin;
+		boolean aLogV = isOresOwner || isOresInstitutionalManager || isAdministrator;
+		boolean uLogV = isAdministrator;
+		boolean sLogV = isOresOwner || isOresInstitutionalManager || isAdministrator;
 
 		// make an intermediate commit here to make sure long running course log export doesn't
 		// cause db connection timeout to be triggered
@@ -999,7 +978,7 @@ public class CourseFactory {
 	 */
 	public static VFSContainer getCourseBaseContainer(Long resourceableId) {
 		String relPath = "/course/" + resourceableId.longValue();
-		OlatRootFolderImpl courseRootContainer = new OlatRootFolderImpl(relPath, null);
+		LocalFolderImpl courseRootContainer = VFSManager.olatRootContainer(relPath, null);
 		File fBasePath = courseRootContainer.getBasefile();
 		if (!fBasePath.exists())
 			throw new OLATRuntimeException(PersistingCourseImpl.class, "Could not resolve course base path:" + courseRootContainer, null);
@@ -1122,9 +1101,7 @@ public class CourseFactory {
 			this.charset = charset;
 		}
 
-		/**
-		 * @see org.olat.core.util.tree.Visitor#visit(org.olat.core.util.nodes.INode)
-		 */
+		@Override
 		public void visit(INode node) {
 			CourseNode cn = (CourseNode) node;
 
@@ -1132,18 +1109,12 @@ public class CourseFactory {
 					+ StringHelper.transformDisplayNameToFileSystemName(cn.getShortName())
 					+ "_" + Formatter.formatDatetimeFilesystemSave(new Date(System.currentTimeMillis()));
 
-			FileOutputStream fileStream = null;
-			ZipOutputStream exportStream = null;
-			try {
-				File exportFile = new File(exportPath, archiveName);
-				fileStream = new FileOutputStream(exportFile);
-				exportStream = new ZipOutputStream(fileStream);
-				cn.archiveNodeData(locale, course, null, exportStream, charset);
-			} catch (FileNotFoundException e) {
+			File exportFile = new File(exportPath, archiveName);
+			try(FileOutputStream fileStream = new FileOutputStream(exportFile);
+					ZipOutputStream exportStream = new ZipOutputStream(fileStream);) {
+				cn.archiveNodeData(locale, course, null, exportStream, "", charset);
+			} catch (IOException e) {
 				log.error("", e);
-			} finally {
-				IOUtils.closeQuietly(exportStream);
-				IOUtils.closeQuietly(fileStream);
 			}
 		}
 	}

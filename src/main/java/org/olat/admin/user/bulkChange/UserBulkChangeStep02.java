@@ -20,18 +20,17 @@
 package org.olat.admin.user.bulkChange;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import org.apache.velocity.VelocityContext;
 import org.apache.velocity.context.Context;
 import org.olat.admin.user.groups.GroupSearchController;
 import org.olat.basesecurity.BaseSecurity;
-import org.olat.basesecurity.BaseSecurityManager;
-import org.olat.basesecurity.Constants;
-import org.olat.basesecurity.SecurityGroup;
+import org.olat.basesecurity.BaseSecurityModule;
+import org.olat.basesecurity.OrganisationRoles;
 import org.olat.core.gui.UserRequest;
 import org.olat.core.gui.components.EscapeMode;
 import org.olat.core.gui.components.form.flexible.FormItemContainer;
@@ -56,7 +55,6 @@ import org.olat.core.gui.control.generic.wizard.StepsEvent;
 import org.olat.core.gui.control.generic.wizard.StepsRunContext;
 import org.olat.core.gui.translator.Translator;
 import org.olat.core.id.Identity;
-import org.olat.core.id.Roles;
 import org.olat.core.util.Util;
 import org.olat.group.BusinessGroup;
 import org.olat.group.BusinessGroupService;
@@ -77,39 +75,38 @@ import org.springframework.beans.factory.annotation.Autowired;
  */
 class UserBulkChangeStep02 extends BasicStep {
 
-	static final String usageIdentifyer = UserBulkChangeStep00.class.getCanonicalName();
-	public List<UserPropertyHandler> userPropertyHandlers;
+	private static final String usageIdentifyer = UserBulkChangeStep00.class.getCanonicalName();
+	
+	private final UserBulkChanges userBulkChanges;
 
-	public UserBulkChangeStep02(UserRequest ureq) {
+	public UserBulkChangeStep02(UserRequest ureq, UserBulkChanges userBulkChanges) {
 		super(ureq);
+		this.userBulkChanges = userBulkChanges;
 		setI18nTitleAndDescr("step2.description", null);
 		setNextStep(Step.NOSTEP);
 	}
 
-	/**
-	 * @see org.olat.core.gui.control.generic.wizard.Step#getInitialPrevNextFinishConfig()
-	 */
 	@Override
 	public PrevNextFinishConfig getInitialPrevNextFinishConfig() {
 		return new PrevNextFinishConfig(true, false, true);
 	}
 
-	/**
-	 * @see org.olat.core.gui.control.generic.wizard.Step#getStepController(org.olat.core.gui.UserRequest,
-	 *      org.olat.core.gui.control.WindowControl,
-	 *      org.olat.core.gui.control.generic.wizard.StepsRunContext,
-	 *      org.olat.core.gui.components.form.flexible.impl.Form)
-	 */
 	@Override
 	public StepFormController getStepController(UserRequest ureq, WindowControl windowControl, StepsRunContext stepsRunContext, Form form) {
-		StepFormController stepI = new UserBulkChangeStepForm02(ureq, windowControl, form, stepsRunContext);
-		return stepI;
+		return new UserBulkChangeStepForm02(ureq, windowControl, form, stepsRunContext);
 	}
 	
 	private final class UserBulkChangeStepForm02 extends StepFormBasicController {
 
-		private FormLayoutContainer textContainer;
+		private final boolean isAdministrativeUser;
+		private final List<UserPropertyHandler> userPropertyHandlers;
 		
+		@Autowired
+		private UserManager userManager;
+		@Autowired
+		private BaseSecurity securityManager;
+		@Autowired
+		private BaseSecurityModule securityModule;
 		@Autowired
 		private UserBulkChangeManager ubcMan;
 		@Autowired
@@ -118,12 +115,14 @@ class UserBulkChangeStep02 extends BasicStep {
 		public UserBulkChangeStepForm02(UserRequest ureq, WindowControl control, Form rootForm, StepsRunContext runContext) {
 			super(ureq, control, rootForm, runContext, LAYOUT_VERTICAL, null);
 			// use custom translator with fallback to user properties translator
-			UserManager um = UserManager.getInstance();
-			Translator pt1 = um.getPropertyHandlerTranslator(getTranslator());
+			Translator pt1 = userManager.getPropertyHandlerTranslator(getTranslator());
 			Translator pt2 = Util.createPackageTranslator(BusinessGroupFormController.class, ureq.getLocale(), pt1);
 			Translator pt3 = Util.createPackageTranslator(GroupSearchController.class, ureq.getLocale(), pt2);
 			setTranslator(pt3);
 			flc.setTranslator(pt3);
+			isAdministrativeUser = securityModule.isUserAllowedAdminProps(ureq.getUserSession().getRoles());
+			userPropertyHandlers = userManager.getUserPropertyHandlersFor(usageIdentifyer, isAdministrativeUser);
+			
 			initForm(ureq);
 		}
 
@@ -148,41 +147,77 @@ class UserBulkChangeStep02 extends BasicStep {
 			formLayout.add(formLayoutVertical);
 
 			setFormTitle("title");
-			List<List<String>> mergedDataChanges = new ArrayList<List<String>>();
-			
-			textContainer = FormLayoutContainer.createCustomFormLayout("index", getTranslator(), this.velocity_root + "/step2.html");
+
+			FormLayoutContainer textContainer = FormLayoutContainer.createCustomFormLayout("index", getTranslator(), this.velocity_root + "/step2.html");
 			formLayoutVertical.add(textContainer);
-			boolean validChange = (Boolean) getFromRunContext("validChange");
+			boolean validChange = userBulkChanges.isValidChange();
 			textContainer.contextPut("validChange", validChange);
-			if (!validChange) return;
+			if (!validChange) {
+				return;
+			}
 
-			@SuppressWarnings("unchecked")
-			List<Identity> selectedIdentities = (List<Identity>) getFromRunContext("identitiesToEdit");
-			@SuppressWarnings("unchecked")
-			HashMap<String, String> attributeChangeMap = (HashMap<String, String>) getFromRunContext("attributeChangeMap");
-			@SuppressWarnings("unchecked")
-			HashMap<String, String> roleChangeMap = (HashMap<String, String>) getFromRunContext("roleChangeMap");
+			List<List<String>> mergedDataChanges = loadModel();	
+			TextFlexiCellRenderer textRenderer = new TextFlexiCellRenderer(EscapeMode.none);
+			FlexiTableColumnModel tableColumnModel = FlexiTableDataModelFactory.createFlexiTableColumnModel();
+			// fixed fields:
+			int colPos = 0;
+			tableColumnModel.addFlexiColumnModel(new DefaultFlexiColumnModel("table.user.login", colPos++));
+			tableColumnModel.addFlexiColumnModel(new DefaultFlexiColumnModel("form.name.pwd", colPos++));
+			tableColumnModel.addFlexiColumnModel(new DefaultFlexiColumnModel(true, "form.name.language", colPos++, false, null, FlexiColumnModel.ALIGNMENT_LEFT, textRenderer));
+			for (int j = 0; j < userPropertyHandlers.size(); j++) {
+				UserPropertyHandler userPropertyHandler = userPropertyHandlers.get(j);
+				tableColumnModel.addFlexiColumnModel(new DefaultFlexiColumnModel(true, userPropertyHandler.i18nColumnDescriptorLabelKey(), colPos++, false, null, FlexiColumnModel.ALIGNMENT_LEFT, textRenderer));
+			}
+			tableColumnModel.addFlexiColumnModel(new DefaultFlexiColumnModel(true, "table.role.added", colPos++, false, null, FlexiColumnModel.ALIGNMENT_LEFT, textRenderer));
+			tableColumnModel.addFlexiColumnModel(new DefaultFlexiColumnModel(true, "table.role.removed", colPos++, false, null, FlexiColumnModel.ALIGNMENT_LEFT, textRenderer));
+			tableColumnModel.addFlexiColumnModel(new DefaultFlexiColumnModel(true, "table.role.status", colPos++, false, null, FlexiColumnModel.ALIGNMENT_LEFT, textRenderer));
 
-			Roles roles = ureq.getUserSession().getRoles();
-			boolean isAdministrativeUser = (roles.isAuthor() || roles.isGroupManager() || roles.isUserManager() || roles.isOLATAdmin());
-			userPropertyHandlers = UserManager.getInstance().getUserPropertyHandlersFor(usageIdentifyer, isAdministrativeUser);
+			FlexiTableDataModel<List<String>> tableDataModel = new FlexiTableDataModelImpl<>(new OverviewModel(mergedDataChanges, colPos), tableColumnModel);
+			uifactory.addTableElement(getWindowControl(), "newUsers", tableDataModel, getTranslator(), formLayoutVertical);
 
-			String[] securityGroups = {
-					Constants.GROUP_USERMANAGERS, Constants.GROUP_GROUPMANAGERS,
-					Constants.GROUP_POOL_MANAGER, Constants.GROUP_INST_ORES_MANAGER,
-					Constants.GROUP_AUTHORS, Constants.GROUP_ADMIN
-				};
+			Set<Long> allGroups = new HashSet<>(); 
+			List<Long> ownGroups = userBulkChanges.getOwnerGroups();
+			List<Long> partGroups = userBulkChanges.getParticipantGroups();
+			allGroups.addAll(ownGroups);
+			allGroups.addAll(partGroups);
+			List<Long> mailGroups = userBulkChanges.getMailGroups();
+			
+			if (!allGroups.isEmpty()) {
+				uifactory.addSpacerElement("space", formLayout, true);
+				uifactory.addStaticTextElement("add.to.groups", "", formLayout);
+				FlexiTableColumnModel groupColumnModel = FlexiTableDataModelFactory.createFlexiTableColumnModel();
+				groupColumnModel.addFlexiColumnModel(new DefaultFlexiColumnModel("table.group.name", 0));
+				groupColumnModel.addFlexiColumnModel(new DefaultFlexiColumnModel("description", 1));
+				groupColumnModel.addFlexiColumnModel(new DefaultFlexiColumnModel("table.user.role", 2));
+				groupColumnModel.addFlexiColumnModel(new DefaultFlexiColumnModel("send.email", 3));
+
+				List<BusinessGroup> groups = businessGroupService.loadBusinessGroups(allGroups);
+				TableDataModel<BusinessGroup> model = new GroupAddOverviewModel(groups, ownGroups, partGroups, mailGroups, getTranslator()); 
+				FlexiTableDataModel<BusinessGroup> groupDataModel = new FlexiTableDataModelImpl<>(model, groupColumnModel);
+				
+				uifactory.addTableElement(getWindowControl(), "groupOverview", groupDataModel, getTranslator(), formLayout);
+			}
+		}
+		
+		private List<List<String>> loadModel() {
+			List<List<String>> mergedDataChanges = new ArrayList<>();
+			OrganisationRoles[] organisationRoles = OrganisationRoles.values();
+			List<Identity> selectedIdentities = userBulkChanges.getIdentitiesToEdit();
+			Map<String, String> attributeChangeMap = userBulkChanges.getAttributeChangeMap();
+			Map<OrganisationRoles, String> roleChangeMap = userBulkChanges.getRoleChangeMap();
 
 			// loop over users to be edited:
 			for (Identity identity : selectedIdentities) {
-				List<String> userDataArray = new ArrayList<String>();
+				List<String> userDataArray = new ArrayList<>();
 
 				// add column for login
 				userDataArray.add(identity.getName());
 				// add columns for password
-				if (attributeChangeMap.containsKey(UserBulkChangeManager.PWD_IDENTIFYER)) {
-					userDataArray.add(attributeChangeMap.get(UserBulkChangeManager.PWD_IDENTIFYER));
-				} else userDataArray.add("***");
+				if (attributeChangeMap.containsKey(UserBulkChangeManager.CRED_IDENTIFYER)) {
+					userDataArray.add(attributeChangeMap.get(UserBulkChangeManager.CRED_IDENTIFYER));
+				} else {
+					userDataArray.add("***");
+				}
 				// add column for language
 				String userLanguage = identity.getUser().getPreferences().getLanguage();
 				if (attributeChangeMap.containsKey(UserBulkChangeManager.LANG_IDENTIFYER)) {
@@ -228,64 +263,31 @@ class UserBulkChangeStep02 extends BasicStep {
 
 				// add columns with roles
 				// loop over securityGroups and get result...
-				for (String securityGroup : securityGroups) {
-					String roleStatus = getRoleStatusForIdentity(identity, securityGroup, roleChangeMap);
-					userDataArray.add(roleStatus);
+				List<String> identityRoles = securityManager.getRolesAsString(identity);
+				StringBuilder addedRole = new StringBuilder();
+				StringBuilder removedRole = new StringBuilder();
+				for (OrganisationRoles organisationRole : organisationRoles) {
+					getRoleStatusForIdentity(organisationRole, identityRoles, roleChangeMap, addedRole, removedRole);
 				}
+				
+				String addedRolesString = addedRole.toString();
+				if(addedRolesString.length() > 0) {
+					addedRolesString = decorateChangedCell(addedRolesString);
+				}
+				userDataArray.add(addedRolesString);
+				String removedRolesString = removedRole.toString();
+				if(removedRolesString.length() > 0) {
+					removedRolesString = decorateChangedCell(removedRolesString);
+				}
+				userDataArray.add(removedRolesString);
+	
 				// add column with status
-				userDataArray.add(roleChangeMap.get("Status"));
+				userDataArray.add(userBulkChanges.getStatus() == null ? "" : userBulkChanges.getStatus().toString());
 
 				// add each user:
 				mergedDataChanges.add(userDataArray);
 			}
-			
-			TextFlexiCellRenderer textRenderer = new TextFlexiCellRenderer(EscapeMode.none);
-			FlexiTableColumnModel tableColumnModel = FlexiTableDataModelFactory.createFlexiTableColumnModel();
-			// fixed fields:
-			int colPos = 0;
-			tableColumnModel.addFlexiColumnModel(new DefaultFlexiColumnModel("table.user.login", colPos++));
-			tableColumnModel.addFlexiColumnModel(new DefaultFlexiColumnModel("form.name.pwd", colPos++));
-			tableColumnModel.addFlexiColumnModel(new DefaultFlexiColumnModel(true, "form.name.language", colPos++, false, null, FlexiColumnModel.ALIGNMENT_LEFT, textRenderer));
-			for (int j = 0; j < userPropertyHandlers.size(); j++) {
-				UserPropertyHandler userPropertyHandler = userPropertyHandlers.get(j);
-				tableColumnModel.addFlexiColumnModel(new DefaultFlexiColumnModel(true, userPropertyHandler.i18nColumnDescriptorLabelKey(), colPos++, false, null, FlexiColumnModel.ALIGNMENT_LEFT, textRenderer));
-			}
-			tableColumnModel.addFlexiColumnModel(new DefaultFlexiColumnModel(true, "table.role.useradmin", colPos++, false, null, FlexiColumnModel.ALIGNMENT_LEFT, textRenderer));
-			tableColumnModel.addFlexiColumnModel(new DefaultFlexiColumnModel(true, "table.role.groupadmin", colPos++, false, null, FlexiColumnModel.ALIGNMENT_LEFT, textRenderer));
-			tableColumnModel.addFlexiColumnModel(new DefaultFlexiColumnModel(true, "table.role.poolManager", colPos++, false, null, FlexiColumnModel.ALIGNMENT_LEFT, textRenderer));
-			tableColumnModel.addFlexiColumnModel(new DefaultFlexiColumnModel(true, "table.role.institutionManager", colPos++, false, null, FlexiColumnModel.ALIGNMENT_LEFT, textRenderer));
-			tableColumnModel.addFlexiColumnModel(new DefaultFlexiColumnModel(true, "table.role.author", colPos++, false, null, FlexiColumnModel.ALIGNMENT_LEFT, textRenderer));
-			tableColumnModel.addFlexiColumnModel(new DefaultFlexiColumnModel(true, "table.role.admin", colPos++, false, null, FlexiColumnModel.ALIGNMENT_LEFT, textRenderer));
-			tableColumnModel.addFlexiColumnModel(new DefaultFlexiColumnModel(true, "table.role.status", colPos++, false, null, FlexiColumnModel.ALIGNMENT_LEFT, textRenderer));
-
-			FlexiTableDataModel<List<String>> tableDataModel = new FlexiTableDataModelImpl<List<String>>(new OverviewModel(mergedDataChanges, colPos), tableColumnModel);
-			uifactory.addTableElement(getWindowControl(), "newUsers", tableDataModel, getTranslator(), formLayoutVertical);
-
-			Set<Long> allGroups = new HashSet<Long>(); 
-			@SuppressWarnings("unchecked")
-			List<Long> ownGroups = (List<Long>) getFromRunContext("ownerGroups");
-			@SuppressWarnings("unchecked")
-			List<Long> partGroups = (List<Long>) getFromRunContext("partGroups");
-			allGroups.addAll(ownGroups);
-			allGroups.addAll(partGroups);
-			@SuppressWarnings("unchecked")
-			List<Long> mailGroups = (List<Long>) getFromRunContext("mailGroups");
-			
-			if (allGroups.size() != 0) {
-				uifactory.addSpacerElement("space", formLayout, true);
-				uifactory.addStaticTextElement("add.to.groups", "", formLayout);
-				FlexiTableColumnModel groupColumnModel = FlexiTableDataModelFactory.createFlexiTableColumnModel();
-				groupColumnModel.addFlexiColumnModel(new DefaultFlexiColumnModel("table.group.name", 0));
-				groupColumnModel.addFlexiColumnModel(new DefaultFlexiColumnModel("description", 1));
-				groupColumnModel.addFlexiColumnModel(new DefaultFlexiColumnModel("table.user.role", 2));
-				groupColumnModel.addFlexiColumnModel(new DefaultFlexiColumnModel("send.email", 3));
-
-				List<BusinessGroup> groups = businessGroupService.loadBusinessGroups(allGroups);
-				TableDataModel<BusinessGroup> model = new GroupAddOverviewModel(groups, ownGroups, partGroups, mailGroups, getTranslator()); 
-				FlexiTableDataModel<BusinessGroup> groupDataModel = new FlexiTableDataModelImpl<BusinessGroup>(model, groupColumnModel);
-				
-				uifactory.addTableElement(getWindowControl(), "groupOverview", groupDataModel, getTranslator(), formLayout);
-			}
+			return mergedDataChanges;
 		}
 
 		/**
@@ -297,26 +299,25 @@ class UserBulkChangeStep02 extends BasicStep {
 		 * @param roleChangeMap
 		 * @return
 		 */
-		private String getRoleStatusForIdentity(Identity identity, String securityGroup, HashMap<String, String> roleChangeMap) {
-			BaseSecurity secMgr = BaseSecurityManager.getInstance();
-			SecurityGroup secGroup = secMgr.findSecurityGroupByName(securityGroup);
-			Boolean isInGroup = secMgr.isIdentityInSecurityGroup(identity, secGroup);
+		private void getRoleStatusForIdentity(OrganisationRoles role, List<String> currentRoles, Map<OrganisationRoles, String> roleChangeMap,
+				StringBuilder addedRole, StringBuilder removedRole) {
+			if(role == OrganisationRoles.user || role == OrganisationRoles.invitee || role == OrganisationRoles.guest
+					|| !roleChangeMap.containsKey(role)) return;
 
-			String thisRoleAction = "";
-			if (roleChangeMap.containsKey(securityGroup)) {
-				thisRoleAction = roleChangeMap.get(securityGroup);
-			} else return isInGroup.toString();
-
-			if ((isInGroup && thisRoleAction.equals("add")) || (!isInGroup && thisRoleAction.equals("remove"))) { 
-				return isInGroup.toString();
-			} else {
-				isInGroup = !isInGroup; //invert to represent the new state
-				return decorateChangedCell(isInGroup);		
+			boolean isInGroup = currentRoles.contains(role.name());
+			String thisRoleAction = roleChangeMap.get(role);
+			if (isInGroup && thisRoleAction.equals("remove")) {
+				if(removedRole.length() > 0) removedRole.append(", ");
+				removedRole.append(translate("table.role.".concat(role.name())));
+			} else if(!isInGroup && thisRoleAction.equals("add")) {
+				if(addedRole.length() > 0) addedRole.append(", ");
+				addedRole.append(translate("table.role.".concat(role.name())));
 			}
 		}
+
 		
-		private String decorateChangedCell(Object val) {
-			return "<span class='o_userbulk_changedcell'><i class='o_icon o_icon_new'> </i> " + val.toString() + "</span>";
+		private String decorateChangedCell(String val) {
+			return "<span class='o_userbulk_changedcell'><i class='o_icon o_icon_new'> </i> " + val + "</span>";
 		}
 	}
 }

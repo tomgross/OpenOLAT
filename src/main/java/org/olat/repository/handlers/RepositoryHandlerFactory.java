@@ -61,8 +61,8 @@ public class RepositoryHandlerFactory {
 	private static Map<String, RepositoryHandler> handlerMap;
 	private static List<OrderedRepositoryHandler> handlerList;
 	static {
-		handlerMap = new HashMap<String, RepositoryHandler>(21);
-		handlerList = new ArrayList<OrderedRepositoryHandler>(21);
+		handlerMap = new HashMap<>(21);
+		handlerList = new ArrayList<>(21);
 
 		// 0-9 Most important resources = 0-9
 		registerHandler(new CourseHandler(), 0);
@@ -78,11 +78,14 @@ public class RepositoryHandlerFactory {
 		registerHandler(new SharedFolderHandler(), 40);
 		registerHandler(new GlossaryHandler(), 41);
 		registerHandler(new PortfolioHandler(), 42);
-		registerHandler(new VideoHandler(), 43);
 		
-		registerHandler(new WebDocumentHandler(DocFileResource.TYPE_NAME), 10001);
-		registerHandler(new WebDocumentHandler(XlsFileResource.TYPE_NAME), 10002);
-		registerHandler(new WebDocumentHandler(PowerpointFileResource.TYPE_NAME), 10003);
+		
+		DocumentEditorDelegate wordDelegate = new DocumentEditorDelegate(new WordVFSEditorDelegateType());
+		registerHandler(new WebDocumentHandler(DocFileResource.TYPE_NAME, wordDelegate, wordDelegate), 10001);
+		DocumentEditorDelegate excelDelegate = new DocumentEditorDelegate(new ExcelVFSEditorDelegateType());
+		registerHandler(new WebDocumentHandler(XlsFileResource.TYPE_NAME, excelDelegate, excelDelegate), 10002);
+		DocumentEditorDelegate powerPointDelegate = new DocumentEditorDelegate(new PowerPointVFSEditorDelegateType());
+		registerHandler(new WebDocumentHandler(PowerpointFileResource.TYPE_NAME, powerPointDelegate, powerPointDelegate), 10003);
 		registerHandler(new WebDocumentHandler(PdfFileResource.TYPE_NAME), 10010);
 		registerHandler(new WebDocumentHandler(ImageFileResource.TYPE_NAME), 10011);
 		registerHandler(new WebDocumentHandler(SoundFileResource.TYPE_NAME), 10020);

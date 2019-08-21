@@ -1,0 +1,57 @@
+<div class="o_header_with_buttons"><h3>$r.escapeHtml($title)</h3>
+#if($r.available("meeting.configure.button")) 
+	<div class="o_button_group">
+		$r.render("meeting.configure.button")
+	</div>
+#end</div>
+#if($errorMessage && !${errorMessage.isEmpty()})
+	<div class="o_error">$errorMessage</div>
+#end
+#if($r.isNotNull($start) || $r.isNotNull($end))
+<div><i class="o_icon o_icon_lifecycle_date"> </i> #if($r.isNotNull($start))$start#end - #if($r.isNotNull($end))$end#end</div>
+#end
+#if($description && !${description.isEmpty()})
+	<div class="o_block_large o_info">$r.xssScan($description)</div>
+#end
+#if($r.isTrue($ended))
+	<div class="o_block_large o_warning">$r.translate("meeting.ended")</div>
+#end
+
+#if($r.isTrue($invalidProvider))
+	<div class="o_block_large o_error">$r.translate("error.invalid.meeting")</div>
+#else
+	#if($r.isFalse($meetingsExists) || $r.isTrue($notStarted))
+	<div class="o_block_large o_info">$r.translate("meeting.create.intro")</div>
+	#end
+	
+	<div class="o_button_group">
+	#if($r.available("meeting.create.button") && $r.visible("meeting.create.button"))
+		$r.render("meeting.create.button")
+	#end
+	#if($r.available("meeting.start.button") && $r.visible("meeting.start.button"))
+		$r.render("meeting.start.button")
+	#end
+	#if($r.available("meeting.register.button") && $r.visible("meeting.register.button"))
+		$r.render("meeting.register.button")
+	#end
+	#if($r.available("meeting.join.button") && $r.visible("meeting.join.button"))
+		$r.render("meeting.join.button")
+	#end
+	</div>
+	
+	#if($r.isTrue($meetingsExists) && ($r.visible("meeting.share.documents") || $r.visible("meetingContents")))
+	<fieldset>
+		<legend>$r.translate("meetings.content")</legend>
+		#if($r.visible("meeting.share.documents"))
+		<div class="o_button_group o_button_group_right">
+			$r.render("meeting.share.documents")
+		</div>
+		#end
+		#if($r.isTrue($notRegistered))
+			<div class="o_warning">$r.translate("warning.not.registered.shared.documents")</div>
+		#end
+		$r.render("meetingContents")
+	</fieldset>
+	#end
+#end
+

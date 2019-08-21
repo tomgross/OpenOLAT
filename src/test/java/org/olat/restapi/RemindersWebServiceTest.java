@@ -25,7 +25,6 @@ import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.UUID;
 
 import javax.ws.rs.core.MediaType;
 import javax.ws.rs.core.UriBuilder;
@@ -36,13 +35,11 @@ import org.apache.http.client.methods.HttpDelete;
 import org.apache.http.client.methods.HttpGet;
 import org.apache.http.client.methods.HttpPost;
 import org.apache.http.client.methods.HttpPut;
-import org.codehaus.jackson.map.ObjectMapper;
-import org.codehaus.jackson.type.TypeReference;
 import org.junit.Assert;
 import org.junit.Test;
 import org.olat.core.commons.persistence.DB;
 import org.olat.core.id.Identity;
-import org.olat.core.logging.OLog;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
 import org.olat.course.nodes.gta.rule.AssignTaskRuleSPI;
 import org.olat.modules.reminder.Reminder;
@@ -59,8 +56,11 @@ import org.olat.modules.reminder.restapi.ReminderVO;
 import org.olat.modules.reminder.rule.DateRuleSPI;
 import org.olat.repository.RepositoryEntry;
 import org.olat.test.JunitTestHelper;
-import org.olat.test.OlatJerseyTestCase;
+import org.olat.test.OlatRestTestCase;
 import org.springframework.beans.factory.annotation.Autowired;
+
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 /**
  * 
@@ -68,9 +68,9 @@ import org.springframework.beans.factory.annotation.Autowired;
  * @author srosse, stephane.rosse@frentix.com, http://www.frentix.com
  *
  */
-public class RemindersWebServiceTest extends OlatJerseyTestCase {
+public class RemindersWebServiceTest extends OlatRestTestCase {
 	
-	private static final OLog log = Tracing.createLoggerFor(RemindersWebServiceTest.class);
+	private static final Logger log = Tracing.createLoggerFor(RemindersWebServiceTest.class);
 
 	@Autowired
 	private DB dbInstance;
@@ -140,7 +140,7 @@ public class RemindersWebServiceTest extends OlatJerseyTestCase {
 	@Test
 	public void putNewReminder()
 	throws IOException, URISyntaxException {
-		Identity creator = JunitTestHelper.createAndPersistIdentityAsAdmin("rest-rem-1-" + UUID.randomUUID());
+		Identity creator = JunitTestHelper.createAndPersistIdentityAsRndAdmin("rest-rem-1");
 		RepositoryEntry entry = JunitTestHelper.createAndPersistRepositoryEntry();
 		dbInstance.commitAndCloseSession();
 		
@@ -204,7 +204,7 @@ public class RemindersWebServiceTest extends OlatJerseyTestCase {
 	@Test
 	public void postReminder()
 	throws IOException, URISyntaxException {
-		Identity creator = JunitTestHelper.createAndPersistIdentityAsAdmin("rest-rem-3-" + UUID.randomUUID());
+		Identity creator = JunitTestHelper.createAndPersistIdentityAsRndAdmin("rest-rem-3");
 		RepositoryEntry entry = JunitTestHelper.createAndPersistRepositoryEntry();
 		
 		Reminder reminder = reminderService.createReminder(entry, creator);

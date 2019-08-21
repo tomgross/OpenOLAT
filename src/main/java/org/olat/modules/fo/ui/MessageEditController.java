@@ -20,7 +20,6 @@
 package org.olat.modules.fo.ui;
 
 import java.io.File;
-import java.io.IOException;
 import java.text.Collator;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -32,7 +31,6 @@ import javax.persistence.PersistenceException;
 import org.olat.basesecurity.BaseSecurity;
 import org.olat.basesecurity.IdentityShort;
 import org.olat.core.commons.modules.bc.FolderConfig;
-import org.olat.core.commons.modules.bc.vfs.OlatRootFolderImpl;
 import org.olat.core.commons.persistence.DBFactory;
 import org.olat.core.commons.services.notifications.NotificationsManager;
 import org.olat.core.gui.UserRequest;
@@ -57,7 +55,6 @@ import org.olat.core.logging.AssertException;
 import org.olat.core.logging.DBRuntimeException;
 import org.olat.core.logging.activity.ThreadLocalUserActivityLogger;
 import org.olat.core.util.CodeHelper;
-import org.olat.core.util.FileUtils;
 import org.olat.core.util.StringHelper;
 import org.olat.core.util.Util;
 import org.olat.core.util.WebappHelper;
@@ -66,6 +63,7 @@ import org.olat.core.util.vfs.LocalFolderImpl;
 import org.olat.core.util.vfs.VFSContainer;
 import org.olat.core.util.vfs.VFSItem;
 import org.olat.core.util.vfs.VFSLeaf;
+import org.olat.core.util.vfs.VFSManager;
 import org.olat.core.util.vfs.filters.VFSItemMetaFilter;
 import org.olat.modules.fo.Forum;
 import org.olat.modules.fo.ForumCallback;
@@ -628,7 +626,7 @@ public class MessageEditController extends FormBasicController {
 
 	private List<VFSItem> getTempFolderFileList() {
 		if (tempUploadFolder == null) {
-			tempUploadFolder = new OlatRootFolderImpl(File.separator + "tmp/" + CodeHelper.getGlobalForeverUniqueID() + "/", null);
+			tempUploadFolder = VFSManager.olatRootContainer(File.separator + "tmp/" + CodeHelper.getGlobalForeverUniqueID() + "/", null);
 		}		
 		return tempUploadFolder.getItems(exclFilter);
 	}
@@ -687,12 +685,9 @@ public class MessageEditController extends FormBasicController {
 			for (VFSItem file : tmpFList) {
 				VFSLeaf leaf = (VFSLeaf) file;
 				try {
-					FileUtils.bcopy(
-							leaf.getInputStream(),
-							msgContainer.createChildLeaf(leaf.getName()).getOutputStream(false),
-							"forumSaveUploadedFile"
-					);
-				} catch (IOException e) {
+					VFSLeaf targetFile = msgContainer.createChildLeaf(leaf.getName());
+					VFSManager.copyContent(leaf, targetFile, false);
+				} catch (Exception e) {
 					removeTempUploadedFiles();
 					throw new RuntimeException ("I/O error saving uploaded file:" + msgContainer + "/" + leaf.getName());
 				}

@@ -27,7 +27,6 @@ import java.util.Locale;
 import java.util.zip.ZipOutputStream;
 
 import org.olat.core.CoreSpringFactory;
-import org.olat.core.commons.modules.bc.vfs.OlatRootFolderImpl;
 import org.olat.core.commons.services.notifications.NotificationsManager;
 import org.olat.core.commons.services.notifications.SubscriptionContext;
 import org.olat.core.gui.UserRequest;
@@ -232,7 +231,7 @@ public class PFCourseNode extends AbstractAccessableCourseNode {
 		CourseEnvironment courseEnv = userCourseEnv.getCourseEnvironment();
 		Identity identity = userCourseEnv.getIdentityEnvironment().getIdentity();
 		Path folderRelPath = null;
-		OlatRootFolderImpl baseContainer = courseEnv.getCourseBaseContainer();
+		LocalFolderImpl baseContainer = courseEnv.getCourseBaseContainer();
 		PFManager pfManager = CoreSpringFactory.getImpl(PFManager.class);
 		if (userCourseEnv.isCoach() || userCourseEnv.isAdmin()) {
 			folderRelPath = Paths.get(baseContainer.getBasefile().toPath().toString(), 
@@ -276,13 +275,13 @@ public class PFCourseNode extends AbstractAccessableCourseNode {
 	}
 	
 	@Override
-	public boolean archiveNodeData(Locale locale, ICourse course, ArchiveOptions options, ZipOutputStream exportStream,
-			String charset) {
+	public boolean archiveNodeData(Locale locale, ICourse course, ArchiveOptions options,
+			ZipOutputStream exportStream, String archivePath, String charset) {
 		CourseEnvironment courseEnv = course.getCourseEnvironment();
 		Path sourceFolder = Paths.get(courseEnv.getCourseBaseContainer().getBasefile().getAbsolutePath(),
 				PFManager.FILENAME_PARTICIPANTFOLDER, getIdent()); 
 		Translator translator = Util.createPackageTranslator(PFRunController.class, locale);
-		return FileSystemExport.fsToZip(exportStream, sourceFolder, this, null, translator);		
+		return FileSystemExport.fsToZip(exportStream, archivePath, sourceFolder, this, null, translator);		
 	}
 
 	@Override

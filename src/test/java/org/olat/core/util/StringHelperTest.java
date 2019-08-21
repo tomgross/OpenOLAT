@@ -139,6 +139,10 @@ public class StringHelperTest {
 		//it's pahlavi \u10B7x
 		String value12 = StringHelper.cleanUTF8ForXml("Hello\u10B7x pahlavi");
 		Assert.assertEquals("Pahlavi test", "Hello\u10B7x pahlavi", value12);
+
+		// smile
+		String value13 = StringHelper.cleanUTF8ForXml("Smile \uD83D\uDE00x now");
+		Assert.assertEquals("Smile test", "Smile \uD83D\uDE00x now", value13);
 	}
 	
 	@Test
@@ -174,12 +178,12 @@ public class StringHelperTest {
 		Assert.assertFalse(StringHelper.isHtml("http://some.domain:8080/olat/dmz/registration/index.html?key=b67a28bd5e5820155b3ba496ef16d1d9&lang=de"));
 		
 		//good and bad html code
-		Assert.assertTrue(StringHelper.isHtml("<html><head></head><body>Hello world</body></html>"));
 		Assert.assertTrue(StringHelper.isHtml("Hello <p>world</p>"));
 		Assert.assertTrue(StringHelper.isHtml("<ul><li>Hello<li>world</ul>"));
 		Assert.assertTrue(StringHelper.isHtml("Hello<br>world"));
+		Assert.assertTrue(StringHelper.isHtml("<html><head></head><body>Hello world</body></html>"));
+		Assert.assertTrue(StringHelper.isHtml("<html><head></head><body><p>Hello world</p></body></html>"));
 	}
-	
 	
 	@Test
 	public void formatAsCSVString() {

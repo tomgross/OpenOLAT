@@ -24,14 +24,14 @@ import java.io.OutputStream;
 import java.util.Date;
 import java.util.List;
 
-import org.apache.commons.lang.StringEscapeUtils;
+import org.olat.core.gui.components.form.flexible.FormItem;
 import org.olat.core.gui.media.MediaResource;
 import org.olat.core.gui.render.EmptyURLBuilder;
 import org.olat.core.gui.render.StringOutput;
 import org.olat.core.gui.render.StringOutputPool;
 import org.olat.core.gui.render.URLBuilder;
 import org.olat.core.gui.translator.Translator;
-import org.olat.core.logging.OLog;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.Formatter;
 import org.olat.core.util.StringHelper;
@@ -49,7 +49,7 @@ import org.olat.core.util.openxml.OpenXMLWorksheet.Row;
  *
  */
 public class XlsFlexiTableExporter implements FlexiTableExporter {
-	private static final OLog log = Tracing.createLoggerFor(XlsFlexiTableExporter.class);
+	private static final Logger log = Tracing.createLoggerFor(XlsFlexiTableExporter.class);
 	private static final URLBuilder ubu = new EmptyURLBuilder();
 	
 	@Override
@@ -113,6 +113,8 @@ public class XlsFlexiTableExporter implements FlexiTableExporter {
 					dataRow.addCell(col, (Date)value, workbook.getStyles().getDateStyle());
 				} else if(value instanceof Number) {
 					dataRow.addCell(col, (Number)value, null);
+				} else if(value instanceof FormItem) {
+					// do nothing
 				} else {
 					StringOutput so = StringOutputPool.allocStringBuilder(1000);
 					cd.getCellRenderer().render(null, so, value, row, ftC, ubu, translator);
@@ -121,7 +123,7 @@ public class XlsFlexiTableExporter implements FlexiTableExporter {
 					cellValue = StringHelper.stripLineBreaks(cellValue);
 					cellValue = FilterFactory.getHtmlTagsFilter().filter(cellValue);
 					if(StringHelper.containsNonWhitespace(cellValue)) {
-						cellValue = StringEscapeUtils.unescapeHtml(cellValue);
+						cellValue = StringHelper.unescapeHtml(cellValue);
 					}
 					dataRow.addCell(col, cellValue, null);
 				}

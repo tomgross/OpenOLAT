@@ -27,8 +27,6 @@ import java.util.UUID;
 
 import org.jboss.arquillian.container.test.api.RunAsClient;
 import org.jboss.arquillian.drone.api.annotation.Drone;
-import org.jboss.arquillian.graphene.page.InitialPage;
-import org.jboss.arquillian.graphene.page.Page;
 import org.jboss.arquillian.junit.Arquillian;
 import org.jboss.arquillian.test.api.ArquillianResource;
 import org.junit.Test;
@@ -38,6 +36,7 @@ import org.olat.selenium.page.NavigationPage;
 import org.olat.selenium.page.Participant;
 import org.olat.selenium.page.User;
 import org.olat.selenium.page.course.CoursePageFragment;
+import org.olat.selenium.page.course.CourseSettingsPage;
 import org.olat.selenium.page.lecture.LectureRepositoryAdminListPage;
 import org.olat.selenium.page.lecture.LectureRepositoryAdminPage;
 import org.olat.selenium.page.lecture.LectureRepositoryParticipantsPage;
@@ -46,7 +45,7 @@ import org.olat.selenium.page.lecture.RollCallInterceptorPage;
 import org.olat.selenium.page.lecture.TeacherRollCallPage;
 import org.olat.selenium.page.repository.AuthoringEnvPage;
 import org.olat.selenium.page.repository.AuthoringEnvPage.ResourceType;
-import org.olat.selenium.page.repository.RepositoryAccessPage.UserAccess;
+import org.olat.selenium.page.repository.UserAccess;
 import org.olat.selenium.page.user.UserToolsPage;
 import org.olat.test.rest.UserRestClient;
 import org.olat.user.restapi.UserVO;
@@ -66,8 +65,6 @@ public class LecturesTest extends Deployments {
 	private WebDriver browser;
 	@ArquillianResource
 	private URL deploymentUrl;
-	@Page
-	private NavigationPage navBar;
 	
 	/**
 	 * An author create a course, enable the absence management,
@@ -83,15 +80,16 @@ public class LecturesTest extends Deployments {
 	 */
 	@Test
 	@RunAsClient
-	public void lecturesRollCall_authorizedAbsence(@InitialPage LoginPage loginPage,
-			@Drone @User WebDriver coachBrowser, @Drone @Participant WebDriver participantBrowser)
+	public void lecturesRollCall_authorizedAbsence(@Drone @User WebDriver coachBrowser,
+			@Drone @Participant WebDriver participantBrowser)
 	throws IOException, URISyntaxException {
 		
 		// configure the lectures module
+		LoginPage loginPage = LoginPage.load(browser, deploymentUrl);
 		loginPage
 			.loginAs("administrator", "openolat")
 			.resume();
-		new NavigationPage(browser)
+		 NavigationPage.load(browser)
 			.openAdministration()
 			.openLecturesSettings()
 			.configure(true, true, true, false, false)
@@ -104,10 +102,11 @@ public class LecturesTest extends Deployments {
 		UserVO participant2 = new UserRestClient(deploymentUrl).createRandomUser("Rymou");
 
 		LoginPage
-			.getLoginPage(browser, deploymentUrl)
+			.load(browser, deploymentUrl)
 			.loginAs(author.getLogin(), author.getPassword());
 		
 		//go to authoring
+		NavigationPage navBar = NavigationPage.load(browser);
 		AuthoringEnvPage authoringEnv = navBar
 			.assertOnNavigationPage()
 			.openAuthoringEnvironment();
@@ -118,15 +117,19 @@ public class LecturesTest extends Deployments {
 			.openCreateDropDown()
 			.clickCreate(ResourceType.course)
 			.fillCreateForm(title)
-			.assertOnGeneralTab()
+			.assertOnInfos()
 			.clickToolbarBack();
 		
 		//set access
 		CoursePageFragment course = new CoursePageFragment(browser);
 		course
+			.settings()
 			.accessConfiguration()
 			.setUserAccess(UserAccess.membersOnly)
+			.save()
 			.clickToolbarBack();
+		course
+			.publish();
 		
 		//add a coach
 		course
@@ -147,17 +150,20 @@ public class LecturesTest extends Deployments {
 			.nextOverview()
 			.nextPermissions()
 			.finish();
-		
+
 		//enable the lectures
-		LectureRepositoryAdminPage lecturesAdmin = course
-			.lecturesAdministration();
-		lecturesAdmin
-			.settings()
+		CourseSettingsPage settings = course
+			.settings();
+		settings
+			.lecturesConfiguration()
 			.enableLectures()
 			.overrideDefaultSettings()
 			.saveSettings();
+		settings
+			.clickToolbarBack();
 		
-		LectureRepositoryAdminListPage lectureList = lecturesAdmin
+		LectureRepositoryAdminListPage lectureList = course
+			.lecturesAdministration()
 			.lectureList();
 		
 		Calendar cal = Calendar.getInstance();
@@ -173,7 +179,7 @@ public class LecturesTest extends Deployments {
 			.save();
 		
 		//coach at work
-		LoginPage coachLoginPage = LoginPage.getLoginPage(coachBrowser, deploymentUrl);
+		LoginPage coachLoginPage = LoginPage.load(coachBrowser, deploymentUrl);
 		coachLoginPage
 			.loginAs(coach);
 		new RollCallInterceptorPage(coachBrowser)
@@ -184,7 +190,7 @@ public class LecturesTest extends Deployments {
 			.assertOnClosedTable();
 		
 		//participant check it roll call
-		LoginPage participantLoginPage = LoginPage.getLoginPage(participantBrowser, deploymentUrl);
+		LoginPage participantLoginPage = LoginPage.load(participantBrowser, deploymentUrl);
 		participantLoginPage
 			.loginAs(participant1)
 			.resume();
@@ -214,15 +220,16 @@ public class LecturesTest extends Deployments {
 	 */
 	@Test
 	@RunAsClient
-	public void lectureMobileRollCall_authorizedAbsence(@InitialPage LoginPage loginPage,
-			@Drone @User WebDriver coachBrowser, @Drone @User WebDriver participantBrowser)
+	public void lectureMobileRollCall_authorizedAbsence(@Drone @User WebDriver coachBrowser,
+			@Drone @User WebDriver participantBrowser)
 	throws IOException, URISyntaxException {
 		
 		// configure the lectures module
+		LoginPage loginPage = LoginPage.load(browser, deploymentUrl);
 		loginPage
 			.loginAs("administrator", "openolat")
 			.resume();
-		new NavigationPage(browser)
+		NavigationPage.load(browser)
 			.openAdministration()
 			.openLecturesSettings()
 			.configure(true, true, true, false, false)
@@ -235,10 +242,11 @@ public class LecturesTest extends Deployments {
 		UserVO participant2 = new UserRestClient(deploymentUrl).createRandomUser("Rymou");
 		
 		LoginPage
-			.getLoginPage(browser, deploymentUrl)
+			.load(browser, deploymentUrl)
 			.loginAs(author.getLogin(), author.getPassword());
 		
 		//go to authoring
+		NavigationPage navBar = NavigationPage.load(browser);
 		AuthoringEnvPage authoringEnv = navBar
 			.assertOnNavigationPage()
 			.openAuthoringEnvironment();
@@ -249,15 +257,19 @@ public class LecturesTest extends Deployments {
 			.openCreateDropDown()
 			.clickCreate(ResourceType.course)
 			.fillCreateForm(title)
-			.assertOnGeneralTab()
+			.assertOnInfos()
 			.clickToolbarBack();
 		
 		//set access
 		CoursePageFragment course = new CoursePageFragment(browser);
 		course
+			.settings()
 			.accessConfiguration()
 			.setUserAccess(UserAccess.membersOnly)
+			.save()
 			.clickToolbarBack();
+		course
+			.publish();
 		
 		//add a coach
 		course
@@ -280,15 +292,18 @@ public class LecturesTest extends Deployments {
 			.finish();
 		
 		//enable the lectures
-		LectureRepositoryAdminPage lecturesAdmin = course
-			.lecturesAdministration();
-		lecturesAdmin
-			.settings()
+		CourseSettingsPage settings = course
+			.settings();
+		settings
+			.lecturesConfiguration()
 			.enableLectures()
 			.overrideDefaultSettings()
 			.saveSettings();
+		settings
+			.clickToolbarBack();
 		
-		LectureRepositoryAdminListPage lectureList = lecturesAdmin
+		LectureRepositoryAdminListPage lectureList = course
+			.lecturesAdministration()
 			.lectureList();
 		
 		Calendar cal = Calendar.getInstance();
@@ -304,7 +319,7 @@ public class LecturesTest extends Deployments {
 			.save();
 		
 		//coach at work
-		LoginPage coachLoginPage = LoginPage.getLoginPage(coachBrowser, deploymentUrl);
+		LoginPage coachLoginPage = LoginPage.load(coachBrowser, deploymentUrl);
 		coachLoginPage
 			.loginAs(coach);
 		new RollCallInterceptorPage(coachBrowser)
@@ -320,7 +335,7 @@ public class LecturesTest extends Deployments {
 			.assertOnClosedTable();
 		
 		//participant check it roll call
-		LoginPage participantLoginPage = LoginPage.getLoginPage(participantBrowser, deploymentUrl);
+		LoginPage participantLoginPage = LoginPage.load(participantBrowser, deploymentUrl);
 		participantLoginPage
 			.loginAs(participant1)
 			.resume();
@@ -345,14 +360,15 @@ public class LecturesTest extends Deployments {
 	 */
 	@Test
 	@RunAsClient
-	public void lecturesRollCall(@InitialPage LoginPage loginPage)
+	public void lecturesRollCall()
 	throws IOException, URISyntaxException {
 
 		// configure the lectures module
+		LoginPage loginPage = LoginPage.load(browser, deploymentUrl);
 		loginPage
 			.loginAs("administrator", "openolat")
 			.resume();
-		new NavigationPage(browser)
+		NavigationPage.load(browser)
 			.openAdministration()
 			.openLecturesSettings()
 			.configure(true, true, false, false, false)
@@ -363,10 +379,11 @@ public class LecturesTest extends Deployments {
 		UserVO participant1 = new UserRestClient(deploymentUrl).createRandomUser("Kanu");
 		UserVO participant2 = new UserRestClient(deploymentUrl).createRandomUser("Rymou");
 		
-		LoginPage authorLoginPage = LoginPage.getLoginPage(browser, deploymentUrl);
+		LoginPage authorLoginPage = LoginPage.load(browser, deploymentUrl);
 		authorLoginPage.loginAs(author.getLogin(), author.getPassword());
 		
 		//go to authoring
+		NavigationPage navBar = NavigationPage.load(browser);
 		AuthoringEnvPage authoringEnv = navBar
 			.assertOnNavigationPage()
 			.openAuthoringEnvironment();
@@ -377,7 +394,7 @@ public class LecturesTest extends Deployments {
 			.openCreateDropDown()
 			.clickCreate(ResourceType.course)
 			.fillCreateForm(title)
-			.assertOnGeneralTab()
+			.assertOnInfos()
 			.clickToolbarBack();
 
 		CoursePageFragment course = new CoursePageFragment(browser);
@@ -391,15 +408,19 @@ public class LecturesTest extends Deployments {
 			.quickImport(participant1, participant2);
 		
 		//enable the lectures
-		LectureRepositoryAdminPage lecturesAdmin = course
-			.lecturesAdministration();
-		lecturesAdmin
-			.settings()
+		CourseSettingsPage settings = course
+			.settings();
+		settings
+			.lecturesConfiguration()
 			.enableLectures()
 			.overrideDefaultSettings()
 			.saveSettings();
+		settings
+			.clickToolbarBack();
 		
 		//add a lecture
+		LectureRepositoryAdminPage lecturesAdmin = course
+			.lecturesAdministration();
 		LectureRepositoryAdminListPage lectureList = lecturesAdmin
 			.lectureList();
 		
@@ -461,14 +482,15 @@ public class LecturesTest extends Deployments {
 	 */
 	@Test
 	@RunAsClient
-	public void lecturesRollCall_defaultAuthorizedAbsence(@InitialPage LoginPage loginPage)
+	public void lecturesRollCall_defaultAuthorizedAbsence()
 	throws IOException, URISyntaxException {
 		
 		// configure the lectures module
+		LoginPage loginPage = LoginPage.load(browser, deploymentUrl);
 		loginPage
 			.loginAs("administrator", "openolat")
 			.resume();
-		new NavigationPage(browser)
+		NavigationPage.load(browser)
 			.openAdministration()
 			.openLecturesSettings()
 			.configure(false, false, true, true, true)
@@ -480,10 +502,11 @@ public class LecturesTest extends Deployments {
 		UserVO participant2 = new UserRestClient(deploymentUrl).createRandomUser("Rymou");
 
 		LoginPage
-			.getLoginPage(browser, deploymentUrl)
+			.load(browser, deploymentUrl)
 			.loginAs(author.getLogin(), author.getPassword());
 		
 		//go to authoring
+		NavigationPage navBar = NavigationPage.load(browser);
 		AuthoringEnvPage authoringEnv = navBar
 			.assertOnNavigationPage()
 			.openAuthoringEnvironment();
@@ -494,15 +517,19 @@ public class LecturesTest extends Deployments {
 			.openCreateDropDown()
 			.clickCreate(ResourceType.course)
 			.fillCreateForm(title)
-			.assertOnGeneralTab()
+			.assertOnInfos()
 			.clickToolbarBack();
 		
 		//set access
 		CoursePageFragment course = new CoursePageFragment(browser);
 		course
+			.settings()
 			.accessConfiguration()
 			.setUserAccess(UserAccess.membersOnly)
+			.save()
 			.clickToolbarBack();
+		course
+			.publish();
 		
 		//add a coach
 		course
@@ -525,15 +552,18 @@ public class LecturesTest extends Deployments {
 			.finish();
 		
 		//enable the lectures
-		LectureRepositoryAdminPage lecturesAdmin = course
-			.lecturesAdministration();
-		lecturesAdmin
-			.settings()
+		CourseSettingsPage settings = course
+			.settings();
+		settings
+			.lecturesConfiguration()
 			.enableLectures()
 			.overrideDefaultSettings()
 			.saveSettings();
-		
-		LectureRepositoryAdminListPage lectureList = lecturesAdmin
+		settings
+			.clickToolbarBack();
+
+		LectureRepositoryAdminListPage lectureList = course
+			.lecturesAdministration()
 			.lectureList();
 		
 		Calendar cal = Calendar.getInstance();
@@ -549,7 +579,7 @@ public class LecturesTest extends Deployments {
 			.save();
 		
 		//coach at work
-		LoginPage coachLoginPage = LoginPage.getLoginPage(browser, deploymentUrl);
+		LoginPage coachLoginPage = LoginPage.load(browser, deploymentUrl);
 		coachLoginPage
 			.loginAs(author);
 		new RollCallInterceptorPage(browser)
@@ -560,7 +590,7 @@ public class LecturesTest extends Deployments {
 			.assertOnClosedTable();
 		
 		//participant check it roll call
-		LoginPage participantLoginPage = LoginPage.getLoginPage(browser, deploymentUrl);
+		LoginPage participantLoginPage = LoginPage.load(browser, deploymentUrl);
 		participantLoginPage
 			.loginAs(participant1)
 			.resume();
@@ -572,5 +602,71 @@ public class LecturesTest extends Deployments {
 			.selectCourseAsParticipant(title)
 			.assertOnParticipantLectureBlocks()
 			.assertOnParticipantLectureBlockAuthorised(author, lectureTitle, title);
+	}
+	
+	/**
+	 * An author create a course to use the absence management
+	 * and import some lectures blocks.
+	 * 
+	 * @param loginPage
+	 * @throws IOException
+	 * @throws URISyntaxException
+	 */
+	@Test
+	@RunAsClient
+	public void importLectures()
+	throws IOException, URISyntaxException {
+		UserVO author = new UserRestClient(deploymentUrl).createAuthor();
+
+		// configure the lectures module
+		LoginPage loginPage = LoginPage.load(browser, deploymentUrl);
+		loginPage
+			.loginAs(author.getLogin(), author.getPassword())
+			.resume();
+		
+		//go to authoring
+		NavigationPage navBar = NavigationPage.load(browser);
+		AuthoringEnvPage authoringEnv = navBar
+			.assertOnNavigationPage()
+			.openAuthoringEnvironment();
+		
+		String title = "Lecture " + UUID.randomUUID();
+		//create course
+		authoringEnv
+			.openCreateDropDown()
+			.clickCreate(ResourceType.course)
+			.fillCreateForm(title)
+			.assertOnInfos()
+			.clickToolbarBack();
+		
+		CoursePageFragment course = new CoursePageFragment(browser);
+		//enable the lectures
+		CourseSettingsPage settings = course
+			.settings();
+		settings
+			.lecturesConfiguration()
+			.enableLectures()
+			.overrideDefaultSettings()
+			.saveSettings();
+		settings
+			.clickToolbarBack();
+		
+		LectureRepositoryAdminListPage lectureList = course
+			.lecturesAdministration()
+			.lectureList();
+		
+		// import the lecture blocks
+		lectureList
+				.importLecturesBlocks()
+				.importFile("lectures/import_lectures.txt")
+				.next()
+				.assertOnNumberOfNewBlocks(3)
+				.finish();
+		
+		//check the blocks
+		lectureList
+			.assertOnLectureBlock("Abschlussparty")
+			.assertOnLectureBlock("Excel Workshop")
+			.assertOnLectureBlock("Mathematik Einf");
 	}
 }

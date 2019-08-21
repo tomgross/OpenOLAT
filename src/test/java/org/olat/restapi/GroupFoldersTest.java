@@ -40,7 +40,6 @@ import java.util.List;
 import javax.ws.rs.core.MediaType;
 import javax.ws.rs.core.UriBuilder;
 
-import org.apache.commons.io.IOUtils;
 import org.apache.http.HttpEntity;
 import org.apache.http.HttpResponse;
 import org.apache.http.client.methods.HttpGet;
@@ -48,35 +47,38 @@ import org.apache.http.client.methods.HttpPut;
 import org.apache.http.entity.mime.HttpMultipartMode;
 import org.apache.http.entity.mime.MultipartEntityBuilder;
 import org.apache.http.util.EntityUtils;
-import org.codehaus.jackson.map.ObjectMapper;
-import org.codehaus.jackson.type.TypeReference;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 import org.olat.basesecurity.GroupRoles;
+import org.olat.basesecurity.OrganisationService;
 import org.olat.collaboration.CollaborationTools;
 import org.olat.collaboration.CollaborationToolsFactory;
-import org.olat.core.CoreSpringFactory;
-import org.olat.core.commons.modules.bc.vfs.OlatRootFolderImpl;
 import org.olat.core.commons.persistence.DBFactory;
 import org.olat.core.id.Identity;
 import org.olat.core.id.OLATResourceable;
+import org.olat.core.id.Organisation;
+import org.apache.logging.log4j.Logger;
+import org.olat.core.logging.Tracing;
 import org.olat.core.util.FileUtils;
+import org.olat.core.util.StringHelper;
 import org.olat.core.util.resource.OresHelper;
 import org.olat.core.util.vfs.VFSContainer;
 import org.olat.core.util.vfs.VFSLeaf;
+import org.olat.core.util.vfs.VFSManager;
 import org.olat.group.BusinessGroup;
 import org.olat.group.BusinessGroupService;
 import org.olat.group.manager.BusinessGroupRelationDAO;
 import org.olat.repository.RepositoryEntry;
+import org.olat.repository.RepositoryEntryStatusEnum;
 import org.olat.repository.RepositoryService;
 import org.olat.resource.OLATResource;
 import org.olat.resource.OLATResourceManager;
 import org.olat.restapi.support.vo.FileMetadataVO;
 import org.olat.restapi.support.vo.FileVO;
 import org.olat.test.JunitTestHelper;
-import org.olat.test.OlatJerseyTestCase;
+import org.olat.test.OlatRestTestCase;
 import org.springframework.beans.factory.annotation.Autowired;
 
 /**
@@ -88,7 +90,9 @@ import org.springframework.beans.factory.annotation.Autowired;
  *
  * @author srosse, stephane.rosse@frentix.com, http://www.frentix.com
  */
-public class GroupFoldersTest extends OlatJerseyTestCase {
+public class GroupFoldersTest extends OlatRestTestCase {
+	
+	private static final Logger log = Tracing.createLoggerFor(GroupFoldersTest.class);
 	
 	private Identity owner1, owner2, part1, part2;
 	private BusinessGroup g1, g2;
@@ -98,6 +102,8 @@ public class GroupFoldersTest extends OlatJerseyTestCase {
 	@Autowired
 	private RepositoryService repositoryService;
 	@Autowired
+	private OrganisationService organisationService;
+	@Autowired
 	private BusinessGroupService businessGroupService;
 	@Autowired
 	private BusinessGroupRelationDAO businessGroupRelationDao;
@@ -105,12 +111,10 @@ public class GroupFoldersTest extends OlatJerseyTestCase {
 	/**
 	 * Set up a course with learn group and group area
 	 * EXACTLY THE SAME AS GroupMgmTest
-	 * @see org.olat.test.OlatJerseyTestCase#setUp()
+	 * @see org.olat.test.OlatRestTestCase#setUp()
 	 */
 	@Before
-	@Override
 	public void setUp() throws Exception {
-		super.setUp();
 		conn = new RestConnection();
 		//create a course with learn group
 		
@@ -122,8 +126,9 @@ public class GroupFoldersTest extends OlatJerseyTestCase {
 		// create course and persist as OLATResourceImpl
 		OLATResourceable resourceable = OresHelper.createOLATResourceableInstance("junitcourse",System.currentTimeMillis());
 		course = OLATResourceManager.getInstance().findOrPersistResourceable(resourceable);
-		RepositoryService rs = CoreSpringFactory.getImpl(RepositoryService.class);
-		RepositoryEntry re = rs.create("administrator", "-", "rest-re", null, course);
+		Organisation defOrganisation = organisationService.getDefaultOrganisation();
+		RepositoryEntry re = repositoryService.create(null, "administrator", "-", "rest-re", null, course,
+				RepositoryEntryStatusEnum.trash, defOrganisation);
 		repositoryService.update(re);
 		DBFactory.getInstance().commit();
 		
@@ -179,8 +184,8 @@ public class GroupFoldersTest extends OlatJerseyTestCase {
 		HttpGet method = conn.createGet(request, MediaType.APPLICATION_JSON, true);
 		HttpResponse response = conn.execute(method);
 		assertEquals(200, response.getStatusLine().getStatusCode());
-		InputStream body = response.getEntity().getContent();
-		assertNotNull(body);
+		String content = EntityUtils.toString(response.getEntity());
+		Assert.assertTrue(StringHelper.containsNonWhitespace(content));
 	}
 	
 	@Test
@@ -188,7 +193,7 @@ public class GroupFoldersTest extends OlatJerseyTestCase {
 		//create some sub folders
 		CollaborationTools collabTools1 = CollaborationToolsFactory.getInstance().getOrCreateCollaborationTools(g1);
 		String folderRelPath = collabTools1.getFolderRelPath();
-		OlatRootFolderImpl folder = new OlatRootFolderImpl(folderRelPath, null);
+		VFSContainer folder = VFSManager.olatRootContainer(folderRelPath, null);
 		VFSContainer newFolder1 = folder.createChildContainer("New folder 1");
 		if(newFolder1 == null) {
 			newFolder1 = (VFSContainer)folder.resolve("New folder 1");
@@ -208,9 +213,7 @@ public class GroupFoldersTest extends OlatJerseyTestCase {
 		HttpGet method0 = conn.createGet(request0, MediaType.APPLICATION_JSON, true);
 		HttpResponse code0 = conn.execute(method0);
 		assertEquals(200, code0.getStatusLine().getStatusCode());
-		InputStream body0 = code0.getEntity().getContent();
-		assertNotNull(body0);
-		List<FileVO> fileVos0 = parseFileArray(body0);
+		List<FileVO> fileVos0 = parseFileArray(code0.getEntity());
 		assertNotNull(fileVos0);
 		assertEquals(1, fileVos0.size());
 		
@@ -219,9 +222,7 @@ public class GroupFoldersTest extends OlatJerseyTestCase {
 		HttpGet method1 = conn.createGet(request1, MediaType.APPLICATION_JSON, true);
 		HttpResponse code1 = conn.execute(method1);
 		assertEquals(200, code1.getStatusLine().getStatusCode());
-		InputStream body1 = code1.getEntity().getContent();
-		assertNotNull(body1);
-		List<FileVO> fileVos1 = parseFileArray(body1);
+		List<FileVO> fileVos1 = parseFileArray(code1.getEntity());
 		assertNotNull(fileVos1);
 		assertEquals(1, fileVos1.size());
 		
@@ -239,18 +240,15 @@ public class GroupFoldersTest extends OlatJerseyTestCase {
 		HttpGet method2 = conn.createGet(request2, MediaType.APPLICATION_JSON, true);
 		HttpResponse code2 = conn.execute(method2);
 		assertEquals(200, code2.getStatusLine().getStatusCode());
-		InputStream body2 = code2.getEntity().getContent();
-		assertNotNull(body2);
-		EntityUtils.consume(code2.getEntity());
+		String test2 = EntityUtils.toString(code2.getEntity());
+		Assert.assertTrue(StringHelper.containsNonWhitespace(test2));
 		
 		//get sub folder with end /
 		URI request3 = UriBuilder.fromUri(getContextURI()).path("/groups/" + g1.getKey() + "/folder/New_folder_1/").build();
 		HttpGet method3 = conn.createGet(request3, MediaType.APPLICATION_JSON, true);
 		HttpResponse code3 = conn.execute(method3);
 		assertEquals(200, code3.getStatusLine().getStatusCode());
-		InputStream body3 = code3.getEntity().getContent();
-		assertNotNull(body3);
-		List<FileVO> fileVos3 = parseFileArray(body3);
+		List<FileVO> fileVos3 = parseFileArray(code3.getEntity());
 		assertNotNull(fileVos3);
 		assertEquals(1, fileVos3.size());
 	}
@@ -260,7 +258,7 @@ public class GroupFoldersTest extends OlatJerseyTestCase {
 		//create some sub folders and copy file
 		CollaborationTools collabTools2 = CollaborationToolsFactory.getInstance().getOrCreateCollaborationTools(g2);
 		String folderRelPath = collabTools2.getFolderRelPath();
-		OlatRootFolderImpl folder = new OlatRootFolderImpl(folderRelPath, null);
+		VFSContainer folder = VFSManager.olatRootContainer(folderRelPath, null);
 		VFSContainer newFolder1 = folder.createChildContainer("New folder 2");
 		if(newFolder1 == null) {
 			newFolder1 = (VFSContainer)folder.resolve("New folder 2");
@@ -268,11 +266,12 @@ public class GroupFoldersTest extends OlatJerseyTestCase {
 		VFSLeaf file = (VFSLeaf)newFolder1.resolve("portrait.jpg");
 		if(file == null) {
 			file = newFolder1.createChildLeaf("portrait.jpg");
-			OutputStream out = file.getOutputStream(true);
-			InputStream in = GroupFoldersTest.class.getResourceAsStream("portrait.jpg");
-			FileUtils.copy(in, out);
-			FileUtils.closeSafely(in);
-			FileUtils.closeSafely(out);
+			try(OutputStream out = file.getOutputStream(true);
+					InputStream in = GroupFoldersTest.class.getResourceAsStream("portrait.jpg")) {
+				FileUtils.copy(in, out);
+			} catch(IOException e) {
+				log.error("", e);
+			}
 		}
 		
 		// get the file
@@ -281,8 +280,7 @@ public class GroupFoldersTest extends OlatJerseyTestCase {
 		HttpGet method = conn.createGet(request, "*/*", true);
 		HttpResponse response = conn.execute(method);
 		assertEquals(200, response.getStatusLine().getStatusCode());
-		InputStream body = response.getEntity().getContent();
-		byte[] byteArr = IOUtils.toByteArray(body);
+		byte[] byteArr = EntityUtils.toByteArray(response.getEntity());
 		Assert.assertNotNull(byteArr);
 		Assert.assertEquals(file.getSize(), byteArr.length);
 	}
@@ -292,7 +290,7 @@ public class GroupFoldersTest extends OlatJerseyTestCase {
 		//create some sub folders and copy file
 		CollaborationTools collabTools2 = CollaborationToolsFactory.getInstance().getOrCreateCollaborationTools(g2);
 		String folderRelPath = collabTools2.getFolderRelPath();
-		OlatRootFolderImpl folder = new OlatRootFolderImpl(folderRelPath, null);
+		VFSContainer folder = VFSManager.olatRootContainer(folderRelPath, null);
 		VFSContainer newFolder1 = folder.createChildContainer("Metadata folder");
 		if(newFolder1 == null) {
 			newFolder1 = (VFSContainer)folder.resolve("Metadata folder");
@@ -300,11 +298,12 @@ public class GroupFoldersTest extends OlatJerseyTestCase {
 		VFSLeaf file = (VFSLeaf)newFolder1.resolve("portrait.jpg");
 		if(file == null) {
 			file = newFolder1.createChildLeaf("portrait.jpg");
-			OutputStream out = file.getOutputStream(true);
-			InputStream in = GroupFoldersTest.class.getResourceAsStream("portrait.jpg");
-			FileUtils.copy(in, out);
-			FileUtils.closeSafely(in);
-			FileUtils.closeSafely(out);
+			try(OutputStream out = file.getOutputStream(true);
+					InputStream in = GroupFoldersTest.class.getResourceAsStream("portrait.jpg")) {
+				FileUtils.copy(in, out);
+			} catch(IOException e) {
+				log.error("", e);
+			}
 		}
 		
 		// get the file
@@ -328,12 +327,11 @@ public class GroupFoldersTest extends OlatJerseyTestCase {
 		URI request = UriBuilder.fromUri(getContextURI()).path("/groups/" + g1.getKey() + "/folder/New_folder_1/New_folder_1_1/New_folder_1_1_1").build();
 		HttpPut method = conn.createPut(request, MediaType.APPLICATION_JSON, true);
 		HttpResponse response = conn.execute(method);
-		InputStream body = response.getEntity().getContent();
 		assertEquals(200, response.getStatusLine().getStatusCode());
-		assertNotNull(body);
+		EntityUtils.consume(response.getEntity());
 	}
 
-	//@Test not working -> Jersey ignore the request and return 200 (why?)
+	@Test
 	public void testCreateFoldersWithSpecialCharacter() throws IOException, URISyntaxException {
 		assertTrue(conn.login("rest-one", "A6B7C8"));
 		URI request = UriBuilder.fromUri(getContextURI()).path("/groups/" + g1.getKey() + "/folder/New_folder_1/New_folder_1_1/New_folder_1 1 2").build();
@@ -362,26 +360,5 @@ public class GroupFoldersTest extends OlatJerseyTestCase {
 		assertNotNull(file.getHref());
 		assertNotNull(file.getTitle());
 		assertEquals("New folder 1 2 3", file.getTitle());
-	}
-	
-	protected <T> T parse(InputStream body, Class<T> cl) {
-		try {
-			ObjectMapper mapper = new ObjectMapper(jsonFactory);
-			T obj = mapper.readValue(body, cl);
-			return obj;
-		} catch (Exception e) {
-			e.printStackTrace();
-			return null;
-		}
-	}
-	
-	protected List<FileVO> parseFileArray(InputStream body) {
-		try {
-			ObjectMapper mapper = new ObjectMapper(jsonFactory); 
-			return mapper.readValue(body, new TypeReference<List<FileVO>>(){/* */});
-		} catch (Exception e) {
-			e.printStackTrace();
-			return null;
-		}
 	}
 }

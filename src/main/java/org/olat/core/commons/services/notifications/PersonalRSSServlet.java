@@ -33,11 +33,12 @@ import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 
 import org.olat.basesecurity.Authentication;
-import org.olat.basesecurity.BaseSecurityManager;
+import org.olat.basesecurity.BaseSecurity;
+import org.olat.core.CoreSpringFactory;
 import org.olat.core.commons.persistence.DBFactory;
 import org.olat.core.dispatcher.DispatcherModule;
 import org.olat.core.id.Identity;
-import org.olat.core.logging.OLog;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.i18n.I18nManager;
 
@@ -56,16 +57,12 @@ import com.rometools.rome.io.SyndFeedOutput;
 public class PersonalRSSServlet extends HttpServlet {
 	
 	private static final long serialVersionUID = -674630331334472714L;
-	private static final OLog log = Tracing.createLoggerFor(PersonalRSSServlet.class);
+	private static final Logger log = Tracing.createLoggerFor(PersonalRSSServlet.class);
 	public static final String DEFAULT_ENCODING = "UTF-8";
 
-	/**
-	 * @see javax.servlet.http.HttpServlet#service(javax.servlet.http.HttpServletRequest,
-	 *      javax.servlet.http.HttpServletResponse)
-	 */
 	@Override
 	protected void service(HttpServletRequest req, HttpServletResponse resp) {
-		Tracing.setUreq(req);
+		Tracing.setHttpRequest(req);
 		I18nManager.attachI18nInfoToThread(req);
 		try {
 			String method = req.getMethod();
@@ -79,7 +76,7 @@ public class PersonalRSSServlet extends HttpServlet {
 		} finally {
 			I18nManager.remove18nInfoFromThread();
 			// consume the user request.
-			Tracing.setUreq(null);
+			Tracing.clearHttpRequest();
 		}
 	}
 
@@ -113,7 +110,7 @@ public class PersonalRSSServlet extends HttpServlet {
 			String encoding = feed.getEncoding();
 			if (encoding == null) {
 				encoding = DEFAULT_ENCODING;
-				if (log.isDebug()) {
+				if (log.isDebugEnabled()) {
 					log.debug("Feed encoding::" + encoding);
 				}
 				log.warn("No encoding provided by feed::" + feed.getClass().getCanonicalName() + " Using utf-8 as default.");
@@ -158,14 +155,18 @@ public class PersonalRSSServlet extends HttpServlet {
 		String idToken = pathInfo.substring(startIdToken + 1, startUselessUri);
 
 		// ---- check integrity and user authentication ----
-		if (idName == null || idName.equals("")) { return null; }
-		Identity identity = BaseSecurityManager.getInstance().findIdentityByName(idName);
+		if (idName == null || idName.equals("")) {
+			return null;
+		}
+		
+		BaseSecurity securityManager = CoreSpringFactory.getImpl(BaseSecurity.class);
+		Identity identity = securityManager.findIdentityByName(idName);
 		if (identity == null) {
 			// error - abort
 			return null;
 		}
 		// check if this is a valid authentication
-		Authentication auth = BaseSecurityManager.getInstance().findAuthentication(identity, PersonalRSSUtil.RSS_AUTH_PROVIDER);
+		Authentication auth = securityManager.findAuthentication(identity, PersonalRSSUtil.RSS_AUTH_PROVIDER);
 		if (auth == null) {
 			// error, rss authentication not yet set. user must login first, then the
 			// auth provider will be generated on the fly

@@ -24,19 +24,24 @@ import java.util.UUID;
 
 import org.olat.core.CoreSpringFactory;
 import org.olat.core.gui.UserRequest;
+import org.olat.core.gui.components.form.flexible.impl.Form;
 import org.olat.core.gui.control.Controller;
 import org.olat.core.gui.control.WindowControl;
+import org.olat.modules.ceditor.PageElement;
+import org.olat.modules.ceditor.PageElementCategory;
+import org.olat.modules.ceditor.PageElementEditorController;
+import org.olat.modules.ceditor.PageElementRenderingHints;
+import org.olat.modules.ceditor.PageRunElement;
+import org.olat.modules.ceditor.SimpleAddPageElementHandler;
+import org.olat.modules.ceditor.ui.PageRunControllerElement;
 import org.olat.modules.forms.EvaluationFormsModule;
 import org.olat.modules.forms.model.xml.FileUpload;
 import org.olat.modules.forms.ui.FileUploadController;
 import org.olat.modules.forms.ui.FileUploadEditorController;
-import org.olat.modules.portfolio.ui.editor.PageElement;
-import org.olat.modules.portfolio.ui.editor.PageElementEditorController;
-import org.olat.modules.portfolio.ui.editor.PageElementHandler;
-import org.olat.modules.portfolio.ui.editor.PageElementRenderingHints;
-import org.olat.modules.portfolio.ui.editor.PageRunControllerElement;
-import org.olat.modules.portfolio.ui.editor.PageRunElement;
-import org.olat.modules.portfolio.ui.editor.SimpleAddPageElementHandler;
+import org.olat.modules.forms.ui.model.EvaluationFormExecutionElement;
+import org.olat.modules.forms.ui.model.EvaluationFormResponseController;
+import org.olat.modules.forms.ui.model.EvaluationFormResponseControllerElement;
+import org.olat.modules.forms.ui.model.ExecutionIdentity;
 
 /**
  * 
@@ -44,8 +49,14 @@ import org.olat.modules.portfolio.ui.editor.SimpleAddPageElementHandler;
  * @author uhensler, urs.hensler@frentix.com, http://www.frentix.com
  *
  */
-public class FileUploadHandler implements PageElementHandler, SimpleAddPageElementHandler {
+public class FileUploadHandler implements EvaluationFormElementHandler, SimpleAddPageElementHandler {
 
+	private final boolean restrictedEdit;
+	
+	public FileUploadHandler(boolean restrictedEdit) {
+		this.restrictedEdit = restrictedEdit;
+	}
+	
 	@Override
 	public String getType() {
 		return "formfileupload";
@@ -54,6 +65,11 @@ public class FileUploadHandler implements PageElementHandler, SimpleAddPageEleme
 	@Override
 	public String getIconCssClass() {
 		return "o_icon_fileupload";
+	}
+	
+	@Override
+	public PageElementCategory getCategory() {
+		return PageElementCategory.questionType;
 	}
 
 	@Override
@@ -70,7 +86,7 @@ public class FileUploadHandler implements PageElementHandler, SimpleAddPageEleme
 	public PageElementEditorController getEditor(UserRequest ureq, WindowControl wControl, PageElement element) {
 		if(element instanceof FileUpload) {
 			FileUpload fileUpload = (FileUpload) element;
-			return new FileUploadEditorController(ureq, wControl, fileUpload);
+			return new FileUploadEditorController(ureq, wControl, fileUpload, restrictedEdit);
 		}
 		return null;
 	}
@@ -83,5 +99,16 @@ public class FileUploadHandler implements PageElementHandler, SimpleAddPageEleme
 		part.setMaxUploadSizeKB(evaluationFormModule.getMaxFileUploadLimitKB());
 		return part;
 	}
+
+	@Override
+	public EvaluationFormExecutionElement getExecutionElement(UserRequest ureq, WindowControl wControl, Form rootForm,
+			PageElement element, ExecutionIdentity executionIdentity) {
+		if (element instanceof FileUpload) {
+			FileUpload fileUpload = (FileUpload) element;
+			EvaluationFormResponseController ctrl = new FileUploadController(ureq, wControl, fileUpload, rootForm);
+			return new EvaluationFormResponseControllerElement(ctrl);
+		}
+		return null;
+ 	}
 
 }

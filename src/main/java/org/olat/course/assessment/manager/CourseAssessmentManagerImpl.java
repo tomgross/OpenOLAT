@@ -30,12 +30,12 @@ import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 
+import org.apache.logging.log4j.Logger;
 import org.olat.core.CoreSpringFactory;
 import org.olat.core.commons.modules.bc.FolderConfig;
 import org.olat.core.commons.persistence.DBFactory;
 import org.olat.core.id.Identity;
 import org.olat.core.id.OLATResourceable;
-import org.olat.core.logging.OLog;
 import org.olat.core.logging.Tracing;
 import org.olat.core.logging.activity.StringResourceableType;
 import org.olat.core.logging.activity.ThreadLocalUserActivityLogger;
@@ -56,6 +56,7 @@ import org.olat.course.assessment.model.AssessmentNodesLastModified;
 import org.olat.course.auditing.UserNodeAuditManager;
 import org.olat.course.certificate.CertificateTemplate;
 import org.olat.course.certificate.CertificatesManager;
+import org.olat.course.certificate.model.CertificateConfig;
 import org.olat.course.certificate.model.CertificateInfos;
 import org.olat.course.groupsandrights.CourseGroupManager;
 import org.olat.course.nodes.AssessableCourseNode;
@@ -82,7 +83,7 @@ import org.olat.util.logging.activity.LoggingResourceable;
  */
 public class CourseAssessmentManagerImpl implements AssessmentManager {
 	
-	private static final OLog log = Tracing.createLoggerFor(CourseAssessmentManagerImpl.class);
+	private static final Logger log = Tracing.createLoggerFor(CourseAssessmentManagerImpl.class);
 	
 	public static final String ASSESSMENT_DOCS_DIR = "assessmentdocs";
 	
@@ -233,7 +234,7 @@ public class CourseAssessmentManagerImpl implements AssessmentManager {
 			
 			//update counter
 			AssessmentEntry nodeAssessment = getOrCreate(assessedIdentity, courseNode);
-			File[] docs = directory.listFiles(new SystemFileFilter(true, false));
+			File[] docs = directory.listFiles(SystemFileFilter.FILES_ONLY);
 			int numOfDocs = docs == null ? 0 : docs.length;
 			nodeAssessment.setNumberOfAssessmentDocuments(numOfDocs);
 			assessmentService.updateAssessmentEntry(nodeAssessment);
@@ -261,7 +262,7 @@ public class CourseAssessmentManagerImpl implements AssessmentManager {
 			//update counter
 			File directory = getAssessmentDocumentsDirectory(courseNode, assessedIdentity);
 			AssessmentEntry nodeAssessment = getOrCreate(assessedIdentity, courseNode);
-			File[] docs = directory.listFiles(new SystemFileFilter(true, false));
+			File[] docs = directory.listFiles(SystemFileFilter.FILES_ONLY);
 			int numOfDocs = docs == null ? 0 : docs.length;
 			nodeAssessment.setNumberOfAssessmentDocuments(numOfDocs);
 			assessmentService.updateAssessmentEntry(nodeAssessment);
@@ -522,7 +523,15 @@ public class CourseAssessmentManagerImpl implements AssessmentManager {
 					template = certificatesManager.getTemplateById(templateId);
 				}
 				CertificateInfos certificateInfos = new CertificateInfos(assessedIdentity, rootEval.getScore(), rootEval.getPassed());
-				certificatesManager.generateCertificate(certificateInfos, cgm.getCourseEntry(), template, true);
+				CertificateConfig config = CertificateConfig.builder()
+						.withCustom1(course.getCourseConfig().getCertificateCustom1())
+						.withCustom2(course.getCourseConfig().getCertificateCustom2())
+						.withCustom3(course.getCourseConfig().getCertificateCustom3())
+						.withSendEmailBcc(true)
+						.withSendEmailLinemanager(true)
+						.withSendEmailIdentityRelations(true)
+						.build();
+				certificatesManager.generateCertificate(certificateInfos, cgm.getCourseEntry(), template, config);
 			}
 		}
 	}
@@ -550,7 +559,7 @@ public class CourseAssessmentManagerImpl implements AssessmentManager {
 	@Override
 	public List<File> getIndividualAssessmentDocuments(CourseNode courseNode, Identity identity) {
 		File directory = getAssessmentDocumentsDirectory(courseNode, identity);
-		File[] documents = directory.listFiles(new SystemFileFilter(true, false));
+		File[] documents = directory.listFiles(SystemFileFilter.FILES_ONLY);
 		List<File> documentList = new ArrayList<>();
 		if(documents != null && documents.length > 0) {
 			for(File document:documents) {

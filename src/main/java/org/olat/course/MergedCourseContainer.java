@@ -19,10 +19,11 @@
  */
 package org.olat.course;
 
+import org.olat.basesecurity.GroupRoles;
+import org.olat.basesecurity.OrganisationRoles;
 import org.olat.core.CoreSpringFactory;
-import org.olat.core.commons.modules.bc.vfs.OlatRootFolderImpl;
 import org.olat.core.id.IdentityEnvironment;
-import org.olat.core.logging.OLog;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.StringHelper;
 import org.olat.core.util.vfs.MergeSource;
@@ -30,6 +31,7 @@ import org.olat.core.util.vfs.NamedContainerImpl;
 import org.olat.core.util.vfs.VFSContainer;
 import org.olat.core.util.vfs.callbacks.ReadOnlyCallback;
 import org.olat.course.config.CourseConfig;
+import org.olat.course.folder.CourseContainerOptions;
 import org.olat.course.folder.MergedCourseElementDataContainer;
 import org.olat.modules.sharedfolder.SharedFolderManager;
 import org.olat.repository.RepositoryEntry;
@@ -44,23 +46,25 @@ import org.olat.resource.OLATResource;
  */
 public class MergedCourseContainer extends MergeSource {
 	
-	private static final OLog log = Tracing.createLoggerFor(MergedCourseContainer.class);
+	private static final Logger log = Tracing.createLoggerFor(MergedCourseContainer.class);
 	
 	private final Long courseId;
 	private boolean courseReadOnly = false;
 	private boolean overrideReadOnly = false;
 	private final IdentityEnvironment identityEnv;
+	private final CourseContainerOptions options;
 	
 	public MergedCourseContainer(Long courseId, String name) {
-		this(courseId, name, null, false);
+		this(courseId, name, null, CourseContainerOptions.all(), false);
 	}
 	
 	public MergedCourseContainer(Long courseId, String name, IdentityEnvironment identityEnv) {
-		this(courseId, name, identityEnv, false);
+		this(courseId, name, identityEnv, CourseContainerOptions.all(), false);
 	}
 	
-	public MergedCourseContainer(Long courseId, String name, IdentityEnvironment identityEnv, boolean overrideReadOnly) {
+	public MergedCourseContainer(Long courseId, String name, IdentityEnvironment identityEnv, CourseContainerOptions options, boolean overrideReadOnly) {
 		super(null, name);
+		this.options = options;
 		this.courseId = courseId;
 		this.identityEnv = identityEnv;
 		this.overrideReadOnly = overrideReadOnly;
@@ -78,36 +82,41 @@ public class MergedCourseContainer extends MergeSource {
 		super.init();
 		
 		RepositoryEntry courseRe = persistingCourse.getCourseEnvironment().getCourseGroupManager().getCourseEntry();
-		courseReadOnly = !overrideReadOnly && (courseRe.getRepositoryEntryStatus().isClosed() || courseRe.getRepositoryEntryStatus().isUnpublished());
+		courseReadOnly = !overrideReadOnly && courseRe.getEntryStatus().decommissioned();
 		if(courseReadOnly) {
 			setLocalSecurityCallback(new ReadOnlyCallback());
 		}
-
-		if(identityEnv == null || identityEnv.getRoles().isOLATAdmin()) {
-			VFSContainer courseContainer = persistingCourse.getIsolatedCourseFolder();
-			if(courseReadOnly) {
-				courseContainer.setLocalSecurityCallback(new ReadOnlyCallback());
-			}
-			addContainersChildren(courseContainer, true);
-		} else {
-			RepositoryEntry re = persistingCourse.getCourseEnvironment().getCourseGroupManager().getCourseEntry();
-			RepositoryEntrySecurity reSecurity = RepositoryManager.getInstance()
-					.isAllowed(identityEnv.getIdentity(), identityEnv.getRoles(), re);
-			if(reSecurity.isEntryAdmin()) {
+		
+		if(options.withCourseFolder()) {
+			if(identityEnv == null) {
 				VFSContainer courseContainer = persistingCourse.getIsolatedCourseFolder();
 				if(courseReadOnly) {
 					courseContainer.setLocalSecurityCallback(new ReadOnlyCallback());
 				}
 				addContainersChildren(courseContainer, true);
+			} else {
+				RepositoryEntrySecurity reSecurity = RepositoryManager.getInstance()
+						.isAllowed(identityEnv.getIdentity(), identityEnv.getRoles(), courseRe);
+				if(reSecurity.isEntryAdmin()) {
+					VFSContainer courseContainer = persistingCourse.getIsolatedCourseFolder();
+					if(courseReadOnly) {
+						courseContainer.setLocalSecurityCallback(new ReadOnlyCallback());
+					}
+					addContainersChildren(courseContainer, true);
+				}
 			}
 		}
 		
-		initSharedFolder(persistingCourse);
+		if(options.withSharedResource()) {
+			initSharedFolder(persistingCourse);
+		}
 			
 		// add all course building blocks of type BC to a virtual folder
-		MergedCourseElementDataContainer nodesContainer = new MergedCourseElementDataContainer(courseId, identityEnv);
-		if (!nodesContainer.isEmpty()) {
-			addContainer(nodesContainer);
+		if(options.withCourseElements()) {
+			MergedCourseElementDataContainer nodesContainer = new MergedCourseElementDataContainer(courseId, identityEnv);
+			if (!nodesContainer.isEmpty()) {
+				addContainer(nodesContainer);
+			}
 		}
 	}
 	
@@ -123,10 +132,14 @@ public class MergedCourseContainer extends MergeSource {
 		String sfSoftkey = courseConfig.getSharedFolderSoftkey();
 		if (StringHelper.containsNonWhitespace(sfSoftkey) && !CourseConfig.VALUE_EMPTY_SHAREDFOLDER_SOFTKEY.equals(sfSoftkey)) {
 			RepositoryEntry re = persistingCourse.getCourseEnvironment().getCourseGroupManager().getCourseEntry();
-			if(identityEnv == null || identityEnv.getRoles().isOLATAdmin() || RepositoryManager.getInstance().isOwnerOfRepositoryEntry(identityEnv.getIdentity(), re)) {
-				OLATResource sharedResource = CoreSpringFactory.getImpl(RepositoryService.class).loadRepositoryEntryResourceBySoftKey(sfSoftkey);
+			RepositoryService repositoryService = CoreSpringFactory.getImpl(RepositoryService.class);
+			
+			if(identityEnv == null || repositoryService.hasRoleExpanded(identityEnv.getIdentity(), re,
+					OrganisationRoles.administrator.name(), OrganisationRoles.learnresourcemanager.name(),
+					GroupRoles.owner.name())) {
+				OLATResource sharedResource = repositoryService.loadRepositoryEntryResourceBySoftKey(sfSoftkey);
 				if (sharedResource != null) {
-					OlatRootFolderImpl sharedFolder = SharedFolderManager.getInstance().getSharedFolder(sharedResource);
+					VFSContainer sharedFolder = SharedFolderManager.getInstance().getSharedFolder(sharedResource);
 					if (sharedFolder != null) {
 						if(courseConfig.isSharedFolderReadOnlyMount() || courseReadOnly) {
 							sharedFolder.setLocalSecurityCallback(new ReadOnlyCallback());

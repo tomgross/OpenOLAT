@@ -26,13 +26,11 @@
 
 package org.olat.core.util.vfs;
 
+import org.olat.core.commons.services.vfs.VFSMetadata;
 import org.olat.core.util.vfs.callbacks.VFSSecurityCallback;
 
 
 /**
- * Description:<br>
- * TODO: Felix Jost Class Description for VFSItem
- * 
  * <P>
  * Initial Date:  23.06.2005 <br>
  *
@@ -64,6 +62,15 @@ public interface VFSItem {
 	 * @param parentContainer
 	 */
 	public void setParentContainer(VFSContainer parentContainer);
+	
+	/**
+	 * The relative path is normalized the following way: if the file is not in
+	 * "bcroot" the returned path is null, the path starts always with "/", directories
+	 * doesn't have a leading "/".
+	 * 
+	 * @return The relative path to "bcroot" or null if the file is not located in "bcroot". 
+	 */
+	public String getRelPath();
 
 	/**
 	 * @param newname e.g test.txt or myfolder (no path prepended)
@@ -87,6 +94,8 @@ public interface VFSItem {
 	 * @return True if the file exists
 	 */
 	public boolean exists();
+	
+	public boolean isHidden();
 	
 	/**
 	 * @return if can write
@@ -122,6 +131,21 @@ public interface VFSItem {
 	 * @return true if a child can be added at all(only files and folder cab be copied to). the operation may still fail because e.g. of quota limitation.
 	 */
 	public VFSStatus canWrite();
+	
+	/**
+	 * @return true if the file has or can save some metadata informations
+	 */
+	public VFSStatus canMeta();
+	
+	/**
+	 * @return true if the file can be versioned
+	 */
+	public VFSStatus canVersion();
+	
+	/**
+	 * @return The metadata if the item can metadata or null if not
+	 */
+	public VFSMetadata getMetaInfo();
 	
 	/**
 	 * Get the local security callback for this item.

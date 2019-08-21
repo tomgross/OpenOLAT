@@ -43,10 +43,10 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
 
+import org.apache.logging.log4j.Logger;
 import org.olat.admin.user.imp.TransientIdentity;
 import org.olat.basesecurity.GroupRoles;
 import org.olat.basesecurity.IdentityRef;
-import org.olat.core.commons.modules.bc.vfs.OlatRootFolderImpl;
 import org.olat.core.commons.persistence.DB;
 import org.olat.core.gui.translator.Translator;
 import org.olat.core.id.Identity;
@@ -54,6 +54,7 @@ import org.olat.core.id.IdentityEnvironment;
 import org.olat.core.id.OLATResourceable;
 import org.olat.core.id.Roles;
 import org.olat.core.logging.OLATRuntimeException;
+import org.olat.core.logging.Tracing;
 import org.olat.core.logging.activity.LoggingObject;
 import org.olat.core.util.StringHelper;
 import org.olat.core.util.Util;
@@ -63,6 +64,8 @@ import org.olat.core.util.nodes.INode;
 import org.olat.core.util.resource.OresHelper;
 import org.olat.core.util.tree.TreeVisitor;
 import org.olat.core.util.tree.Visitor;
+import org.olat.core.util.vfs.LocalFolderImpl;
+import org.olat.core.util.vfs.VFSManager;
 import org.olat.course.CorruptedCourseException;
 import org.olat.course.CourseFactory;
 import org.olat.course.CourseModule;
@@ -116,6 +119,7 @@ import org.olat.portfolio.model.structel.StructureStatusEnum;
 import org.olat.properties.Property;
 import org.olat.repository.RepositoryEntry;
 import org.olat.repository.RepositoryEntryRef;
+import org.olat.repository.RepositoryEntryRelationType;
 import org.olat.repository.RepositoryManager;
 import org.olat.repository.RepositoryService;
 import org.olat.repository.model.SearchRepositoryEntryParameters;
@@ -130,6 +134,8 @@ import org.springframework.beans.factory.annotation.Autowired;
  *
  */
 public class OLATUpgrade_11_0_0 extends OLATUpgrade {
+
+	private static final Logger log = Tracing.createLoggerFor(OLATUpgrade_11_0_0.class);
 	
 	private static final int BATCH_SIZE = 50;
 	private static final String ASSESSMENT_DATAS = "ASSESSMENT PROPERTY TABLE";
@@ -168,11 +174,6 @@ public class OLATUpgrade_11_0_0 extends OLATUpgrade {
 	public String getVersion() {
 		return VERSION;
 	}
-	
-	@Override
-	public boolean doPreSystemInitUpgrade(UpgradeManager upgradeManager) {
-		return false;
-	}
 
 	@Override
 	public boolean doPostSystemInitUpgrade(UpgradeManager upgradeManager) {
@@ -192,9 +193,9 @@ public class OLATUpgrade_11_0_0 extends OLATUpgrade {
 		uhd.setInstallationComplete(allOk);
 		upgradeManager.setUpgradesHistory(uhd, VERSION);
 		if(allOk) {
-			log.audit("Finished OLATUpgrade_11_0_0 successfully!");
+			log.info(Tracing.M_AUDIT, "Finished OLATUpgrade_11_0_0 successfully!");
 		} else {
-			log.audit("OLATUpgrade_11_0_0 not finished, try to restart OpenOLAT!");
+			log.info(Tracing.M_AUDIT, "OLATUpgrade_11_0_0 not finished, try to restart OpenOLAT!");
 		}
 		return allOk;
 	}
@@ -256,7 +257,7 @@ public class OLATUpgrade_11_0_0 extends OLATUpgrade {
 		boolean allOk = true;
 		if (!uhd.getBooleanDataValue(EFFICIENCY_STATEMENT_DATAS)) {
 			int counter = 0;
-			final Roles roles = new Roles(true, true, true, true, false, true, false);
+			final Roles roles = Roles.administratorAndManagersRoles();
 			final SearchRepositoryEntryParameters params = new SearchRepositoryEntryParameters();
 			params.setRoles(roles);
 			params.setResourceTypes(Collections.singletonList("CourseModule"));
@@ -272,7 +273,7 @@ public class OLATUpgrade_11_0_0 extends OLATUpgrade {
 					}
 				}
 				counter += courses.size();
-				log.audit("Efficiency statement data migration processed: " + courses.size() + ", total courses processed (" + counter + ")");
+				log.info(Tracing.M_AUDIT, "Efficiency statement data migration processed: " + courses.size() + ", total courses processed (" + counter + ")");
 				dbInstance.commitAndCloseSession();
 			} while(courses.size() == BATCH_SIZE);
 			uhd.setBooleanDataValue(EFFICIENCY_STATEMENT_DATAS, allOk);
@@ -285,7 +286,7 @@ public class OLATUpgrade_11_0_0 extends OLATUpgrade {
 		boolean allOk = true;
 		if (!uhd.getBooleanDataValue(ASSESSMENT_DATAS)) {
 			int counter = 0;
-			final Roles roles = new Roles(true, true, true, true, false, true, false);
+			final Roles roles = Roles.administratorAndManagersRoles();
 			final SearchRepositoryEntryParameters params = new SearchRepositoryEntryParameters();
 			params.setRoles(roles);
 			params.setResourceTypes(Collections.singletonList("CourseModule"));
@@ -301,7 +302,7 @@ public class OLATUpgrade_11_0_0 extends OLATUpgrade {
 					}
 				}
 				counter += courses.size();
-				log.audit("Assessment data migration processed: " + courses.size() + ", total courses processed (" + counter + ")");
+				log.info(Tracing.M_AUDIT, "Assessment data migration processed: " + courses.size() + ", total courses processed (" + counter + ")");
 				dbInstance.commitAndCloseSession();
 			} while(courses.size() == BATCH_SIZE);
 			uhd.setBooleanDataValue(ASSESSMENT_DATAS, allOk);
@@ -488,12 +489,12 @@ public class OLATUpgrade_11_0_0 extends OLATUpgrade {
 				nodeAssessmentMap.put(key, nodeAssessment);
 				
 				String dropbox = DropboxController.getDropboxPathRelToFolderRoot(course.getCourseEnvironment(), tNode) + File.separator + assessedIdentity.getName();
-				OlatRootFolderImpl dropBox = new OlatRootFolderImpl(dropbox, null);
+				LocalFolderImpl dropBox = VFSManager.olatRootContainer(dropbox, null);
 				if (dropBox.getBasefile().exists() && dropBox.getBasefile().listFiles(SystemFileFilter.FILES_ONLY).length > 0) {
 					nodeAssessment.setAssessmentStatus(AssessmentEntryStatus.inProgress);
 				} else {
 					String returnbox = ReturnboxController.getReturnboxPathRelToFolderRoot(course.getCourseEnvironment(), tNode) + File.separator + assessedIdentity.getName();
-					OlatRootFolderImpl returnBox = new OlatRootFolderImpl(returnbox, null);
+					LocalFolderImpl returnBox = VFSManager.olatRootContainer(returnbox, null);
 					if (returnBox.getBasefile().exists() && returnBox.getBasefile().listFiles(SystemFileFilter.FILES_ONLY).length > 0) {
 						nodeAssessment.setAssessmentStatus(AssessmentEntryStatus.inProgress);
 					}
@@ -628,14 +629,14 @@ public class OLATUpgrade_11_0_0 extends OLATUpgrade {
 	private boolean compareProperty(String dataType, Serializable value, AssessmentEntryImpl nodeAssessment, RepositoryEntry courseEntry, String nodeIdent, Long identityKey) {
 		boolean allOk = true;
 		if(nodeAssessment == null) {
-			log.audit("ERROR nodeAssessment not found: " + getErrorAt(courseEntry, nodeIdent, identityKey));
+			log.info(Tracing.M_AUDIT, "ERROR nodeAssessment not found: " + getErrorAt(courseEntry, nodeIdent, identityKey));
 			allOk = false;
 		} else if(ATTEMPTS.equals(dataType)) {
 			if((value == null && nodeAssessment.getAttempts() == null) ||
 					(value != null && nodeAssessment.getAttempts() != null && value.equals(nodeAssessment.getAttempts()))) {
 				//ok
 			} else {
-				log.audit("ERROR number of attempts: " + value + " / " + nodeAssessment.getAttempts() + getErrorAt(courseEntry, nodeIdent, identityKey));
+				log.info(Tracing.M_AUDIT, "ERROR number of attempts: " + value + " / " + nodeAssessment.getAttempts() + getErrorAt(courseEntry, nodeIdent, identityKey));
 				allOk &= false;
 			}
 		} else if(PASSED.equals(dataType)) {
@@ -643,7 +644,7 @@ public class OLATUpgrade_11_0_0 extends OLATUpgrade {
 					(value != null && nodeAssessment.getPassed() != null && value.equals(nodeAssessment.getPassed()))) {
 				//ok
 			} else {
-				log.audit("ERROR passed: " + value + " / " + nodeAssessment.getPassed() + getErrorAt(courseEntry, nodeIdent, identityKey));
+				log.info(Tracing.M_AUDIT, "ERROR passed: " + value + " / " + nodeAssessment.getPassed() + getErrorAt(courseEntry, nodeIdent, identityKey));
 				allOk &= false;
 			}
 		} else if(FULLY_ASSESSED.equals(dataType)) {
@@ -651,7 +652,7 @@ public class OLATUpgrade_11_0_0 extends OLATUpgrade {
 					(value != null && nodeAssessment.getFullyAssessed() != null && value.equals(nodeAssessment.getFullyAssessed()))) {
 				//ok
 			} else {
-				log.audit("ERROR fullyAssessed: " + value + " / " + nodeAssessment.getFullyAssessed() + getErrorAt(courseEntry, nodeIdent, identityKey));
+				log.info(Tracing.M_AUDIT, "ERROR fullyAssessed: " + value + " / " + nodeAssessment.getFullyAssessed() + getErrorAt(courseEntry, nodeIdent, identityKey));
 				allOk &= false;
 			}
 		} else if(SCORE.equals(dataType)) {
@@ -659,7 +660,7 @@ public class OLATUpgrade_11_0_0 extends OLATUpgrade {
 					(value instanceof Float && nodeAssessment.getScore() != null && Math.abs(((Float)value).floatValue() - nodeAssessment.getScore().floatValue()) < 0.00001f)) {
 				//ok
 			} else {
-				log.audit("ERROR score: " + value + " / " + nodeAssessment.getScore() + getErrorAt(courseEntry, nodeIdent, identityKey));
+				log.info(Tracing.M_AUDIT, "ERROR score: " + value + " / " + nodeAssessment.getScore() + getErrorAt(courseEntry, nodeIdent, identityKey));
 				allOk &= false;
 			}
 		}
@@ -690,7 +691,7 @@ public class OLATUpgrade_11_0_0 extends OLATUpgrade {
 					(attempts != null && entry.getAttempts() != null && attempts.equals(entry.getAttempts()))) {
 				//ok
 			} else {
-				log.audit("ERROR number of attempts: " + attempts + " / " + entry.getAttempts() + getErrorAt(courseEntry, node));
+				log.info(Tracing.M_AUDIT, "ERROR number of attempts: " + attempts + " / " + entry.getAttempts() + getErrorAt(courseEntry, node));
 				allOk &= false;
 			}
 			
@@ -699,7 +700,7 @@ public class OLATUpgrade_11_0_0 extends OLATUpgrade {
 					(passed != null && entry.getPassed() != null && passed.equals(entry.getPassed()))) {
 				//ok
 			} else {
-				log.audit("ERROR passed: " + passed + " / " + entry.getPassed() + getErrorAt(courseEntry, node));
+				log.info(Tracing.M_AUDIT, "ERROR passed: " + passed + " / " + entry.getPassed() + getErrorAt(courseEntry, node));
 				allOk &= false;
 			}
 
@@ -708,7 +709,7 @@ public class OLATUpgrade_11_0_0 extends OLATUpgrade {
 					(fullyAssessed != null && entry.getFullyAssessed() != null && fullyAssessed.equals(entry.getFullyAssessed()))) {
 				//ok
 			} else {
-				log.audit("ERROR fullyAssessed: " + fullyAssessed + " / " + entry.getFullyAssessed() + getErrorAt(courseEntry, node));
+				log.info(Tracing.M_AUDIT, "ERROR fullyAssessed: " + fullyAssessed + " / " + entry.getFullyAssessed() + getErrorAt(courseEntry, node));
 				allOk &= false;
 			}
 
@@ -717,7 +718,7 @@ public class OLATUpgrade_11_0_0 extends OLATUpgrade {
 					(score != null && entry.getScore() != null && Math.abs(score.floatValue() - entry.getScore().floatValue()) < 0.00001f)) {
 				//ok
 			} else {
-				log.audit("ERROR score: " + score + " / " + entry.getScore() + getErrorAt(courseEntry, node));
+				log.info(Tracing.M_AUDIT, "ERROR score: " + score + " / " + entry.getScore() + getErrorAt(courseEntry, node));
 				allOk &= false;
 			}
 		}
@@ -750,7 +751,7 @@ public class OLATUpgrade_11_0_0 extends OLATUpgrade {
 		}
 		
 
-		List<Identity> courseParticipants = repositoryService.getMembers(entry, GroupRoles.participant.name());
+		List<Identity> courseParticipants = repositoryService.getMembers(entry, RepositoryEntryRelationType.defaultGroup,  GroupRoles.participant.name());
 		for(Identity participant:courseParticipants) {
 			if(!duplicateKiller.contains(participant)) {
 				assessableIdentities.add(participant);
@@ -998,11 +999,11 @@ public class OLATUpgrade_11_0_0 extends OLATUpgrade {
 		}
 		if(assessmentStatus == null) {
 			String dropbox = DropboxController.getDropboxPathRelToFolderRoot(course.getCourseEnvironment(), tNode) + File.separator + assessedIdentity.getName();
-			OlatRootFolderImpl dropBox = new OlatRootFolderImpl(dropbox, null);
+			LocalFolderImpl dropBox = VFSManager.olatRootContainer(dropbox, null);
 			boolean hasDropped = (dropBox.getBasefile().exists() && dropBox.getBasefile().listFiles(SystemFileFilter.FILES_ONLY).length > 0);
 			
 			String returnbox = ReturnboxController.getReturnboxPathRelToFolderRoot(course.getCourseEnvironment(), tNode) + File.separator + assessedIdentity.getName();
-			OlatRootFolderImpl returnBox = new OlatRootFolderImpl(returnbox, null);
+			LocalFolderImpl returnBox = VFSManager.olatRootContainer(returnbox, null);
 			boolean hasReturned = (returnBox.getBasefile().exists() && returnBox.getBasefile().listFiles(SystemFileFilter.FILES_ONLY).length > 0);
 			
 			if(hasReturned || hasDropped) {
@@ -1240,6 +1241,11 @@ public class OLATUpgrade_11_0_0 extends OLATUpgrade {
 		@Override
 		public Iterator<NewCacheKey> iterateKeys() {
 			return map.keySet().iterator();
+		}
+
+		@Override
+		public void clear() {
+			//
 		}
 
 		@Override

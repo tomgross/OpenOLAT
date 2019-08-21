@@ -39,7 +39,6 @@ import org.olat.admin.user.UserChangePasswordMailUtil;
 import org.apache.velocity.VelocityContext;
 import org.olat.basesecurity.Authentication;
 import org.olat.basesecurity.BaseSecurity;
-import org.olat.basesecurity.BaseSecurityManager;
 import org.olat.core.commons.persistence.DB;
 import org.olat.core.commons.persistence.DBFactory;
 import org.olat.core.gui.UserRequest;
@@ -198,7 +197,7 @@ public class UserImportController extends BasicController {
 			report.incrementCreatedUser();
 			report.incrementUpdatedShibboletAuthentication();
 		} else {
-			ident = securityManager.createAndPersistIdentityAndUserWithDefaultProviderAndUserGroup(login, null, pwd, newUser);
+			ident = securityManager.createAndPersistIdentityAndUserWithDefaultProviderAndUserGroup(login, null, pwd, newUser, null);
 			report.incrementCreatedUser();
 		}
 		return ident;
@@ -246,7 +245,7 @@ public class UserImportController extends BasicController {
 
 	private String loadEmail(Identity updatedIdentity) {
 		String email = null;
-		Identity oldIdentity = BaseSecurityManager.getInstance().loadIdentityByKey(updatedIdentity.getKey());
+		Identity oldIdentity = securityManager.loadIdentityByKey(updatedIdentity.getKey());
 		if (oldIdentity != null) {
 			email = oldIdentity.getUser().getEmail();
 		}

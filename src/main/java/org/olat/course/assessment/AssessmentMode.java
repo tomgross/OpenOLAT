@@ -24,6 +24,7 @@ import java.util.Set;
 
 import org.olat.core.id.CreateInfo;
 import org.olat.core.id.ModifiedInfo;
+import org.olat.modules.lecture.LectureBlock;
 import org.olat.repository.RepositoryEntry;
 
 /**
@@ -45,6 +46,8 @@ public interface AssessmentMode extends ModifiedInfo, CreateInfo {
 	public void setDescription(String description);
 	
 	public RepositoryEntry getRepositoryEntry();
+	
+	public LectureBlock getLectureBlock();
 	
 	public Status getStatus();
 
@@ -83,6 +86,8 @@ public interface AssessmentMode extends ModifiedInfo, CreateInfo {
 	public Set<AssessmentModeToGroup> getGroups();
 	
 	public Set<AssessmentModeToArea> getAreas();
+	
+	public Set<AssessmentModeToCurriculumElement> getCurriculumElements();
 
 	public boolean isRestrictAccessElements();
 
@@ -122,16 +127,27 @@ public interface AssessmentMode extends ModifiedInfo, CreateInfo {
 	
 
 	public enum Target {
-		courseAndGroups,
+		courseAndGroups,//it's in fact course, groups and curriculum elements
 		course,
-		groups
+		groups,
+		curriculumEls
 	}
 	
 	public enum Status {
-		none,
-		leadtime,
-		assessment,
-		followup,
-		end
+		none("o_as_mode_none"),
+		leadtime("o_as_mode_leadtime"),
+		assessment("o_as_mode_assessment"),
+		followup("o_as_mode_followup"),
+		end("o_as_mode_closed");
+		
+		private final String cssClass;
+		
+		private Status(String cssClass) {
+			this.cssClass = cssClass;
+		}
+		
+		public String cssClass() {
+			return cssClass;
+		}
 	}
 }

@@ -2,19 +2,19 @@ LICENSE CONCERNING THIS DISTRIBUTION
 
 Licensed under the Apache License, Version 2.0 (the "License")
 
-OpenOLAT (http://www.openolat.org) is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS 
+OpenOlat (http://www.openolat.org) is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS 
 OF ANY KIND, either expressed or implied. See the License for the specific language governing 
 permissions and limitations under the License. 
 
-You should have received a copy of the License along with OpenOLAT, see file LICENSE.TXT distributed 
+You should have received a copy of the License along with OpenOlat, see file LICENSE.TXT distributed 
 along with this release. You may also obtain a copy of the License at 
 http://www.apache.org/licenses/LICENSE-2.0
 
 
 Copyright openolat.org codebase since 2011:
 ======================================================================
-OpenOLAT is initiated by frentix GmbH [http://www.frentix.com], Zurich, Switzerland and contains code 
-contributed by other OpenOLAT open source community members [http://www.openolat.org]. All contributed code
+OpenOlat is initiated by frentix GmbH [http://www.frentix.com], Zurich, Switzerland and contains code 
+contributed by other OpenOlat open source community members [http://www.openolat.org]. All contributed code
 is copyrighted by their respective party and released under the Apache 2.0 License. 
 
 Contributors and copy right holders of openolat.org codebase since 2011:
@@ -33,9 +33,9 @@ Contributors and copy right holders of openolat.org codebase since 2011:
   Thomas Haselwanter, Guenter Krausgruber, Hermann Schwärzler, Daniel Haag
   
 
-OpenOLAT logo and icons
+OpenOlat logo and icons
 -----------------------------------------------------------------------
-The OpenOLAT logo and icons if not covered by another licenses mentioned below are released under 
+The OpenOlat logo and icons if not covered by another licenses mentioned below are released under 
 the Creative Commons Attribution-NoDerivs 2.5 license. 
 German license text  [http://creativecommons.org/licenses/by-nd/2.5/ch/]
 English license text [http://creativecommons.org/licenses/by-nd/2.5/]
@@ -74,7 +74,7 @@ OTHER LICENSES AFFECTED BY THIS DISTRIBUTION
 This product uses software based on the Apache Software License like
 * Tomcat (Apache Software License, Version 2.0) [http://tomcat.apache.org]
 * Velocity (Apache Software License, Version 2.0) [http://velocity.apache.org]
-* Log4J (Apache Software License, Version 2.0) [http://logging.apache.org/log4j]
+* Log4J 2 (Apache Software License, Version 2.0) [https://logging.apache.org/log4j/2.x/]
 * cglib (Apache Software License, Version 2.0) [http://cglib.sourceforge.net]
 * CyberNeko HTML Parser (Apache 2 License) [http://nekohtml.sourceforge.net/index.html]
 * Quartz job scheduler from the OpenSymphony project (Apache 2 license) [http://www.opensymphony.com/quartz]
@@ -115,6 +115,8 @@ This product uses software based on the Apache Software License like
 * Hikari CP (Apache Software License, Version 2.0) [https://github.com/brettwooldridge/HikariCP]
 * flv.js (Apache Software License, Version 2.0) [https://github.com/Bilibili/flv.js]
 * hls.js (Apache Software License, Version 2.0) [https://github.com/video-dev/hls.js]
+* JJWT (Apache Software License, Version 2.0) [https://github.com/jwtk/jjwt]
+* Java-html-sanitizer (Apache Software License, Version 2.0) [https://github.com/OWASP/java-html-sanitizer]
 
 -----------------------------------------------------------------------
 This produce uses software based on the MIT License
@@ -123,15 +125,12 @@ This produce uses software based on the MIT License
 * SCORM player project: reload (MIT License) [http://www.reload.ac.uk]
 * jQuery JavaScript DOM library (MIT License) [http://jquery.com]
 * jQuery-UI JavaScript UI library (MIT License) [http://jqueryui.com]
-* jQuery ui touch punch JavaScript UI library (MIT License) [http://touchpunch.furf.com]
 * jQuery transit library (MIT License) [http://ricostacruz.com/jquery.transit]
 * slf4j (MIT License) [http://www.slf4j.org]
 * fullcalendar (MIT License) [http://arshaw.com/fullcalendar/]
 * qrcode.js (MIT License) [http://davidshimjs.github.io/qrcodejs/]
 * bootstrap-tagsinput (MIT License) [https://github.com/timschlechter/bootstrap-tagsinput]
 * cropper.js (MIT License) [https://github.com/fengyuanchen/cropper]
-* html5shiv (MIT License / GPL2) [https://github.com/aFarkas/html5shiv]
-* respond.js (MIT License) [https://github.com/scottjehl/Respond]
 * Fuel UX (MIT License) [http://exacttarget.github.io/fuelux]
 * mediaelementjs (MIT License) [http://mediaelementjs.com]
 * jQuery UI Slider Pips (MIT License) [https://github.com/simeydotme/jQuery-ui-Slider-Pips]
@@ -142,7 +141,6 @@ This produce uses software based on the MIT License
 
 -----------------------------------------------------------------------
 This product uses software based on the BSD License
-* antisamy (BSD license.) [https://www.owasp.org/index.php/Category:OWASP_AntiSamy_Project]
 * XStream (BSD style) [http://xstream.codehaus.org]
 * dom4j (BSD style license) [http://dom4j.sourceforge.net]
 * Mail	(CDDL-1.0, BSD, GPL-2.0, GNU-Classpath) [http://kenai.com/projects/javamail]
@@ -212,3 +210,4 @@ This product uses software based on specific License
 * jcodec (see http://jcodec.org/lic.html) [http://jcodec.org]
 * periodic (none) [https://github.com/tra/periodic]
 * typeahead.js (see src/main/webapp/WEB-INF/lib/licenses/typeahead.licence.txt) [https://github.com/twitter/typeahead.js/blob/master/LICENSE]
+* validator.nu htmlparser (https://github.com/validator/htmlparser/blob/validator-nu/LICENSE.txt) [https://github.com/validator/htmlparser/blob/validator-nu/LICENSE.txt]

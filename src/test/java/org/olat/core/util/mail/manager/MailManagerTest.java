@@ -41,7 +41,7 @@ import org.junit.Ignore;
 import org.junit.Test;
 import org.olat.core.commons.persistence.DB;
 import org.olat.core.id.Identity;
-import org.olat.core.logging.OLog;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.WebappHelper;
 import org.olat.core.util.mail.ContactList;
@@ -54,6 +54,8 @@ import org.olat.test.JunitTestHelper;
 import org.olat.test.OlatTestCase;
 import org.springframework.beans.factory.annotation.Autowired;
 
+import com.dumbster.smtp.SmtpMessage;
+
 /**
  * 
  * Initial date: 30.11.2012<br>
@@ -61,7 +63,7 @@ import org.springframework.beans.factory.annotation.Autowired;
  *
  */
 public class MailManagerTest extends OlatTestCase {
-	private static final OLog log = Tracing.createLoggerFor(MailManagerTest.class);
+	private static final Logger log = Tracing.createLoggerFor(MailManagerTest.class);
 
 	@Autowired
 	private MailManager mailManager;
@@ -266,7 +268,7 @@ public class MailManagerTest extends OlatTestCase {
 		
 		// sleep until threads should have terminated/excepted
 		try {
-			Thread.sleep(30000);// eat all JMS events
+			sleep(30000);// eat all JMS events
 			finishCount.await(120, TimeUnit.SECONDS);
 		} catch (InterruptedException e) {
 			log.error("", e);
@@ -275,6 +277,24 @@ public class MailManagerTest extends OlatTestCase {
 
 		assertTrue("It throws an exception in test", exceptionHolder.isEmpty());	
 		assertEquals("Thread(s) did not finish", NUM_OF_THREADS, statusList.size());
+	}
+	
+	@Test
+	public void sendExternMessage() {
+		Identity id = JunitTestHelper.createAndPersistIdentityAsRndUser("mailman-1");
+		
+		MailBundle bundle = new MailBundle();
+		bundle.setToId(id);
+		bundle.setContent("Hello", "Hello world");
+		
+		MailerResult result = new MailerResult();
+		mailManager.sendExternMessage(bundle, result, false);
+		
+		List<SmtpMessage> messages = getSmtpServer().getReceivedEmails();
+		Assert.assertFalse(messages.isEmpty());
+		
+		SmtpMessage message = messages.get(0);
+		Assert.assertEquals(id.getUser().getEmail(), message.getHeaderValue("To"));
 	}
 
 	@Test

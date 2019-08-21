@@ -54,7 +54,13 @@
 	   <property name="enabled" value="${site.catalog.enable}"/>
 	   <property name="defaultSiteSecurityCallbackBeanId" value="restrictToGuestSiteSecurityCallback"/>
 	</bean>
-
+	
+	<bean id="frentixsites_library" class="org.olat.modules.library.site.LibrarySiteDef">
+		<property name="order" value="7" />
+		<property name="enabled" value="${sites.enable.library}"/>
+		<property name="defaultSiteSecurityCallbackBeanId" value="registredSiteSecurityCallback"/>
+	</bean>
+	
 	<bean id="olatsites_portfolio" class="org.olat.portfolio.site.EPSiteDef">
 	   <property name="order" value="7" />
 	   <property name="enabled" value="${site.portfolio.enable}"/>
@@ -88,16 +94,26 @@
 	   <property name="enabled" value="${site.catalogadmin.enable}"/>
 	   	<property name="defaultSiteSecurityCallbackBeanId" value="catalogManagerSiteSecurityCallback"/>
 	</bean>
-	<bean id="olatsites_useradmin" class="org.olat.admin.site.UserAdminSiteDef">
+	<bean id="olatsites_curriculumadmin" class="org.olat.modules.curriculum.site.CurriculumAdminSiteDef">
 	   <property name="order" value="12" />
+	   <property name="enabled" value="${site.catalogadmin.enable}"/>
+	   	<property name="defaultSiteSecurityCallbackBeanId" value="curriculumManagerAndOwnerSiteSecurityCallback"/>
+	</bean>
+	<bean id="olatsites_quality" class="org.olat.modules.quality.site.QualitySiteDef">
+	   <property name="order" value="13" />
+	   <property name="defaultSiteSecurityCallbackBeanId" value="adminSiteSecurityCallback"/>
+	</bean>
+	<bean id="olatsites_useradmin" class="org.olat.admin.site.UserAdminSiteDef">
+	   <property name="order" value="14" />
 	   	<property name="defaultSiteSecurityCallbackBeanId" value="restrictToUserManagerSiteSecurityCallback"/>
 	</bean>
 	<bean id="olatsites_admin" class="org.olat.admin.site.AdminSiteDef">
-	   <property name="order" value="13" />
-	   	<property name="defaultSiteSecurityCallbackBeanId" value="adminSiteSecurityCallback"/>
+	   <property name="order" value="15" />
+	   <!-- this one is hard coded and cannot be changed -->
+	   <property name="defaultSiteSecurityCallbackBeanId" value="restrictToSysAdminSiteSecurityCallback"/>
 	</bean>
 	<bean id="olatsites_guidemo" class="org.olat.gui.demo.site.GUIDemoSiteDef">
-	   <property name="order" value="14" />
+	   <property name="order" value="16" />
 	   <property name="enabled" value="${guidemo.enabled}"/>
 	   	<property name="defaultSiteSecurityCallbackBeanId" value="adminSiteSecurityCallback"/>
 	</bean>
@@ -125,32 +141,41 @@
 	</bean>
 
 	<bean id="restrictToAuthorSiteSecurityCallback" class="org.olat.core.gui.control.navigation.callback.SiteSecurityCallbackWithRolesRestriction">
-		<property name="limitToRole" value="author"/>
+		<property name="limitToRole" value="author,administrator,principal"/>
 	</bean>
 	
 	<bean id="restrictToUserManagerSiteSecurityCallback" class="org.olat.core.gui.control.navigation.callback.SiteSecurityCallbackWithRolesRestriction">
-		<property name="limitToRole" value="usermanager"/>
+		<property name="limitToRole" value="usermanager,rolesmanager,principal,administrator"/>
 	</bean>
 	
 	<bean id="restrictToGroupManagerSiteSecurityCallback" class="org.olat.core.gui.control.navigation.callback.SiteSecurityCallbackWithRolesRestriction">
-		<property name="limitToRole" value="groupmanager"/>
+		<property name="limitToRole" value="groupmanager,principal,administrator"/>
 	</bean>
 	
 	<bean id="restrictToPoolAdminSiteSecurityCallback" class="org.olat.core.gui.control.navigation.callback.SiteSecurityCallbackWithRolesRestriction">
-		<property name="limitToRole" value="pooladmin"/>
+		<property name="limitToRole" value="poolmanager,principal,administrator"/>
 	</bean>
 
 	<bean id="restrictToInstResourceManagersAndAuthorsSiteSecurityCallback" class="org.olat.core.gui.control.navigation.callback.SiteSecurityCallbackWithRolesRestriction">
-		<property name="limitToRole" value="author,institutionalresourcemanager"/>
+		<property name="limitToRole" value="author,learnresourcemanager,principal,administrator"/>
 	</bean>
 
 	<bean id="restrictToInstResourceManagerSiteSecurityCallback" class="org.olat.core.gui.control.navigation.callback.SiteSecurityCallbackWithRolesRestriction">
-		<property name="limitToRole" value="institutionalresourcemanager,administrator"/>
+		<property name="limitToRole" value="learnresourcemanager,principal,administrator"/>
 	</bean>
 	
 	<bean id="catalogManagerSiteSecurityCallback" class="org.olat.repository.site.CatalogManagerSecurityCallback">
 		<property name="catalogManager" ref="catalogManager" />
 	</bean>
+	
+	<bean id="restrictToSysAdminSiteSecurityCallback" class="org.olat.core.gui.control.navigation.callback.SiteSecurityCallbackWithRolesRestriction">
+		<property name="limitToRole" value="sysadmin"/>
+	</bean>
+	
+	<bean id="restrictToAdminAndSysAdminSiteSecurityCallback" class="org.olat.core.gui.control.navigation.callback.SiteSecurityCallbackWithRolesRestriction">
+		<property name="limitToRole" value="administrator,sysadmin"/>
+	</bean>
+	
 	
 	<!-- Alternative controllers -->
 	<bean id="courseSiteForbiddenAlt" class="org.olat.core.gui.control.navigation.SiteAlternativeControllerCreator">

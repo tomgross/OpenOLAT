@@ -21,7 +21,10 @@ package org.olat.group.ui.main;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
+import org.olat.commons.memberlist.model.CurriculumElementInfos;
+import org.olat.commons.memberlist.model.CurriculumMemberInfos;
 import org.olat.core.commons.persistence.SortKey;
 import org.olat.core.gui.components.form.flexible.elements.FormLink;
 import org.olat.core.gui.components.form.flexible.impl.elements.table.DefaultFlexiTableDataModel;
@@ -36,11 +39,16 @@ import org.olat.instantMessaging.model.Presence;
  * 
  * @author srosse, stephane.rosse@frentix.com, http://www.frentix.com
  */
-public class MemberListTableModel extends DefaultFlexiTableDataModel<MemberView> implements SortableFlexiTableDataModel<MemberView> {
+public class MemberListTableModel extends DefaultFlexiTableDataModel<MemberRow> implements SortableFlexiTableDataModel<MemberRow> {
 	
 	private final boolean onlineStatusEnabled;
 	private final List<BusinessGroup> businessGroupColumnHeaders;
 
+	private Map<Long,CurriculumMemberInfos> curriculumInfos;
+	
+	public MemberListTableModel(FlexiTableColumnModel columnModel, boolean onlineStatusEnabled) {
+		//
+	}
 	public MemberListTableModel(FlexiTableColumnModel columnModel, boolean onlineStatusEnabled, List<BusinessGroup> businessGroupColumnHeaders) {
 		super(columnModel);
 		this.onlineStatusEnabled = onlineStatusEnabled;
@@ -50,22 +58,22 @@ public class MemberListTableModel extends DefaultFlexiTableDataModel<MemberView>
 	@Override
 	public void sort(SortKey orderBy) {
 		if(orderBy != null) {
-			List<MemberView> views = new MemberListTableSort(orderBy, this, null).sort();
+			List<MemberRow> views = new MemberListTableSort(orderBy, this, null).sort();
 			super.setObjects(views);
 		}
 	}
 
 	@Override
 	public Object getValueAt(int row, int col) {
-		MemberView member = getObject(row);
+		MemberRow member = getObject(row);
 		return getValueAt(member, col);
 	}
 
 	@Override
-	public Object getValueAt(MemberView row, int col) {
+	public Object getValueAt(MemberRow row, int col) {
 		if(col >= 0 && col < Cols.values().length) {
 			switch(Cols.values()[col]) {
-				case username: return row.getIdentityName();
+				case username: return row.getView().getIdentityName();
 				case firstTime: return row.getFirstTime();
 				case lastTime: return row.getLastTime();
 				case role: return row.getMembership();
@@ -94,6 +102,18 @@ public class MemberListTableModel extends DefaultFlexiTableDataModel<MemberView>
 					}
 					return chatLink;
 				}
+				case curriculumDisplayName: {
+					CurriculumElementInfos curriculumElementInfos = getCurriculumElementInfos(row);
+					return curriculumElementInfos == null ? null : curriculumElementInfos.getCurriculumDisplayName();
+				}
+				case rootCurriculumElementIdentifier: {
+					CurriculumElementInfos curriculumElementInfos = getCurriculumElementInfos(row);
+					return curriculumElementInfos == null ? null : curriculumElementInfos.getRootElementIdentifier();
+				}
+				case rootCurriculumElementDisplayName: {
+					CurriculumElementInfos curriculumElementInfos = getCurriculumElementInfos(row);
+					return curriculumElementInfos == null ? null : curriculumElementInfos.getRootElementDisplayName();
+				}
 				case tools: return row.getToolsLink();
 				default: return "ERROR";
 			}
@@ -120,6 +140,20 @@ public class MemberListTableModel extends DefaultFlexiTableDataModel<MemberView>
 		}
 		return "";
 	}
+	
+	private CurriculumElementInfos getCurriculumElementInfos(MemberRow row) {
+		if(curriculumInfos != null && curriculumInfos.containsKey(row.getIdentityKey())) {
+			List<CurriculumElementInfos> infos = curriculumInfos.get(row.getIdentityKey()).getCurriculumInfos();
+			if(!infos.isEmpty()) {
+				return infos.get(0);
+			}
+		}
+		return null;
+	}
+	
+	public void setCurriculumInfos(Map<Long,CurriculumMemberInfos> curriculumInfos) {
+		this.curriculumInfos = curriculumInfos;
+	}
 
 	@Override
 	public MemberListTableModel createCopyWithEmptyList() {
@@ -133,7 +167,10 @@ public class MemberListTableModel extends DefaultFlexiTableDataModel<MemberView>
 		role("table.header.role"),
 		groups("table.header.groups"),
 		online("table.header.online"),
-		tools("tools");
+		tools("tools"),
+		curriculumDisplayName("table.header.curriculum"),
+		rootCurriculumElementIdentifier("table.header.curriculum.root.identifier"),
+		rootCurriculumElementDisplayName("table.header.curriculum.root.displayname");
 		
 		private final String i18n;
 		

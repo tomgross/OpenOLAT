@@ -25,8 +25,8 @@ import java.util.Properties;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import org.apache.logging.log4j.Logger;
 import org.olat.core.gui.control.Event;
-import org.olat.core.logging.OLog;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.StringHelper;
 import org.olat.core.util.coordinate.CoordinatorManager;
@@ -53,14 +53,14 @@ import org.springframework.beans.factory.annotation.Value;
  */
 public abstract class AbstractSpringModule implements GenericEventListener, InitializingBean, DisposableBean {
 	
-	private static final OLog log = Tracing.createLoggerFor(AbstractSpringModule.class);
+	private static final Logger log = Tracing.createLoggerFor(AbstractSpringModule.class);
 	
 	@Value("${userdata.dir}")
 	private String userDataDirectory;
 	
 	private final PersistedProperties moduleConfigProperties;
 	
-	public static final Map<Class<?>,AtomicInteger> starts = new HashMap<Class<?>,AtomicInteger>();
+	public static final Map<Class<?>,AtomicInteger> starts = new HashMap<>();
 
 	public AbstractSpringModule(CoordinatorManager coordinatorManager) {
 		moduleConfigProperties = new PersistedProperties(coordinatorManager, this);
@@ -90,7 +90,7 @@ public abstract class AbstractSpringModule implements GenericEventListener, Init
 	}
 	
 	public static void printStats() {
-		OLog logger = Tracing.createLoggerFor(AbstractSpringModule.class);
+		Logger logger = Tracing.createLoggerFor(AbstractSpringModule.class);
 		for(Map.Entry<Class<?>, AtomicInteger> entry:starts.entrySet()) {
 			if(entry.getValue().get() > 1) {
 				logger.info(entry.getValue().get() + " :: " + entry.getKey());
@@ -152,6 +152,16 @@ public abstract class AbstractSpringModule implements GenericEventListener, Init
 		// delegate to new property based config style
 		return moduleConfigProperties.getStringPropertyValue(propertyName, allowEmptyString);
 	}
+	
+	protected String getStringPropertyValue(String propertyName, String defaultValue) {
+		// delegate to new property based config style
+		String val = moduleConfigProperties.getStringPropertyValue(propertyName, true);
+		if(StringHelper.containsNonWhitespace(val)) {
+			return val;
+		}
+		return defaultValue;
+	}
+	
 	/**
 	 * Set a string property
 	 * 
@@ -163,10 +173,11 @@ public abstract class AbstractSpringModule implements GenericEventListener, Init
 	 *            true: will save property and fire event; false: will not save,
 	 *            but set a dirty flag
 	 */
-	protected void setStringProperty(String propertyName, String value, boolean saveConfiguration) {
+	protected String setStringProperty(String propertyName, String value, boolean saveConfiguration) {
 		// delegate to new property based config style
 		moduleConfigProperties.setStringProperty(propertyName, value, saveConfiguration);
-		log.audit("change system property: " + propertyName, value);
+		log.info(Tracing.M_AUDIT, "change system property: {} {}", propertyName, value);
+		return value;
 	}
 	
 	/**
@@ -178,7 +189,7 @@ public abstract class AbstractSpringModule implements GenericEventListener, Init
 	protected void setSecretStringProperty(String propertyName, String value, boolean saveConfiguration) {
 		// delegate to new property based config style
 		moduleConfigProperties.setStringProperty(propertyName, value, saveConfiguration);
-		log.audit("change system property: " + propertyName, "*********");
+		log.info(Tracing.M_AUDIT, "change system property: {} {}", propertyName, "*********");
 	}
 	/**
 	 * Retrun an int value for a certain propertyName
@@ -190,6 +201,8 @@ public abstract class AbstractSpringModule implements GenericEventListener, Init
 		// delegate to new property based config style
 		return moduleConfigProperties.getIntPropertyValue(propertyName);
 	}
+	
+	
 	/**
 	 * Set an int property
 	 * 
@@ -204,12 +217,12 @@ public abstract class AbstractSpringModule implements GenericEventListener, Init
 	protected void setIntProperty(String propertyName, int value, boolean saveConfiguration) {
 		// delegate to new property based config style
 		moduleConfigProperties.setIntProperty(propertyName, value, saveConfiguration);
-		log.audit("change system property: " + propertyName, Integer.toString(value));
+		log.info(Tracing.M_AUDIT, "change system property: {}", propertyName, Integer.valueOf(value));
 	}
 	
 	protected void removeProperty(String propertyName, boolean saveConfiguration) {
 		moduleConfigProperties.removeProperty(propertyName, saveConfiguration);
-		log.audit("remove system property: " + propertyName, null);
+		log.info(Tracing.M_AUDIT, "remove system property: {}", propertyName);
 	}
 	
 	/**
@@ -236,7 +249,7 @@ public abstract class AbstractSpringModule implements GenericEventListener, Init
 	protected void setBooleanProperty(String propertyName, boolean value, boolean saveConfiguration) {
 		// delegate to new property based config style
 		moduleConfigProperties.setBooleanProperty(propertyName, value, saveConfiguration);
-		log.audit("change system property: " + propertyName,  Boolean.toString(value));
+		log.info(Tracing.M_AUDIT, "change system property: {} {}", propertyName,  Boolean.toString(value));
 	}
 	/**
 	 * Save the properties configuration to disk and notify other nodes about
@@ -281,10 +294,7 @@ public abstract class AbstractSpringModule implements GenericEventListener, Init
 		// delegate to new property based config style
 		moduleConfigProperties.setIntPropertyDefault(key, value);		
 	}
-	
-	/**
-	 * @see org.olat.core.util.event.GenericEventListener#event(org.olat.core.gui.control.Event)
-	 */
+
 	@Override
 	public void event(Event event) {
 		if (event instanceof PersistedPropertiesChangedEvent) {

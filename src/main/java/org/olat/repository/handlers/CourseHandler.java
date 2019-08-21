@@ -27,8 +27,8 @@ package org.olat.repository.handlers;
 
 import java.io.File;
 import java.io.FileInputStream;
-import java.io.FileNotFoundException;
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.file.DirectoryStream;
 import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
@@ -39,8 +39,8 @@ import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
 
+import org.apache.logging.log4j.Logger;
 import org.olat.core.CoreSpringFactory;
-import org.olat.core.commons.modules.bc.vfs.OlatRootFolderImpl;
 import org.olat.core.commons.persistence.DBFactory;
 import org.olat.core.gui.UserRequest;
 import org.olat.core.gui.components.stack.TooledStackedPanel;
@@ -50,15 +50,14 @@ import org.olat.core.gui.control.generic.layout.MainLayoutController;
 import org.olat.core.gui.control.generic.wizard.Step;
 import org.olat.core.gui.control.generic.wizard.StepRunnerCallback;
 import org.olat.core.gui.control.generic.wizard.StepsMainRunController;
-import org.olat.core.gui.control.generic.wizard.StepsRunContext;
 import org.olat.core.gui.media.CleanupAfterDeliveryFileMediaResource;
 import org.olat.core.gui.media.MediaResource;
 import org.olat.core.gui.translator.Translator;
 import org.olat.core.helpers.Settings;
 import org.olat.core.id.Identity;
 import org.olat.core.id.OLATResourceable;
+import org.olat.core.id.Organisation;
 import org.olat.core.id.Roles;
-import org.olat.core.logging.OLog;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.FileUtils;
 import org.olat.core.util.Formatter;
@@ -76,13 +75,13 @@ import org.olat.core.util.resource.OLATResourceableJustBeforeDeletedEvent;
 import org.olat.core.util.vfs.LocalFileImpl;
 import org.olat.core.util.vfs.VFSContainer;
 import org.olat.core.util.vfs.VFSItem;
+import org.olat.core.util.vfs.VFSManager;
 import org.olat.course.CorruptedCourseException;
 import org.olat.course.CourseFactory;
 import org.olat.course.CourseModule;
 import org.olat.course.ICourse;
 import org.olat.course.PersistingCourseImpl;
 import org.olat.course.Structure;
-import org.olat.course.assessment.AssessmentMode;
 import org.olat.course.config.CourseConfig;
 import org.olat.course.editor.CourseAccessAndProperties;
 import org.olat.course.export.CourseEnvironmentMapper;
@@ -107,10 +106,10 @@ import org.olat.repository.ErrorList;
 import org.olat.repository.RepositoryEntry;
 import org.olat.repository.RepositoryEntryImportExport;
 import org.olat.repository.RepositoryEntryImportExport.RepositoryEntryImport;
+import org.olat.repository.RepositoryEntryStatusEnum;
 import org.olat.repository.RepositoryManager;
 import org.olat.repository.RepositoryService;
 import org.olat.repository.model.RepositoryEntrySecurity;
-import org.olat.repository.ui.RepositoryEntryRuntimeController.RuntimeControllerCreator;
 import org.olat.resource.OLATResource;
 import org.olat.resource.OLATResourceManager;
 import org.olat.resource.references.ReferenceManager;
@@ -133,23 +132,25 @@ import de.tuchemnitz.wizard.workflows.coursecreation.steps.CcStep00;
 public class CourseHandler implements RepositoryHandler {
 
 	public static final String EDITOR_XML = "editortreemodel.xml";
-	private static final OLog log = Tracing.createLoggerFor(CourseHandler.class);
+	private static final Logger log = Tracing.createLoggerFor(CourseHandler.class);
 	
 	@Override
-	public boolean isCreate() {
+	public boolean supportCreate(Identity identity, Roles roles) {
 		return true;
 	}
 	
 	@Override
-	public RepositoryEntry createResource(Identity initialAuthor, String displayname, String description, Object createObject, Locale locale) {
+	public RepositoryEntry createResource(Identity initialAuthor, String displayname, String description,
+			Object createObject, Organisation organisation, Locale locale) {
 		RepositoryService repositoryService = CoreSpringFactory.getImpl(RepositoryService.class);
 		OLATResource resource = OLATResourceManager.getInstance().createOLATResourceInstance(CourseModule.class);
-		RepositoryEntry re = repositoryService.create(initialAuthor, null, "", displayname, description, resource, RepositoryEntry.ACC_OWNERS);
+		RepositoryEntry re = repositoryService.create(initialAuthor, null, "", displayname, description, resource,
+						RepositoryEntryStatusEnum.preparation, organisation);
 		DBFactory.getInstance().commit();
 
 		String shortDisplayname = Formatter.truncateOnly(displayname, 25);
 		ICourse course = CourseFactory.createCourse(re, shortDisplayname, displayname, "");
-		log.audit("Course created: " + course.getCourseTitle());
+		log.info(Tracing.M_AUDIT, "Course created: {}", course.getCourseTitle());
 		return re;
 	}
 	
@@ -161,6 +162,11 @@ public class CourseHandler implements RepositoryHandler {
 	@Override
 	public String getCreateLabelI18nKey() {
 		return "new.course";
+	}
+
+	@Override
+	public boolean supportImport() {
+		return true;
 	}
 
 	@Override
@@ -193,6 +199,16 @@ public class CourseHandler implements RepositoryHandler {
 		return eval;
 	}
 	
+	@Override
+	public boolean supportImportUrl() {
+		return false;
+	}
+
+	@Override
+	public ResourceEvaluation acceptImport(String url) {
+		return ResourceEvaluation.notValid();
+	}
+
 	/**
 	 * Find references in the export folder with the repo.xml.
 	 * @param fPath
@@ -219,18 +235,17 @@ public class CourseHandler implements RepositoryHandler {
 	
 	@Override
 	public RepositoryEntry importResource(Identity initialAuthor, String initialAuthorAlt, String displayname,
-			String description, boolean withReferences, Locale locale, File file, String filename) {
+			String description, boolean withReferences, Organisation organisation, Locale locale, File file, String filename) {
 
 		OLATResource newCourseResource = OLATResourceManager.getInstance().createOLATResourceInstance(CourseModule.class);
 		ICourse course = CourseFactory.importCourseFromZip(newCourseResource, file);
-		// cfc.release();
 		if (course == null) {
 			return null;
 		}
 
 		RepositoryService repositoryService = CoreSpringFactory.getImpl(RepositoryService.class);
-		RepositoryEntry re = repositoryService
-				.create(initialAuthor, null, "", displayname, description, newCourseResource, RepositoryEntry.ACC_OWNERS);
+		RepositoryEntry re = repositoryService.create(initialAuthor, null, "", displayname, description, newCourseResource,
+				RepositoryEntryStatusEnum.preparation, organisation);
 		DBFactory.getInstance().commit();
 
 		// create empty run structure
@@ -241,12 +256,12 @@ public class CourseHandler implements RepositoryHandler {
 		
 		//import references
 		CourseEditorTreeNode rootNode = (CourseEditorTreeNode)course.getEditorTreeModel().getRootNode();
-		importReferences(rootNode, course, initialAuthor, locale, withReferences);
+		importReferences(rootNode, course, initialAuthor, organisation, locale, withReferences);
 		if(withReferences && course.getCourseConfig().hasCustomSharedFolder()) {
-			importSharedFolder(course, initialAuthor);
+			importSharedFolder(course, initialAuthor, organisation);
 		}
 		if(withReferences && course.getCourseConfig().hasGlossary()) {
-			importGlossary(course, initialAuthor);
+			importGlossary(course, initialAuthor, organisation);
 		}
 
 		// create group management / import groups
@@ -262,18 +277,15 @@ public class CourseHandler implements RepositoryHandler {
 		boolean doUpdateTitle = true;
 		File repoConfigXml = new File(fImportBaseDirectory, "repo.xml");
 		if (repoConfigXml.exists()) {
-			RepositoryEntryImport importConfig;
-			try {
-				importConfig = RepositoryEntryImportExport.getConfiguration(new FileInputStream(repoConfigXml));
-				if(importConfig != null) {
-					if (displayname.equals(importConfig.getDisplayname())) {					
-						// do not update if title was not modified during import
-						// user does not expect to have an updated title and there is a chance
-						// the root node title is not the same as the course title
-						doUpdateTitle = false;
-					}
+			try(InputStream inRepoConfig=new FileInputStream(repoConfigXml)) {
+				RepositoryEntryImport importConfig = RepositoryEntryImportExport.getConfiguration(inRepoConfig);
+				if(importConfig != null && displayname.equals(importConfig.getDisplayname())) {					
+					// do not update if title was not modified during import
+					// user does not expect to have an updated title and there is a chance
+					// the root node title is not the same as the course title
+					doUpdateTitle = false;
 				}
-			} catch (FileNotFoundException e) {
+			} catch (IOException e) {
 				// ignore
 			}
 		}
@@ -281,7 +293,7 @@ public class CourseHandler implements RepositoryHandler {
 			course.getRunStructure().getRootNode().setShortTitle(Formatter.truncateOnly(displayname, 25)); //do not use truncate!
 			course.getRunStructure().getRootNode().setLongTitle(displayname);
 		}
-		//course.saveRunStructure();
+		
 		CourseEditorTreeNode editorRootNode = ((CourseEditorTreeNode)course.getEditorTreeModel().getRootNode());
 		editorRootNode.getCourseNode().setShortTitle(Formatter.truncateOnly(displayname, 25)); //do not use truncate!
 		editorRootNode.getCourseNode().setLongTitle(displayname);
@@ -309,6 +321,13 @@ public class CourseHandler implements RepositoryHandler {
 		return re;
 	}
 	
+	@Override
+	public RepositoryEntry importResource(Identity initialAuthor, String initialAuthorAlt, String displayname,
+			String description, Organisation organisation, Locale locale, String url) {
+		//
+		return null;
+	}
+	
 	private void cleanExportAfterImport(File fImportBaseDirectory) {
 		try {
 			Path exportDir = fImportBaseDirectory.toPath();
@@ -318,7 +337,7 @@ public class CourseHandler implements RepositoryHandler {
 		}
 	}
 	
-	private void importSharedFolder(ICourse course, Identity owner) {
+	private void importSharedFolder(ICourse course, Identity owner, Organisation organisation) {
 		SharedFolderManager sfm = SharedFolderManager.getInstance();
 		RepositoryEntryImportExport importExport = sfm.getRepositoryImportExport(course.getCourseExportDataDir().getBasefile());
 		
@@ -331,7 +350,7 @@ public class CourseHandler implements RepositoryHandler {
 		VFSContainer sfContainer = sfm.getSharedFolder(resource);
 		File fExportedFile = importExport.importGetExportedFile();
 		if (fExportedFile.exists()) {
-			ZipUtil.unzip(new LocalFileImpl(fExportedFile), sfContainer);
+			ZipUtil.unzipNonStrict(fExportedFile, sfContainer, owner, false);
 		} else {
 			log.warn("The actual contents of the shared folder were not found in the export.");
 		}
@@ -339,7 +358,8 @@ public class CourseHandler implements RepositoryHandler {
 		RepositoryService repositoryService = CoreSpringFactory.getImpl(RepositoryService.class);
 		OLATResource ores = OLATResourceManager.getInstance().findOrPersistResourceable(resource);
 		RepositoryEntry importedRepositoryEntry = repositoryService.create(owner, null,
-				importExport.getResourceName(), importExport.getDisplayName(), importExport.getDescription(), ores, RepositoryEntry.ACC_OWNERS);
+				importExport.getResourceName(), importExport.getDisplayName(), importExport.getDescription(), ores,
+				RepositoryEntryStatusEnum.preparation, organisation);
 
 		// set the new shared folder reference
 		CourseConfig courseConfig = course.getCourseEnvironment().getCourseConfig();
@@ -350,8 +370,8 @@ public class CourseHandler implements RepositoryHandler {
 		CourseFactory.setCourseConfig(course.getResourceableId(), courseConfig);
 	}
 	
-	private void importGlossary(ICourse course, Identity owner) {
-		GlossaryManager gm = GlossaryManager.getInstance();
+	private void importGlossary(ICourse course, Identity owner, Organisation organisation) {
+		GlossaryManager gm = CoreSpringFactory.getImpl(GlossaryManager.class);
 		RepositoryEntryImportExport importExport = gm.getRepositoryImportExport(course.getCourseExportDataDir().getBasefile());
 		GlossaryResource resource = gm.createGlossary();
 		if (resource == null) {
@@ -373,7 +393,8 @@ public class CourseHandler implements RepositoryHandler {
 		OLATResource ores = OLATResourceManager.getInstance().findOrPersistResourceable(resource);
 		
 		RepositoryEntry importedRepositoryEntry = repositoryService.create(owner,
-				null, importExport.getResourceName(), importExport.getDisplayName(), importExport.getDescription(), ores, RepositoryEntry.ACC_OWNERS);
+				null, importExport.getResourceName(), importExport.getDisplayName(), importExport.getDescription(), ores,
+				RepositoryEntryStatusEnum.preparation, organisation);
 
 			// set the new glossary reference
 		CourseConfig courseConfig = course.getCourseEnvironment().getCourseConfig();
@@ -382,13 +403,13 @@ public class CourseHandler implements RepositoryHandler {
 		CourseFactory.setCourseConfig(course.getResourceableId(), courseConfig);
 	}
 	
-	private void importReferences(CourseEditorTreeNode node, ICourse course, Identity owner, Locale locale, boolean withReferences) {
-		node.getCourseNode().importNode(course.getCourseExportDataDir().getBasefile(), course, owner, locale, withReferences);
+	private void importReferences(CourseEditorTreeNode node, ICourse course, Identity owner, Organisation organisation, Locale locale, boolean withReferences) {
+		node.getCourseNode().importNode(course.getCourseExportDataDir().getBasefile(), course, owner, organisation, locale, withReferences);
 
 		for (int i = 0; i<node.getChildCount(); i++) {
 			INode child = node.getChildAt(i);
 			if(child instanceof CourseEditorTreeNode) {
-				importReferences((CourseEditorTreeNode)child, course, owner, locale, withReferences);
+				importReferences((CourseEditorTreeNode)child, course, owner, organisation, locale, withReferences);
 			}
 		}
 	}
@@ -440,7 +461,7 @@ public class CourseHandler implements RepositoryHandler {
 			
 		File fExportDir = new File(WebappHelper.getTmpDir(), UUID.randomUUID().toString());
 		fExportDir.mkdirs();
-		sourceCgm.exportCourseBusinessGroups(fExportDir, env, false, false);
+		sourceCgm.exportCourseBusinessGroups(fExportDir, env, false);
 
 		ICourse course = CourseFactory.loadCourse(target);
 		CourseGroupManager cgm = course.getCourseEnvironment().getCourseGroupManager();
@@ -500,7 +521,7 @@ public class CourseHandler implements RepositoryHandler {
 	}
 	
 	@Override
-	public EditionSupport supportsEdit(OLATResourceable resource) {
+	public EditionSupport supportsEdit(OLATResourceable resource, Identity identity, Roles roles) {
 		return EditionSupport.yes;
 	}
 	
@@ -512,13 +533,9 @@ public class CourseHandler implements RepositoryHandler {
 	@Override
 	public MainLayoutController createLaunchController(RepositoryEntry re, RepositoryEntrySecurity reSecurity, UserRequest ureq, WindowControl wControl) {
 		return new CourseRuntimeController(ureq, wControl, re, reSecurity,
-				new RuntimeControllerCreator() {
-					@Override
-					public Controller create(UserRequest uureq, WindowControl wwControl, TooledStackedPanel toolbarPanel,
-							RepositoryEntry entry, RepositoryEntrySecurity security, AssessmentMode assessmentMode) {
+				(uureq, wwControl, toolbarPanel,  entry, security, assessmentMode) -> {
 						ICourse course = CourseFactory.loadCourse(entry);
 						return new RunMainController(uureq, wwControl, toolbarPanel, course, entry, security, assessmentMode);
-					}
 			}, true, true);
 	}
 
@@ -528,11 +545,11 @@ public class CourseHandler implements RepositoryHandler {
 	}
 
 	@Override
-	public MediaResource getAsMediaResource(OLATResourceable res, boolean backwardsCompatible) {
+	public MediaResource getAsMediaResource(OLATResourceable res) {
 		RepositoryEntry re = RepositoryManager.getInstance().lookupRepositoryEntry(res, true);
 		String exportFileName = StringHelper.transformDisplayNameToFileSystemName(re.getDisplayname()) + ".zip";
 		File fExportZIP = new File(WebappHelper.getTmpDir(), exportFileName);
-		CourseFactory.exportCourseToZIP(res, fExportZIP, false, backwardsCompatible);
+		CourseFactory.exportCourseToZIP(res, fExportZIP, false);
 		return new CleanupAfterDeliveryFileMediaResource(fExportZIP);
 	}
 	
@@ -540,7 +557,7 @@ public class CourseHandler implements RepositoryHandler {
 	public VFSContainer getMediaContainer(RepositoryEntry repoEntry) {
 		OLATResource resource = repoEntry.getOlatResource();
 		String relPath = File.separator + PersistingCourseImpl.COURSE_ROOT_DIR_NAME + File.separator + resource.getResourceableId();
-		VFSContainer rootFolder = new OlatRootFolderImpl(relPath, null);
+		VFSContainer rootFolder = VFSManager.olatRootContainer(relPath, null);
 		VFSItem item = rootFolder.resolve("media");
 		VFSContainer mediaContainer;
 		if(item == null) {
@@ -548,7 +565,7 @@ public class CourseHandler implements RepositoryHandler {
 		} else if(item instanceof VFSContainer) {
 			mediaContainer = (VFSContainer)item;
 		} else {
-			log.error("media folder is not a container", null);
+			log.error("media folder is not a container");
 			mediaContainer = null;
 		}
 		return mediaContainer;
@@ -568,8 +585,7 @@ public class CourseHandler implements RepositoryHandler {
 		final CourseCreationConfiguration courseConfig = new CourseCreationConfiguration(course.getCourseTitle(), Settings.getServerContextPathURI() + "/url/RepositoryEntry/" + repoEntry.getKey());
 		// wizard finish callback called after "finish" is called
 		final CourseCreationHelper ccHelper = new CourseCreationHelper(ureq.getLocale(), repoEntry, courseConfig , course);
-		StepRunnerCallback finishCallback = new StepRunnerCallback() {
-			public Step execute(UserRequest uureq, WindowControl control, StepsRunContext runContext) {
+		StepRunnerCallback finishCallback = (uureq, control, runContext) -> {
 				// retrieve access and properties
 				CourseAccessAndProperties accessAndProps = (CourseAccessAndProperties) runContext.get("accessAndProperties");
 				courseConfig.setAccessAndProperties(accessAndProps);
@@ -579,13 +595,14 @@ public class CourseHandler implements RepositoryHandler {
 				control.setInfo(CourseCreationMailHelper.getSuccessMessageString(uureq));
 				// send notification mail
 				final MailerResult mr = CourseCreationMailHelper.sentNotificationMail(uureq, ccHelper.getConfiguration());
-				MailHelper.printErrorsAndWarnings(mr, control, uureq.getUserSession().getRoles().isOLATAdmin(), uureq.getLocale());
+				Roles roles = uureq.getUserSession().getRoles();
+				boolean detailedErrorOuput = roles.isAdministrator() || roles.isSystemAdmin();
+				MailHelper.printErrorsAndWarnings(mr, control, detailedErrorOuput, uureq.getLocale());
 				return StepsMainRunController.DONE_MODIFIED;
-			}
-		};
+			};
+
 		Step start  = new CcStep00(ureq, courseConfig, repoEntry);
-		StepsMainRunController ccSMRC = new StepsMainRunController(ureq, wControl, start, finishCallback, null, cceTranslator.translate("coursecreation.title"), "o_sel_course_create_wizard");
-		return ccSMRC;
+		return new StepsMainRunController(ureq, wControl, start, finishCallback, null, cceTranslator.translate("coursecreation.title"), "o_sel_course_create_wizard");
 	}
 
 	@Override

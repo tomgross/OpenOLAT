@@ -24,8 +24,9 @@ import java.io.InputStream;
 
 import org.junit.Assert;
 import org.junit.Test;
-import org.olat.core.logging.OLog;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
+import org.olat.modules.reminder.model.ImportExportReminders;
 import org.olat.modules.reminder.model.ReminderRules;
 
 /**
@@ -36,10 +37,10 @@ import org.olat.modules.reminder.model.ReminderRules;
  */
 public class ReminderRulesXStreamTest {
 	
-	private static final OLog log = Tracing.createLoggerFor(ReminderRulesXStreamTest.class);
+	private static final Logger log = Tracing.createLoggerFor(ReminderRulesXStreamTest.class);
 	
 	@Test
-	public void readXml() {
+	public void readReminderRulesXml() {
 		ReminderRules reminderRules = null;
 		try(InputStream input=ReminderRulesXStreamTest.class.getResourceAsStream("reminder_rules_1.xml")) {
 			reminderRules = ReminderRulesXStream.toRules(input);
@@ -50,5 +51,17 @@ public class ReminderRulesXStreamTest {
 		Assert.assertNotNull(reminderRules);
 		Assert.assertNotNull(reminderRules.getRules());
 		Assert.assertEquals(3, reminderRules.getRules().size());
+	}
+	
+	@Test
+	public void readImportedReminderRulesXml() {
+		ImportExportReminders reminders = null;
+		try(InputStream input=ReminderRulesXStreamTest.class.getResourceAsStream("import_reminders.xml")) {
+			reminders = ReminderRulesXStream.fromXML(input);
+		} catch(IOException e) {
+			log.error("", e);
+		}
+		
+		Assert.assertNotNull(reminders);
 	}
 }

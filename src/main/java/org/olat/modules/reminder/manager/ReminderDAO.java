@@ -31,6 +31,7 @@ import javax.persistence.TypedQuery;
 
 import org.olat.core.commons.persistence.DB;
 import org.olat.core.commons.persistence.PersistenceHelper;
+import org.olat.core.commons.persistence.QueryBuilder;
 import org.olat.core.id.Identity;
 import org.olat.modules.reminder.Reminder;
 import org.olat.modules.reminder.SentReminder;
@@ -39,6 +40,7 @@ import org.olat.modules.reminder.model.ReminderInfos;
 import org.olat.modules.reminder.model.SentReminderImpl;
 import org.olat.repository.RepositoryEntry;
 import org.olat.repository.RepositoryEntryRef;
+import org.olat.repository.RepositoryEntryStatusEnum;
 import org.olat.user.UserManager;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -136,11 +138,11 @@ public class ReminderDAO {
 	 * @return A list of reminders
 	 */
 	public List<Reminder> getReminders(Date startDate) {
-		StringBuilder sb = new StringBuilder();
+		QueryBuilder sb = new QueryBuilder(256);
 		sb.append("select rem from reminder rem")
 		  .append(" inner join rem.entry entry")
 		  .append(" where (rem.startDate is null or rem.startDate<=:startDate)")
-		  .append(" and entry.statusCode=0 and entry.access>").append(RepositoryEntry.DELETED);
+		  .append(" and entry.status ").in(RepositoryEntryStatusEnum.preparationToPublished());
 
 		return dbInstance.getCurrentEntityManager()
 				.createQuery(sb.toString(), Reminder.class)
@@ -230,26 +232,33 @@ public class ReminderDAO {
 				.getResultList();
 	}
 	
-
+	/**
+	 * The query is limited to the default group of the repository entry
+	 * and the business groups 
+	 * @param entry
+	 * @param identities
+	 * @return
+	 */
 	public Map<Long,Date> getCourseEnrollmentDates(RepositoryEntryRef entry, List<Identity> identities) {
 		if(identities == null || identities.isEmpty()) {
-			return new HashMap<Long,Date>();
+			return new HashMap<>();
 		}
 
 		List<Long> identityKeys = PersistenceHelper.toKeys(identities);
 
-		StringBuilder sb = new StringBuilder();
-		sb.append("select membership.identity.key, membership.creationDate from ").append(RepositoryEntry.class.getName()).append(" as v ")
+		StringBuilder sb = new StringBuilder(512);
+		sb.append("select membership.identity.key, membership.creationDate from repositoryentry as v ")
 		  .append(" inner join v.groups as relGroup")
 		  .append(" inner join relGroup.group as baseGroup")
 		  .append(" inner join baseGroup.members as membership")
-		  .append(" where v.key=:repoKey");
+		  .append(" left join businessgroup as businessGroup on (businessGroup.baseGroup.key=baseGroup.key)")
+		  .append(" where v.key=:repoKey and (relGroup.defaultGroup=true or businessGroup.key is not null)");
 
 		Set<Long> identityKeySet = null;
 		if(identityKeys.size() < 100) {
 			sb.append(" and membership.identity.key in (:identityKeys)");
 		} else {
-			identityKeySet = new HashSet<Long>(identityKeys);
+			identityKeySet = new HashSet<>(identityKeys);
 		}
 
 		TypedQuery<Object[]> query = dbInstance.getCurrentEntityManager()

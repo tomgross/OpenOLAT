@@ -22,8 +22,11 @@ package org.olat.modules.lecture.manager;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 import javax.persistence.TemporalType;
 import javax.persistence.TypedQuery;
@@ -31,9 +34,11 @@ import javax.persistence.TypedQuery;
 import org.olat.basesecurity.Group;
 import org.olat.basesecurity.GroupRoles;
 import org.olat.basesecurity.IdentityRef;
+import org.olat.basesecurity.OrganisationRoles;
 import org.olat.basesecurity.manager.GroupDAO;
 import org.olat.core.commons.persistence.DB;
 import org.olat.core.commons.persistence.PersistenceHelper;
+import org.olat.core.commons.persistence.QueryBuilder;
 import org.olat.core.id.Identity;
 import org.olat.core.util.StringHelper;
 import org.olat.modules.lecture.LectureBlock;
@@ -41,8 +46,10 @@ import org.olat.modules.lecture.LectureBlockRef;
 import org.olat.modules.lecture.LectureBlockStatus;
 import org.olat.modules.lecture.LectureRollCallStatus;
 import org.olat.modules.lecture.model.LectureBlockImpl;
+import org.olat.modules.lecture.model.LectureBlockRefImpl;
 import org.olat.modules.lecture.model.LectureBlockToGroupImpl;
 import org.olat.modules.lecture.model.LectureBlockWithTeachers;
+import org.olat.modules.lecture.model.LectureReportRow;
 import org.olat.modules.lecture.model.LecturesBlockSearchParameters;
 import org.olat.repository.RepositoryEntry;
 import org.olat.repository.RepositoryEntryRef;
@@ -116,23 +123,32 @@ public class LectureBlockDAO {
 			.createQuery(deleteToGroup)
 			.setParameter("lectureBlockKey", reloadedBlock.getKey())
 			.executeUpdate();
+		
 		//delete LectureBlockRollCallImpl
 		String deleteRollCall = "delete from lectureblockrollcall rollcall where rollcall.lectureBlock.key=:lectureBlockKey";
 		rows += dbInstance.getCurrentEntityManager()
 			.createQuery(deleteRollCall)
 			.setParameter("lectureBlockKey", reloadedBlock.getKey())
 			.executeUpdate();
+		
 		//delete LectureBlockReminderImpl
 		String deleteReminder = "delete from lecturereminder reminder where reminder.lectureBlock.key=:lectureBlockKey";
 		rows += dbInstance.getCurrentEntityManager()
 			.createQuery(deleteReminder)
 			.setParameter("lectureBlockKey", reloadedBlock.getKey())
 			.executeUpdate();
+		
+		//delete LectureBlockToTaxonomyLevelImpl
+		String deleteTaxanomyLevels = "delete from lectureblocktotaxonomylevel relTax where relTax.lectureBlock.key=:lectureBlockKey";
+		rows += dbInstance.getCurrentEntityManager()
+			.createQuery(deleteTaxanomyLevels)
+			.setParameter("lectureBlockKey", reloadedBlock.getKey())
+			.executeUpdate();
 
 		dbInstance.getCurrentEntityManager()
 			.remove(reloadedBlock);
 		rows++;
-		
+
 		return rows;
 	}
 	
@@ -158,9 +174,12 @@ public class LectureBlockDAO {
 		  .append(" inner join block.teacherGroup tGroup")
 		  .append(" inner join tGroup.members membership")
 		  .append(" inner join fetch block.entry entry");
-		boolean where = false;
-		where = addSearchParametersToQuery(sb, where, searchParams);
-		
+		boolean where = addSearchParametersToQuery(sb, false, searchParams);
+		where = PersistenceHelper.appendAnd(sb, where);
+		sb.append(" exists (select config.key from lectureentryconfig config")
+		  .append("   where config.entry.key=entry.key and config.lectureEnabled=true")
+		  .append(" )");
+
 		TypedQuery<LectureBlock> query = dbInstance.getCurrentEntityManager()
 				.createQuery(sb.toString(), LectureBlock.class);
 		addSearchParametersToQuery(query, searchParams);
@@ -175,12 +194,135 @@ public class LectureBlockDAO {
 		  .append(" inner join fetch block.entry entry")
 		  .append(" where membership.identity.key=:teacherKey");
 		addSearchParametersToQuery(sb, true, searchParams);
-		
+		sb.append(" and exists (select config.key from lectureentryconfig config")
+		  .append("   where config.entry.key=entry.key and config.lectureEnabled=true")
+		  .append(" )");
+
 		TypedQuery<LectureBlock> query = dbInstance.getCurrentEntityManager()
 				.createQuery(sb.toString(), LectureBlock.class)
 				.setParameter("teacherKey", identityRef.getKey());
 		addSearchParametersToQuery(query, searchParams);
 		return query.getResultList();
+	}
+	
+	public List<LectureBlockRef> loadAssessedByTeacher(IdentityRef identityRef, LecturesBlockSearchParameters searchParams) {
+		StringBuilder sb = new StringBuilder(512);
+		sb.append("select distinct block.key from lectureblock block")
+		  .append(" inner join block.teacherGroup tGroup")
+		  .append(" inner join tGroup.members membership")
+		  .append(" inner join courseassessmentmode mode on (mode.lectureBlock.key=block.key)")
+		  .append(" where membership.identity.key=:teacherKey");
+		addSearchParametersToQuery(sb, true, searchParams);
+		TypedQuery<Long> query = dbInstance.getCurrentEntityManager()
+				.createQuery(sb.toString(), Long.class)
+				.setParameter("teacherKey", identityRef.getKey());
+		addSearchParametersToQuery(query, searchParams);
+		List<Long> blockKeys = query.getResultList();
+		return blockKeys.stream().map(LectureBlockRefImpl::new).collect(Collectors.toList());
+	}
+	
+	public List<LectureReportRow> getLecturesBlocksReport(Date from, Date to, List<LectureRollCallStatus> status) {
+		// search blocks and coaches
+		QueryBuilder sb = new QueryBuilder(512);
+		sb.append("select block, teacher")
+		  .append(" from lectureblock block")
+		  .append(" inner join block.teacherGroup tGroup")
+		  .append(" left join tGroup.members membership on (membership.role='").append("teacher").append("')")
+		  .append(" left join membership.identity teacher")
+		  .append(" left join fetch teacher.user userteacher")
+		  .append(" inner join lectureentryconfig config on (config.entry.key=block.entry.key)")
+		  .append(" where config.lectureEnabled=true");
+		
+		if(from != null) {
+			sb.append(" and block.startDate>=:startDate");
+		}
+		if(to != null) {
+			sb.append(" and block.endDate<=:endDate");
+		}
+		if(status != null && !status.isEmpty()) {
+			sb.append(" and block.rollCallStatusString in (:status)");
+		}
+
+		//get all, it's quick
+		TypedQuery<Object[]> rawCoachQuery = dbInstance.getCurrentEntityManager()
+				.createQuery(sb.toString(), Object[].class);
+		if(from != null) {
+			rawCoachQuery.setParameter("startDate", from, TemporalType.TIMESTAMP);
+		}
+		if(to != null) {
+			rawCoachQuery.setParameter("endDate", to, TemporalType.TIMESTAMP);
+		}
+		if(status != null && !status.isEmpty()) {
+			List<String> statusStrings = status.stream()
+					.map(LectureRollCallStatus::name).collect(Collectors.toList());
+			rawCoachQuery.setParameter("status", statusStrings);
+		}
+
+		List<Object[]> rawCoachs = rawCoachQuery.getResultList();
+		Map<Long,LectureReportRow> blockMap = new HashMap<>();
+		for(Object[] rawCoach:rawCoachs) {
+			LectureBlock block = (LectureBlock)rawCoach[0];
+			Identity teacher = (Identity)rawCoach[1];
+			LectureReportRow row = blockMap
+					.computeIfAbsent(block.getKey(), b -> new LectureReportRow(block));
+			if(teacher != null && !row.getTeachers().contains(teacher)) {
+				row.getTeachers().add(teacher);
+			}
+		}
+		
+		enrichLecturesBlocksReport(from, to, status, blockMap);
+		return new ArrayList<>(blockMap.values());
+	}
+	
+	private void enrichLecturesBlocksReport(Date from, Date to, List<LectureRollCallStatus> status, Map<Long,LectureReportRow> blockMap) {
+		// search blocks and coaches
+		QueryBuilder sb = new QueryBuilder(512);
+		sb.append("select block.key, entry.externalRef, owner")
+		  .append(" from lectureblock block")
+		  .append(" inner join block.entry as entry")
+		  .append(" inner join entry.groups as relGroup")
+		  .append(" inner join relGroup.group as baseGroup")
+		  .append(" left join baseGroup.members as membership on (membership.role='").append(GroupRoles.owner).append("')")
+		  .append(" left join membership.identity owner")
+		  .append(" left join fetch owner.user userowner");
+		if(from != null) {
+			sb.and().append(" block.startDate>=:startDate");
+		}
+		if(to != null) {
+			sb.and().append(" block.endDate<=:endDate");
+		}
+		if(status != null && !status.isEmpty()) {
+			sb.and().append(" block.rollCallStatusString in (:status)");
+		}
+
+		//get all, it's quick
+		TypedQuery<Object[]> rawCoachQuery = dbInstance.getCurrentEntityManager()
+				.createQuery(sb.toString(), Object[].class);
+		if(from != null) {
+			rawCoachQuery.setParameter("startDate", from, TemporalType.TIMESTAMP);
+		}
+		if(to != null) {
+			rawCoachQuery.setParameter("endDate", to, TemporalType.TIMESTAMP);
+		}
+		if(status != null && !status.isEmpty()) {
+			List<String> statusStrings = status.stream()
+					.map(LectureRollCallStatus::name).collect(Collectors.toList());
+			rawCoachQuery.setParameter("status", statusStrings);
+		}
+
+		List<Object[]> rawRepos = rawCoachQuery.getResultList();
+		for(Object[] rawRepo:rawRepos) {
+			Long blockKey = (Long)rawRepo[0];
+			String externalRef = (String)rawRepo[1];
+			Identity owner = (Identity)rawRepo[2];
+			LectureReportRow row = blockMap.get(blockKey);
+			if(row != null) {
+				row.setExternalRef(externalRef);
+				if(owner != null && !row.getOwners().contains(owner)) {
+					row.getOwners().add(owner);
+				}
+			}
+		}
 	}
 	
 	/**
@@ -191,9 +333,23 @@ public class LectureBlockDAO {
 	 */
 	public List<LectureBlockWithTeachers> getLecturesBlockWithTeachers(RepositoryEntryRef entry) {
 		List<LectureBlock> blocks = getLectureBlocks(entry);
+		
+		// assessed lectures blocks
+		StringBuilder sb = new StringBuilder(256);
+		sb.append("select distinct block.key from lectureblock block")
+		  .append(" inner join courseassessmentmode mode on (mode.lectureBlock.key=block.key)")
+		  .append(" where block.entry.key=:entryKey");
+
+		List<Long> assessedBlockKeys = dbInstance.getCurrentEntityManager()
+				.createQuery(sb.toString(), Long.class)
+				.setParameter("entryKey", entry.getKey())
+				.getResultList();
+		Set<Long> assessedBlockKeySet = new HashSet<>(assessedBlockKeys);
+		
+		
 		Map<Long,LectureBlockWithTeachers> blockMap = new HashMap<>();
 		for(LectureBlock block:blocks) {
-			blockMap.put(block.getKey(), new  LectureBlockWithTeachers(block));
+			blockMap.put(block.getKey(), new  LectureBlockWithTeachers(block, assessedBlockKeySet.contains(block.getKey())));
 		}
 		
 		// append the coaches
@@ -231,13 +387,14 @@ public class LectureBlockDAO {
 	public List<LectureBlockWithTeachers> getLecturesBlockWithTeachers(RepositoryEntryRef entry,
 			IdentityRef teacher, LecturesBlockSearchParameters searchParams) {
 		StringBuilder sc = new StringBuilder();
-		sc.append("select block, coach")
+		sc.append("select block, coach, mode.key")
 		  .append(" from lectureblock block")
 		  .append(" inner join block.entry entry")
 		  .append(" inner join block.teacherGroup tGroup")
 		  .append(" inner join tGroup.members membership")
 		  .append(" inner join membership.identity coach")
 		  .append(" inner join fetch coach.user usercoach")
+		  .append(" left join courseassessmentmode mode on (mode.lectureBlock.key=block.key)")
 		  .append(" where membership.role='").append("teacher").append("' and block.entry.key=:repoEntryKey");
 		addSearchParametersToQuery(sc, true, searchParams);
 		if(teacher != null) {
@@ -260,10 +417,11 @@ public class LectureBlockDAO {
 		for(Object[] rawCoach:rawCoachs) {
 			LectureBlock block = (LectureBlock)rawCoach[0];
 			Identity coach = (Identity)rawCoach[1];
+			Long assessmentModeKey = (Long)rawCoach[2];
 			
 			LectureBlockWithTeachers blockWith = blockMap.get(block.getKey());
 			if(blockWith == null) {
-				blockWith = new LectureBlockWithTeachers(block);
+				blockWith = new LectureBlockWithTeachers(block, assessmentModeKey != null);
 				blockMap.put(block.getKey(), blockWith);
 			}
 			blockWith.getTeachers().add(coach);
@@ -291,6 +449,13 @@ public class LectureBlockDAO {
 			where = PersistenceHelper.appendAnd(sb, where);
 			sb.append(" block.endDate<=:endDate");
 		}
+		if(searchParams.getManager() != null) {
+			where = PersistenceHelper.appendAnd(sb, where);
+			sb.append(" exists (select membership.key from repoentrytogroup as rel, bgroupmember as membership")
+	         .append("    where rel.entry.key=entry.key and rel.group.key=membership.group.key and membership.identity.key=:managerKey")
+	         .append("      and membership.role in ('").append(OrganisationRoles.administrator.name()).append("','").append(OrganisationRoles.learnresourcemanager.name()).append("','").append(OrganisationRoles.lecturemanager.name()).append("','").append(GroupRoles.owner.name()).append("')")
+	         .append("  )");
+		}
 		return where;
 	}
 	
@@ -308,6 +473,9 @@ public class LectureBlockDAO {
 		}
 		if(searchParams.getEndDate() != null) {
 			query.setParameter("endDate", searchParams.getEndDate(), TemporalType.TIMESTAMP);
+		}
+		if(searchParams.getManager() != null) {
+			query.setParameter("managerKey", searchParams.getManager().getKey());
 		}
 	}
 
@@ -337,7 +505,7 @@ public class LectureBlockDAO {
 				.setFirstResult(0)
 				.setMaxResults(1)
 				.getResultList();
-		return firstKey != null && firstKey.size() > 0
+		return firstKey != null && !firstKey.isEmpty()
 				&& firstKey.get(0) != null && firstKey.get(0).longValue() > 0;
 	}
 	

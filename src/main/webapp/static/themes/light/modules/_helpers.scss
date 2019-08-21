@@ -33,8 +33,18 @@
 	@extend %o_block_large_top;
 	@extend %o_block_large_bottom;
 }
+.o_block_move_up {
+	margin-top: -1em;
+}
+.o_block_move_up_small {
+	margin-top: -0.5em;
+}
+.o_block_move_up_large {
+	margin-top: -2em;
+}
 .o_block_inline, %o_block_inline {
 	display: inline-block;
+	vertical-align: top;
 }
 .o_block_inline_left, %o_block_inline_left {
 	@extend %o_block_inline;
@@ -195,6 +205,7 @@
 	border-style: dashed;
 	border-color: $o-panel-placeholder-border-color;
 	border-radius: $o-panel-placeholder-border-radius;
+	background-color: $o-panel-placeholder-bg;
 	
 	.panel-body {
 		padding: $o-panel-placeholder-padding; 
@@ -241,7 +252,7 @@
 
 /* font sizes */
 .o_xsmall, %o_xsmall {
-	font-size: $font-size-small;
+	font-size: ceil($font-size-small * .9);
 }
 .o_small, %o_small {
 	font-size: $font-size-small;
@@ -250,7 +261,7 @@
 	font-size: $font-size-large;
 }
 .o_xlarge, %o_xlarge {
-	font-size: $font-size-large;
+	font-size: ceil($font-size-large * 1.1);
 }
 
 /* disabled elements */
@@ -343,13 +354,6 @@
 	figure { 
 		display: table; 
 	}
-	figcaption { 
-		display: table-caption; 
-		caption-side: bottom ; 
-		font-size: 90%;
-		font-style: italic;
-		text-align: center;
-	}
 }
 
 
@@ -376,3 +380,30 @@
 	padding: 25px;
 }
 
+/* Drag&Drop cursor */
+.o_dragable, %o_dragable {
+	cursor: move; /* fallback: no `url()` support or images disabled */
+    cursor: -webkit-grab; /* Chrome 1-21, Safari 4+ */
+    cursor: -moz-grab; /* Firefox 1.5-26 */
+    cursor: grab; /* W3C standards syntax, should come least */
+    &:active {
+	    cursor: -webkit-grabbing;
+    	cursor: -moz-grabbing;
+    	cursor: grabbing;
+    }
+}
+.o_draging, %o_draging {
+    cursor: -webkit-grabbing;
+   	cursor: -moz-grabbing;
+   	cursor: grabbing;
+   	&:active {
+	    cursor: -webkit-grabbing;
+    	cursor: -moz-grabbing;
+    	cursor: grabbing;
+    }
+ }
+ 
+ /* misc */
+ .o_hidden {
+ 	visibility: hidden;
+ }

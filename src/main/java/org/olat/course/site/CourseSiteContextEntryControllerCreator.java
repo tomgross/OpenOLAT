@@ -43,6 +43,7 @@ import org.olat.core.util.Util;
 import org.olat.course.site.model.CourseSiteConfiguration;
 import org.olat.course.site.model.LanguageConfiguration;
 import org.olat.repository.RepositoryEntry;
+import org.olat.repository.RepositoryEntryStatusEnum;
 import org.olat.repository.RepositoryManager;
 import org.olat.repository.RepositoryService;
 import org.olat.repository.handlers.RepositoryHandler;
@@ -69,11 +70,6 @@ public class CourseSiteContextEntryControllerCreator extends DefaultContextEntry
 		return new CourseSiteContextEntryControllerCreator();
 	}
 
-	/**
-	 * @see org.olat.core.id.context.ContextEntryControllerCreator#createController(org.olat.core.id.context.ContextEntry,
-	 *      org.olat.core.gui.UserRequest,
-	 *      org.olat.core.gui.control.WindowControl)
-	 */
 	@Override
 	public Controller createController(List<ContextEntry> ces, UserRequest ureq, WindowControl wControl) {
 		RepositoryEntry re = getRepositoryEntry(ureq, ces.get(0));
@@ -95,20 +91,20 @@ public class CourseSiteContextEntryControllerCreator extends DefaultContextEntry
 		}
 		
 		UserSession usess = ureq.getUserSession();
-		if(re.getAccess() == RepositoryEntry.DELETED) {
-			Roles roles = usess.getRoles();
-			if(!roles.isInstitutionalResourceManager() && !roles.isOLATAdmin()) {
-				return messageController(ureq, wControl, "repositoryentry.deleted");
-			}
-		}
-		
 		if(usess.isInAssessmentModeProcess() && !usess.matchLockResource(re.getOlatResource())) {
 			return null;
 		}
 		
 		RepositoryManager rm = RepositoryManager.getInstance();
 		RepositoryEntrySecurity reSecurity = rm.isAllowed(ureq, re);
-		if (!reSecurity.canLaunch()) {
+		if(re.getEntryStatus() == RepositoryEntryStatusEnum.trash || re.getEntryStatus() == RepositoryEntryStatusEnum.deleted) {
+			Roles roles = usess.getRoles();
+			if(!reSecurity.isEntryAdmin() && !roles.isLearnResourceManager() && !roles.isAdministrator()) {
+				return messageController(ureq, wControl, "repositoryentry.deleted");
+			}
+		}
+		
+		if (!reSecurity.canLaunch() && !re.isBookable()) {
 			return messageController(ureq, wControl, "launch.noaccess");
 		}
 

@@ -67,6 +67,7 @@ public class TeacherOverviewDataModel extends DefaultFlexiTableDataModel<Lecture
 			case externalRef: return row.getEntryExternalRef();
 			case entry: return row.getEntryDisplayname();
 			case lectureBlock: return row.getLectureBlock().getTitle();
+			case compulsory: return row.getLectureBlock().isCompulsory();
 			case teachers: return row.getTeachers();
 			case location: return row.getLectureBlock().getLocation();
 			case status: return row.getLectureBlock();
@@ -76,6 +77,7 @@ public class TeacherOverviewDataModel extends DefaultFlexiTableDataModel<Lecture
 				Date now = new Date();
 				return end.before(new Date()) || (row.isIamTeacher() && start.compareTo(now) <= 0);
 			}
+			case assessmentMode: return Boolean.valueOf(row.isAssessmentMode());
 			case tools: return row.getToolsLink();
 			default: return null;
 		}
@@ -97,7 +99,9 @@ public class TeacherOverviewDataModel extends DefaultFlexiTableDataModel<Lecture
 		teachers("table.header.teachers"),
 		status("table.header.status"),
 		details("table.header.details"),
-		tools("table.header.tools");
+		tools("table.header.tools"),
+		compulsory("table.header.compulsory.long"),
+		assessmentMode("table.header.assessment.mode");
 		
 		private final String i18nKey;
 		

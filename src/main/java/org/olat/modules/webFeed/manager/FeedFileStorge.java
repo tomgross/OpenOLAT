@@ -19,6 +19,7 @@
  */
 package org.olat.modules.webFeed.manager;
 
+import java.io.BufferedInputStream;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
@@ -27,23 +28,23 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 
-import org.olat.core.commons.modules.bc.meta.MetaInfo;
-import org.olat.core.commons.modules.bc.meta.tagged.MetaTagged;
-import org.olat.core.commons.modules.bc.vfs.OlatRootFolderImpl;
 import org.olat.core.commons.services.image.ImageService;
 import org.olat.core.gui.components.form.flexible.elements.FileElement;
 import org.olat.core.id.OLATResourceable;
-import org.olat.core.logging.OLog;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.CodeHelper;
+import org.olat.core.util.FileUtils;
 import org.olat.core.util.Formatter;
 import org.olat.core.util.StringHelper;
 import org.olat.core.util.vfs.LocalFileImpl;
+import org.olat.core.util.vfs.LocalFolderImpl;
 import org.olat.core.util.vfs.VFSContainer;
 import org.olat.core.util.vfs.VFSItem;
 import org.olat.core.util.vfs.VFSLeaf;
 import org.olat.core.util.vfs.VFSManager;
 import org.olat.core.util.vfs.filters.VFSItemMetaFilter;
+import org.olat.core.util.vfs.filters.VFSSystemItemFilter;
 import org.olat.core.util.xml.XStreamHelper;
 import org.olat.fileresource.FileResourceManager;
 import org.olat.modules.webFeed.Enclosure;
@@ -80,7 +81,7 @@ import com.thoughtworks.xstream.XStream;
 @Service
 public class FeedFileStorge {
 
-	private static final OLog log = Tracing.createLoggerFor(FeedFileStorge.class);
+	private static final Logger log = Tracing.createLoggerFor(FeedFileStorge.class);
 
 	private static final String MEDIA_DIR = "media";
 	private static final String ITEMS_DIR = "items";
@@ -118,8 +119,22 @@ public class FeedFileStorge {
 	 * @param ores
 	 * @return
 	 */
-	public OlatRootFolderImpl getResourceContainer(OLATResourceable ores) {
+	public LocalFolderImpl getResourceContainer(OLATResourceable ores) {
 		return fileResourceManager.getFileResourceRootImpl(ores);
+	}
+	
+	public VFSContainer getOrCreateResourceMediaContainer(OLATResourceable ores) {
+		VFSContainer mediaContainer = null;
+
+		if (ores != null) {
+			VFSContainer resourceDir = getResourceContainer(ores);
+			mediaContainer = (VFSContainer) resourceDir.resolve(MEDIA_DIR);
+			if (mediaContainer == null) {
+				mediaContainer = resourceDir.createChildContainer(MEDIA_DIR);
+			}
+		}
+
+		return mediaContainer;
 	}
 
 	/**
@@ -293,7 +308,7 @@ public class FeedFileStorge {
 		if (feedContainer != null) {
 			VFSLeaf leaf = (VFSLeaf) feedContainer.resolve(FEED_FILE_NAME);
 			if (leaf != null) {
-				feed = (FeedImpl) XStreamHelper.readObject(xstream, leaf.getInputStream());
+				feed = (FeedImpl) XStreamHelper.readObject(xstream, leaf);
 				shorteningFeedToLengthOfDbAttribues(feed);
 			}
 		} else {
@@ -336,8 +351,9 @@ public class FeedFileStorge {
 
 		if (feedDir != null) {
 			Path feedPath = feedDir.resolve(FeedFileStorge.FEED_FILE_NAME);
-			try (InputStream in = Files.newInputStream(feedPath)) {
-				feed = (FeedImpl) XStreamHelper.readObject(xstream, in);
+			try (InputStream in = Files.newInputStream(feedPath);
+					BufferedInputStream bis = new BufferedInputStream(in, FileUtils.BSIZE)) {
+				feed = (FeedImpl) XStreamHelper.readObject(xstream, bis);
 			} catch (IOException e) {
 				log.warn("Feed XML-File could not be found on file system. Feed path: " + feedPath, e);
 			}
@@ -392,7 +408,7 @@ public class FeedFileStorge {
 			VFSLeaf leaf = (VFSLeaf) itemContainer.resolve(ITEM_FILE_NAME);
 			if (leaf != null) {
 				try {
-					item = (ItemImpl) XStreamHelper.readObject(xstream, leaf.getInputStream());
+					item = (ItemImpl) XStreamHelper.readObject(xstream, leaf);
 				} catch (Exception e) {
 					log.warn("Item XML-File could not be read. Item container: " + leaf);
 				}
@@ -501,7 +517,7 @@ public class FeedFileStorge {
 		if (feedMediaContainer != null) {
 			deleteFeedMedia(feed);
 			if (media != null) {
-				VFSManager.copyContent(media, feedMediaContainer.createChildLeaf(media.getName()));
+				VFSManager.copyContent(media, feedMediaContainer.createChildLeaf(media.getName()), true);
 				saveFileName = media.getName();
 			}
 		}
@@ -536,16 +552,8 @@ public class FeedFileStorge {
 	public void deleteFeedMedia(Feed feed) {
 		VFSContainer feedMediaContainer = getOrCreateFeedMediaContainer(feed);
 		if (feedMediaContainer != null) {
-			for (VFSItem fileItem : feedMediaContainer.getItems()) {
-				if (!fileItem.getName().startsWith(".")) {
-					if(fileItem instanceof MetaTagged) {
-						MetaInfo info = ((MetaTagged)fileItem).getMetaInfo();
-						if(info != null) {
-							info.clearThumbnails();
-						}
-					}
-					fileItem.delete();
-				}
+			for (VFSItem fileItem : feedMediaContainer.getItems(new VFSSystemItemFilter())) {
+				fileItem.delete();
 			}
 		}
 	}
@@ -587,7 +595,7 @@ public class FeedFileStorge {
 		VFSContainer mediaDir = getOrCreateItemMediaContainer(item);
 		if (mediaDir != null && enclosure != null) {
 			VFSLeaf mediaFile = (VFSLeaf) mediaDir.resolve(enclosure.getFileName());
-			if (mediaFile != null && mediaFile instanceof LocalFileImpl) {
+			if (mediaFile instanceof LocalFileImpl) {
 				file = ((LocalFileImpl) mediaFile).getBasefile();
 			}
 		}

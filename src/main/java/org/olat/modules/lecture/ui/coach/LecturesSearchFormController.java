@@ -25,6 +25,8 @@ import java.util.List;
 import java.util.Map;
 
 import org.olat.basesecurity.BaseSecurityModule;
+import org.olat.basesecurity.OrganisationModule;
+import org.olat.basesecurity.OrganisationRoles;
 import org.olat.core.gui.UserRequest;
 import org.olat.core.gui.components.form.flexible.FormItem;
 import org.olat.core.gui.components.form.flexible.FormItemContainer;
@@ -38,6 +40,8 @@ import org.olat.core.gui.components.form.flexible.impl.FormLayoutContainer;
 import org.olat.core.gui.control.Controller;
 import org.olat.core.gui.control.Event;
 import org.olat.core.gui.control.WindowControl;
+import org.olat.core.id.OrganisationRef;
+import org.olat.core.id.Roles;
 import org.olat.core.util.StringHelper;
 import org.olat.core.util.Util;
 import org.olat.modules.lecture.model.LectureStatisticsSearchParameters;
@@ -58,7 +62,7 @@ import org.springframework.beans.factory.annotation.Autowired;
  */
 public class LecturesSearchFormController extends FormBasicController {
 
-	protected static final String PROPS_IDENTIFIER = LecturesSearchFormController.class.getName();
+	public static final String PROPS_IDENTIFIER = LecturesSearchFormController.class.getName();
 	
 	private TextElement login;
 	private TextElement bulkEl;
@@ -71,19 +75,32 @@ public class LecturesSearchFormController extends FormBasicController {
 	private final boolean adminProps;
 	private List<UserPropertyHandler> userPropertyHandlers;
 	private final Map<String,FormItem> propFormItems = new HashMap<>();
+	private final List<OrganisationRef> searcheableOrganisations;
+	
 	
 	@Autowired
 	private UserManager userManager;
 	@Autowired
 	private BaseSecurityModule securityModule;
 	@Autowired
+	private OrganisationModule organisationModule;
+	@Autowired
 	private RepositoryEntryLifecycleDAO lifecycleDao;
 	
-	public LecturesSearchFormController(UserRequest ureq, WindowControl wControl, boolean admin) {
+	public LecturesSearchFormController(UserRequest ureq, WindowControl wControl) {
 		super(ureq, wControl, Util.createPackageTranslator(LectureRepositoryAdminController.class, ureq.getLocale()));
 		setTranslator(userManager.getPropertyHandlerTranslator(getTranslator()));
-		this.admin = admin;
-		adminProps = securityModule.isUserAllowedAdminProps(ureq.getUserSession().getRoles());
+		
+		Roles roles = ureq.getUserSession().getRoles();
+		admin = roles.isAdministrator() || roles.isLearnResourceManager() || roles.isLectureManager() || roles.isAuthor();
+		adminProps = securityModule.isUserAllowedAdminProps(roles);
+		
+		if(organisationModule.isEnabled()) {
+			searcheableOrganisations = roles.getOrganisationsWithRoles(OrganisationRoles.administrator,
+				OrganisationRoles.principal, OrganisationRoles.learnresourcemanager, OrganisationRoles.lecturemanager);
+		} else {
+			searcheableOrganisations = null;
+		}
 		
 		initForm(ureq);
 		updateDatesVisibility();
@@ -209,7 +226,7 @@ public class LecturesSearchFormController extends FormBasicController {
 			params.setStartDate(null);
 			params.setEndDate(null);
 			if(publicDatesEl.isOneSelected() && StringHelper.isLong(publicDatesEl.getSelectedKey())) {
-				RepositoryEntryLifecycle lifecycle = lifecycleDao.loadById(new Long(publicDatesEl.getSelectedKey()));
+				RepositoryEntryLifecycle lifecycle = lifecycleDao.loadById(Long.valueOf(publicDatesEl.getSelectedKey()));
 				params.setLifecycle(lifecycle);
 			} else {
 				params.setLifecycle(null);
@@ -223,6 +240,7 @@ public class LecturesSearchFormController extends FormBasicController {
 		params.setLogin(getLogin());
 		params.setBulkIdentifiers(getBulkIdentifiers());
 		params.setUserProperties(getSearchProperties());
+		params.setOrganisations(searcheableOrganisations);
 		return params;
 	}
 	

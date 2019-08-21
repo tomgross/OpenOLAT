@@ -21,7 +21,6 @@
 package org.olat.course.nodes.gta.ui;
 
 import java.io.File;
-import java.util.Collections;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -56,7 +55,6 @@ import org.olat.course.nodes.gta.ui.events.SelectBusinessGroupEvent;
 import org.olat.course.nodes.gta.ui.events.SelectIdentityEvent;
 import org.olat.course.run.environment.CourseEnvironment;
 import org.olat.course.run.userview.UserCourseEnvironment;
-import org.olat.course.run.userview.UserCourseEnvironmentImpl;
 import org.olat.group.BusinessGroup;
 import org.olat.modules.ModuleConfiguration;
 import org.olat.repository.RepositoryEntry;
@@ -86,10 +84,6 @@ public class GTACoachSelectionController extends BasicController implements Acti
 	private final UserCourseEnvironment coachCourseEnv;
 	private final boolean markedOnly;
 	
-	protected PublisherData publisherData;
-	protected SubscriptionContext subsContext;
-	
-	
 	@Autowired
 	private GTAManager gtaManager;
 	@Autowired
@@ -114,15 +108,11 @@ public class GTACoachSelectionController extends BasicController implements Acti
 		downloadButton = LinkFactory.createButton("bulk.download.title", mainVC, this);
 		downloadButton.setTranslator(getTranslator());
 		
-		if (!markedOnly) {
-			publisherData = gtaManager.getPublisherData(courseEnv, gtaNode);
-			subsContext = gtaManager.getSubscriptionContext(courseEnv, gtaNode);
-			if (subsContext != null) {
-				ContextualSubscriptionController contextualSubscriptionCtr = new ContextualSubscriptionController(ureq, getWindowControl(), subsContext, publisherData);
-				listenTo(contextualSubscriptionCtr);
-				mainVC.put("contextualSubscription", contextualSubscriptionCtr.getInitialComponent());
-			}
-		}
+		PublisherData publisherData = gtaManager.getPublisherData(courseEnv, gtaNode, markedOnly);
+		SubscriptionContext subsContext = gtaManager.getSubscriptionContext(courseEnv, gtaNode, markedOnly);
+		ContextualSubscriptionController contextualSubscriptionCtr = new ContextualSubscriptionController(ureq, getWindowControl(), subsContext, publisherData);
+		listenTo(contextualSubscriptionCtr);
+		mainVC.put("contextualSubscription", contextualSubscriptionCtr.getInitialComponent());
 		
 		ModuleConfiguration config = gtaNode.getModuleConfiguration();
 		if(GTAType.group.name().equals(config.getStringValue(GTACourseNode.GTASK_TYPE))) {
@@ -130,10 +120,8 @@ public class GTACoachSelectionController extends BasicController implements Acti
 			CourseGroupManager gm = coachCourseEnv.getCourseEnvironment().getCourseGroupManager();
 			if(coachCourseEnv.isAdmin()) {
 				groups = gm.getAllBusinessGroups();
-			} else if (coachCourseEnv instanceof UserCourseEnvironmentImpl) {
-				groups = ((UserCourseEnvironmentImpl)coachCourseEnv).getCoachedGroups();
 			} else {
-				groups = Collections.emptyList();
+				groups = coachCourseEnv.getCoachedGroups();
 			}
 			
 			groups = gtaManager.filterBusinessGroups(groups, gtaNode);

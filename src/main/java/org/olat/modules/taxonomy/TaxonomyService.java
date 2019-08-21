@@ -106,7 +106,7 @@ public interface TaxonomyService {
 	 * @return The freshly loaded taxonomy level
 	 */
 	public TaxonomyLevel getTaxonomyLevel(TaxonomyLevelRef ref);
-	
+
 	/**
 	 * 
 	 * @param taxonomyLevel The taxonomy level
@@ -309,6 +309,12 @@ public interface TaxonomyService {
 	 * @return The number of questions and other elements related to the specified taxonomy levels
 	 */
 	public int countRelations(List<? extends TaxonomyLevelRef> taxonomyLevels);
+	
+	/**
+	 * @param taxonomyLevels A list of taxonomy levels
+	 * @return The number of surveys related to the specified taxonomy levels
+	 */
+	public int countQualityManagementsRelations(List<? extends TaxonomyLevelRef> taxonomyLevels);
 	
 	/**
 	 * 

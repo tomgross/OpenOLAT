@@ -26,7 +26,7 @@ import java.util.List;
 import org.olat.core.configuration.AbstractSpringModule;
 import org.olat.core.configuration.ConfigOnOff;
 import org.olat.core.gui.components.form.flexible.elements.FileElement;
-import org.olat.core.logging.OLog;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.StringHelper;
 import org.olat.core.util.coordinate.CoordinatorManager;
@@ -45,10 +45,12 @@ import org.springframework.stereotype.Service;
 @Service
 public class EvaluationFormsModule extends AbstractSpringModule implements ConfigOnOff {
 
-	private static final OLog log = Tracing.createLoggerFor(EvaluationFormsModule.class);
+	private static final Logger log = Tracing.createLoggerFor(EvaluationFormsModule.class);
 
 	public static final String FORMS_ENABLED = "forms.enabled";
 	
+	@Autowired
+	private EvaluationFormManager evaluationFormMAnager;
 	@Autowired
 	private EvaluationFormHandler formHandler;
 	
@@ -59,6 +61,8 @@ public class EvaluationFormsModule extends AbstractSpringModule implements Confi
 	private String fileUploadLimitsMB;
 	private List<Long> orderedFileUploadLimitsKB = new ArrayList<>(4);
 	private long maxFileUploadLimitsKB = FileElement.UPLOAD_UNLIMITED;
+	@Value("${forms.report.max.sessions:100}")
+	private int reportMaxSessions;
 	
 	@Autowired
 	public EvaluationFormsModule(CoordinatorManager coordinatorManager) {
@@ -73,6 +77,8 @@ public class EvaluationFormsModule extends AbstractSpringModule implements Confi
 		}
 		
 		initFileUploadLimit();
+		
+		evaluationFormMAnager.deleteTmpDirs();
 
 		RepositoryHandlerFactory.registerHandler(formHandler, 40);
 	}
@@ -114,6 +120,10 @@ public class EvaluationFormsModule extends AbstractSpringModule implements Confi
 	
 	public long getMaxFileUploadLimitKB() {
 		return maxFileUploadLimitsKB;
+	}
+
+	public int getReportMaxSessions() {
+		return reportMaxSessions;
 	}
 	
 }

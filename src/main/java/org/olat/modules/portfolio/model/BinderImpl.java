@@ -32,7 +32,6 @@ import javax.persistence.GenerationType;
 import javax.persistence.Id;
 import javax.persistence.JoinColumn;
 import javax.persistence.ManyToOne;
-import javax.persistence.NamedQueries;
 import javax.persistence.NamedQuery;
 import javax.persistence.OneToMany;
 import javax.persistence.OrderColumn;
@@ -47,6 +46,7 @@ import org.olat.core.id.CreateInfo;
 import org.olat.core.id.ModifiedInfo;
 import org.olat.core.id.Persistable;
 import org.olat.core.util.StringHelper;
+import org.olat.modules.portfolio.Assignment;
 import org.olat.modules.portfolio.Binder;
 import org.olat.modules.portfolio.BinderStatus;
 import org.olat.modules.portfolio.PortfolioElementType;
@@ -63,11 +63,12 @@ import org.olat.resource.OLATResourceImpl;
  */
 @Entity(name="pfbinder")
 @Table(name="o_pf_binder")
-@NamedQueries({
-	@NamedQuery(name="loadBinderByKey", query="select binder from pfbinder as binder inner join fetch binder.baseGroup as baseGroup where binder.key=:portfolioKey")
-	
-	
-})
+@NamedQuery(name="loadBinderByKey", query="select binder from pfbinder as binder" +
+											" inner join fetch binder.baseGroup as baseGroup" +
+											" left join fetch binder.entry as v" +
+											" left join fetch v.olatResource as res" +
+											" where binder.key=:portfolioKey")
+
 public class BinderImpl implements Persistable, ModifiedInfo, CreateInfo, Binder {
 
 	private static final long serialVersionUID = -2607615295380443760L;
@@ -122,6 +123,11 @@ public class BinderImpl implements Persistable, ModifiedInfo, CreateInfo, Binder
 			orphanRemoval=true, cascade={CascadeType.REMOVE})
 	@OrderColumn(name="pos")
 	private List<Section> sections;
+	
+	@OneToMany(targetEntity=AssignmentImpl.class, mappedBy="binder", fetch=FetchType.LAZY,
+			orphanRemoval=true, cascade={CascadeType.REMOVE})
+	@OrderColumn(name="pos")
+	private List<Assignment> assignments;
 	
 	
 	@Override
@@ -288,6 +294,17 @@ public class BinderImpl implements Persistable, ModifiedInfo, CreateInfo, Binder
 
 	public void setSections(List<Section> sections) {
 		this.sections = sections;
+	}
+
+	public List<Assignment> getAssignments() {
+		if(assignments == null) {
+			assignments = new ArrayList<>();
+		}
+		return assignments;
+	}
+
+	public void setAssignments(List<Assignment> assignments) {
+		this.assignments = assignments;
 	}
 
 	@Override

@@ -19,29 +19,25 @@
  */
 package org.olat.modules.forms.manager;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
 import java.math.BigDecimal;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.Arrays;
+import java.util.List;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
-import org.junit.Assert;
+import org.junit.Before;
 import org.junit.Test;
 import org.olat.core.commons.persistence.DB;
-import org.olat.core.id.Identity;
+import org.olat.modules.forms.EvaluationFormParticipation;
 import org.olat.modules.forms.EvaluationFormResponse;
 import org.olat.modules.forms.EvaluationFormSession;
-import org.olat.modules.forms.handler.EvaluationFormResource;
-import org.olat.modules.portfolio.Page;
-import org.olat.modules.portfolio.PageBody;
-import org.olat.modules.portfolio.Section;
-import org.olat.modules.portfolio.manager.BinderDAO;
-import org.olat.modules.portfolio.manager.PageDAO;
-import org.olat.modules.portfolio.model.BinderImpl;
-import org.olat.repository.RepositoryEntry;
-import org.olat.repository.RepositoryService;
-import org.olat.resource.OLATResource;
-import org.olat.resource.OLATResourceManager;
-import org.olat.test.JunitTestHelper;
+import org.olat.modules.forms.EvaluationFormSurvey;
+import org.olat.modules.forms.SessionFilter;
+import org.olat.modules.forms.SessionFilterFactory;
 import org.olat.test.OlatTestCase;
 import org.springframework.beans.factory.annotation.Autowired;
 
@@ -56,59 +52,158 @@ public class EvaluationFormResponseDAOTest extends OlatTestCase {
 	@Autowired
 	private DB dbInstance;
 	@Autowired
-	private PageDAO pageDao;
-	@Autowired
-	private BinderDAO binderDao;
-	@Autowired
-	private RepositoryService repositoryService;
-	@Autowired
-	private EvaluationFormSessionDAO evaluationFormSessionDao;
-	@Autowired
-	private EvaluationFormResponseDAO evaluationFormResponseDao;
+	private EvaluationFormTestsHelper evaTestHelper;
 	
+	@Autowired
+	private EvaluationFormResponseDAO sut;
+
+	@Before
+	public void cleanUp() {
+		evaTestHelper.deleteAll();
+	}
 	
 	@Test
-	public void createResponseforPortfolio() {
-		//prepare a test case with the binder up to the page body
-		Identity id = JunitTestHelper.createAndPersistIdentityAsRndUser("eva-1");
-		BinderImpl binder = binderDao.createAndPersist("Binder evaluation 1", "A binder with an evaluation", null, null);
-		Section section = binderDao.createSection("Section", "First section", null, null, binder);
-		dbInstance.commit();
-		Section reloadedSection = binderDao.loadSectionByKey(section.getKey());
-		Page page = pageDao.createAndPersist("Page 1", "A page with an evalutation.", null, null, true, reloadedSection, null);
-		dbInstance.commit();
-		RepositoryEntry formEntry = createFormEntry("Eva. form for responses");
-
-		PageBody reloadedBody = pageDao.loadPageBodyByKey(page.getBody().getKey());
-		EvaluationFormSession session = evaluationFormSessionDao.createSessionForPortfolio(id, reloadedBody, formEntry);
+	public void shouldUpdateResponse() {
+		EvaluationFormSession session = evaTestHelper.createSession();
+		EvaluationFormResponse response = createResponse(session);
 		dbInstance.commit();
 		
-		//create a response
+		BigDecimal numericalValue = new BigDecimal("3.3");
+		String stringuifiedResponse = numericalValue.toPlainString();
+		Path fileResponse = Paths.get("a", "b", "a", "c");
+		EvaluationFormResponse updatedResponse = sut.updateResponse(numericalValue, stringuifiedResponse, fileResponse, response);
+		
+		assertThat(updatedResponse.getNumericalResponse()).isEqualTo(numericalValue);
+		assertThat(updatedResponse.getStringuifiedResponse()).isEqualTo(stringuifiedResponse);
+		assertThat(updatedResponse.getFileResponse()).isEqualTo(fileResponse);
+		assertThat(updatedResponse.isNoResponse()).isFalse();
+	}
+
+	@Test
+	public void shouldCreateNoResponse() {
+		EvaluationFormSession session = evaTestHelper.createSession();
 		String responseIdentifier = UUID.randomUUID().toString();
+		EvaluationFormResponse response = sut.createNoResponse(responseIdentifier, session);
+		dbInstance.commit();
+		
+		assertThat(response.getCreationDate()).isNotNull();
+		assertThat(response.getLastModified()).isNotNull();
+		assertThat(response.getResponseIdentifier()).isEqualTo(responseIdentifier);
+		assertThat(response.getSession()).isEqualTo(session);
+		assertThat(response.isNoResponse()).isTrue();
+		assertThat(response.getNumericalResponse()).isNull();
+		assertThat(response.getStringuifiedResponse()).isNull();
+		assertThat(response.getFileResponse()).isNull();
+	}
+	
+	@Test
+	public void shouldUpdateNoResponse() {
+		EvaluationFormSession session = evaTestHelper.createSession();
+		EvaluationFormResponse initialResponse = createResponse(session);
+		dbInstance.commit();
+
+		EvaluationFormResponse response = sut.updateNoResponse(initialResponse);
+
+		assertThat(response.isNoResponse()).isTrue();
+		assertThat(response.getNumericalResponse()).isNull();
+		assertThat(response.getStringuifiedResponse()).isNull();
+		assertThat(response.getFileResponse()).isNull();
+	}
+
+	@Test
+	public void shouldLoadResponsesBySurvey() {
+		EvaluationFormSurvey survey = evaTestHelper.createSurvey();
+		EvaluationFormSession surveySession1 = evaTestHelper.createSession(survey);
+		EvaluationFormResponse response11 = evaTestHelper.createResponse(surveySession1);
+		EvaluationFormResponse response12 = evaTestHelper.createResponse(surveySession1);
+		EvaluationFormSession surveySession2 = evaTestHelper.createSession(survey);
+		EvaluationFormResponse response21 = evaTestHelper.createResponse(surveySession2);
+		EvaluationFormSession otherSession = evaTestHelper.createSession();
+		EvaluationFormResponse otherResponse = evaTestHelper.createResponse(otherSession);
+		dbInstance.commit();
+		
+		List<EvaluationFormResponse> loadedResponses = sut.loadResponsesBySurvey(survey);
+		
+		assertThat(loadedResponses)
+				.contains(response11, response12, response21)
+				.doesNotContain(otherResponse);
+	}
+	
+	@Test
+	public void shouldLoadResponsesByParticipations() { 
+		EvaluationFormParticipation participation1 = evaTestHelper.createParticipation();
+		EvaluationFormSession session1 = evaTestHelper.createSession(participation1);
+		EvaluationFormResponse response11 = evaTestHelper.createResponse(session1);
+		EvaluationFormResponse response12 = evaTestHelper.createResponse(session1);
+		EvaluationFormParticipation participation2 = evaTestHelper.createParticipation();
+		EvaluationFormSession session2 = evaTestHelper.createSession(participation2);
+		EvaluationFormResponse response21 = evaTestHelper.createResponse(session2);
+		EvaluationFormSession otherSession = evaTestHelper.createSession();
+		EvaluationFormResponse otherResponse = evaTestHelper.createResponse(otherSession);
+		dbInstance.commit();
+		
+		List<EvaluationFormParticipation> participations = Arrays.asList(participation1, participation2);
+		List<EvaluationFormResponse> loadedResponses = sut.loadResponsesByParticipations(participations);
+		
+		assertThat(loadedResponses)
+				.contains(response11, response12, response21)
+				.doesNotContain(otherResponse);
+	}
+	
+	@Test
+	public void shouldLoadResponsesBySessions() {
+		EvaluationFormSurvey survey = evaTestHelper.createSurvey();
+		EvaluationFormSession session1 = evaTestHelper.createSession(survey);
+		EvaluationFormResponse response11 = evaTestHelper.createResponse(session1);
+		EvaluationFormResponse response12 = evaTestHelper.createResponse(session1);
+		EvaluationFormSession session2 = evaTestHelper.createSession(survey);
+		EvaluationFormResponse response21 = evaTestHelper.createResponse(session2);
+		EvaluationFormSession otherSession = evaTestHelper.createSession();
+		EvaluationFormResponse otherResponse = evaTestHelper.createResponse(otherSession);
+		dbInstance.commit();
+		
+		List<EvaluationFormSession> sessions = Arrays.asList(session1, session2);
+		SessionFilter filter = SessionFilterFactory.create(sessions);
+		List<EvaluationFormResponse> loadedResponses = sut.loadResponsesBySessions(filter);
+		
+		assertThat(loadedResponses)
+				.contains(response11, response12, response21)
+				.doesNotContain(otherResponse);
+	}
+	
+	@Test
+	public void shouldDeleteResponses() {
+		EvaluationFormSession session = evaTestHelper.createSession();
+		String responseIdentifier = UUID.randomUUID().toString();
+		createResponse(session, responseIdentifier);
+		createResponse(session, responseIdentifier);
+		createResponse(session, responseIdentifier);
+		dbInstance.commit();
+
+		SessionFilter filter = SessionFilterFactory.create(session);
+		List<EvaluationFormResponse> responses = sut.loadResponsesBySessions(filter);
+		assertThat(responses).hasSize(3);
+		
+		List<Long> keys = responses.stream().map(EvaluationFormResponse::getKey).collect(Collectors.toList());
+		sut.deleteResponses(keys);
+		dbInstance.commit();
+		
+		responses = sut.loadResponsesBySessions(filter);
+		assertThat(responses).hasSize(0);
+	}
+	
+
+	private EvaluationFormResponse createResponse(EvaluationFormSession session) {
+		String responseIdentifier = UUID.randomUUID().toString();
+		return createResponse(session, responseIdentifier);
+	}
+
+	private EvaluationFormResponse createResponse(EvaluationFormSession session, String responseIdentifier) {
 		BigDecimal numericalValue = new BigDecimal("2.2");
 		String stringuifiedResponse = numericalValue.toPlainString();
 		Path fileResponse = Paths.get("this", "is", "a", "path");
-		EvaluationFormResponse response = evaluationFormResponseDao.createResponse(responseIdentifier,
-				numericalValue, stringuifiedResponse, fileResponse, session);
-		dbInstance.commit();
+		return sut.createResponse(responseIdentifier, numericalValue, stringuifiedResponse,
+				fileResponse, session);
+	}
 
-		Assert.assertNotNull(response);
-		Assert.assertNotNull(response.getKey());
-		Assert.assertNotNull(response.getCreationDate());
-		Assert.assertNotNull(response.getLastModified());
-		Assert.assertEquals(session, response.getSession());
-		Assert.assertEquals(numericalValue, response.getNumericalResponse());
-		Assert.assertEquals(stringuifiedResponse, response.getStringuifiedResponse());
-		Assert.assertEquals(fileResponse, response.getFileResponse());
-		Assert.assertEquals(responseIdentifier, response.getResponseIdentifier());
-	}
-	
-	private RepositoryEntry createFormEntry(String displayname) {
-		EvaluationFormResource ores = new EvaluationFormResource();
-		OLATResource resource = OLATResourceManager.getInstance().findOrPersistResourceable(ores);
-		Identity author = JunitTestHelper.createAndPersistIdentityAsRndUser("eva-form-author");
-		RepositoryEntry re = repositoryService.create(author, null, "", displayname, "Description", resource, RepositoryEntry.ACC_OWNERS);
-		dbInstance.commit();
-		return re;
-	}
 }

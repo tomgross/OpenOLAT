@@ -34,16 +34,25 @@ import javax.ws.rs.core.Response.Status;
 
 import org.olat.basesecurity.BaseSecurity;
 import org.olat.basesecurity.Group;
-import org.olat.core.CoreSpringFactory;
+import org.olat.core.commons.persistence.DB;
 import org.olat.core.id.Identity;
-import org.olat.core.logging.OLog;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
+import org.olat.modules.curriculum.CurriculumElement;
+import org.olat.modules.curriculum.CurriculumElementStatus;
+import org.olat.modules.curriculum.CurriculumService;
 import org.olat.modules.lecture.LectureBlock;
 import org.olat.modules.lecture.LectureService;
+import org.olat.modules.lecture.manager.LectureBlockToTaxonomyLevelDAO;
+import org.olat.modules.taxonomy.TaxonomyLevel;
+import org.olat.modules.taxonomy.TaxonomyService;
+import org.olat.modules.taxonomy.model.TaxonomyLevelRefImpl;
+import org.olat.modules.taxonomy.restapi.TaxonomyLevelVO;
 import org.olat.repository.RepositoryEntry;
 import org.olat.repository.RepositoryService;
 import org.olat.user.restapi.UserVO;
 import org.olat.user.restapi.UserVOFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 
 /**
  * 
@@ -53,19 +62,29 @@ import org.olat.user.restapi.UserVOFactory;
  */
 public class LectureBlockWebService {
 	
-	private static final OLog log = Tracing.createLoggerFor(LectureBlockWebService.class);
+	private static final Logger log = Tracing.createLoggerFor(LectureBlockWebService.class);
 	
 	private final RepositoryEntry entry;
 	private final LectureBlock lectureBlock;
 	
-	private final LectureService lectureService;
-	private final BaseSecurity securityManager;
+	@Autowired
+	private DB dbInstance;
+	@Autowired
+	private BaseSecurity securityManager;
+	@Autowired
+	private LectureService lectureService;
+	@Autowired
+	private TaxonomyService taxonomyService;
+	@Autowired
+	private RepositoryService repositoryService;
+	@Autowired
+	private CurriculumService curriculumService;
+	@Autowired
+	private LectureBlockToTaxonomyLevelDAO lectureBlockToTaxonomyLevelDao;
 	
-	public LectureBlockWebService(LectureBlock lectureBlock, RepositoryEntry entry, LectureService lectureService) {
+	public LectureBlockWebService(LectureBlock lectureBlock, RepositoryEntry entry) {
 		this.entry = entry;
 		this.lectureBlock = lectureBlock;
-		this.lectureService = lectureService;
-		securityManager = CoreSpringFactory.getImpl(BaseSecurity.class);
 	}
 	
 	/**
@@ -83,6 +102,19 @@ public class LectureBlockWebService {
 	public Response getLectureBlock() {
 		return Response.ok(new LectureBlockVO(lectureBlock, entry.getKey())).build();
 	}
+	
+	@POST
+	@Path("entry/{repositoryEntryKey}")
+	@Produces({MediaType.APPLICATION_XML, MediaType.APPLICATION_JSON})
+	public Response moveLectureBlock(@PathParam("repositoryEntryKey") Long repositoryEntryKey) {
+		RepositoryEntry newEntry = repositoryService.loadByKey(repositoryEntryKey);
+		if(newEntry == null) {
+			return Response.serverError().status(Status.NOT_FOUND).build();
+		}
+		LectureBlock movedLectureBlock = lectureService.moveLectureBlock(lectureBlock, newEntry);
+		return Response.ok(new LectureBlockVO(movedLectureBlock, movedLectureBlock.getEntry().getKey())).build();
+	}
+	
 
 	/**
 	 * Delete a specific lecture blocks.
@@ -94,7 +126,7 @@ public class LectureBlockWebService {
 	@DELETE
 	public Response deleteLectureBlock() {
 		lectureService.deleteLectureBlock(lectureBlock);
-		log.audit("Lecture block deleted: " + lectureBlock);
+		log.info(Tracing.M_AUDIT, "Lecture block deleted: " + lectureBlock);
 		return Response.ok().build();
 	}
 
@@ -163,13 +195,13 @@ public class LectureBlockWebService {
 	@Path("participants/repositoryentry")
 	public Response addRepositoryEntryParticipantGroup() {
 		LectureBlock reloadedBlock = lectureService.getLectureBlock(lectureBlock);
-		Group defGroup = CoreSpringFactory.getImpl(RepositoryService.class)
-				.getDefaultGroup(entry);
+		Group defGroup = repositoryService.getDefaultGroup(entry);
 		List<Group> currentGroups = lectureService.getLectureBlockToGroups(reloadedBlock);
 		if(!currentGroups.contains(defGroup)) {
 			currentGroups.add(defGroup);
 			reloadedBlock = lectureService.save(reloadedBlock, currentGroups);
 		}
+		dbInstance.commit();
 		lectureService.syncParticipantSummaries(reloadedBlock);
 		return Response.ok().build();
 	}
@@ -183,13 +215,110 @@ public class LectureBlockWebService {
 	@Path("participants/repositoryentry")
 	public Response deleteRepositoryEntryParticipantGroup() {
 		LectureBlock reloadedBlock = lectureService.getLectureBlock(lectureBlock);
-		Group defGroup = CoreSpringFactory.getImpl(RepositoryService.class)
-				.getDefaultGroup(entry);
+		Group defGroup = repositoryService.getDefaultGroup(entry);
 		List<Group> currentGroups = lectureService.getLectureBlockToGroups(reloadedBlock);
 		if(currentGroups.contains(defGroup)) {
 			currentGroups.remove(defGroup);
 			lectureService.save(reloadedBlock, currentGroups);
 		}
+		return Response.ok().build();
+	}
+	
+	/**
+	 * Add the group of all curriculum elements to the lecture block participants list.
+	 * @response.representation.200.doc Successfully added
+	 * @return 200 if all ok
+	 */
+	@PUT
+	@Path("participants/curriculum")
+	public Response addCurriculumElementParticipantGroup() {
+		LectureBlock reloadedBlock = lectureService.getLectureBlock(lectureBlock);
+		List<CurriculumElement> elements = curriculumService.getCurriculumElements(entry);
+		List<Group> currentGroups = lectureService.getLectureBlockToGroups(reloadedBlock);
+		
+		boolean changed = false;
+		for(CurriculumElement element:elements) {
+			Group elementGroup = element.getGroup();
+			if(element.getElementStatus() != CurriculumElementStatus.deleted && !currentGroups.contains(elementGroup)) {
+				currentGroups.add(elementGroup);
+				changed = true;
+			}
+		}
+		if(changed) {
+			reloadedBlock = lectureService.save(reloadedBlock, currentGroups);
+		}
+		dbInstance.commit();
+		lectureService.syncParticipantSummaries(reloadedBlock);
+		Status status = changed ? Status.OK : Status.NOT_MODIFIED;
+		return Response.ok(status).build();
+	}
+	
+	/**
+	 * Remove the group of all curriculum elements from the lecture block participants.
+	 * @response.representation.200.doc Successfully removed
+	 * @return 200 if all ok
+	 */
+	@DELETE
+	@Path("participants/curriculum")
+	public Response deleteCurriculumElementParticipantGroup() {
+		LectureBlock reloadedBlock = lectureService.getLectureBlock(lectureBlock);
+		List<CurriculumElement> elements = curriculumService.getCurriculumElements(entry);
+		List<Group> currentGroups = lectureService.getLectureBlockToGroups(reloadedBlock);
+		
+		boolean changed = false;
+		for(CurriculumElement element:elements) {
+			Group elementGroup = element.getGroup();
+			if(currentGroups.contains(elementGroup)) {
+				currentGroups.remove(elementGroup);
+				changed = true;
+			}
+		}
+		
+		if(changed) {
+			lectureService.save(reloadedBlock, currentGroups);
+		}
+		
+		Status status = changed ? Status.OK : Status.NOT_MODIFIED;
+		return Response.ok(status).build();
+	}
+	
+	@GET
+	@Path("taxonomy/levels")
+	@Produces({MediaType.APPLICATION_XML, MediaType.APPLICATION_JSON})
+	public Response getTaxonomyLevels() {	
+		List<TaxonomyLevel> levels = lectureBlockToTaxonomyLevelDao.getTaxonomyLevels(lectureBlock);
+		TaxonomyLevelVO[] voes = new TaxonomyLevelVO[levels.size()];
+		for(int i=levels.size(); i-->0; ) {
+			voes[i] = TaxonomyLevelVO.valueOf(levels.get(i));
+		}
+		return Response.ok(voes).build();
+	}
+	
+	@PUT
+	@Path("taxonomy/levels/{taxonomyLevelKey}")
+	public Response putTaxonomyLevel(@PathParam("taxonomyLevelKey") Long taxonomyLevelKey) {
+		List<TaxonomyLevel> levels = lectureBlockToTaxonomyLevelDao.getTaxonomyLevels(lectureBlock);
+		for(TaxonomyLevel level:levels) {
+			if(level.getKey().equals(taxonomyLevelKey)) {
+				return Response.ok().status(Status.NOT_MODIFIED).build();
+			}
+		}
+		TaxonomyLevel level = taxonomyService.getTaxonomyLevel(new TaxonomyLevelRefImpl(taxonomyLevelKey));
+		if(level == null) {
+			return Response.ok(Status.NOT_FOUND).build();
+		}
+		lectureBlockToTaxonomyLevelDao.createRelation(lectureBlock, level);
+		return Response.ok().build();
+	}
+	
+	@DELETE
+	@Path("taxonomy/levels/{taxonomyLevelKey}")
+	public Response deleteTaxonomyLevel(@PathParam("taxonomyLevelKey") Long taxonomyLevelKey) {
+		TaxonomyLevel level = taxonomyService.getTaxonomyLevel(new TaxonomyLevelRefImpl(taxonomyLevelKey));
+		if(level == null) {
+			return Response.ok(Status.NOT_FOUND).build();
+		}
+		lectureBlockToTaxonomyLevelDao.deleteRelation(lectureBlock, level);
 		return Response.ok().build();
 	}
 	

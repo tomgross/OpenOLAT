@@ -19,6 +19,11 @@
  */
 package org.olat.modules.lecture;
 
+import java.util.List;
+
+import org.olat.core.id.Identity;
+import org.olat.repository.RepositoryEntryRef;
+
 /**
  * 
  * Initial date: 28 août 2017<br>
@@ -33,6 +38,11 @@ public class LectureBlockRollCallSearchParameters {
 	
 	private Long rollCallKey;
 	private Long lectureBlockKey;
+	
+	private RepositoryEntryRef entry;
+	private List<LectureBlockAppealStatus> appealStatus;
+	
+	private Identity identity;
 
 	public Boolean getClosed() {
 		return closed;
@@ -73,4 +83,41 @@ public class LectureBlockRollCallSearchParameters {
 	public void setLectureBlockKey(Long lectureBlockKey) {
 		this.lectureBlockKey = lectureBlockKey;
 	}
+
+	public RepositoryEntryRef getEntry() {
+		return entry;
+	}
+
+	public void setEntry(RepositoryEntryRef entry) {
+		this.entry = entry;
+	}
+
+	public List<LectureBlockAppealStatus> getAppealStatus() {
+		return appealStatus;
+	}
+
+	public void setAppealStatus(List<LectureBlockAppealStatus> appealStatus) {
+		this.appealStatus = appealStatus;
+	}
+
+	/**
+	 * Identity which want to access the data (for permission restrictions)
+	 * 
+	 * @return
+	 */
+	public Identity getIdentity() {
+		return identity;
+	}
+
+	/**
+	 * Identity which want to access the data (for permission restrictions)
+	 * 
+	 * @param identity
+	 */
+	public void setIdentity(Identity identity) {
+		this.identity = identity;
+	}
+	
+	
+
 }

@@ -63,6 +63,7 @@ import org.olat.group.model.StatisticsBusinessGroupRow;
 import org.olat.properties.Property;
 import org.olat.repository.RepositoryEntryRef;
 import org.olat.repository.RepositoryEntryShort;
+import org.olat.repository.RepositoryEntryStatusEnum;
 import org.olat.resource.OLATResource;
 import org.olat.resource.OLATResourceManager;
 import org.olat.resource.accesscontrol.Price;
@@ -202,11 +203,10 @@ public class BusinessGroupDAO {
 		  .append(" inner join fetch bgi.resource resource")
 		  .append(" where bgi.key in (:ids)");
 
-		List<BusinessGroup> groups = dbInstance.getCurrentEntityManager()
+		return dbInstance.getCurrentEntityManager()
 				.createQuery(sb.toString(), BusinessGroup.class)
 				.setParameter("ids", ids)
 				.getResultList();
-		return groups;
 	}
 	
 	public List<BusinessGroup> loadAll() {
@@ -214,10 +214,9 @@ public class BusinessGroupDAO {
 		sb.append("select bgi from businessgroup bgi ")
 		  .append(" inner join fetch bgi.resource resource");
 
-		List<BusinessGroup> groups = dbInstance.getCurrentEntityManager()
+		return dbInstance.getCurrentEntityManager()
 				.createQuery(sb.toString(), BusinessGroup.class)
 				.getResultList();
-		return groups;
 	}
 	
 	public BusinessGroup loadByResourceId(Long resourceId) {
@@ -292,7 +291,7 @@ public class BusinessGroupDAO {
 			groupKeys.add(group.getKey());
 		}
 
-		Map<IdentityGroupKey, BusinessGroupMembershipImpl> memberships = new HashMap<IdentityGroupKey, BusinessGroupMembershipImpl>();
+		Map<IdentityGroupKey, BusinessGroupMembershipImpl> memberships = new HashMap<>();
 		loadBusinessGroupsMembership(groupKeys, memberships);
 		return new ArrayList<BusinessGroupMembership>(memberships.values());
 	}
@@ -408,7 +407,7 @@ public class BusinessGroupDAO {
 		
 		TypedQuery<BusinessGroupMembershipViewImpl> query = dbInstance.getCurrentEntityManager().createQuery(sb.toString(), BusinessGroupMembershipViewImpl.class);
 		if(identity != null && identity.length > 0) {
-			List<Long> ids = new ArrayList<Long>(identity.length);
+			List<Long> ids = new ArrayList<>(identity.length);
 			for(Identity id:identity) {
 				ids.add(id.getKey());
 			}
@@ -418,8 +417,7 @@ public class BusinessGroupDAO {
 			query.setParameter("groupKeys", groupKeys);
 		}
 		
-		List<BusinessGroupMembershipViewImpl> res = query.getResultList();
-		return res;
+		return query.getResultList();
 	}
 
 	public List<Long> isIdentityInBusinessGroups(Identity identity, boolean owner, boolean attendee, boolean waiting, List<BusinessGroup> groups) {
@@ -1001,7 +999,7 @@ public class BusinessGroupDAO {
 		if(StringHelper.containsNonWhitespace(params.getIdRef())) {
 			if(StringHelper.isLong(params.getIdRef())) {
 				try {
-					Long id = new Long(params.getIdRef());
+					Long id = Long.valueOf(params.getIdRef());
 					query.setParameter("idRefLong", id);
 				} catch (NumberFormatException e) {
 					//not a real number, can be a very long numerical external id
@@ -1040,9 +1038,9 @@ public class BusinessGroupDAO {
 		boolean memberOnly = params.isAttendee() || params.isOwner() || params.isWaiting();
 		
 		if(memberOnly) {
-			sb.append("inner join bGroup.members as memberships on memberships.identity.key=:identityKey and memberships.role in (:roles)");	
+			sb.append("inner join bGroup.members as memberships on (memberships.identity.key=:identityKey and memberships.role in (:roles))");	
 		} else if(includeMemberships) {
-			sb.append("left join bGroup.members as memberships on memberships.identity.key=:identityKey");	
+			sb.append("left join bGroup.members as memberships on (memberships.identity.key=:identityKey)");	
 		}
 		
 		//coach / owner
@@ -1209,8 +1207,6 @@ public class BusinessGroupDAO {
 			  .append(" inner join bGroup.members as membership on membership.identity.key=:identityKey");
 		} else if(keyToGroup.size() < RELATIONS_IN_LIMIT) {
 			sr.append(" where bgi.key in (:businessGroupKeys)");
-		} else if(params.getPublicGroups() != null && params.getPublicGroups().booleanValue()) {
-			sr.append(" inner join acoffer as offer on (bgi.resource.key = offer.resource.key)");
 		} else if(params.getRepositoryEntry() != null) {
 			sr.append(" inner join repoentrytobusinessgroup as refBgiToGroup")
 			  .append("   on (refBgiToGroup.entry.key=:repositoryEntryKey and bgi.baseGroup.key=refBgiToGroup.businessGroup.key)");
@@ -1230,8 +1226,6 @@ public class BusinessGroupDAO {
 				businessGroupKeys.add(businessGroupKey);
 			}
 			resourcesQuery.setParameter("businessGroupKeys", businessGroupKeys);
-		} else if(params.getPublicGroups() != null && params.getPublicGroups().booleanValue()) {
-			//no parameters to add
 		} else if(params.getRepositoryEntry() != null) {
 			resourcesQuery.setParameter("repositoryEntryKey", params.getRepositoryEntry().getKey());
 		} else {
@@ -1391,8 +1385,8 @@ public class BusinessGroupDAO {
 		}
 
 		@Override
-		public int getStatusCode() {
-			return 0;
+		public RepositoryEntryStatusEnum getEntryStatus() {
+			return null;
 		}
 
 		@Override

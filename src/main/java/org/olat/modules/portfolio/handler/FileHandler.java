@@ -24,9 +24,9 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 
-import org.olat.core.commons.modules.bc.meta.MetaInfo;
-import org.olat.core.commons.modules.bc.meta.tagged.MetaTagged;
 import org.olat.core.commons.services.image.Size;
+import org.olat.core.commons.services.vfs.VFSMetadata;
+import org.olat.core.commons.services.vfs.VFSRepositoryService;
 import org.olat.core.gui.UserRequest;
 import org.olat.core.gui.control.Controller;
 import org.olat.core.gui.control.WindowControl;
@@ -35,10 +35,14 @@ import org.olat.core.id.Identity;
 import org.olat.core.logging.activity.ThreadLocalUserActivityLogger;
 import org.olat.core.util.FileUtils;
 import org.olat.core.util.StringHelper;
+import org.olat.core.util.vfs.VFSConstants;
 import org.olat.core.util.vfs.VFSContainer;
 import org.olat.core.util.vfs.VFSItem;
 import org.olat.core.util.vfs.VFSLeaf;
 import org.olat.core.util.vfs.VFSManager;
+import org.olat.modules.ceditor.InteractiveAddPageElementHandler;
+import org.olat.modules.ceditor.PageElementAddController;
+import org.olat.modules.ceditor.PageElementCategory;
 import org.olat.modules.portfolio.Media;
 import org.olat.modules.portfolio.MediaInformations;
 import org.olat.modules.portfolio.MediaLight;
@@ -46,8 +50,6 @@ import org.olat.modules.portfolio.MediaRenderingHints;
 import org.olat.modules.portfolio.PortfolioLoggingAction;
 import org.olat.modules.portfolio.manager.MediaDAO;
 import org.olat.modules.portfolio.manager.PortfolioFileStorage;
-import org.olat.modules.portfolio.ui.editor.InteractiveAddPageElementHandler;
-import org.olat.modules.portfolio.ui.editor.PageElementAddController;
 import org.olat.modules.portfolio.ui.media.CollectFileMediaController;
 import org.olat.modules.portfolio.ui.media.FileMediaController;
 import org.olat.modules.portfolio.ui.media.UploadMedia;
@@ -69,7 +71,6 @@ import org.springframework.stereotype.Service;
 public class FileHandler extends AbstractMediaHandler implements InteractiveAddPageElementHandler {
 	
 	public static final String FILE_TYPE = "bc";
-
 	
 	@Autowired
 	private MediaDAO mediaDao;
@@ -77,6 +78,8 @@ public class FileHandler extends AbstractMediaHandler implements InteractiveAddP
 	private PortfolioFileStorage fileStorage;
 	@Autowired
 	private EPFrontendManager oldPortfolioManager;
+	@Autowired
+	private VFSRepositoryService vfsRepositoryService;
 	
 	public FileHandler() {
 		super(FILE_TYPE);
@@ -85,6 +88,11 @@ public class FileHandler extends AbstractMediaHandler implements InteractiveAddP
 	@Override
 	public String getIconCssClass() {
 		return "o_filetype_file";
+	}
+	
+	@Override
+	public PageElementCategory getCategory() {
+		return PageElementCategory.embed;
 	}
 
 	@Override
@@ -111,12 +119,8 @@ public class FileHandler extends AbstractMediaHandler implements InteractiveAddP
 		if(StringHelper.containsNonWhitespace(storagePath)) {
 			VFSContainer storageContainer = fileStorage.getMediaContainer(media);
 			VFSItem item = storageContainer.resolve(media.getRootFilename());
-			if(item instanceof VFSLeaf) {
-				VFSLeaf leaf = (VFSLeaf)item;
-				if(leaf instanceof MetaTagged) {
-					MetaInfo metaInfo = ((MetaTagged)leaf).getMetaInfo();
-					thumbnail = metaInfo.getThumbnail(size.getHeight(), size.getWidth(), true);
-				}
+			if(item instanceof VFSLeaf && item.canMeta() == VFSConstants.YES) {
+				thumbnail = vfsRepositoryService.getThumbnail((VFSLeaf)item, size.getHeight(), size.getWidth(), true);
 			}
 		}
 		
@@ -132,8 +136,8 @@ public class FileHandler extends AbstractMediaHandler implements InteractiveAddP
 	public MediaInformations getInformations(Object mediaObject) {
 		String title = null;
 		String description = null;
-		if (mediaObject instanceof MetaTagged) {
-			MetaInfo meta = ((MetaTagged)mediaObject).getMetaInfo();
+		if (mediaObject instanceof VFSItem && ((VFSItem)mediaObject).canMeta() == VFSConstants.YES) {
+			VFSMetadata meta = ((VFSItem)mediaObject).getMetaInfo();
 			title = meta.getTitle();
 			description = meta.getComment();
 		}

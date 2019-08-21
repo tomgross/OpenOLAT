@@ -31,8 +31,8 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Random;
 
+import org.apache.logging.log4j.Logger;
 import org.olat.core.commons.modules.bc.FolderConfig;
-import org.olat.core.commons.modules.bc.vfs.OlatRootFolderImpl;
 import org.olat.core.gui.UserRequest;
 import org.olat.core.gui.components.Component;
 import org.olat.core.gui.components.link.Link;
@@ -53,11 +53,13 @@ import org.olat.core.gui.control.controller.BasicController;
 import org.olat.core.gui.util.CSSHelper;
 import org.olat.core.id.Identity;
 import org.olat.core.logging.AssertException;
-import org.olat.core.logging.OLog;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.StringHelper;
+import org.olat.core.util.io.SystemFileFilter;
+import org.olat.core.util.vfs.VFSContainer;
 import org.olat.core.util.vfs.VFSItem;
 import org.olat.core.util.vfs.VFSLeaf;
+import org.olat.core.util.vfs.VFSManager;
 import org.olat.core.util.vfs.VFSMediaResource;
 import org.olat.course.nodes.CourseNode;
 import org.olat.course.nodes.TACourseNode;
@@ -81,7 +83,7 @@ import org.olat.properties.Property;
 
 public class TaskController extends BasicController {
 	
-	private OLog log = Tracing.createLoggerFor(this.getClass());
+	private static final Logger log = Tracing.createLoggerFor(TaskController.class);
 	
 	private static final String ACTION_PREVIEW = "ta.preview";
 	private static final String ACTION_SELECT = "seltask";
@@ -176,7 +178,7 @@ public class TaskController extends BasicController {
 				myContent = createVelocityContainer("taskChoose");
 				
 				List<String> availableTasks = compileAvailableTasks();
-				if (availableTasks.size() == 0 && assignedTask==null) { // no more tasks available
+				if (availableTasks.isEmpty() && assignedTask==null) { // no more tasks available
 					myContent.contextPut(VC_NOMORETASKS, translate("task.nomoretasks"));
 				} else {
 				
@@ -235,9 +237,7 @@ public class TaskController extends BasicController {
 		}
 	}
 
-	/**
-	 * @see org.olat.core.gui.control.DefaultController#event(org.olat.core.gui.UserRequest, org.olat.core.gui.control.Controller, org.olat.core.gui.control.Event)
-	 */
+	@Override
 	public void event(UserRequest ureq, Controller source, Event event) {
 		
 		log.debug("Test Controller.event source" + source + "  , event=" + event);
@@ -305,19 +305,6 @@ public class TaskController extends BasicController {
 		myContent.contextPut("taskIcon", CSSHelper.createFiletypeIconCssClassFor(assignedTask));
 		panel.setContent(myContent);
 	}
-	
-	/*private String getTaskFilename(String task) {
-		if(!StringHelper.containsNonWhitespace(task)) {
-			return null;
-		}
-		String extension = FileUtils.getFileSuffix(assignedTask);
-		if(!StringHelper.containsNonWhitespace(extension)) {
-			return null;
-		}
-		
-		String filename = assignedTask.substring(0, assignedTask.length() - extension.length());
-		return StringHelper.transformDisplayNameToFileSystemName(filename) + "." + extension;
-	}*/
 
 	/**
 	 * Auto-assign a task to an identity and mark it as sampled if necessary.
@@ -326,11 +313,11 @@ public class TaskController extends BasicController {
 	 */
 	private String assignTask(Identity identity) {
 		List<String> availableTasks = compileAvailableTasks();
-		if (availableTasks.size() == 0 && samplingWithReplacement) {
+		if (availableTasks.isEmpty() && samplingWithReplacement) {
 			unmarkAllSampledTasks(); // unmark all tasks if samplingWithReplacement and no more tasks available
 			availableTasks = compileAvailableTasks(); // refetch tasks
 		}
-		if (availableTasks.size() == 0)	return null; // no more task available
+		if (availableTasks.isEmpty())	return null; // no more task available
 		
 		String task = availableTasks.get((new Random()).nextInt(availableTasks.size()));
 		setAssignedTask(identity, task); // assignes the file to this identity
@@ -341,7 +328,7 @@ public class TaskController extends BasicController {
 	
 	public static String getAssignedTask(Identity identity, CourseEnvironment courseEnv, CourseNode node) {
 		List<Property> samples = courseEnv.getCoursePropertyManager().findCourseNodeProperties(node, identity, null, PROP_ASSIGNED);
-		if (samples.size() == 0) return null; // no sample assigned yet
+		if (samples.isEmpty()) return null; // no sample assigned yet
 		return samples.get(0).getStringValue();
 	}
 
@@ -395,8 +382,8 @@ public class TaskController extends BasicController {
 	 * @return List of available tasks.
 	 */
 	private List<String> compileAvailableTasks() {
-		File[] taskSources = taskFolder.listFiles();
-		List<String> tasks = new ArrayList<String>(taskSources.length);
+		File[] taskSources = taskFolder.listFiles(SystemFileFilter.FILES_ONLY);
+		List<String> tasks = new ArrayList<>(taskSources.length);
 		List<String> sampledTasks = compileSampledTasks();
 		for (int i = 0; i < taskSources.length; i++) {
 			File nextTask = taskSources[i];
@@ -411,7 +398,7 @@ public class TaskController extends BasicController {
 	 * @return List of sampled tasks.
 	 */
 	private List<String> compileSampledTasks() {
-		List<String> sampledTasks = new ArrayList<String>();
+		List<String> sampledTasks = new ArrayList<>();
 		List<Property> samples = courseEnv.getCoursePropertyManager()
 			.findCourseNodeProperties(node, null, null, PROP_SAMPLED);
 		for (Iterator<Property> iter = samples.iterator(); iter.hasNext();) {
@@ -450,11 +437,7 @@ public class TaskController extends BasicController {
 		return isDeselectable;
 	}
 
-		
-	/**
-	 * 
-	 * @see org.olat.core.gui.control.DefaultController#doDispose(boolean)
-	 */
+	@Override
 	protected void doDispose() {
 		//
 	}
@@ -466,7 +449,7 @@ public class TaskController extends BasicController {
 	 * @param command
 	 */
 	private boolean doFileDelivery(UserRequest ureq, String taskFile) {
-		OlatRootFolderImpl forumContainer = new OlatRootFolderImpl(TACourseNode.getTaskFolderPathRelToFolderRoot(courseEnv, node), null);
+		VFSContainer forumContainer = VFSManager.olatRootContainer(TACourseNode.getTaskFolderPathRelToFolderRoot(courseEnv, node), null);
 		VFSItem item = forumContainer.resolve(taskFile);
 		if (item instanceof VFSLeaf) {
 			VFSLeaf leaf = (VFSLeaf)item;

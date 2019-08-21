@@ -30,6 +30,7 @@ import java.util.List;
 import java.util.regex.Pattern;
 import java.util.regex.PatternSyntaxException;
 
+import org.apache.logging.log4j.Logger;
 import org.olat.NewControllerFactory;
 import org.olat.admin.site.UserAdminSite;
 import org.olat.admin.user.UserAdminContextEntryControllerCreator;
@@ -41,7 +42,6 @@ import org.olat.core.configuration.AbstractSpringModule;
 import org.olat.core.id.Identity;
 import org.olat.core.id.User;
 import org.olat.core.id.UserConstants;
-import org.olat.core.logging.OLog;
 import org.olat.core.logging.StartupException;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.StringHelper;
@@ -63,10 +63,14 @@ import org.springframework.stereotype.Service;
 @Service
 public class UserModule extends AbstractSpringModule {
 
-	private static OLog log = Tracing.createLoggerFor(UserModule.class);
+	private static final Logger log = Tracing.createLoggerFor(UserModule.class);
 	
 	private static final String USER_EMAIL_MANDATORY = "userEmailMandatory";
 	private static final String USER_EMAIL_UNIQUE = "userEmailUnique";
+	private static final String ALLOW_REQUEST_DELETE_ACCOUNT = "allow.request.delete.account";
+	private static final String ALLOW_REQUEST_DELETE_ACCOUNT_DISCLAIMER = "allow.request.delete.account.disclaimer";
+	private static final String MAIL_REQUEST_DELETE_ACCOUNT = "request.delete.account.mail";
+	private static final String PORTRAIT_MANAGED = "user.portrait.managed";
 	
 	@Autowired @Qualifier("loginBlacklist")
 	private ArrayList<String> loginBlacklist;
@@ -76,6 +80,13 @@ public class UserModule extends AbstractSpringModule {
 	private boolean pwdchangeallowed;
 	@Value("${password.change.allowed.without.authentications:false}")
 	private boolean pwdChangeWithoutAuthenticationAllowed;
+	
+	@Value("${allow.request.delete.account:false}")
+	private boolean allowRequestToDeleteAccount;
+	@Value("${allow.request.delete.account.disclaimer:false}")
+	private boolean allowRequestToDeleteAccountDisclaimer;
+	@Value("${request.delete.account.mail}")
+	private String mailToRequestAccountDeletion;
 
 	private String adminUserName = "administrator";
 	@Value("${user.logoByProfile:disabled}")
@@ -85,6 +96,9 @@ public class UserModule extends AbstractSpringModule {
 	private boolean isEmailMandatory;
 	@Value("${user.email.unique:true}")
 	private boolean isEmailUnique;
+	
+	@Value("${user.portrait.managed:false}")
+	private boolean portraitManaged;
 	
 	@Autowired
 	private UserPropertiesConfig userPropertiesConfig;
@@ -108,17 +122,8 @@ public class UserModule extends AbstractSpringModule {
 		}
 		
 		log.info("Successfully added " + count + " entries to login blacklist.");
-		
-		String userEmailOptionalValue = getStringPropertyValue(USER_EMAIL_MANDATORY, false);
-		if(StringHelper.containsNonWhitespace(userEmailOptionalValue)) {
-			isEmailMandatory = "true".equalsIgnoreCase(userEmailOptionalValue);
-		}
-		
-		String userEmailUniquenessOptionalValue = getStringPropertyValue(USER_EMAIL_UNIQUE, false);
-		if(StringHelper.containsNonWhitespace(userEmailUniquenessOptionalValue)) {
-			isEmailUnique = "true".equalsIgnoreCase(userEmailUniquenessOptionalValue);
-		}
-		
+		updateProperties();
+
 		// Check if user manager is configured properly and has user property
 		// handlers for the mandatory user properties used in OLAT
 		checkMandatoryUserProperty(UserConstants.FIRSTNAME);
@@ -142,7 +147,36 @@ public class UserModule extends AbstractSpringModule {
 
 	@Override
 	protected void initFromChangedProperties() {
-		//
+		updateProperties();
+	}
+	
+	private void updateProperties() {
+		String userEmailOptionalValue = getStringPropertyValue(USER_EMAIL_MANDATORY, false);
+		if(StringHelper.containsNonWhitespace(userEmailOptionalValue)) {
+			isEmailMandatory = "true".equalsIgnoreCase(userEmailOptionalValue);
+		}
+		String userEmailUniquenessOptionalValue = getStringPropertyValue(USER_EMAIL_UNIQUE, false);
+		if(StringHelper.containsNonWhitespace(userEmailUniquenessOptionalValue)) {
+			isEmailUnique = "true".equalsIgnoreCase(userEmailUniquenessOptionalValue);
+		}
+		
+		String allowRequestDeleteObj = getStringPropertyValue(ALLOW_REQUEST_DELETE_ACCOUNT, false);
+		if(StringHelper.containsNonWhitespace(allowRequestDeleteObj)) {
+			allowRequestToDeleteAccount = "true".equalsIgnoreCase(allowRequestDeleteObj);
+		}
+		String allowRequestDeleteDisclaimerObj = getStringPropertyValue(ALLOW_REQUEST_DELETE_ACCOUNT_DISCLAIMER, false);
+		if(StringHelper.containsNonWhitespace(allowRequestDeleteDisclaimerObj)) {
+			allowRequestToDeleteAccountDisclaimer = "true".equalsIgnoreCase(allowRequestDeleteDisclaimerObj);
+		}
+		String mailRequestDeleteObj = getStringPropertyValue(MAIL_REQUEST_DELETE_ACCOUNT, false);
+		if(StringHelper.containsNonWhitespace(mailRequestDeleteObj)) {
+			mailToRequestAccountDeletion = mailRequestDeleteObj;
+		}
+		
+		String portraitManagedObj = getStringPropertyValue(PORTRAIT_MANAGED, false);
+		if(StringHelper.containsNonWhitespace(portraitManagedObj)) {
+			portraitManaged = "true".equalsIgnoreCase(portraitManagedObj);
+		}
 	}
 
 	private void checkMandatoryUserProperty(String userPropertyIdentifyer) {
@@ -177,7 +211,7 @@ public class UserModule extends AbstractSpringModule {
 		login = login.toLowerCase();
 		for (String regexp: getLoginBlacklist()) {
 			if (login.matches(regexp)) {
-				log.audit("Blacklist entry match for login '" + login + "' with regexp '" + regexp + "'.");
+				log.info(Tracing.M_AUDIT, "Blacklist entry match for login '" + login + "' with regexp '" + regexp + "'.");
 				return true;
 			}
 		}
@@ -262,4 +296,42 @@ public class UserModule extends AbstractSpringModule {
 		setStringProperty(USER_EMAIL_UNIQUE, isEmailUniqueStr, true);
 	}
 
+	public boolean isAllowRequestToDeleteAccount() {
+		return allowRequestToDeleteAccount;
+	}
+
+	public void setAllowRequestToDeleteAccount(boolean allowRequestToDeleteAccount) {
+		this.allowRequestToDeleteAccount = allowRequestToDeleteAccount;
+		String allowed = allowRequestToDeleteAccount ? "true" : "false";
+		setStringProperty(ALLOW_REQUEST_DELETE_ACCOUNT, allowed, true);
+	}
+
+	public boolean isAllowRequestToDeleteAccountDisclaimer() {
+		return allowRequestToDeleteAccountDisclaimer;
+	}
+
+	public void setAllowRequestToDeleteAccountDisclaimer(boolean allowRequestToDeleteAccountDisclaimer) {
+		this.allowRequestToDeleteAccountDisclaimer = allowRequestToDeleteAccountDisclaimer;
+		String allowed = allowRequestToDeleteAccountDisclaimer ? "true" : "false";
+		setStringProperty(ALLOW_REQUEST_DELETE_ACCOUNT_DISCLAIMER, allowed, true);
+	}
+
+	public String getMailToRequestAccountDeletion() {
+		return mailToRequestAccountDeletion;
+	}
+
+	public void setMailToRequestAccountDeletion(String mailToRequestAccountDeletion) {
+		this.mailToRequestAccountDeletion = mailToRequestAccountDeletion;
+		setStringProperty(MAIL_REQUEST_DELETE_ACCOUNT, mailToRequestAccountDeletion, true);
+	}
+
+	public boolean isPortraitManaged() {
+		return portraitManaged;
+	}
+
+	public void setPortraitManaged(boolean portraitManaged) {
+		this.portraitManaged = portraitManaged;
+		setStringProperty(PORTRAIT_MANAGED, Boolean.toString(portraitManaged), true);
+	}
+	
 }

@@ -28,13 +28,13 @@ package org.olat.resource;
 import java.util.Collections;
 import java.util.List;
 
+import org.apache.logging.log4j.Logger;
 import org.olat.core.commons.persistence.DB;
 import org.olat.core.id.OLATResourceable;
 import org.olat.core.logging.AssertException;
-import org.olat.core.manager.BasicManager;
+import org.olat.core.logging.Tracing;
 import org.olat.core.util.CodeHelper;
 import org.olat.core.util.coordinate.CoordinatorManager;
-import org.olat.core.util.coordinate.SyncerCallback;
 import org.olat.core.util.resource.OresHelper;
 import org.olat.course.CourseModule;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -46,7 +46,9 @@ import org.springframework.beans.factory.annotation.Autowired;
  * @author Andreas Ch. Kapp
  *
  */
-public class OLATResourceManager extends BasicManager {
+public class OLATResourceManager {
+	
+	private static final Logger log = Tracing.createLoggerFor(OLATResourceManager.class);
 	
 	private static OLATResourceManager INSTANCE;
 
@@ -86,7 +88,7 @@ public class OLATResourceManager extends BasicManager {
 	 * @return OLATResource
 	 */
 	public OLATResource createOLATResourceInstance(String typeName) {
-		Long id = new Long(CodeHelper.getForeverUniqueID());
+		Long id = Long.valueOf(CodeHelper.getForeverUniqueID());
 		return new OLATResourceImpl(id, typeName);
 	}
 	
@@ -148,20 +150,18 @@ public class OLATResourceManager extends BasicManager {
 		}
 		// Second there exists no resourcable => try to find and create(if no exists) in a synchronized block
 		//o_clusterOK by:cg
-		ores = CoordinatorManager.getInstance().getCoordinator().getSyncer().doInSync(resourceable, new SyncerCallback<OLATResource>(){
-			public OLATResource execute() {
-				logDebug("start synchronized-block in findOrPersistResourceable");
-				OLATResource oresSync  = findResourceable(resourceable);
-				// if not found, persist it.
-				if (oresSync == null ) {
-					if(CourseModule.ORES_TYPE_COURSE.equals(resourceable.getResourceableTypeName())) {
-					  logInfo("OLATResourceManager - createOLATResourceInstance if not found: " + resourceable.getResourceableTypeName() + " " + resourceable.getResourceableId());
-					}
-					oresSync = createOLATResourceInstance(resourceable);
-					saveOLATResource(oresSync);
+		ores = CoordinatorManager.getInstance().getCoordinator().getSyncer().doInSync(resourceable, () -> {
+			log.debug("start synchronized-block in findOrPersistResourceable");
+			OLATResource oresSync  = findResourceable(resourceable);
+			// if not found, persist it.
+			if (oresSync == null ) {
+				if(CourseModule.ORES_TYPE_COURSE.equals(resourceable.getResourceableTypeName())) {
+				  log.info("OLATResourceManager - createOLATResourceInstance if not found: " + resourceable.getResourceableTypeName() + " " + resourceable.getResourceableId());
 				}
-				return oresSync;
+				oresSync = createOLATResourceInstance(resourceable);
+				saveOLATResource(oresSync);
 			}
+			return oresSync;
 		});
 		return ores;
 	}
@@ -201,7 +201,7 @@ public class OLATResourceManager extends BasicManager {
 				.getResultList();
 
 		// if not found, it is an empty list
-		if (resources.size() == 0) {
+		if (resources.isEmpty()) {
 			return null;
 		}
 		return resources.get(0);
@@ -216,12 +216,9 @@ public class OLATResourceManager extends BasicManager {
 		if(types == null || types.isEmpty()) return Collections.<OLATResource>emptyList();
 		
 		String s = "select ori from org.olat.resource.OLATResourceImpl ori where ori.resName in (:restrictedType)";
-		List<OLATResource> resources = dbInstance.getCurrentEntityManager()
+		return dbInstance.getCurrentEntityManager()
 				.createQuery(s, OLATResource.class)
 				.setParameter("restrictedType", types)
 				.getResultList();
-		return resources;
-		
-		
 	}
 }

@@ -31,6 +31,8 @@ import org.olat.core.util.vfs.VFSLeaf;
 import org.olat.course.nodes.PortfolioCourseNode;
 import org.olat.modules.assessment.Role;
 import org.olat.modules.assessment.model.AssessmentEntryStatus;
+import org.olat.modules.forms.EvaluationFormSession;
+import org.olat.modules.forms.EvaluationFormSurvey;
 import org.olat.modules.portfolio.model.AccessRightChange;
 import org.olat.modules.portfolio.model.AccessRights;
 import org.olat.modules.portfolio.model.AssessedBinder;
@@ -125,7 +127,7 @@ public interface PortfolioService {
 	 * @param section The section is mandatory
 	 * @return
 	 */
-	public Assignment addAssignment(String title, String summary, String content, AssignmentType type, Section section,
+	public Assignment addAssignment(String title, String summary, String content, AssignmentType type, boolean template, Section section, Binder binder,
 			boolean onlyAutoEvaluation, boolean reviewerSeeAutoEvaluation, boolean anonymousExternEvaluation, RepositoryEntry formEntry);
 	
 	public Section moveUpAssignment(Section section, Assignment assignment);
@@ -145,8 +147,23 @@ public interface PortfolioService {
 	 */
 	public Assignment getAssignment(PageBody body);
 
+	/**
+	 * The list of assignments in each sections of the binder.
+	 * 
+	 * @param binder The binder
+	 * @param searchString An optional search string
+	 * @return A list of assignments
+	 */
+	public List<Assignment> getSectionsAssignments(PortfolioElement binder, String searchString);
 	
-	public List<Assignment> getAssignments(PortfolioElement binder, String searchString);
+	/**
+	 * The list of assignments in the templates folder of the binder.
+	 * @param binder The binder which holds the assignments
+	 * @return A list of assignments
+	 */
+	public List<Assignment> getBindersAssignmentsTemplates(BinderRef binder);
+	
+	public boolean hasBinderAssignmentTemplate(BinderRef binder);
 	
 	public List<Assignment> searchOwnedAssignments(IdentityRef assignee);
 	
@@ -156,12 +173,29 @@ public interface PortfolioService {
 	
 	
 	/**
+	 * Start an assignment (template excluded) and create the page.
 	 * 
-	 * @param assignmentKey
-	 * @param author
-	 * @return
+	 * @param assignmentKey The assignment primary key
+	 * @param author The user which will authored the page
+	 * @return The updated assignment
 	 */
 	public Assignment startAssignment(Long assignmentKey, Identity author);
+	
+	/**
+	 * Start an assignment (template one) and create a copy of the assignment
+	 * linked to the section.
+	 * 
+	 * @param assignmentKey The assignment primary key
+	 * @param author The user which will author the page
+	 * @param title The title of the page
+	 * @param summary The summary of the page
+	 * @param imagePath The path of the image
+	 * @param align Alignment of the image
+	 * @param section The section (mandatory)
+	 * @return The page created for the assignment
+	 */
+	public Page startAssignmentFromTemplate(Long assignmentKey, Identity author,
+			String title, String summary, String imagePath, PageImageAlign align, SectionRef section);
 	
 	/**
 	 * Add a new section at the end of the sections list of the specified binder.
@@ -203,7 +237,11 @@ public interface PortfolioService {
 	 */
 	public List<BinderStatistics> searchOwnedBinders(IdentityRef owner);
 	
+	public int countOwnedBinders(IdentityRef owner);
+	
 	public List<BinderStatistics> searchOwnedDeletedBinders(IdentityRef owner);
+	
+	public List<BinderStatistics> searchOwnedLastBinders(IdentityRef owner, int maxResults);
 	
 	/**
 	 * Return the list of binder owned by the specified user
@@ -454,7 +492,11 @@ public interface PortfolioService {
 	 */
 	public List<Page> getPages(SectionRef section);
 	
+	public int countOwnedPages(IdentityRef owner);
+	
 	public List<Page> searchOwnedPages(IdentityRef owner, String searchString);
+	
+	public List<Page> searchOwnedLastPages(IdentityRef owner, int maxResults);
 	
 	/**
 	 * List the pages of the specified user in deleted mode.
@@ -490,7 +532,7 @@ public interface PortfolioService {
 	 */
 	public Page getPageByBody(PageBody body);
 	
-	public Page getLastPage(Identity owner, boolean binderMandatory);
+	public List<Page> getLastPages(Identity owner, int maxResults);
 	
 	/**
 	 * Update the metadata of a page.
@@ -549,6 +591,8 @@ public interface PortfolioService {
 	public void moveUpPagePart(Page page, PagePart part);
 	
 	public void moveDownPagePart(Page page, PagePart part);
+	
+	public void movePagePart(Page page, PagePart partToMove, PagePart sibling, boolean after);
 	
 	/**
 	 * Remove the page from the section, remove relations to the
@@ -632,6 +676,10 @@ public interface PortfolioService {
 	
 	public void setAssessmentStatus(Identity assessedIdentity, BinderRef binderRef, AssessmentEntryStatus status, Identity coachingIdentity);
 		
+	public EvaluationFormSurvey loadOrCreateSurvey(PageBody body, RepositoryEntry formEntry);
 	
+	public EvaluationFormSession loadOrCreateSession(EvaluationFormSurvey survey, Identity executor);
+
+	public void deleteSurvey(PageBody body);
 
 }

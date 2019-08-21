@@ -21,7 +21,6 @@ package org.olat.modules.fo.portfolio;
 
 import java.util.List;
 
-import org.olat.core.commons.modules.bc.vfs.OlatRootFolderImpl;
 import org.olat.core.gui.UserRequest;
 import org.olat.core.gui.components.Component;
 import org.olat.core.gui.components.download.DownloadComponent;
@@ -35,7 +34,8 @@ import org.olat.core.util.Util;
 import org.olat.core.util.vfs.VFSContainer;
 import org.olat.core.util.vfs.VFSItem;
 import org.olat.core.util.vfs.VFSLeaf;
-import org.olat.core.util.vfs.filters.SystemItemFilter;
+import org.olat.core.util.vfs.VFSManager;
+import org.olat.core.util.vfs.filters.VFSSystemItemFilter;
 import org.olat.modules.portfolio.Media;
 import org.olat.modules.portfolio.MediaRenderingHints;
 import org.olat.modules.portfolio.ui.MediaMetadataController;
@@ -70,8 +70,8 @@ public class ForumMessageMediaController extends BasicController {
 		mainVC.contextPut("author", userManager.getUserDisplayName(media.getAuthor()));
 
 		if (StringHelper.containsNonWhitespace(media.getStoragePath())) {
-			VFSContainer attachmentsContainer = new OlatRootFolderImpl("/" + media.getStoragePath(), null);
-			List<VFSItem> attachments = attachmentsContainer.getItems(new SystemItemFilter());
+			VFSContainer attachmentsContainer = VFSManager.olatRootContainer("/" + media.getStoragePath(), null);
+			List<VFSItem> attachments = attachmentsContainer.getItems(new VFSSystemItemFilter());
 			int i=1; //vc-shift!
 			for (VFSItem attachment : attachments) {
 				if(attachment instanceof VFSLeaf) {

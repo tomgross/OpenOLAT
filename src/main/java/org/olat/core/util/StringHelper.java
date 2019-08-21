@@ -50,9 +50,9 @@ import org.apache.commons.lang3.StringEscapeUtils;
 import org.apache.commons.lang3.text.translate.*;
 import org.olat.core.id.Identity;
 import org.olat.core.logging.AssertException;
-import org.olat.core.logging.OLog;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
-import org.olat.core.util.filter.impl.NekoHTMLScanner;
+import org.olat.core.util.filter.impl.HtmlScanner;
 import org.olat.core.util.filter.impl.OWASPAntiSamyXSSFilter;
 import org.olat.user.UserManager;
 
@@ -66,7 +66,7 @@ import com.thoughtworks.xstream.core.util.Base64Encoder;
  */
 public class StringHelper {
 	
-	private static final OLog log = Tracing.createLoggerFor(StringHelper.class);
+	private static final Logger log = Tracing.createLoggerFor(StringHelper.class);
 
 	private static final NumberFormat numFormatter;
 	private static final String WHITESPACE_REGEXP = "^\\s*$";
@@ -113,7 +113,7 @@ public class StringHelper {
 	 * @return List
 	 */
 	public static List<String> getParts(String in, String delim) {
-		List<String> li = new ArrayList<String>();
+		List<String> li = new ArrayList<>();
 		String part;
 		int delimlen = delim.length();
 		int oldpos = 0;
@@ -309,6 +309,10 @@ public class StringHelper {
 		return !matcher.find();
 	}
 	
+	public static String blankIfNull(String s) {
+		return s != null? s: "";
+	}
+	
 	public static int count(String s, char character) {
 		int count = 0;
 		
@@ -353,9 +357,7 @@ public class StringHelper {
 	 */
 	public static boolean isHtml(String s) {
 		if (s == null) return false;
-		
-		boolean containsHtml = new NekoHTMLScanner().scan(s);
-		return containsHtml;
+		return new HtmlScanner().scan(s);
 	}
 
 	/**
@@ -413,8 +415,12 @@ public class StringHelper {
 		return tmpDET.toString();
 	}
 	
+	public static final String escapeHtml(String str) {
+		return org.apache.commons.text.StringEscapeUtils.escapeHtml4(str);
+	}
+	
 	public static final String unescapeHtml(String str) {
-		return StringEscapeUtils.UNESCAPE_HTML4.translate(str);
+		return org.apache.commons.text.StringEscapeUtils.unescapeHtml4(str);
 	}
 	
 	public static final String escapeXml(String str) {
@@ -427,10 +433,14 @@ public class StringHelper {
 
 	public static final void escapeHtml(Writer writer, String str) {
 		try {
-			StringEscapeUtils.ESCAPE_HTML4.translate(str, writer);
+			org.apache.commons.text.StringEscapeUtils.ESCAPE_HTML4.translate(str, writer);
 		} catch (IOException e) {
 			log.error("Error escaping HTML", e);
 		}
+	}
+	
+	public static final String escapeXml(String str) {
+		return org.apache.commons.text.StringEscapeUtils.escapeXml11(str);
 	}
 	
 	public static final String xssScan(String str) {
@@ -444,18 +454,20 @@ public class StringHelper {
 	}
 	
 	public static final boolean xssScanForErrors(String str) {
-		OWASPAntiSamyXSSFilter filter = new OWASPAntiSamyXSSFilter();
-		filter.filter(str);
-		return filter.getNumOfErrors() > 0;
+		return new OWASPAntiSamyXSSFilter().errors(str);
+	}
+	
+	public static final String escapeJava(String str) {
+		return org.apache.commons.text.StringEscapeUtils.escapeJava(str);
 	}
 	
 	public static final String escapeJavaScript(String str) {
-		return OLAT_ESCAPE_ECMASCRIPT.translate(str);
+		return org.apache.commons.text.StringEscapeUtils.escapeEcmaScript(str);
 	}
 	
 	public static final void escapeJavaScript(Writer writer, String str) {
 		try {
-			OLAT_ESCAPE_ECMASCRIPT.translate(str, writer);
+			org.apache.commons.text.StringEscapeUtils.ESCAPE_ECMASCRIPT.translate(str, writer);
 		} catch (IOException e) {
 			log.error("Error escaping JavaScript", e);
 		}
@@ -512,25 +524,26 @@ public class StringHelper {
 	
 	public static String cleanUTF8ForXml(String string) {
 		if(string == null) return null;
-		if(string.length() == 0) return string;
-		
-		StringBuilder sb = new StringBuilder();
-		char[] charArr = string.toCharArray();
-		int numOfCharacters = charArr.length;
-		for(int i=0; i<numOfCharacters; i++) {
-			char ch = charArr[i];
+
+		int length = string.length();
+		if(length == 0) return string;
+
+		StringBuilder sb = new StringBuilder(length);
+		for(int i=0; i<length; i++) {
+			int ch = string.codePointAt(i);
 			if(ch < 32) {
 				switch(ch) {
-					case '\n': sb.append(ch); break;//0x000A
-					case '\t': sb.append(ch); break;//0x0009
-					case '\r': sb.append(ch); break;//0x000D
+					case '\n': //0x000A
+					case '\t': //0x0009
+					case '\r': sb.appendCodePoint(ch); break;//0x000D
+					default: // dump them
 				}
 			} else if(ch >= 0x0020 && ch <= 0xD7FF) {
-				sb.append(ch);
+				sb.appendCodePoint(ch);
 			} else if(ch >= 0xE000 && ch <= 0xFFFD) {
-				sb.append(ch);
+				sb.appendCodePoint(ch);
 			} else if(ch >= 0x10000 && ch <= 0x10FFFF) {
-				sb.append(ch);
+				sb.appendCodePoint(ch);
 			}
 		}
 		return sb.toString();

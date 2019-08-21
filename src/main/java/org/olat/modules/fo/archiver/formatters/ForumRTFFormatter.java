@@ -39,13 +39,11 @@ import java.util.Locale;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-import org.apache.commons.lang.StringEscapeUtils;
 import org.olat.core.CoreSpringFactory;
-import org.olat.core.commons.modules.bc.vfs.OlatRootFolderImpl;
 import org.olat.core.id.Identity;
 import org.olat.core.id.UserConstants;
 import org.olat.core.logging.AssertException;
-import org.olat.core.logging.OLog;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.Formatter;
 import org.olat.core.util.StringHelper;
@@ -54,10 +52,11 @@ import org.olat.core.util.ZipUtil;
 import org.olat.core.util.filter.FilterFactory;
 import org.olat.core.util.nodes.INode;
 import org.olat.core.util.vfs.LocalFileImpl;
-import org.olat.core.util.vfs.LocalFolderImpl;
 import org.olat.core.util.vfs.VFSContainer;
 import org.olat.core.util.vfs.VFSItem;
 import org.olat.core.util.vfs.VFSLeaf;
+import org.olat.core.util.vfs.VFSManager;
+import org.olat.core.util.vfs.filters.VFSSystemItemFilter;
 import org.olat.modules.fo.archiver.MessageNode;
 import org.olat.modules.fo.manager.ForumManager;
 
@@ -69,24 +68,24 @@ import org.olat.modules.fo.manager.ForumManager;
 
 public class ForumRTFFormatter extends ForumFormatter {
 	
-	private static final OLog log = Tracing.createLoggerFor(ForumRTFFormatter.class);
+	private static final Logger log = Tracing.createLoggerFor(ForumRTFFormatter.class);
 
 	private VFSContainer container;
 	private VFSItem vfsFil = null;
 	private VFSContainer tempContainer;
 	
-	final Pattern PATTERN_HTML_BOLD = Pattern.compile("<strong>(.*?)</strong>", Pattern.CASE_INSENSITIVE);
-	final Pattern PATTERN_HTML_ITALIC = Pattern.compile("<em>(.*?)</em>", Pattern.CASE_INSENSITIVE);
-	final Pattern PATTERN_HTML_BREAK = Pattern.compile("<br />", Pattern.CASE_INSENSITIVE);
-	final Pattern PATTERN_HTML_PARAGRAPH = Pattern.compile("<p>(.*?)</p>", Pattern.CASE_INSENSITIVE);
-	final Pattern PATTERN_HTML_AHREF = Pattern.compile("<a href=\"([^\"]+)\"[^>]*>(.*?)</a>", Pattern.CASE_INSENSITIVE);
-	final Pattern PATTERN_HTML_LIST = Pattern.compile("<li>(.*?)</li>", Pattern.CASE_INSENSITIVE);
-	final Pattern HTML_SPACE_PATTERN = Pattern.compile("&nbsp;");
+	private final Pattern PATTERN_HTML_BOLD = Pattern.compile("<strong>(.*?)</strong>", Pattern.CASE_INSENSITIVE);
+	private final Pattern PATTERN_HTML_ITALIC = Pattern.compile("<em>(.*?)</em>", Pattern.CASE_INSENSITIVE);
+	private final Pattern PATTERN_HTML_BREAK = Pattern.compile("<br />", Pattern.CASE_INSENSITIVE);
+	private final Pattern PATTERN_HTML_PARAGRAPH = Pattern.compile("<p>(.*?)</p>", Pattern.CASE_INSENSITIVE);
+	private final Pattern PATTERN_HTML_AHREF = Pattern.compile("<a href=\"([^\"]+)\"[^>]*>(.*?)</a>", Pattern.CASE_INSENSITIVE);
+	private final Pattern PATTERN_HTML_LIST = Pattern.compile("<li>(.*?)</li>", Pattern.CASE_INSENSITIVE);
+	private final Pattern HTML_SPACE_PATTERN = Pattern.compile("&nbsp;");
 	
-	final Pattern PATTERN_CSS_O_FOQUOTE = Pattern.compile("<div class=\"o_quote_wrapper\">\\s*<div class=\"b_quote_author mceNonEditable\">(.*?)</div>\\s*<blockquote class=\"b_quote\">\\s*(.*?)\\s*</blockquote>\\s*</div>", Pattern.CASE_INSENSITIVE | Pattern.DOTALL);
+	private final Pattern PATTERN_CSS_O_FOQUOTE = Pattern.compile("<div class=\"o_quote_wrapper\">\\s*<div class=\"b_quote_author mceNonEditable\">(.*?)</div>\\s*<blockquote class=\"b_quote\">\\s*(.*?)\\s*</blockquote>\\s*</div>", Pattern.CASE_INSENSITIVE | Pattern.DOTALL);
 
-	final Pattern PATTERN_THREEPOINTS = Pattern.compile("&#8230;", Pattern.CASE_INSENSITIVE);
-	final String THREEPOINTS = "...";
+	private final Pattern PATTERN_THREEPOINTS = Pattern.compile("&#8230;", Pattern.CASE_INSENSITIVE);
+	private final String THREEPOINTS = "...";
 	
 	//TODO: (LD) translate this!
 	private String HIDDEN_STR = "VERBORGEN";
@@ -171,8 +170,8 @@ public class ForumRTFFormatter extends ForumFormatter {
 		sb.append(" \\par}");
 		// attachment(s)
 		VFSContainer msgContainer = forumManager.getMessageContainer(getForumKey(), mn.getKey());
-		List<VFSItem> attachments = msgContainer.getItems();
-		if (attachments != null && attachments.size() > 0){
+		List<VFSItem> attachments = msgContainer.getItems(new VFSSystemItemFilter());
+		if (attachments != null && !attachments.isEmpty()){
 			VFSItem item = container.resolve("attachments");
 			if (item == null){
 				item = container.createChildContainer("attachments");
@@ -192,10 +191,7 @@ public class ForumRTFFormatter extends ForumFormatter {
 		sb.append("{\\pard \\brdrb\\brdrs\\brdrw10 \\par}");
 	}
 
-	/**
-	 * 
-	 * @see org.olat.modules.fo.archiver.formatters.ForumFormatter#openThread()
-	 */
+	@Override
 	public void openThread() {
 		super.openThread();
 		if(filePerThread){
@@ -206,10 +202,7 @@ public class ForumRTFFormatter extends ForumFormatter {
 		sb.append("{\\pard \\brdrb \\brdrs \\brdrdb \\brsp20 \\par}{\\pard\\par}");
 	}
 
-	/**
-	 * 
-	 * @see org.olat.modules.fo.archiver.formatters.ForumFormatter#getThreadResult()
-	 */
+	@Override
 	public StringBuilder closeThread() {
 		boolean append = !filePerThread;
 		String footerThread = "{\\pard \\brdrb \\brdrs \\brdrw20 \\brsp20 \\par}{\\pard\\par}";
@@ -224,11 +217,8 @@ public class ForumRTFFormatter extends ForumFormatter {
 		}
 		return super.closeThread();
 	}
-	
-	/**
-	 * 
-	 * @see org.olat.modules.fo.archiver.formatters.ForumFormatter#openForum()
-	 */
+
+	@Override
 	public void openForum(){
 		if(!filePerThread){
 			//make one ForumFile
@@ -248,11 +238,7 @@ public class ForumRTFFormatter extends ForumFormatter {
 		}
 	}
 
-	
-	/**
-	 * 
-	 * @see org.olat.modules.fo.archiver.formatters.ForumFormatter#closeForum()
-	 */
+	@Override
 	public StringBuilder closeForum(){
 		if(!filePerThread){
 			boolean append = !filePerThread;
@@ -378,7 +364,7 @@ public class ForumRTFFormatter extends ForumFormatter {
 		// Remove all &nbsp;
 		Matcher tmp = HTML_SPACE_PATTERN.matcher(htmlText);
 		htmlText = tmp.replaceAll(" ");
-		htmlText = StringEscapeUtils.unescapeHtml(htmlText);
+		htmlText = StringHelper.unescapeHtml(htmlText);
 
 		return htmlText;
 	}
@@ -428,7 +414,7 @@ public class ForumRTFFormatter extends ForumFormatter {
 	 * @return
 	 */
 	private List<String> addImagesToVFSContainer(MessageNode messageNode, VFSContainer imageContainer) {
-		List<String> fileNameList = new ArrayList<String>();
+		List<String> fileNameList = new ArrayList<>();
 		String iconPath = null;
 		if(messageNode.isClosed() && messageNode.isSticky()) {
 			iconPath = getImagePath("fo_sticky_closed");
@@ -451,7 +437,6 @@ public class ForumRTFFormatter extends ForumFormatter {
 	}
 	
 	/**
-	 * TODO: LD: to clarify whether there it a better way to get the image path?
 	 * Gets the image path.
 	 * @param val
 	 * @return the path of the static icon image.
@@ -467,10 +452,8 @@ public class ForumRTFFormatter extends ForumFormatter {
 	private VFSContainer makeTempVFSContainer() {		
 		Long forumKey = getForumKey();
 		String dateStamp = String.valueOf(System.currentTimeMillis());
-    //TODO: (LD) could this filename regarded as unique or use System.nanoTime() instead?
 		String fileName = "forum" + forumKey.toString() + "_" + dateStamp; 
-		LocalFolderImpl tempFolder =  new OlatRootFolderImpl("/tmp/" + fileName, null);
-		return tempFolder;
+		return VFSManager.olatRootContainer("/tmp/" + fileName, null);
 	}
 	
 	/**

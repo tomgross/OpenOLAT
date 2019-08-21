@@ -29,6 +29,8 @@ import java.io.File;
 import java.util.List;
 import java.util.Locale;
 
+import org.apache.logging.log4j.Logger;
+import org.olat.core.CoreSpringFactory;
 import org.olat.core.gui.UserRequest;
 import org.olat.core.gui.components.stack.BreadcrumbPanel;
 import org.olat.core.gui.control.Controller;
@@ -37,7 +39,7 @@ import org.olat.core.gui.control.generic.iframe.DeliveryOptions;
 import org.olat.core.gui.control.generic.tabbable.TabbableController;
 import org.olat.core.id.Identity;
 import org.olat.core.id.OLATResourceable;
-import org.olat.core.logging.OLog;
+import org.olat.core.id.Organisation;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.Util;
 import org.olat.core.util.resource.OresHelper;
@@ -67,6 +69,8 @@ import org.olat.repository.handlers.RepositoryHandlerFactory;
  * @author BPS (<a href="http://www.bps-system.de/">BPS Bildungsportal Sachsen GmbH</a>)
  */
 public class CPCourseNode extends AbstractAccessableCourseNode {
+	
+	private static final Logger log = Tracing.createLoggerFor(CPCourseNode.class);
 
 	private static final long serialVersionUID = -4317662219173515498L;
 	private static final String TYPE = "cp";
@@ -79,10 +83,6 @@ public class CPCourseNode extends AbstractAccessableCourseNode {
 		updateModuleConfigDefaults(true);
 	}
 
-	/**
-	 * @see org.olat.course.nodes.CourseNode#createEditController(org.olat.core.gui.UserRequest,
-	 *      org.olat.core.gui.control.WindowControl, org.olat.course.ICourse)
-	 */
 	@Override
 	public TabbableController createEditController(UserRequest ureq, WindowControl wControl, BreadcrumbPanel stackPanel, ICourse course, UserCourseEnvironment euce) {
 		updateModuleConfigDefaults(false);
@@ -90,12 +90,6 @@ public class CPCourseNode extends AbstractAccessableCourseNode {
 		return new NodeEditController(ureq, wControl, course.getEditorTreeModel(), course, euce, childTabCntrllr);
 	}
 
-	/**
-	 * @see org.olat.course.nodes.CourseNode#createNodeRunConstructionResult(org.olat.core.gui.UserRequest,
-	 *      org.olat.core.gui.control.WindowControl,
-	 *      org.olat.course.run.userview.UserCourseEnvironment,
-	 *      org.olat.course.run.userview.NodeEvaluation)
-	 */
 	@Override
 	public NodeRunConstructionResult createNodeRunConstructionResult(UserRequest ureq, WindowControl wControl,
 			UserCourseEnvironment userCourseEnv, NodeEvaluation ne, String nodecmd) {
@@ -105,18 +99,11 @@ public class CPCourseNode extends AbstractAccessableCourseNode {
 		return cprunC.createNodeRunConstructionResult(ureq, null);
 	}
 
-	/**
-	 * @see org.olat.course.nodes.GenericCourseNode#createPreviewController(org.olat.core.gui.UserRequest,
-	 *      org.olat.core.gui.control.WindowControl,
-	 *      org.olat.course.run.userview.UserCourseEnvironment,
-	 *      org.olat.course.run.userview.NodeEvaluation)
-	 */
 	@Override
 	public Controller createPreviewController(UserRequest ureq, WindowControl wControl, UserCourseEnvironment userCourseEnv, NodeEvaluation ne) {
 		updateModuleConfigDefaults(false);
 		OLATResourceable ores = OresHelper.createOLATResourceableInstance(ICourse.class, userCourseEnv.getCourseEnvironment().getCourseResourceableId());
-		CPRunController cprunC = new CPRunController(getModuleConfiguration(), ureq, wControl, this, null, ores, true);
-		return cprunC;
+		return new CPRunController(getModuleConfiguration(), ureq, wControl, this, null, ores, true);
 	}
 	
 	@Override
@@ -124,9 +111,6 @@ public class CPCourseNode extends AbstractAccessableCourseNode {
 		return CourseNode.DISPLAY_OPTS_CONTENT;
 	}
 
-	/**
-	 * @see org.olat.course.nodes.CourseNode#isConfigValid()
-	 */
 	@Override
 	public StatusDescription isConfigValid() {/*
 																						 * first check the one click cache
@@ -161,15 +145,11 @@ public class CPCourseNode extends AbstractAccessableCourseNode {
 		return StatusDescriptionHelper.sort(statusDescs);
 	}
 
-	/**
-	 * @see org.olat.course.nodes.CourseNode#getReferencedRepositoryEntry()
-	 */
 	@Override
 	public RepositoryEntry getReferencedRepositoryEntry() {
 		// ",false" because we do not want to be strict, but just indicate whether
 		// the reference still exists or not
-		RepositoryEntry entry = CPEditController.getCPReference(getModuleConfiguration(), false);
-		return entry;
+		return CPEditController.getCPReference(getModuleConfiguration(), false);
 	}
 
 	/**
@@ -242,7 +222,8 @@ public class CPCourseNode extends AbstractAccessableCourseNode {
 					RepositoryEntry re = getReferencedRepositoryEntry();
 					// Check if delivery options are set for repo entry, if not create default
 					if(re != null) {
-						reConfig = CPManager.getInstance().getCPPackageConfig(re.getOlatResource());						
+						CPManager cpManager = CoreSpringFactory.getImpl(CPManager.class);
+						reConfig = cpManager.getCPPackageConfig(re.getOlatResource());						
 						if(reConfig == null) {
 							reConfig = new CPPackageConfig();
 						}
@@ -253,7 +234,7 @@ public class CPCourseNode extends AbstractAccessableCourseNode {
 							reConfig.setDeliveryOptions(repoDeliveryOptions);
 							repoDeliveryOptions.setContentEncoding(contentEncoding);
 							repoDeliveryOptions.setJavascriptEncoding(jsEncoding);						
-							CPManager.getInstance().setCPPackageConfig(re.getOlatResource(), reConfig);
+							cpManager.setCPPackageConfig(re.getOlatResource(), reConfig);
 						} else {
 							// see if we have any different settings than the repo. if so, don't use inherit mode
 							if(contentEncoding != repoDeliveryOptions.getContentEncoding() || jsEncoding != repoDeliveryOptions.getJavascriptEncoding()) {
@@ -275,8 +256,7 @@ public class CPCourseNode extends AbstractAccessableCourseNode {
 			// else node is up-to-date - nothing to do
 		}
 		if (config.getConfigurationVersion() != CURRENTVERSION) {
-			OLog logger = Tracing.createLoggerFor(CPCourseNode.class);
-			logger.error("CP course node version not updated to lastest version::" + CURRENTVERSION + ", was::" + config.getConfigurationVersion() + ". Check the code, programming error.");
+			log.error("CP course node version not updated to lastest version::" + CURRENTVERSION + ", was::" + config.getConfigurationVersion() + ". Check the code, programming error.");
 		}
 	}
 
@@ -291,12 +271,12 @@ public class CPCourseNode extends AbstractAccessableCourseNode {
 	}
 
 	@Override
-	public void importNode(File importDirectory, ICourse course, Identity owner, Locale locale, boolean withReferences) {
+	public void importNode(File importDirectory, ICourse course, Identity owner, Organisation organisation, Locale locale, boolean withReferences) {
 		RepositoryEntryImportExport rie = new RepositoryEntryImportExport(importDirectory, getIdent());
 		if(withReferences && rie.anyExportedPropertiesAvailable()) {
 			RepositoryHandler handler = RepositoryHandlerFactory.getInstance().getRepositoryHandler(ImsCPFileResource.TYPE_NAME);
 			RepositoryEntry re = handler.importResource(owner, rie.getInitialAuthor(), rie.getDisplayName(),
-					rie.getDescription(), false, locale, rie.importGetExportedFile(), null);
+					rie.getDescription(), false, organisation, locale, rie.importGetExportedFile(), null);
 			CPEditController.setCPReference(re, getModuleConfiguration());
 		} else {
 			CPEditController.removeCPReference(getModuleConfiguration());

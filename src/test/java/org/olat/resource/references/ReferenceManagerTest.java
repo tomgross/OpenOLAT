@@ -35,12 +35,14 @@ import java.util.List;
 import org.junit.Assert;
 import org.junit.Test;
 import org.olat.basesecurity.GroupRoles;
+import org.olat.basesecurity.OrganisationService;
 import org.olat.core.commons.persistence.DB;
 import org.olat.core.id.Identity;
 import org.olat.core.id.OLATResourceable;
-import org.olat.core.id.Roles;
+import org.olat.core.id.Organisation;
 import org.olat.core.util.resource.OresHelper;
 import org.olat.repository.RepositoryEntry;
+import org.olat.repository.RepositoryEntryStatusEnum;
 import org.olat.repository.RepositoryService;
 import org.olat.repository.manager.RepositoryEntryRelationDAO;
 import org.olat.resource.OLATResource;
@@ -50,9 +52,6 @@ import org.olat.test.OlatTestCase;
 import org.springframework.beans.factory.annotation.Autowired;
 
 
-/**
- * 
- */
 public class ReferenceManagerTest extends OlatTestCase {
 
 	@Autowired
@@ -63,6 +62,8 @@ public class ReferenceManagerTest extends OlatTestCase {
 	private OLATResourceManager resourceManager;
 	@Autowired
 	private RepositoryService repositoryService;
+	@Autowired
+	private OrganisationService organisationService;
 	@Autowired
 	private RepositoryEntryRelationDAO repositoryEntryRelationDao;
 	
@@ -213,19 +214,22 @@ public class ReferenceManagerTest extends OlatTestCase {
 	
 	@Test
 	public void getReferencesInfos_simpleCase() {
-		Identity id = JunitTestHelper.createAndPersistIdentityAsRndUser("Asuka");
-		Roles adminRoles = new Roles(true, false, false, false, false, false, false);
-		
-		RepositoryEntry course1 = repositoryService.create("Asuka Langley", "-", "Reference Manager course 1", "", null);
-		RepositoryEntry course2 = repositoryService.create("Asuka Langley", "-", "Reference Manager course 2", "", null);
-		RepositoryEntry test = repositoryService.create("Asuka Langley", "-", "Reference Manager test ", "", null);
+		Identity admin = JunitTestHelper.createAndPersistIdentityAsRndAdmin("Asuka");
+
+		Organisation defOrganisation = organisationService.getDefaultOrganisation();
+		RepositoryEntry course1 = repositoryService.create(null,"Asuka Langley", "-", "Reference Manager course 1", "", null,
+				RepositoryEntryStatusEnum.trash, defOrganisation);
+		RepositoryEntry course2 = repositoryService.create(null, "Asuka Langley", "-", "Reference Manager course 2", "", null,
+				RepositoryEntryStatusEnum.trash, defOrganisation);
+		RepositoryEntry test = repositoryService.create(null, "Asuka Langley", "-", "Reference Manager test ", "", null,
+				RepositoryEntryStatusEnum.trash, defOrganisation);
 		// add the references
 		referenceManager.addReference(course1.getOlatResource(), test.getOlatResource(), "86234");
 		referenceManager.addReference(course2.getOlatResource(), test.getOlatResource(), "78437590");
 		dbInstance.commitAndCloseSession();
 		
 		//ref of course 1
-		List<ReferenceInfos> refCourse1s = referenceManager.getReferencesInfos(Collections.singletonList(course1), id, adminRoles);
+		List<ReferenceInfos> refCourse1s = referenceManager.getReferencesInfos(Collections.singletonList(course1), admin);
 		Assert.assertNotNull(refCourse1s);
 		Assert.assertEquals(1, refCourse1s.size());
 		ReferenceInfos ref = refCourse1s.get(0);
@@ -237,7 +241,7 @@ public class ReferenceManagerTest extends OlatTestCase {
 		List<RepositoryEntry> courses = new ArrayList<>(2);
 		courses.add(course1);
 		courses.add(course2);
-		List<ReferenceInfos> refCourse1and2s = referenceManager.getReferencesInfos(courses, id, adminRoles);
+		List<ReferenceInfos> refCourse1and2s = referenceManager.getReferencesInfos(courses, admin);
 		Assert.assertNotNull(refCourse1and2s);
 		Assert.assertEquals(1, refCourse1and2s.size());
 		ReferenceInfos ref1nd2 = refCourse1and2s.get(0);
@@ -247,23 +251,30 @@ public class ReferenceManagerTest extends OlatTestCase {
 		
 		//ref empty
 		List<RepositoryEntry> emptyList = new ArrayList<>(2);
-		List<ReferenceInfos> emptyRefList = referenceManager.getReferencesInfos(emptyList, id, adminRoles);
+		List<ReferenceInfos> emptyRefList = referenceManager.getReferencesInfos(emptyList, admin);
 		Assert.assertNotNull(emptyRefList);
 		Assert.assertEquals(0, emptyRefList.size());
 	}
 	
 	@Test
 	public void getReferencesInfos_difficultCase() {
-		Identity id = JunitTestHelper.createAndPersistIdentityAsRndUser("Asuka");
-		Roles adminRoles = new Roles(true, false, false, false, false, false, false);
-		
-		RepositoryEntry course1 = repositoryService.create("Asuka Langley", "-", "Reference Manager course 1", "", null);
-		RepositoryEntry course2 = repositoryService.create("Asuka Langley", "-", "Reference Manager course 2", "", null);
-		RepositoryEntry course3 = repositoryService.create("Asuka Langley", "-", "Reference Manager course 3", "", null);
-		RepositoryEntry course4 = repositoryService.create("Asuka Langley", "-", "Reference Manager course 4", "", null);
-		RepositoryEntry test12 = repositoryService.create("Asuka Langley", "-", "Reference Manager test 12", "", null);
-		RepositoryEntry test2 = repositoryService.create("Asuka Langley", "-", "Reference Manager test 2", "", null);
-		RepositoryEntry test234 = repositoryService.create("Asuka Langley", "-", "Reference Manager test 234", "", null);
+		Identity admin = JunitTestHelper.createAndPersistIdentityAsRndAdmin("Asuka");
+
+		Organisation defOrganisation = organisationService.getDefaultOrganisation();
+		RepositoryEntry course1 = repositoryService.create(null, "Asuka Langley", "-", "Reference Manager course 1", "", null,
+				RepositoryEntryStatusEnum.trash, defOrganisation);
+		RepositoryEntry course2 = repositoryService.create(null, "Asuka Langley", "-", "Reference Manager course 2", "", null,
+				RepositoryEntryStatusEnum.trash, defOrganisation);
+		RepositoryEntry course3 = repositoryService.create(null, "Asuka Langley", "-", "Reference Manager course 3", "", null,
+				RepositoryEntryStatusEnum.trash, defOrganisation);
+		RepositoryEntry course4 = repositoryService.create(null, "Asuka Langley", "-", "Reference Manager course 4", "", null,
+				RepositoryEntryStatusEnum.trash, defOrganisation);
+		RepositoryEntry test12 = repositoryService.create(null, "Asuka Langley", "-", "Reference Manager test 12", "", null,
+				RepositoryEntryStatusEnum.trash, defOrganisation);
+		RepositoryEntry test2 = repositoryService.create(null, "Asuka Langley", "-", "Reference Manager test 2", "", null,
+				RepositoryEntryStatusEnum.trash, defOrganisation);
+		RepositoryEntry test234 = repositoryService.create(null, "Asuka Langley", "-", "Reference Manager test 234", "", null,
+				RepositoryEntryStatusEnum.trash, defOrganisation);
 		// add the references
 		referenceManager.addReference(course1.getOlatResource(), test12.getOlatResource(), "45345");
 		referenceManager.addReference(course2.getOlatResource(), test12.getOlatResource(), "453421");
@@ -277,7 +288,7 @@ public class ReferenceManagerTest extends OlatTestCase {
 		List<RepositoryEntry> courses12 = new ArrayList<>(2);
 		courses12.add(course1);
 		courses12.add(course2);
-		List<ReferenceInfos> refCourses12 = referenceManager.getReferencesInfos(courses12, id, adminRoles);
+		List<ReferenceInfos> refCourses12 = referenceManager.getReferencesInfos(courses12, admin);
 		Assert.assertNotNull(refCourses12);
 		Assert.assertEquals(3, refCourses12.size());
 		//test12
@@ -299,7 +310,7 @@ public class ReferenceManagerTest extends OlatTestCase {
 		//course 2
 		List<RepositoryEntry> courses2 = new ArrayList<>(2);
 		courses2.add(course2);
-		List<ReferenceInfos> refCourses2 = referenceManager.getReferencesInfos(courses2, id, adminRoles);
+		List<ReferenceInfos> refCourses2 = referenceManager.getReferencesInfos(courses2, admin);
 		Assert.assertNotNull(refCourses2);
 		Assert.assertEquals(3, refCourses2.size());
 		//test12
@@ -321,7 +332,7 @@ public class ReferenceManagerTest extends OlatTestCase {
 		//course 4
 		List<RepositoryEntry> courses4 = new ArrayList<>(2);
 		courses4.add(course4);
-		List<ReferenceInfos> refCourses4 = referenceManager.getReferencesInfos(courses4, id, adminRoles);
+		List<ReferenceInfos> refCourses4 = referenceManager.getReferencesInfos(courses4, admin);
 		Assert.assertNotNull(refCourses4);
 		Assert.assertEquals(1, refCourses4.size());
 		//test234
@@ -335,17 +346,24 @@ public class ReferenceManagerTest extends OlatTestCase {
 	public void getReferencesInfos_permission() {
 		Identity id1 = JunitTestHelper.createAndPersistIdentityAsRndUser("Asuka");
 		Identity id2 = JunitTestHelper.createAndPersistIdentityAsRndUser("Rei");
-		Roles roles = new Roles(false, false, false, false, false, false, false);
-		
-		RepositoryEntry course1 = repositoryService.create("Asuka Langley", "-", "Reference Manager course 1 permission", "", null);
-		RepositoryEntry course2 = repositoryService.create("Asuka Langley", "-", "Reference Manager course 2 permission", "", null);
-		RepositoryEntry course3 = repositoryService.create("Asuka Langley", "-", "Reference Manager course 3 permission", "", null);
-		RepositoryEntry course4 = repositoryService.create("Asuka Langley", "-", "Reference Manager course 4 permission", "", null);
-		RepositoryEntry test12 = repositoryService.create("Asuka Langley", "-", "Reference Manager test 12 permission", "", null);
+
+		Organisation defOrganisation = organisationService.getDefaultOrganisation();
+		RepositoryEntry course1 = repositoryService.create(null, "Asuka Langley", "-", "Reference Manager course 1 permission", "", null,
+				RepositoryEntryStatusEnum.trash, defOrganisation);
+		RepositoryEntry course2 = repositoryService.create(null, "Asuka Langley", "-", "Reference Manager course 2 permission", "", null,
+				RepositoryEntryStatusEnum.trash, defOrganisation);
+		RepositoryEntry course3 = repositoryService.create(null, "Asuka Langley", "-", "Reference Manager course 3 permission", "", null,
+				RepositoryEntryStatusEnum.trash, defOrganisation);
+		RepositoryEntry course4 = repositoryService.create(null, "Asuka Langley", "-", "Reference Manager course 4 permission", "", null,
+				RepositoryEntryStatusEnum.trash, defOrganisation);
+		RepositoryEntry test12 = repositoryService.create(null, "Asuka Langley", "-", "Reference Manager test 12 permission", "", null,
+				RepositoryEntryStatusEnum.trash, defOrganisation);
 		repositoryEntryRelationDao.addRole(id1, test12, GroupRoles.owner.name());
-		RepositoryEntry test2 = repositoryService.create("Asuka Langley", "-", "Reference Manager test 2 permission", "", null);
+		RepositoryEntry test2 = repositoryService.create(null, "Asuka Langley", "-", "Reference Manager test 2 permission", "", null,
+				RepositoryEntryStatusEnum.trash, defOrganisation);
 		repositoryEntryRelationDao.addRole(id2, test2, GroupRoles.owner.name());
-		RepositoryEntry test234 = repositoryService.create("Asuka Langley", "-", "Reference Manager test 234 permission", "", null);
+		RepositoryEntry test234 = repositoryService.create(null, "Asuka Langley", "-", "Reference Manager test 234 permission", "", null,
+				RepositoryEntryStatusEnum.trash, defOrganisation);
 		repositoryEntryRelationDao.addRole(id2, test234, GroupRoles.owner.name());
 		
 		// add the references
@@ -361,7 +379,7 @@ public class ReferenceManagerTest extends OlatTestCase {
 		List<RepositoryEntry> courses12 = new ArrayList<>(2);
 		courses12.add(course1);
 		courses12.add(course2);
-		List<ReferenceInfos> refCourses12 = referenceManager.getReferencesInfos(courses12, id1, roles);
+		List<ReferenceInfos> refCourses12 = referenceManager.getReferencesInfos(courses12, id1);
 		Assert.assertNotNull(refCourses12);
 		Assert.assertEquals(3, refCourses12.size());
 		//test12
@@ -383,7 +401,7 @@ public class ReferenceManagerTest extends OlatTestCase {
 		//course 2
 		List<RepositoryEntry> courses2 = new ArrayList<>(2);
 		courses2.add(course2);
-		List<ReferenceInfos> refCourses2 = referenceManager.getReferencesInfos(courses2, id2, roles);
+		List<ReferenceInfos> refCourses2 = referenceManager.getReferencesInfos(courses2, id2);
 		Assert.assertNotNull(refCourses2);
 		Assert.assertEquals(3, refCourses2.size());
 		//test12

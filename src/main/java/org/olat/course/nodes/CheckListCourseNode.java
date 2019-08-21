@@ -43,6 +43,7 @@ import org.olat.core.gui.translator.Translator;
 import org.olat.core.id.Identity;
 import org.olat.core.id.IdentityEnvironment;
 import org.olat.core.id.OLATResourceable;
+import org.olat.core.id.Organisation;
 import org.olat.core.id.Roles;
 import org.olat.core.logging.OLATRuntimeException;
 import org.olat.core.util.FileUtils;
@@ -121,10 +122,6 @@ public class CheckListCourseNode extends AbstractAccessableCourseNode implements
 		updateModuleConfigDefaults(true);
 	}
 
-	/**
-	 * @see org.olat.course.nodes.CourseNode#createEditController(org.olat.core.gui.UserRequest,
-	 *      org.olat.core.gui.control.WindowControl, org.olat.course.ICourse)
-	 */
 	@Override
 	public TabbableController createEditController(UserRequest ureq, WindowControl wControl, BreadcrumbPanel stackPanel, ICourse course, UserCourseEnvironment euce) {
 		updateModuleConfigDefaults(false);
@@ -133,12 +130,6 @@ public class CheckListCourseNode extends AbstractAccessableCourseNode implements
 		return new NodeEditController(ureq, wControl, course.getEditorTreeModel(), course, euce, childTabCntrllr);
 	}
 
-	/**
-	 * @see org.olat.course.nodes.CourseNode#createNodeRunConstructionResult(org.olat.core.gui.UserRequest,
-	 *      org.olat.core.gui.control.WindowControl,
-	 *      org.olat.course.run.userview.UserCourseEnvironment,
-	 *      org.olat.course.run.userview.NodeEvaluation)
-	 */
 	@Override
 	public NodeRunConstructionResult createNodeRunConstructionResult(UserRequest ureq, WindowControl wControl,
 			final UserCourseEnvironment userCourseEnv, NodeEvaluation ne, String nodecmd) {
@@ -162,12 +153,6 @@ public class CheckListCourseNode extends AbstractAccessableCourseNode implements
 		return new NodeRunConstructionResult(cont);
 	}
 	
-	/**
-	 * @see org.olat.course.nodes.GenericCourseNode#createPreviewController(org.olat.core.gui.UserRequest,
-	 *      org.olat.core.gui.control.WindowControl,
-	 *      org.olat.course.run.userview.UserCourseEnvironment,
-	 *      org.olat.course.run.userview.NodeEvaluation)
-	 */
 	@Override
 	public Controller createPreviewController(UserRequest ureq, WindowControl wControl, UserCourseEnvironment userCourseEnv, NodeEvaluation ne) {
 		return createNodeRunConstructionResult(ureq, wControl, userCourseEnv, ne, null).getRunController();
@@ -200,9 +185,6 @@ public class CheckListCourseNode extends AbstractAccessableCourseNode implements
 		return am.getAssessmentEntry(this, mySelf);
 	}
 
-	/**
-	 * @see org.olat.course.nodes.CourseNode#isConfigValid()
-	 */
 	@Override
 	public StatusDescription isConfigValid() {
 		if (oneClickStatusCache != null && oneClickStatusCache.length > 0) {
@@ -217,9 +199,6 @@ public class CheckListCourseNode extends AbstractAccessableCourseNode implements
 		return oneClickStatusCache[0];
 	}
 
-	/**
-	 * @see org.olat.course.nodes.CourseNode#isConfigValid(org.olat.course.run.userview.UserCourseEnvironment)
-	 */
 	@Override
 	public StatusDescription[] isConfigValid(CourseEditorEnv cev) {
 		oneClickStatusCache = null;
@@ -280,17 +259,11 @@ public class CheckListCourseNode extends AbstractAccessableCourseNode implements
 		return statusDescs;
 	}
 
-	/**
-	 * @see org.olat.course.nodes.CourseNode#getReferencedRepositoryEntry()
-	 */
 	@Override
 	public RepositoryEntry getReferencedRepositoryEntry() {
 		return null;
 	}
 
-	/**
-	 * @see org.olat.course.nodes.CourseNode#needsReferenceToARepositoryEntry()
-	 */
 	@Override
 	public boolean needsReferenceToARepositoryEntry() {
 		return false;
@@ -301,9 +274,6 @@ public class CheckListCourseNode extends AbstractAccessableCourseNode implements
 		return false;
 	}
 
-	/**
-	 * @see org.olat.course.nodes.AssessableCourseNode#getCutValueConfiguration()
-	 */
 	@Override
 	public Float getCutValueConfiguration() {
 		if (!hasPassedConfigured()) {
@@ -313,9 +283,6 @@ public class CheckListCourseNode extends AbstractAccessableCourseNode implements
 		return (Float)config.get(MSCourseNode.CONFIG_KEY_PASSED_CUT_VALUE);
 	}
 
-	/**
-	 * @see org.olat.course.nodes.AssessableCourseNode#getMaxScoreConfiguration()
-	 */
 	@Override
 	public Float getMaxScoreConfiguration() {
 		if (!hasScoreConfigured()) {
@@ -325,9 +292,6 @@ public class CheckListCourseNode extends AbstractAccessableCourseNode implements
 		return (Float)config.get(MSCourseNode.CONFIG_KEY_SCORE_MAX);
 	}
 
-	/**
-	 * @see org.olat.course.nodes.AssessableCourseNode#getMinScoreConfiguration()
-	 */
 	@Override
 	public Float getMinScoreConfiguration() {
 		if (!hasScoreConfigured()) {
@@ -337,27 +301,18 @@ public class CheckListCourseNode extends AbstractAccessableCourseNode implements
 		return (Float)config.get(MSCourseNode.CONFIG_KEY_SCORE_MIN);
 	}
 
-	/**
-	 * @see org.olat.course.nodes.AssessableCourseNode#getUserCoachComment(org.olat.course.run.userview.UserCourseEnvironment)
-	 */
 	@Override
 	public String getUserCoachComment(UserCourseEnvironment userCourseEnvironment) {
 		AssessmentManager am = userCourseEnvironment.getCourseEnvironment().getAssessmentManager();
 		return am.getNodeCoachComment(this, userCourseEnvironment.getIdentityEnvironment().getIdentity());
 	}
 
-	/**
-	 * @see org.olat.course.nodes.AssessableCourseNode#getUserLog(org.olat.course.run.userview.UserCourseEnvironment)
-	 */
 	@Override
 	public String getUserLog(UserCourseEnvironment userCourseEnvironment) {
 		UserNodeAuditManager am = userCourseEnvironment.getCourseEnvironment().getAuditManager();
 		return am.getUserNodeLog(this, userCourseEnvironment.getIdentityEnvironment().getIdentity());
 	}
 
-	/**
-	 * @see org.olat.course.nodes.AssessableCourseNode#getUserUserComment(org.olat.course.run.userview.UserCourseEnvironment)
-	 */
 	@Override
 	public String getUserUserComment(UserCourseEnvironment userCourseEnvironment) {
 		AssessmentManager am = userCourseEnvironment.getCourseEnvironment().getAssessmentManager();
@@ -371,12 +326,9 @@ public class CheckListCourseNode extends AbstractAccessableCourseNode implements
 		return am.getIndividualAssessmentDocuments(this, mySelf);
 	}
 
-	/**
-	 * @see org.olat.course.nodes.AssessableCourseNode#hasCommentConfigured()
-	 */
 	@Override
 	public boolean hasCommentConfigured() {
-		return true;
+		return getModuleConfiguration().getBooleanSafe(MSCourseNode.CONFIG_KEY_HAS_COMMENT_FIELD, false);
 	}
 	
 	@Override
@@ -384,9 +336,6 @@ public class CheckListCourseNode extends AbstractAccessableCourseNode implements
 		return getModuleConfiguration().getBooleanSafe(MSCourseNode.CONFIG_KEY_HAS_INDIVIDUAL_ASSESSMENT_DOCS, false);
 	}
 
-	/**
-	 * @see org.olat.course.nodes.AssessableCourseNode#hasPassedConfigured()
-	 */
 	@Override
 	public boolean hasPassedConfigured() {
 		ModuleConfiguration config = getModuleConfiguration();
@@ -395,9 +344,6 @@ public class CheckListCourseNode extends AbstractAccessableCourseNode implements
 		return passed.booleanValue();
 	}
 
-	/**
-	 * @see org.olat.course.nodes.AssessableCourseNode#hasScoreConfigured()
-	 */
 	@Override
 	public boolean hasScoreConfigured() {
 		ModuleConfiguration config = getModuleConfiguration();
@@ -406,26 +352,16 @@ public class CheckListCourseNode extends AbstractAccessableCourseNode implements
 		return score.booleanValue();
 	}
 
-	/**
-	 * @see org.olat.course.nodes.AssessableCourseNode#hasStatusConfigured()
-	 */
 	@Override
 	public boolean hasStatusConfigured() {
 		return false;
 	}
 
-	/**
-	 * @see org.olat.course.nodes.AssessableCourseNode#isEditableConfigured()
-	 */
 	@Override
 	public boolean isEditableConfigured() {
 		return true;
 	}
 
-	/**
-	 * @see org.olat.course.nodes.AssessableCourseNode#updateUserCoachComment(java.lang.String,
-	 *      org.olat.course.run.userview.UserCourseEnvironment)
-	 */
 	@Override
 	public void updateUserCoachComment(String coachComment, UserCourseEnvironment userCourseEnvironment) {
 		AssessmentManager am = userCourseEnvironment.getCourseEnvironment().getAssessmentManager();
@@ -435,11 +371,6 @@ public class CheckListCourseNode extends AbstractAccessableCourseNode implements
 		}
 	}
 
-	/**
-	 * @see org.olat.course.nodes.AssessableCourseNode#updateUserScoreEvaluation(org.olat.course.run.scoring.ScoreEvaluation,
-	 *      org.olat.course.run.userview.UserCourseEnvironment,
-	 *      org.olat.core.id.Identity)
-	 */
 	@Override
 	public void updateUserScoreEvaluation(ScoreEvaluation scoreEvaluation, UserCourseEnvironment userCourseEnvironment,
 			Identity coachingIdentity, boolean incrementAttempts, Role by) {
@@ -448,11 +379,6 @@ public class CheckListCourseNode extends AbstractAccessableCourseNode implements
 		am.saveScoreEvaluation(this, coachingIdentity, mySelf, new ScoreEvaluation(scoreEvaluation), userCourseEnvironment, incrementAttempts, by);
 	}
 
-	/**
-	 * @see org.olat.course.nodes.AssessableCourseNode#updateUserUserComment(java.lang.String,
-	 *      org.olat.course.run.userview.UserCourseEnvironment,
-	 *      org.olat.core.id.Identity)
-	 */
 	@Override
 	public void updateUserUserComment(String userComment, UserCourseEnvironment userCourseEnvironment, Identity coachingIdentity) {
 		if (userComment != null) {
@@ -480,35 +406,21 @@ public class CheckListCourseNode extends AbstractAccessableCourseNode implements
 		}
 	}
 
-	/**
-	 * @see org.olat.course.nodes.AssessableCourseNode#getUserAttempts(org.olat.course.run.userview.UserCourseEnvironment)
-	 */
 	@Override
 	public Integer getUserAttempts(UserCourseEnvironment userCourseEnvironment) {
 		throw new OLATRuntimeException(CheckListCourseNode.class, "No attempts available in check list nodes", null);
 	}
 
-	/**
-	 * @see org.olat.course.nodes.AssessableCourseNode#hasAttemptsConfigured()
-	 */
 	@Override
 	public boolean hasAttemptsConfigured() {
 		return false;
 	}
 
-	/**
-	 * @see org.olat.course.nodes.AssessableCourseNode#updateUserAttempts(java.lang.Integer,
-	 *      org.olat.course.run.userview.UserCourseEnvironment,
-	 *      org.olat.core.id.Identity)
-	 */
 	@Override
 	public void updateUserAttempts(Integer userAttempts, UserCourseEnvironment userCourseEnvironment, Identity coachingIdentity, Role by) {
 		throw new OLATRuntimeException(CheckListCourseNode.class, "Attempts variable can't be updated in ST nodes", null);
 	}
 
-	/**
-	 * @see org.olat.course.nodes.AssessableCourseNode#incrementUserAttempts(org.olat.course.run.userview.UserCourseEnvironment)
-	 */
 	@Override
 	public void incrementUserAttempts(UserCourseEnvironment userCourseEnvironment, Role by) {
 		throw new OLATRuntimeException(CheckListCourseNode.class, "Attempts variable can't be updated in ST nodes", null);
@@ -537,11 +449,6 @@ public class CheckListCourseNode extends AbstractAccessableCourseNode implements
 		am.updateLastModifications(this, assessedIdentity, userCourseEnvironment, by);
 	}
 
-	/**
-	 * @see org.olat.course.nodes.AssessableCourseNode#getDetailsEditController(org.olat.core.gui.UserRequest,
-	 *      org.olat.core.gui.control.WindowControl,
-	 *      org.olat.course.run.userview.UserCourseEnvironment)
-	 */
 	@Override
 	public Controller getDetailsEditController(UserRequest ureq, WindowControl wControl,
 			BreadcrumbPanel stackPanel, UserCourseEnvironment coachCourseEnv, UserCourseEnvironment assessedUserCourseEnv) {
@@ -549,6 +456,17 @@ public class CheckListCourseNode extends AbstractAccessableCourseNode implements
 		Long resId = assessedUserCourseEnv.getCourseEnvironment().getCourseResourceableId();
 		OLATResourceable courseOres = OresHelper.createOLATResourceableInstance("CourseModule", resId);
 		return new AssessedIdentityCheckListController(ureq, wControl, assessedIdentity, courseOres, coachCourseEnv, assessedUserCourseEnv, this, false, false);
+	}
+
+	@Override
+	public boolean hasResultsDetails() {
+		return false;
+	}
+
+	@Override
+	public Controller getResultDetailsController(UserRequest ureq, WindowControl wControl,
+			UserCourseEnvironment assessedUserCourseEnv) {
+		return null;
 	}
 	
 	@Override
@@ -558,26 +476,17 @@ public class CheckListCourseNode extends AbstractAccessableCourseNode implements
 		return new IdentityListCourseNodeController(ureq, wControl, stackPanel,
 				courseEntry, group, this, coachCourseEnv, toolContainer, assessmentCallback);
 	}
-	
-	/**
-	 * @see org.olat.course.nodes.AssessableCourseNode#getDetailsListView(org.olat.course.run.userview.UserCourseEnvironment)
-	 */
+
 	@Override
 	public String getDetailsListView(UserCourseEnvironment userCourseEnvironment) {
 		return null;
 	}
 
-	/**
-	 * @see org.olat.course.nodes.AssessableCourseNode#getDetailsListViewHeaderKey()
-	 */
 	@Override
 	public String getDetailsListViewHeaderKey() {
 		return null;
 	}
 
-	/**
-	 * @see org.olat.course.nodes.AssessableCourseNode#hasDetails()
-	 */
 	@Override
 	public boolean hasDetails() {
 		return true;
@@ -588,11 +497,16 @@ public class CheckListCourseNode extends AbstractAccessableCourseNode implements
 	 */
 	@Override
 	public boolean archiveNodeData(Locale locale, ICourse course, ArchiveOptions options,
-			ZipOutputStream exportStream, String charset) {
+			ZipOutputStream exportStream, String archivePath, String charset) {
 		
-		String dirName = "cl_"
-				+ StringHelper.transformDisplayNameToFileSystemName(getShortName())
-				+ "_" + Formatter.formatDatetimeFilesystemSave(new Date(System.currentTimeMillis()));
+		String dirName;
+		if(StringHelper.containsNonWhitespace(archivePath)) {
+			dirName = archivePath;
+		} else {
+			dirName = "cl_"
+					+ StringHelper.transformDisplayNameToFileSystemName(getShortName())
+					+ "_" + Formatter.formatDatetimeFilesystemSave(new Date(System.currentTimeMillis()));
+		}
 		
 		ModuleConfiguration config = getModuleConfiguration();
 		CheckboxList list = (CheckboxList)config.get(CONFIG_KEY_CHECKBOX);
@@ -645,7 +559,7 @@ public class CheckListCourseNode extends AbstractAccessableCourseNode implements
 			}
 		}
 
-		return super.archiveNodeData(locale, course, options, exportStream, charset);
+		return super.archiveNodeData(locale, course, options, exportStream, archivePath, charset);
 	}
 
 	@Override
@@ -667,7 +581,7 @@ public class CheckListCourseNode extends AbstractAccessableCourseNode implements
 	}
 
 	@Override
-	public void importNode(File importDirectory, ICourse course, Identity owner, Locale locale, boolean withReferences) {
+	public void importNode(File importDirectory, ICourse course, Identity owner, Organisation organisation, Locale locale, boolean withReferences) {
 		CheckboxManager checkboxManager = CoreSpringFactory.getImpl(CheckboxManager.class);
 		ModuleConfiguration config = getModuleConfiguration();
 		CheckboxList list = (CheckboxList)config.get(CONFIG_KEY_CHECKBOX);

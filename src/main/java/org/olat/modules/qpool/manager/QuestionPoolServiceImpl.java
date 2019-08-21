@@ -30,9 +30,9 @@ import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.zip.ZipOutputStream;
 
-import org.olat.basesecurity.BaseSecurity;
 import org.olat.basesecurity.IdentityRef;
 import org.olat.basesecurity.SecurityGroup;
+import org.olat.basesecurity.manager.SecurityGroupDAO;
 import org.olat.core.commons.persistence.DB;
 import org.olat.core.commons.persistence.DefaultResultInfos;
 import org.olat.core.commons.persistence.ResultInfos;
@@ -43,7 +43,7 @@ import org.olat.core.commons.services.mark.MarkManager;
 import org.olat.core.gui.media.MediaResource;
 import org.olat.core.id.Identity;
 import org.olat.core.id.Roles;
-import org.olat.core.logging.OLog;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.StringHelper;
 import org.olat.core.util.coordinate.CoordinatorManager;
@@ -105,9 +105,9 @@ import org.springframework.stereotype.Service;
 @Service("qpoolService")
 public class QuestionPoolServiceImpl implements QPoolService {
 	
-	private static final OLog log = Tracing.createLoggerFor(QuestionPoolServiceImpl.class);
+	private static final Logger log = Tracing.createLoggerFor(QuestionPoolServiceImpl.class);
 	
-	private static final int MAX_NUMBER_DOCS = 990;
+	private static final int MAX_NUMBER_DOCS = 32000;
 	
 	@Autowired
 	private DB dbInstance;
@@ -128,7 +128,7 @@ public class QuestionPoolServiceImpl implements QPoolService {
 	@Autowired
 	private QuestionPoolModule qpoolModule;
 	@Autowired
-	private BaseSecurity securityManager;
+	private SecurityGroupDAO securityGroupDao;
 	@Autowired
 	private SearchClient searchClient;
 	@Autowired
@@ -177,7 +177,7 @@ public class QuestionPoolServiceImpl implements QPoolService {
 		
 		// Delete SecurityGroup after the item to avoid foreign key constraint violation.
 		for (SecurityGroup secGroup: secGroups) {
-			securityManager.deleteSecurityGroup(secGroup);
+			securityGroupDao.deleteSecurityGroup(secGroup);
 		}
 		
 		for(QuestionItemShort item:items) {
@@ -217,7 +217,7 @@ public class QuestionPoolServiceImpl implements QPoolService {
 		} else {
 			itemImpl = questionItemDao.loadById(item.getKey());
 		}
-		return securityManager.getIdentitiesOfSecurityGroup(itemImpl.getOwnerGroup());
+		return securityGroupDao.getIdentitiesOfSecurityGroup(itemImpl.getOwnerGroup());
 	}
 	
 	@Override
@@ -456,7 +456,7 @@ public class QuestionPoolServiceImpl implements QPoolService {
 
 	@Override
 	public List<Pool> getPools(Identity identity, Roles roles) {
-		if(roles.isOLATAdmin()) {
+		if(roles.isAdministrator() || roles.isPoolManager()) {
 			return poolDao.getPools(0, -1);
 		}
 		return poolDao.getPools(identity, 0, -1);
@@ -477,7 +477,7 @@ public class QuestionPoolServiceImpl implements QPoolService {
 		if(pool == null || owner == null) return false;
 		
 		SecurityGroup secGroup = ((PoolImpl)pool).getOwnerGroup();
-		return securityManager.isIdentityInSecurityGroup(owner, secGroup);
+		return securityGroupDao.isIdentityInSecurityGroup(owner, secGroup);
 	}
 
 	@Override
@@ -489,8 +489,8 @@ public class QuestionPoolServiceImpl implements QPoolService {
 		for(Pool pool:pools) {
 			SecurityGroup secGroup = ((PoolImpl)pool).getOwnerGroup();
 			for(Identity owner:owners) {
-				if(!securityManager.isIdentityInSecurityGroup(owner, secGroup)) {
-					securityManager.addIdentityToSecurityGroup(owner, secGroup);
+				if(!securityGroupDao.isIdentityInSecurityGroup(owner, secGroup)) {
+					securityGroupDao.addIdentityToSecurityGroup(owner, secGroup);
 				}
 			}
 		}
@@ -507,7 +507,7 @@ public class QuestionPoolServiceImpl implements QPoolService {
 			SecurityGroup secGroup = ((PoolImpl)pool).getOwnerGroup();
 			secGroups.add(secGroup);
 		}
-		securityManager.removeIdentityFromSecurityGroups(owners, secGroups);
+		securityGroupDao.removeIdentityFromSecurityGroups(owners, secGroups);
 	}
 
 	@Override
@@ -580,7 +580,7 @@ public class QuestionPoolServiceImpl implements QPoolService {
 				}
 				addConditionsOfParams(condQueries, searchParams);
 				List<Long> results = searchClient.doSearch(queryString, condQueries, searchParams.getIdentity(),
-						searchParams.getRoles(), 0, MAX_NUMBER_DOCS);
+						searchParams.getRoles(), searchParams.getLocale(), 0, MAX_NUMBER_DOCS);
 				if (!results.isEmpty()) {
 					List<QuestionItemView> items = itemQueriesDao.getItems(searchParams, results, firstResult,
 							maxResults, orderBy);
@@ -613,7 +613,7 @@ public class QuestionPoolServiceImpl implements QPoolService {
 				}
 				condQueries.add("pool:" + searchParams.getPoolKey());
 				List<Long> results = searchClient.doSearch(queryString, condQueries,
-						searchParams.getIdentity(), searchParams.getRoles(), 0, MAX_NUMBER_DOCS);
+						searchParams.getIdentity(), searchParams.getRoles(), searchParams.getLocale(), 0, MAX_NUMBER_DOCS);
 
 				if(results.isEmpty()) {
 					return new DefaultResultInfos<>();
@@ -641,7 +641,7 @@ public class QuestionPoolServiceImpl implements QPoolService {
 				}
 				condQueries.add(QItemDocument.OWNER_FIELD + ":" + author.getKey());
 				List<Long> results = searchClient.doSearch(queryString, condQueries,
-						searchParams.getIdentity(), searchParams.getRoles(), 0, MAX_NUMBER_DOCS);
+						searchParams.getIdentity(), searchParams.getRoles(), searchParams.getLocale(), 0, MAX_NUMBER_DOCS);
 
 				if(results.isEmpty()) {
 					return new DefaultResultInfos<>();
@@ -681,7 +681,7 @@ public class QuestionPoolServiceImpl implements QPoolService {
 				}
 				condQueries.add(getDbKeyConditionalQuery(favoritKeys));
 				List<Long> results = searchClient.doSearch(queryString, condQueries,
-						searchParams.getIdentity(), searchParams.getRoles(), 0, MAX_NUMBER_DOCS);
+						searchParams.getIdentity(), searchParams.getRoles(), searchParams.getLocale(), 0, MAX_NUMBER_DOCS);
 
 				if(results.isEmpty()) {
 					return new DefaultResultInfos<>();
@@ -758,7 +758,7 @@ public class QuestionPoolServiceImpl implements QPoolService {
 				}
 				condQueries.add(QItemDocument.SHARE_FIELD + ":" + resource.getKey());
 				List<Long> results = searchClient.doSearch(queryString, condQueries,
-						searchParams.getIdentity(), searchParams.getRoles(), 0, MAX_NUMBER_DOCS);
+						searchParams.getIdentity(), searchParams.getRoles(), searchParams.getLocale(), 0, MAX_NUMBER_DOCS);
 				if(results.isEmpty()) {
 					return new DefaultResultInfos<>();
 				}
@@ -768,7 +768,7 @@ public class QuestionPoolServiceImpl implements QPoolService {
 			} catch (Exception e) {
 				log.error("", e);
 			}
-			return new DefaultResultInfos<QuestionItemView>();
+			return new DefaultResultInfos<>();
 		} else {
 			List<QuestionItemView> items = itemQueriesDao.getSharedItemByResource(searchParams.getIdentity(), resource, null,
 					searchParams.getFormat(), firstResult, maxResults, orderBy);
@@ -842,7 +842,7 @@ public class QuestionPoolServiceImpl implements QPoolService {
 				}
 				condQueries.add(getDbKeyConditionalQuery(content));
 				List<Long> results = searchClient.doSearch(queryString, condQueries,
-						searchParams.getIdentity(), searchParams.getRoles(), 0, MAX_NUMBER_DOCS);
+						searchParams.getIdentity(), searchParams.getRoles(), searchParams.getLocale(), 0, MAX_NUMBER_DOCS);
 
 				if(results.isEmpty()) {
 					return new DefaultResultInfos<>();

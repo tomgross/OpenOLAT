@@ -65,6 +65,7 @@ import org.olat.course.groupsandrights.CourseGroupManager;
 import org.olat.course.nodes.members.Member;
 import org.olat.course.run.environment.CourseEnvironment;
 import org.olat.repository.RepositoryEntry;
+import org.olat.repository.RepositoryEntryRelationType;
 import org.olat.repository.RepositoryService;
 import org.olat.user.UserManager;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -144,21 +145,25 @@ public class MembersMailController extends FormBasicController {
 		if(ownerList != null && ownerList.size() > 0) {
 			String[] values = new String[] { translate("contact.all.owners") };
 			ownerEl = uifactory.addCheckboxesHorizontal("contact.all.owners", to, formLayout, keys, values);
+			ownerEl.setElementCssClass("o_sel_cmembers_mail_owner");
 			to = null;
 		}
 		if(coachList != null && coachList.size() > 0) {
 			String[] values = new String[] { translate("contact.all.coaches") };
 			coachEl = uifactory.addCheckboxesHorizontal("contact.all.coaches", to, formLayout, keys, values);
+			coachEl.setElementCssClass("o_sel_cmembers_mail_coach");
 			to = null;
 		}
 		if(participantList != null && participantList.size() > 0) {
 			String[] values = new String[] { translate("contact.all.participants") };
 			participantEl = uifactory.addCheckboxesHorizontal("contact.all.participants", to, formLayout, keys, values);
+			participantEl.setElementCssClass("o_sel_cmembers_mail_participant");
 			to = null;
 		}
 		if(waitingList != null && waitingList.size() > 0) {
 			String[] values = new String[] { translate("contact.all.waiting") };
 			waitingEl = uifactory.addCheckboxesHorizontal("contact.all.waiting", to, formLayout, keys, values);
+			waitingEl.setElementCssClass("o_sel_cmembers_mail_waiting");
 			to = null;
 		}
 		
@@ -186,19 +191,25 @@ public class MembersMailController extends FormBasicController {
 
 		String[] extValues = new String[] { translate("contact.external") };
 		externalEl = uifactory.addCheckboxesHorizontal("contact.external", to, formLayout, keys, extValues);
+		externalEl.setElementCssClass("o_sel_cmembers_mail_external");
 		externalEl.addActionListener(FormEvent.ONCHANGE);
 		
-		externalAddressesEl = uifactory.addTextAreaElement("contact.external.list", null, 4096, 3, 60, false, "", formLayout);
+		externalAddressesEl = uifactory.addTextAreaElement("contact.external.list", null, 4096, 3, 60, false, false, "", formLayout);
 		externalAddressesEl.setExampleKey("contact.external.list.example", null);
+		externalAddressesEl.setElementCssClass("o_sel_cmembers_external_mail");
 		externalAddressesEl.setVisible(false);
 
 		uifactory.addSpacerElement("space-2", formLayout, false);
 		
 		subjectEl = uifactory.addTextElement("subject", "mail.subject", 255, "", formLayout);
+		subjectEl.setElementCssClass("o_sel_cmembers_mail_subject");
 		subjectEl.setDisplaySize(255);
 		subjectEl.setMandatory(true);
 		bodyEl = uifactory.addRichTextElementForStringDataMinimalistic("body", "mail.body", "", 15, 8, formLayout, getWindowControl());
+		bodyEl.setElementCssClass("o_sel_cmembers_mail_body");
 		bodyEl.setMandatory(true);
+		bodyEl.getEditorConfiguration().setRelativeUrls(false);
+		bodyEl.getEditorConfiguration().setRemoveScriptHost(false);
 		
 		attachmentEl = uifactory.addFileElement(getWindowControl(), "file_upload_1", "contact.attachment", formLayout);
 		attachmentEl.addActionListener(FormEvent.ONCHANGE);
@@ -484,9 +495,9 @@ public class MembersMailController extends FormBasicController {
 					identityKeys.add(coach.getKey());
 				}
 				List<Identity> coaches = securityManager.loadIdentityByKeys(identityKeys);
-				ContactList coachList = new ContactList(translate("contact.list.coaches"));
-				coachList.addAllIdentites(coaches);
-				contactList.add(coachList);
+				ContactList memberList = new ContactList(translate("contact.list.coaches"));
+				memberList.addAllIdentites(coaches);
+				contactList.add(memberList);
 			}
 			
 			if(participantEl != null && participantEl.isAtLeastSelected(1)) {
@@ -495,9 +506,9 @@ public class MembersMailController extends FormBasicController {
 					identityKeys.add(participant.getKey());
 				}
 				List<Identity> participants = securityManager.loadIdentityByKeys(identityKeys);
-				ContactList participantList = new ContactList(translate("contact.list.participants"));
-				participantList.addAllIdentites(participants);
-				contactList.add(participantList);
+				ContactList memberList = new ContactList(translate("contact.list.participants"));
+				memberList.addAllIdentites(participants);
+				contactList.add(memberList);
 			}
 			
 			if(waitingEl != null && waitingEl.isAtLeastSelected(1)) {
@@ -506,17 +517,17 @@ public class MembersMailController extends FormBasicController {
 					identityKeys.add(waiter.getKey());
 				}
 				List<Identity> waiters = securityManager.loadIdentityByKeys(identityKeys);
-				ContactList waitingList = new ContactList(translate("contact.list.waiting"));
-				waitingList.addAllIdentites(waiters);
-				contactList.add(waitingList);
+				ContactList memberList = new ContactList(translate("contact.list.waiting"));
+				memberList.addAllIdentites(waiters);
+				contactList.add(memberList);
 			}
 		} else {			
 			if(ownerEl != null && ownerEl.isAtLeastSelected(1)) {
 				RepositoryEntry courseRepositoryEntry = courseEnv.getCourseGroupManager().getCourseEntry();
-				List<Identity> owners = repositoryService.getMembers(courseRepositoryEntry, GroupRoles.owner.name());
-				ContactList ownerList = new ContactList(translate("contact.list.owners"));
-				ownerList.addAllIdentites(owners);
-				contactList.add(ownerList);
+				List<Identity> owners = repositoryService.getMembers(courseRepositoryEntry, RepositoryEntryRelationType.entryAndCurriculums, GroupRoles.owner.name());
+				ContactList memberList = new ContactList(translate("contact.list.owners"));
+				memberList.addAllIdentites(owners);
+				contactList.add(memberList);
 			}
 			
 			if(coachEl != null && coachEl.isAtLeastSelected(1)) {
@@ -525,10 +536,10 @@ public class MembersMailController extends FormBasicController {
 					sendToWhatYouSee.add(coach.getKey());
 				}
 				CourseGroupManager cgm = courseEnv.getCourseGroupManager();
-				ContactList coachList = new ContactList(translate("contact.list.coaches"));
-				avoidInvisibleMember(cgm.getCoachesFromBusinessGroups(), coachList, sendToWhatYouSee);
-				avoidInvisibleMember(cgm.getCoaches(), coachList, sendToWhatYouSee);
-				contactList.add(coachList);
+				ContactList memberList = new ContactList(translate("contact.list.coaches"));
+				avoidInvisibleMember(cgm.getCoachesFromBusinessGroups(), memberList, sendToWhatYouSee);
+				avoidInvisibleMember(cgm.getCoaches(), memberList, sendToWhatYouSee);
+				contactList.add(memberList);
 			}
 			
 			if(participantEl != null && participantEl.isAtLeastSelected(1)) {
@@ -537,10 +548,10 @@ public class MembersMailController extends FormBasicController {
 					sendToWhatYouSee.add(participant.getKey());
 				}
 				CourseGroupManager cgm = courseEnv.getCourseGroupManager();
-				ContactList participantList = new ContactList(translate("contact.list.participants"));
-				avoidInvisibleMember(cgm.getParticipantsFromBusinessGroups(), participantList, sendToWhatYouSee);
-				avoidInvisibleMember(cgm.getParticipants(), participantList, sendToWhatYouSee);
-				contactList.add(participantList);
+				ContactList memberList = new ContactList(translate("contact.list.participants"));
+				avoidInvisibleMember(cgm.getParticipantsFromBusinessGroups(), memberList, sendToWhatYouSee);
+				avoidInvisibleMember(cgm.getParticipants(), memberList, sendToWhatYouSee);
+				contactList.add(memberList);
 			}
 		}
 		

@@ -31,10 +31,13 @@ import java.util.UUID;
 import javax.annotation.PostConstruct;
 
 import org.olat.core.commons.modules.bc.FolderConfig;
-import org.olat.core.commons.modules.bc.vfs.OlatRootFileImpl;
-import org.olat.core.logging.OLog;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
+import org.olat.core.util.CodeHelper;
+import org.olat.core.util.FileUtils;
+import org.olat.core.util.WebappHelper;
 import org.olat.core.util.vfs.VFSLeaf;
+import org.olat.core.util.vfs.VFSManager;
 import org.springframework.stereotype.Service;
 
 /**
@@ -46,10 +49,12 @@ import org.springframework.stereotype.Service;
 @Service
 class EvaluationFormStorage {
 	
-	private static final OLog log = Tracing.createLoggerFor(EvaluationFormStorage.class);
+	private static final Logger log = Tracing.createLoggerFor(EvaluationFormStorage.class);
 	
 	private static final String EVALUATION_FORMS_DIRECTORY = "evaluation_form";
 	private static final String RESPONSES_DIRECTORY = "responses";
+	private static final String TMP_DIRECTORY = "evaluation_form_tmp";
+
 	
 	private Path bcrootDirectory;
 	private Path rootDirectory;
@@ -65,6 +70,19 @@ class EvaluationFormStorage {
 		} catch (Exception e) {
 			log.error("Creation of evaluation forms responses directory failed! Path: " + responsesDirectory, e);
 		}
+	}
+	
+	File createTmpDir() {
+		return getTmpDir().resolve(CodeHelper.getUniqueID()).toFile();
+	}
+
+	void deleteTmpDirs() {
+		FileUtils.deleteDirsAndFiles(getTmpDir().toFile(), true, false);
+		log.info("Evaluation form tmp dir cleaned: " + getTmpDir().toString());
+	}
+
+	private Path getTmpDir() {
+		return Paths.get(WebappHelper.getTmpDir(), TMP_DIRECTORY);
 	}
 
 	Path getResponsesRoot() {
@@ -91,17 +109,33 @@ class EvaluationFormStorage {
 	}
 	
 	VFSLeaf resolve(Path relativePath) {
-		return new OlatRootFileImpl("/" + relativePath.toString(), null);
+		return VFSManager.olatRootLeaf("/" + relativePath.toString());
+	}
+
+	void copyTo(Path relativePath, File targetDir) {
+		File file = getAbsolutePath(relativePath).toFile();
+		FileUtils.copyFileToDir(file, targetDir, "copy evaluation form upload file");
 	}
 
 	void delete(Path relativePath) {
-		Path parentDir = relativePath.getParent();
-		Path absolutePath = getAbsolutePath(parentDir);
+		Path absolutePath = null;
 		try {
-		    Files.walk(absolutePath)
-		      .sorted(Comparator.reverseOrder())
-		      .map(Path::toFile)
-		      .forEach(File::delete);
+			Path parentDir = relativePath.getParent();
+			absolutePath = getAbsolutePath(parentDir);
+		} catch (Exception e) {
+			log.warn("Cannot find absolute path to delete file of evaluation form response file. Path: " + relativePath, e);
+		}
+		if (absolutePath != null) {
+			deleteFiles(absolutePath);
+		}
+	}
+
+	private void deleteFiles(Path absolutePath) {
+		try {
+			Files.walk(absolutePath)
+					.sorted(Comparator.reverseOrder())
+					.map(Path::toFile)
+					.forEach(File::delete);
 		} catch (IOException e) {
 			log.warn("Cannot properly delete evaluation form response file. Path: " + absolutePath, e);
 		}

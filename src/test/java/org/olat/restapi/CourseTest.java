@@ -43,6 +43,7 @@ import java.util.List;
 import javax.ws.rs.core.MediaType;
 import javax.ws.rs.core.UriBuilder;
 
+import org.apache.http.HttpEntity;
 import org.apache.http.HttpResponse;
 import org.apache.http.client.methods.HttpDelete;
 import org.apache.http.client.methods.HttpGet;
@@ -50,42 +51,44 @@ import org.apache.http.client.methods.HttpPost;
 import org.apache.http.client.methods.HttpPut;
 import org.apache.http.message.BasicNameValuePair;
 import org.apache.http.util.EntityUtils;
-import org.codehaus.jackson.map.ObjectMapper;
-import org.codehaus.jackson.type.TypeReference;
+import org.apache.logging.log4j.Logger;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 import org.olat.admin.securitygroup.gui.IdentitiesAddEvent;
-import org.olat.basesecurity.BaseSecurityManager;
-import org.olat.basesecurity.Constants;
+import org.olat.basesecurity.BaseSecurity;
 import org.olat.basesecurity.GroupRoles;
-import org.olat.basesecurity.SecurityGroup;
+import org.olat.basesecurity.OrganisationRoles;
+import org.olat.basesecurity.OrganisationService;
 import org.olat.core.commons.persistence.DB;
-import org.olat.core.commons.persistence.DBFactory;
 import org.olat.core.id.Identity;
 import org.olat.core.id.Roles;
-import org.olat.core.logging.OLog;
 import org.olat.core.logging.Tracing;
+import org.olat.course.CourseFactory;
 import org.olat.course.CourseModule;
 import org.olat.course.ICourse;
 import org.olat.repository.RepositoryEntry;
+import org.olat.repository.RepositoryEntryStatusEnum;
 import org.olat.repository.RepositoryManager;
 import org.olat.repository.RepositoryService;
 import org.olat.repository.model.SearchRepositoryEntryParameters;
-import org.olat.restapi.repository.course.CoursesWebService;
 import org.olat.restapi.support.vo.CourseConfigVO;
 import org.olat.restapi.support.vo.CourseVO;
+import org.olat.restapi.support.vo.RepositoryEntryAccessVO;
 import org.olat.restapi.support.vo.RepositoryEntryVO;
 import org.olat.test.JunitTestHelper;
-import org.olat.test.OlatJerseyTestCase;
+import org.olat.test.OlatRestTestCase;
 import org.olat.user.restapi.UserVO;
 import org.olat.user.restapi.UserVOFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 
-public class CourseTest extends OlatJerseyTestCase {
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
+
+public class CourseTest extends OlatRestTestCase {
 	
-	private static final OLog log = Tracing.createLoggerFor(CourseTest.class);
+	private static final Logger log = Tracing.createLoggerFor(CourseTest.class);
 	
 	private Identity admin, auth0, auth1, auth2;
 	private ICourse course1;
@@ -98,25 +101,28 @@ public class CourseTest extends OlatJerseyTestCase {
 	@Autowired
 	private RepositoryService repositoryService;
 	@Autowired
-	private BaseSecurityManager securityManager;
+	private BaseSecurity securityManager;
+	@Autowired
+	private OrganisationService organisationService;
 
 	/**
 	 * SetUp is called before each test.
 	 */
 	@Before
 	public void setUp() throws Exception {
-		super.setUp();
 		conn = new RestConnection();
 		try {
 			// create course and persist as OLATResourceImpl
-			admin = BaseSecurityManager.getInstance().findIdentityByName("administrator");
+			admin = securityManager.findIdentityByName("administrator");
 			auth0 = JunitTestHelper.createAndPersistIdentityAsUser("rest-zero");
 			auth1 = JunitTestHelper.createAndPersistIdentityAsUser("rest-one");
 			auth2 = JunitTestHelper.createAndPersistIdentityAsUser("rest-two");
 			
-			course1 = CoursesWebService.createEmptyCourse(admin, "course1", "course1 long name", null);
+			RepositoryEntry courseEntry = JunitTestHelper.deployBasicCourse(admin,
+					RepositoryEntryStatusEnum.preparation, false, false);
+			course1 = CourseFactory.loadCourse(courseEntry);
 			
-			DBFactory.getInstance().closeSession();
+			dbInstance.closeSession();
 		} catch (Exception e) {
 			log.error("Exception in setUp(): " + e);
 		}
@@ -222,7 +228,9 @@ public class CourseTest extends OlatJerseyTestCase {
 	
 	@Test
 	public void testDeleteCourses() throws IOException, URISyntaxException {
-		ICourse course = CoursesWebService.createEmptyCourse(admin, "courseToDel", "course to delete", null);
+		RepositoryEntry courseEntry = JunitTestHelper.deployBasicCourse(admin,
+				RepositoryEntryStatusEnum.preparation, false, false);
+		ICourse course = CourseFactory.loadCourse(courseEntry);
 		dbInstance.intermediateCommit();
 		
 		assertTrue(conn.login("administrator", "openolat"));
@@ -232,11 +240,12 @@ public class CourseTest extends OlatJerseyTestCase {
 		HttpResponse response = conn.execute(method);
 		assertEquals(200, response.getStatusLine().getStatusCode());
 		
-		List<String> courseType = new ArrayList<String>();
+		List<String> courseType = new ArrayList<>();
 		courseType.add(CourseModule.getCourseTypeName());
-		Roles roles = new Roles(true, true, true, true, false, true, false);
+		Roles roles = Roles.administratorRoles();
 
-		SearchRepositoryEntryParameters params = new SearchRepositoryEntryParameters("*", "*", "*", courseType, null, roles, "");
+		SearchRepositoryEntryParameters params = new SearchRepositoryEntryParameters("*", "*", "*", courseType, null, roles);
+		params.setIdentity(admin);
 		List<RepositoryEntry> repoEntries = repositoryManager.genericANDQueryWithRolesRestriction(params, 0, -1, true);
 		assertNotNull(repoEntries);
 		
@@ -255,8 +264,7 @@ public class CourseTest extends OlatJerseyTestCase {
 		EntityUtils.consume(response.getEntity());
 
 		//is auth0 author
-		SecurityGroup authorGroup = securityManager.findSecurityGroupByName(Constants.GROUP_AUTHORS);
-		boolean isAuthor = securityManager.isIdentityInSecurityGroup(auth0, authorGroup);
+		boolean isAuthor = organisationService.hasRole(auth0, OrganisationRoles.author);
 		dbInstance.intermediateCommit();
 		Assert.assertTrue(isAuthor);
 		
@@ -270,7 +278,8 @@ public class CourseTest extends OlatJerseyTestCase {
 	@Test
 	public void addAuthors() throws IOException, URISyntaxException {
 		Assert.assertTrue(conn.login("administrator", "openolat"));
-		ICourse course = CoursesWebService.createEmptyCourse(admin, "course1", "course1 long name", null);
+		RepositoryEntry courseEntry = JunitTestHelper.deployBasicCourse(admin);
+		ICourse course = CourseFactory.loadCourse(courseEntry);
 		Identity author1 = JunitTestHelper.createAndPersistIdentityAsRndUser("rest-auth-1");
 		Identity author2 = JunitTestHelper.createAndPersistIdentityAsRndUser("rest-auth-2");
 		dbInstance.commitAndCloseSession();
@@ -290,9 +299,8 @@ public class CourseTest extends OlatJerseyTestCase {
 		EntityUtils.consume(response.getEntity());
 
 		//is auth0 author
-		SecurityGroup authorGroup = securityManager.findSecurityGroupByName(Constants.GROUP_AUTHORS);
-		boolean isAuthor1 = securityManager.isIdentityInSecurityGroup(author1, authorGroup);
-		boolean isAuthor2 = securityManager.isIdentityInSecurityGroup(author2, authorGroup);
+		boolean isAuthor1 = organisationService.hasRole(author1, OrganisationRoles.author);
+		boolean isAuthor2 = organisationService.hasRole(author2, OrganisationRoles.author);
 		dbInstance.commit();
 		Assert.assertTrue(isAuthor1);
 		Assert.assertTrue(isAuthor2);
@@ -309,14 +317,9 @@ public class CourseTest extends OlatJerseyTestCase {
 	@Test
 	public void getAuthors() throws IOException, URISyntaxException {
 		//make auth1 and auth2 authors
-		SecurityGroup authorGroup = securityManager.findSecurityGroupByName(Constants.GROUP_AUTHORS);
-		if(!securityManager.isIdentityInSecurityGroup(auth1, authorGroup)) {
-			securityManager.addIdentityToSecurityGroup(auth1, authorGroup);
-		}
-		if(!securityManager.isIdentityInSecurityGroup(auth2, authorGroup)) {
-			securityManager.addIdentityToSecurityGroup(auth2, authorGroup);
-		}
-		dbInstance.intermediateCommit();
+		organisationService.addMember(auth1, OrganisationRoles.author);
+		organisationService.addMember(auth2, OrganisationRoles.author);
+		dbInstance.commitAndCloseSession();
 		
 		//make auth1 and auth2 owner
 		RepositoryEntry repositoryEntry = repositoryManager.lookupRepositoryEntry(course1, true);
@@ -325,7 +328,7 @@ public class CourseTest extends OlatJerseyTestCase {
 		authors.add(auth2);
 		IdentitiesAddEvent identitiesAddedEvent = new IdentitiesAddEvent(authors);
 		repositoryManager.addOwners(admin, identitiesAddedEvent, repositoryEntry, null);
-		dbInstance.intermediateCommit();
+		dbInstance.commitAndCloseSession();
 		
 		//get them
 		assertTrue(conn.login("administrator", "openolat"));
@@ -333,24 +336,16 @@ public class CourseTest extends OlatJerseyTestCase {
 		HttpGet method = conn.createGet(uri, MediaType.APPLICATION_JSON, true);
 		HttpResponse response = conn.execute(method);
 		assertEquals(200, response.getStatusLine().getStatusCode());
-		InputStream body = response.getEntity().getContent();
-		assertNotNull(body);
-		
-		List<UserVO> authorVOs = parseUserArray(body);
-		assertNotNull(authorVOs);
+		List<UserVO> authorVOs = parseUserArray(response.getEntity());
+		Assert.assertNotNull(authorVOs);
 	}
 	
 	@Test
 	public void removeAuthor() throws IOException, URISyntaxException {
 		//make auth1 and auth2 authors
-		SecurityGroup authorGroup = securityManager.findSecurityGroupByName(Constants.GROUP_AUTHORS);
-		if(!securityManager.isIdentityInSecurityGroup(auth1, authorGroup)) {
-			securityManager.addIdentityToSecurityGroup(auth1, authorGroup);
-		}
-		if(!securityManager.isIdentityInSecurityGroup(auth2, authorGroup)) {
-			securityManager.addIdentityToSecurityGroup(auth2, authorGroup);
-		}
-		dbInstance.intermediateCommit();
+		organisationService.addMember(auth1, OrganisationRoles.author);
+		organisationService.addMember(auth2, OrganisationRoles.author);
+		dbInstance.commitAndCloseSession();
 		
 		//make auth1 and auth2 owner
 		RepositoryEntry repositoryEntry = repositoryManager.lookupRepositoryEntry(course1, true);
@@ -359,7 +354,7 @@ public class CourseTest extends OlatJerseyTestCase {
 		authors.add(auth2);
 		IdentitiesAddEvent identitiesAddedEvent = new IdentitiesAddEvent(authors);
 		repositoryManager.addOwners(admin, identitiesAddedEvent, repositoryEntry, null);
-		dbInstance.intermediateCommit();
+		dbInstance.commitAndCloseSession();
 		//end setup
 		
 		//test
@@ -396,10 +391,7 @@ public class CourseTest extends OlatJerseyTestCase {
 		HttpGet method = conn.createGet(uri, MediaType.APPLICATION_JSON, true);
 		HttpResponse response = conn.execute(method);
 		assertEquals(200, response.getStatusLine().getStatusCode());
-		InputStream body = response.getEntity().getContent();
-		Assert.assertNotNull(body);
-		
-		List<UserVO> tutorVOs = parseUserArray(body);
+		List<UserVO> tutorVOs = parseUserArray(response.getEntity());
 		Assert.assertNotNull(tutorVOs);
 		boolean found = false;
 		for(UserVO tutorVo:tutorVOs) {
@@ -452,7 +444,8 @@ public class CourseTest extends OlatJerseyTestCase {
 	@Test
 	public void addCoaches() throws IOException, URISyntaxException {
 		Assert.assertTrue(conn.login("administrator", "openolat"));
-		ICourse course = CoursesWebService.createEmptyCourse(admin, "course1", "course1 long name", null);
+		RepositoryEntry courseEntry = JunitTestHelper.deployBasicCourse(admin);
+		ICourse course = CourseFactory.loadCourse(courseEntry);
 		Identity coach1 = JunitTestHelper.createAndPersistIdentityAsRndUser("rest-coach-1");
 		Identity coach2 = JunitTestHelper.createAndPersistIdentityAsRndUser("rest-coach-2");
 		dbInstance.commitAndCloseSession();
@@ -493,10 +486,7 @@ public class CourseTest extends OlatJerseyTestCase {
 		HttpGet method = conn.createGet(uri, MediaType.APPLICATION_JSON, true);
 		HttpResponse response = conn.execute(method);
 		assertEquals(200, response.getStatusLine().getStatusCode());
-		InputStream body = response.getEntity().getContent();
-		Assert.assertNotNull(body);
-		
-		List<UserVO> participantVOs = parseUserArray(body);
+		List<UserVO> participantVOs = parseUserArray(response.getEntity());
 		Assert.assertNotNull(participantVOs);
 		boolean found = false;
 		for(UserVO participantVo:participantVOs) {
@@ -549,7 +539,8 @@ public class CourseTest extends OlatJerseyTestCase {
 	@Test
 	public void addParticipants() throws IOException, URISyntaxException {
 		Assert.assertTrue(conn.login("administrator", "openolat"));
-		ICourse course = CoursesWebService.createEmptyCourse(admin, "course1", "course1 long name", null);
+		RepositoryEntry courseEntry = JunitTestHelper.deployBasicCourse(admin);
+		ICourse course = CourseFactory.loadCourse(courseEntry);
 		Identity participant1 = JunitTestHelper.createAndPersistIdentityAsRndUser("rest-part-1");
 		Identity participant2 = JunitTestHelper.createAndPersistIdentityAsRndUser("rest-part-2");
 		dbInstance.commitAndCloseSession();
@@ -577,9 +568,36 @@ public class CourseTest extends OlatJerseyTestCase {
 	}
 	
 	@Test
+	public void getAccess() throws IOException, URISyntaxException {
+		Assert.assertTrue(conn.login("administrator", "openolat"));
+		RepositoryEntry courseEntry = JunitTestHelper.deployBasicCourse(admin);
+		ICourse course = CourseFactory.loadCourse(courseEntry);
+		dbInstance.closeSession();
+		Assert.assertEquals(RepositoryEntryStatusEnum.published, courseEntry.getEntryStatus());
+		Assert.assertTrue(courseEntry.isAllUsers());
+		Assert.assertFalse(courseEntry.isGuests());
+		
+		URI request = UriBuilder.fromUri(getContextURI()).path("repo").path("courses")
+				.path(course.getResourceableId().toString()).path("access").build();
+		HttpGet method = conn.createGet(request, MediaType.APPLICATION_JSON, true);
+		HttpResponse response = conn.execute(method);
+		Assert.assertEquals(200, response.getStatusLine().getStatusCode());
+		RepositoryEntryAccessVO accessVo = conn.parse(response, RepositoryEntryAccessVO.class);
+		conn.shutdown();
+		
+		//check
+		Assert.assertNotNull(accessVo);
+		Assert.assertEquals(courseEntry.getKey(), accessVo.getRepoEntryKey());
+		Assert.assertEquals(courseEntry.getStatus(), accessVo.getStatus());
+		Assert.assertEquals(courseEntry.isAllUsers(), accessVo.isAllUsers());
+		Assert.assertEquals(courseEntry.isGuests(), accessVo.isGuests());
+	}
+	
+	@Test
 	public void changedStatus_closed() throws IOException, URISyntaxException {
 		Assert.assertTrue(conn.login("administrator", "openolat"));
-		ICourse courseToClose = CoursesWebService.createEmptyCourse(admin, "Course to close", "A course to close.", null);
+		RepositoryEntry courseEntry = JunitTestHelper.deployBasicCourse(admin);
+		ICourse courseToClose = CourseFactory.loadCourse(courseEntry);
 		dbInstance.closeSession();
 		
 		URI request = UriBuilder.fromUri(getContextURI()).path("repo").path("courses")
@@ -592,13 +610,14 @@ public class CourseTest extends OlatJerseyTestCase {
 		EntityUtils.consume(response.getEntity());
 		
 		RepositoryEntry repositoryEntry = repositoryManager.lookupRepositoryEntry(courseToClose, true);
-		Assert.assertTrue(repositoryEntry.getRepositoryEntryStatus().isClosed());
+		Assert.assertEquals(RepositoryEntryStatusEnum.closed, repositoryEntry.getEntryStatus());
 	}
 	
 	@Test
 	public void changedStatus_deleted() throws IOException, URISyntaxException {
 		Assert.assertTrue(conn.login("administrator", "openolat"));
-		ICourse courseToClose = CoursesWebService.createEmptyCourse(admin, "Course to delete (soft)", "A course to delete.", null);
+		RepositoryEntry courseEntry = JunitTestHelper.deployBasicCourse(admin);
+		ICourse courseToClose = CourseFactory.loadCourse(courseEntry);
 		dbInstance.closeSession();
 		
 		URI request = UriBuilder.fromUri(getContextURI()).path("repo").path("courses")
@@ -611,7 +630,7 @@ public class CourseTest extends OlatJerseyTestCase {
 		EntityUtils.consume(response.getEntity());
 		
 		RepositoryEntry repositoryEntry = repositoryManager.lookupRepositoryEntry(courseToClose, true);
-		Assert.assertEquals(0, repositoryEntry.getAccess());
+		Assert.assertEquals(RepositoryEntryStatusEnum.trash, repositoryEntry.getEntryStatus());
 	}
 	
 	@Test
@@ -670,12 +689,12 @@ public class CourseTest extends OlatJerseyTestCase {
 		EntityUtils.consume(response.getEntity());
 	}
 	
-	protected List<UserVO> parseUserArray(InputStream body) {
-		try {
+	protected List<UserVO> parseUserArray(HttpEntity entity) {
+		try(InputStream in=entity.getContent()) {
 			ObjectMapper mapper = new ObjectMapper(jsonFactory); 
-			return mapper.readValue(body, new TypeReference<List<UserVO>>(){/* */});
+			return mapper.readValue(in, new TypeReference<List<UserVO>>(){/* */});
 		} catch (Exception e) {
-			e.printStackTrace();
+			log.error("", e);
 			return null;
 		}
 	}

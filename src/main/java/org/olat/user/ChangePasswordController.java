@@ -30,7 +30,6 @@ import java.util.List;
 import org.olat.basesecurity.Authentication;
 import org.olat.basesecurity.BaseSecurity;
 import org.olat.basesecurity.BaseSecurityModule;
-import org.olat.basesecurity.Constants;
 import org.olat.core.gui.UserRequest;
 import org.olat.core.gui.components.Component;
 import org.olat.core.gui.components.velocity.VelocityContainer;
@@ -40,9 +39,9 @@ import org.olat.core.gui.control.WindowControl;
 import org.olat.core.gui.control.controller.BasicController;
 import org.olat.core.gui.control.generic.messages.SimpleMessageController;
 import org.olat.core.id.Identity;
+import org.olat.core.logging.Tracing;
 import org.olat.core.util.UserSession;
 import org.olat.core.util.WebappHelper;
-import org.olat.core.util.resource.OresHelper;
 import org.olat.ldap.LDAPError;
 import org.olat.ldap.LDAPLoginManager;
 import org.olat.ldap.LDAPLoginModule;
@@ -88,10 +87,6 @@ public class ChangePasswordController extends BasicController implements Support
 	@Autowired
 	private OLATAuthManager olatAuthenticationSpi;
 
-	/**
-	 * @param ureq
-	 * @param wControl
-	 */
 	public ChangePasswordController(UserRequest ureq, WindowControl wControl) {
 		super(ureq, wControl);
 
@@ -100,15 +95,7 @@ public class ChangePasswordController extends BasicController implements Support
 			String text = translate("notallowedtochangepwd", new String[] { WebappHelper.getMailConfig("mailSupport") });
 			Controller simpleMsg = new SimpleMessageController(ureq, wControl, text, "o_warning");
 			listenTo(simpleMsg); //register controller to be disposed automatically on dispose of Change password controller
-			putInitialPanel(simpleMsg.getInitialComponent());
-		} else if (!securityManager.isIdentityPermittedOnResourceable(
-				ureq.getIdentity(), 
-				Constants.PERMISSION_ACCESS, 
-				OresHelper.lookupType(this.getClass()))) {
-			String text = "Insufficient permission to access ChangePasswordController";
-			Controller simpleMsg = new SimpleMessageController(ureq, wControl, text, "o_warning");
-			listenTo(simpleMsg); //register controller to be disposed automatically on dispose of Change password controller
-			putInitialPanel(simpleMsg.getInitialComponent());			
+			putInitialPanel(simpleMsg.getInitialComponent());	
 		} else {
 			myContent = createVelocityContainer("pwd");
 			//adds "provider_..." variables to myContent
@@ -124,6 +111,9 @@ public class ChangePasswordController extends BasicController implements Support
 	public boolean isUserInteractionRequired(UserRequest ureq) {
 		UserSession usess = ureq.getUserSession();
 		if(usess.getRoles() == null || usess.getRoles().isInvitee() || usess.getRoles().isGuestOnly()) {
+			return false;
+		}
+		if(usess.getRoles().isSystemAdmin()) {
 			return false;
 		}
 		
@@ -163,7 +153,7 @@ public class ChangePasswordController extends BasicController implements Support
 					String newPwd = chPwdForm.getNewPasswordValue();
 					if(olatAuthenticationSpi.changePassword(ureq.getIdentity(), provenIdent, newPwd)) {			
 						fireEvent(ureq, Event.DONE_EVENT);
-						getLogger().audit("Changed password for identity:" + provenIdent.getKey());
+						getLogger().info(Tracing.M_AUDIT, "Changed password for identity:" + provenIdent.getKey());
 						showInfo("password.successful");
 					} else {
 						showError("password.failed");

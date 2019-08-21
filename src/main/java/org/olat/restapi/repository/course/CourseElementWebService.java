@@ -1,4 +1,5 @@
 /**
+
  * <a href="http://www.openolat.org">
  * OpenOLAT - Online Learning and Training</a><br>
  * <p>
@@ -18,9 +19,6 @@
  * <p>
  */
 package org.olat.restapi.repository.course;
-
-import static org.olat.restapi.security.RestSecurityHelper.isAuthor;
-import static org.olat.restapi.security.RestSecurityHelper.isAuthorEditor;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -48,13 +46,13 @@ import javax.ws.rs.core.Response;
 import javax.ws.rs.core.Response.Status;
 
 import org.apache.commons.io.IOUtils;
-import org.olat.core.commons.modules.bc.vfs.OlatRootFolderImpl;
-import org.olat.core.logging.OLog;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.FileUtils;
 import org.olat.core.util.StringHelper;
 import org.olat.core.util.vfs.VFSContainer;
 import org.olat.core.util.vfs.VFSLeaf;
+import org.olat.core.util.vfs.VFSManager;
 import org.olat.course.ICourse;
 import org.olat.course.condition.interpreter.ConditionExpression;
 import org.olat.course.editor.NodeEditController;
@@ -81,6 +79,7 @@ import org.olat.restapi.support.vo.CourseNodeVO;
 import org.olat.restapi.support.vo.elements.SurveyConfigVO;
 import org.olat.restapi.support.vo.elements.TaskConfigVO;
 import org.olat.restapi.support.vo.elements.TestConfigVO;
+import org.springframework.stereotype.Component;
 
 
 /**
@@ -90,16 +89,17 @@ import org.olat.restapi.support.vo.elements.TestConfigVO;
  * 
  * @author cbuckley, srosse, stephane.rosse@frentix.com
  */
+@Component
 @Path("repo/courses/{courseId}/elements")
 public class CourseElementWebService extends AbstractCourseNodeWebService {
-	private static final OLog log = Tracing.createLoggerFor(CourseElementWebService.class);
+	private static final Logger log = Tracing.createLoggerFor(CourseElementWebService.class);
 	private static final String VERSION = "0.1";
 	
 	/**
 	 * The version of the Course Elements Web Service
-   * @response.representation.200.mediaType text/plain
-   * @response.representation.200.doc The version of this specific Web Service
-   * @response.representation.200.example 1.0
+	 * @response.representation.200.mediaType text/plain
+	 * @response.representation.200.doc The version of this specific Web Service
+	 * @response.representation.200.example 1.0
 	 * @return
 	 */
 	@GET
@@ -113,11 +113,11 @@ public class CourseElementWebService extends AbstractCourseNodeWebService {
 	/**
 	 * Retrieves metadata of the course node
 	 * @response.representation.200.qname {http://www.example.com}courseNodeVO
-   * @response.representation.200.mediaType application/xml, application/json
-   * @response.representation.200.doc The course node metadatas
-   * @response.representation.200.example {@link org.olat.restapi.support.vo.Examples#SAMPLE_COURSENODEVO}
+	 * @response.representation.200.mediaType application/xml, application/json
+	 * @response.representation.200.doc The course node metadatas
+	 * @response.representation.200.example {@link org.olat.restapi.support.vo.Examples#SAMPLE_COURSENODEVO}
 	 * @response.representation.401.doc The roles of the authenticated user are not sufficient
-   * @response.representation.404.doc The course or parentNode not found
+	 * @response.representation.404.doc The course or parentNode not found
 	 * @param courseId The course resourceable's id
 	 * @param nodeId The node's id
 	 * @param request The HTTP request
@@ -128,13 +128,12 @@ public class CourseElementWebService extends AbstractCourseNodeWebService {
 	@Produces({MediaType.APPLICATION_XML, MediaType.APPLICATION_JSON})
 	public Response getCourseNode(@PathParam("courseId") Long courseId, @PathParam("nodeId") String nodeId,
 			@Context HttpServletRequest request) {
-		if(!isAuthor(request)) {
-			return Response.serverError().status(Status.UNAUTHORIZED).build();
-		}
-		
 		ICourse course = CoursesWebService.loadCourse(courseId);
 		if(course == null) {
 			return Response.serverError().status(Status.NOT_FOUND).build();
+		}
+		if(!isAuthorEditor(course, request)) {
+			return Response.serverError().status(Status.UNAUTHORIZED).build();
 		}
 
 		CourseNode courseNode = getParentNode(course, nodeId);
@@ -148,14 +147,14 @@ public class CourseElementWebService extends AbstractCourseNodeWebService {
 	
 	/**
 	 * This updates a Structure Element onto a given course.
-   * @response.representation.mediaType application/x-www-form-urlencoded, multipart/form-data
-   * @response.representation.doc The course node metadatas
+	 * @response.representation.mediaType application/x-www-form-urlencoded, multipart/form-data
+	 * @response.representation.doc The course node metadatas
 	 * @response.representation.200.qname {http://www.example.com}courseNodeVO
-   * @response.representation.200.mediaType application/xml, application/json
-   * @response.representation.200.doc The course node metadatas
-   * @response.representation.200.example {@link org.olat.restapi.support.vo.Examples#SAMPLE_COURSENODEVO}
+	 * @response.representation.200.mediaType application/xml, application/json
+	 * @response.representation.200.doc The course node metadatas
+	 * @response.representation.200.example {@link org.olat.restapi.support.vo.Examples#SAMPLE_COURSENODEVO}
 	 * @response.representation.401.doc The roles of the authenticated user are not sufficient
-   * @response.representation.404.doc The course or parentNode not found
+	 * @response.representation.404.doc The course or parentNode not found
 	 * @param courseId The course resourceable's id
 	 * @param nodeId The node's id of this structure
 	 * @param shortTitle The node short title
@@ -205,14 +204,14 @@ public class CourseElementWebService extends AbstractCourseNodeWebService {
 	/**
 	 * This attaches a Structure Element onto a given course. The element will be
 	 * inserted underneath the supplied parentNodeId.
-   * @response.representation.mediaType application/x-www-form-urlencoded
-   * @response.representation.doc The course node metadatas
+	 * @response.representation.mediaType application/x-www-form-urlencoded
+	 * @response.representation.doc The course node metadatas
 	 * @response.representation.200.qname {http://www.example.com}courseNodeVO
-   * @response.representation.200.mediaType application/xml, application/json
-   * @response.representation.200.doc The course node metadatas
-   * @response.representation.200.example {@link org.olat.restapi.support.vo.Examples#SAMPLE_COURSENODEVO}
+	 * @response.representation.200.mediaType application/xml, application/json
+	 * @response.representation.200.doc The course node metadatas
+	 * @response.representation.200.example {@link org.olat.restapi.support.vo.Examples#SAMPLE_COURSENODEVO}
 	 * @response.representation.401.doc The roles of the authenticated user are not sufficient
-   * @response.representation.404.doc The course or parentNode not found
+	 * @response.representation.404.doc The course or parentNode not found
 	 * @param courseId The course resourceable's id
 	 * @param parentNodeId The node's id which will be the parent of this
 	 *          structure
@@ -262,14 +261,14 @@ public class CourseElementWebService extends AbstractCourseNodeWebService {
 	/**
 	 * This attaches a Structure Element onto a given course. The element will be
 	 * inserted underneath the supplied parentNodeId.
-   * @response.representation.mediaType application/x-www-form-urlencoded
-   * @response.representation.doc The course node metadatas
+	 * @response.representation.mediaType application/x-www-form-urlencoded
+	 * @response.representation.doc The course node metadatas
 	 * @response.representation.200.qname {http://www.example.com}courseNodeVO
-   * @response.representation.200.mediaType application/xml, application/json
-   * @response.representation.200.doc The course node metadatas
-   * @response.representation.200.example {@link org.olat.restapi.support.vo.Examples#SAMPLE_COURSENODEVO}
+	 * @response.representation.200.mediaType application/xml, application/json
+	 * @response.representation.200.doc The course node metadatas
+	 * @response.representation.200.example {@link org.olat.restapi.support.vo.Examples#SAMPLE_COURSENODEVO}
 	 * @response.representation.401.doc The roles of the authenticated user are not sufficient
-   * @response.representation.404.doc The course or parentNode not found
+	 * @response.representation.404.doc The course or parentNode not found
 	 * @param courseId The course resourceable's id
 	 * @param parentNodeId The node's id which will be the parent of this
 	 *          structure
@@ -299,14 +298,14 @@ public class CourseElementWebService extends AbstractCourseNodeWebService {
 	
 	/**
 	 * This updates a Single Page Element onto a given course.
-   * @response.representation.mediaType multipart/form-data
-   * @response.representation.doc The content of the single page
+	 * @response.representation.mediaType multipart/form-data
+	 * @response.representation.doc The content of the single page
 	 * @response.representation.200.qname {http://www.example.com}courseNodeVO
-   * @response.representation.200.mediaType application/xml, application/json
-   * @response.representation.200.doc the course node metadatas
-   * @response.representation.200.example {@link org.olat.restapi.support.vo.Examples#SAMPLE_COURSENODEVO}
+	 * @response.representation.200.mediaType application/xml, application/json
+	 * @response.representation.200.doc the course node metadatas
+	 * @response.representation.200.example {@link org.olat.restapi.support.vo.Examples#SAMPLE_COURSENODEVO}
 	 * @response.representation.401.doc The roles of the authenticated user are not sufficient
-   * @response.representation.404.doc The course or parentNode not found
+	 * @response.representation.404.doc The course or parentNode not found
 	 * @param courseId The course resourceable's id
 	 * @param nodeId The node's id of this single page
 	 * @param position The node's position relative to its sibling nodes (optional)
@@ -352,14 +351,14 @@ public class CourseElementWebService extends AbstractCourseNodeWebService {
 	/**
 	 * This attaches a Single Page Element onto a given course. The element will
 	 * be inserted underneath the supplied parentNodeId.
-   * @response.representation.mediaType multipart/form-data
-   * @response.representation.doc The content of the single page
+	 * @response.representation.mediaType multipart/form-data
+	 * @response.representation.doc The content of the single page
 	 * @response.representation.200.qname {http://www.example.com}courseNodeVO
-   * @response.representation.200.mediaType application/xml, application/json
-   * @response.representation.200.doc The course node metadatas
-   * @response.representation.200.example {@link org.olat.restapi.support.vo.Examples#SAMPLE_COURSENODEVO}
+	 * @response.representation.200.mediaType application/xml, application/json
+	 * @response.representation.200.doc The course node metadatas
+	 * @response.representation.200.example {@link org.olat.restapi.support.vo.Examples#SAMPLE_COURSENODEVO}
 	 * @response.representation.401.doc The roles of the authenticated user are not sufficient
-   * @response.representation.404.doc The course or parentNode not found
+	 * @response.representation.404.doc The course or parentNode not found
 	 * @param courseId The course resourceable id
 	 * @param parentNodeId The node's id which will be the parent of this single
 	 *          page
@@ -385,14 +384,14 @@ public class CourseElementWebService extends AbstractCourseNodeWebService {
 	/**
 	 * This attaches a Single Page Element onto a given course. The element will
 	 * be inserted underneath the supplied parentNodeId.
-   * @response.representation.mediaType multipart/form-data
-   * @response.representation.doc The content of the single page
+	 * @response.representation.mediaType multipart/form-data
+	 * @response.representation.doc The content of the single page
 	 * @response.representation.200.qname {http://www.example.com}courseNodeVO
-   * @response.representation.200.mediaType application/xml, application/json
-   * @response.representation.200.doc the course node metadatas
-   * @response.representation.200.example {@link org.olat.restapi.support.vo.Examples#SAMPLE_COURSENODEVO}
+	 * @response.representation.200.mediaType application/xml, application/json
+	 * @response.representation.200.doc the course node metadatas
+	 * @response.representation.200.example {@link org.olat.restapi.support.vo.Examples#SAMPLE_COURSENODEVO}
 	 * @response.representation.401.doc The roles of the authenticated user are not sufficient
-   * @response.representation.404.doc The course or parentNode not found
+	 * @response.representation.404.doc The course or parentNode not found
 	 * @param courseId The course resourceable's id
 	 * @param parentNodeId The node's id which will be the parent of this single
 	 *          page
@@ -440,14 +439,14 @@ public class CourseElementWebService extends AbstractCourseNodeWebService {
 	 * This attaches a Single Page Element onto a given course. The element will
 	 * be inserted underneath the supplied parentNodeId. The page is found in the
 	 * resource folder of the course.
-   * @response.representation.mediaType application/x-www-form-urlencoded
-   * @response.representation.doc The content of the single page
+	 * @response.representation.mediaType application/x-www-form-urlencoded
+	 * @response.representation.doc The content of the single page
 	 * @response.representation.200.qname {http://www.example.com}courseNodeVO
-   * @response.representation.200.mediaType application/xml, application/json
-   * @response.representation.200.doc the course node metadatas
-   * @response.representation.200.example {@link org.olat.restapi.support.vo.Examples#SAMPLE_COURSENODEVO}
+	 * @response.representation.200.mediaType application/xml, application/json
+	 * @response.representation.200.doc the course node metadatas
+	 * @response.representation.200.example {@link org.olat.restapi.support.vo.Examples#SAMPLE_COURSENODEVO}
 	 * @response.representation.401.doc The roles of the authenticated user are not sufficient
-   * @response.representation.404.doc The course or parentNode not found
+	 * @response.representation.404.doc The course or parentNode not found
 	 * @param courseId The course resourceable's id
 	 * @param parentNodeId The node's id which will be the parent of this single
 	 *          page
@@ -478,14 +477,14 @@ public class CourseElementWebService extends AbstractCourseNodeWebService {
 	 * This attaches a Single Page Element onto a given course. The element will
 	 * be inserted underneath the supplied parentNodeId. The page is found in the
 	 * resource folder of the course.
-   * @response.representation.mediaType application/x-www-form-urlencoded
-   * @response.representation.doc The content of the single page
+	 * @response.representation.mediaType application/x-www-form-urlencoded
+	 * @response.representation.doc The content of the single page
 	 * @response.representation.200.qname {http://www.example.com}courseNodeVO
-   * @response.representation.200.mediaType application/xml, application/json
-   * @response.representation.200.doc the course node metadatas
-   * @response.representation.200.example {@link org.olat.restapi.support.vo.Examples#SAMPLE_COURSENODEVO}
+	 * @response.representation.200.mediaType application/xml, application/json
+	 * @response.representation.200.doc the course node metadatas
+	 * @response.representation.200.example {@link org.olat.restapi.support.vo.Examples#SAMPLE_COURSENODEVO}
 	 * @response.representation.401.doc The roles of the authenticated user are not sufficient
-   * @response.representation.404.doc The course or parentNode not found
+	 * @response.representation.404.doc The course or parentNode not found
 	 * @param courseId The course resourceable's id
 	 * @param parentNodeId The node's id which will be the parent of this single
 	 *          page
@@ -515,14 +514,14 @@ public class CourseElementWebService extends AbstractCourseNodeWebService {
 	
 	/**
 	 * This updates a Task Element onto a given course.
-   * @response.representation.mediaType application/x-www-form-urlencoded
-   * @response.representation.doc The task node metadatas
+	 * @response.representation.mediaType application/x-www-form-urlencoded
+	 * @response.representation.doc The task node metadatas
 	 * @response.representation.200.qname {http://www.example.com}courseNodeVO
-   * @response.representation.200.mediaType application/xml, application/json
-   * @response.representation.200.doc The course node metadatas
-   * @response.representation.200.example {@link org.olat.restapi.support.vo.Examples#SAMPLE_COURSENODEVO}
+	 * @response.representation.200.mediaType application/xml, application/json
+	 * @response.representation.200.doc The course node metadatas
+	 * @response.representation.200.example {@link org.olat.restapi.support.vo.Examples#SAMPLE_COURSENODEVO}
 	 * @response.representation.401.doc The roles of the authenticated user are not sufficient
-   * @response.representation.404.doc The course or parentNode not found
+	 * @response.representation.404.doc The course or parentNode not found
 	 * @param courseId The course resourceable id
 	 * @param nodeId The node's id of this task
 	 * @param shortTitle The node short title
@@ -553,14 +552,14 @@ public class CourseElementWebService extends AbstractCourseNodeWebService {
 	/**
 	 * This attaches a Task Element onto a given course. The element will be
 	 * inserted underneath the supplied parentNodeId.
-   * @response.representation.mediaType application/x-www-form-urlencoded
-   * @response.representation.doc The task node metadatas
+	 * @response.representation.mediaType application/x-www-form-urlencoded
+	 * @response.representation.doc The task node metadatas
 	 * @response.representation.200.qname {http://www.example.com}courseNodeVO
-   * @response.representation.200.mediaType application/xml, application/json
-   * @response.representation.200.doc The course node metadatas
-   * @response.representation.200.example {@link org.olat.restapi.support.vo.Examples#SAMPLE_COURSENODEVO}
+	 * @response.representation.200.mediaType application/xml, application/json
+	 * @response.representation.200.doc The course node metadatas
+	 * @response.representation.200.example {@link org.olat.restapi.support.vo.Examples#SAMPLE_COURSENODEVO}
 	 * @response.representation.401.doc The roles of the authenticated user are not sufficient
-   * @response.representation.404.doc The course or parentNode not found
+	 * @response.representation.404.doc The course or parentNode not found
 	 * @param courseId The course resourceable id
 	 * @param parentNodeId The node's id which will be the parent of this task
 	 * @param position The node's position relative to its sibling nodes (optional)
@@ -590,14 +589,14 @@ public class CourseElementWebService extends AbstractCourseNodeWebService {
 	/**
 	 * This attaches a Task Element onto a given course. The element will be
 	 * inserted underneath the supplied parentNodeId.
-   * @response.representation.mediaType application/x-www-form-urlencoded
-   * @response.representation.doc The task node metadatas
+	 * @response.representation.mediaType application/x-www-form-urlencoded
+	 * @response.representation.doc The task node metadatas
 	 * @response.representation.200.qname {http://www.example.com}courseNodeVO
-   * @response.representation.200.mediaType application/xml, application/json
-   * @response.representation.200.doc The course node metadatas
-   * @response.representation.200.example {@link org.olat.restapi.support.vo.Examples#SAMPLE_COURSENODEVO}
+	 * @response.representation.200.mediaType application/xml, application/json
+	 * @response.representation.200.doc The course node metadatas
+	 * @response.representation.200.example {@link org.olat.restapi.support.vo.Examples#SAMPLE_COURSENODEVO}
 	 * @response.representation.401.doc The roles of the authenticated user are not sufficient
-   * @response.representation.404.doc The course or parentNode not found
+	 * @response.representation.404.doc The course or parentNode not found
 	 * @param courseId The course resourceable id
 	 * @param parentNodeId The node's id which will be the parent of this task
 	 * @param position The node's position relative to its sibling nodes (optional)
@@ -627,14 +626,14 @@ public class CourseElementWebService extends AbstractCourseNodeWebService {
 	
 	/**
 	 * This updates a Test Element onto a given course.
-   * @response.representation.mediaType application/x-www-form-urlencoded
-   * @response.representation.doc The course node metadatas
+	 * @response.representation.mediaType application/x-www-form-urlencoded
+	 * @response.representation.doc The course node metadatas
 	 * @response.representation.200.qname {http://www.example.com}courseNodeVO
-   * @response.representation.200.mediaType application/xml, application/json
-   * @response.representation.200.doc The test node metadatas
-   * @response.representation.200.example {@link org.olat.restapi.support.vo.Examples#SAMPLE_COURSENODEVO}
+	 * @response.representation.200.mediaType application/xml, application/json
+	 * @response.representation.200.doc The test node metadatas
+	 * @response.representation.200.example {@link org.olat.restapi.support.vo.Examples#SAMPLE_COURSENODEVO}
 	 * @response.representation.401.doc The roles of the authenticated user are not sufficient
-   * @response.representation.404.doc The course, parentNode or test not found
+	 * @response.representation.404.doc The course, parentNode or test not found
 	 * @param courseId The course resourceable id
 	 * @param nodeId The node's id of this test
 	 * @param testResourceableId The test node's id which is retorned in the
@@ -671,14 +670,14 @@ public class CourseElementWebService extends AbstractCourseNodeWebService {
 	/**
 	 * This attaches a Test Element onto a given course. The element will be
 	 * inserted underneath the supplied parentNodeId.
-   * @response.representation.mediaType application/x-www-form-urlencoded
-   * @response.representation.doc The course node metadatas
+	 * @response.representation.mediaType application/x-www-form-urlencoded
+	 * @response.representation.doc The course node metadatas
 	 * @response.representation.200.qname {http://www.example.com}courseNodeVO
-   * @response.representation.200.mediaType application/xml, application/json
-   * @response.representation.200.doc The test node metadatas
-   * @response.representation.200.example {@link org.olat.restapi.support.vo.Examples#SAMPLE_COURSENODEVO}
+	 * @response.representation.200.mediaType application/xml, application/json
+	 * @response.representation.200.doc The test node metadatas
+	 * @response.representation.200.example {@link org.olat.restapi.support.vo.Examples#SAMPLE_COURSENODEVO}
 	 * @response.representation.401.doc The roles of the authenticated user are not sufficient
-   * @response.representation.404.doc The course, parentNode or test not found
+	 * @response.representation.404.doc The course, parentNode or test not found
 	 * @param courseId The course resourceable id
 	 * @param parentNodeId The node's id which will be the parent of this test
 	 * @param testResourceableId The test node's id which is retorned in the
@@ -707,14 +706,14 @@ public class CourseElementWebService extends AbstractCourseNodeWebService {
 	/**
 	 * This attaches a Test Element onto a given course. The element will be
 	 * inserted underneath the supplied parentNodeId.
-   * @response.representation.mediaType application/x-www-form-urlencoded
-   * @response.representation.doc the course node metadatas
+	 * @response.representation.mediaType application/x-www-form-urlencoded
+	 * @response.representation.doc the course node metadatas
 	 * @response.representation.200.qname {http://www.example.com}courseNodeVO
-   * @response.representation.200.mediaType application/xml, application/json
-   * @response.representation.200.doc the test node metadatas
-   * @response.representation.200.example {@link org.olat.restapi.support.vo.Examples#SAMPLE_COURSENODEVO}
+	 * @response.representation.200.mediaType application/xml, application/json
+	 * @response.representation.200.doc the test node metadatas
+	 * @response.representation.200.example {@link org.olat.restapi.support.vo.Examples#SAMPLE_COURSENODEVO}
 	 * @response.representation.401.doc The roles of the authenticated user are not sufficient
-   * @response.representation.404.doc course, parentNode or test not found
+	 * @response.representation.404.doc course, parentNode or test not found
 	 * @param courseId The course resourceable id
 	 * @param parentNodeId The node's id which will be the parent of this test
 	 * @param testResourceableId The test node's id which is retorned in the
@@ -750,13 +749,13 @@ public class CourseElementWebService extends AbstractCourseNodeWebService {
 	/**
 	 * Updates an assessment building block.
 	 * @response.representation.mediaType application/x-www-form-urlencoded
-   * @response.representation.doc The assessment node metadatas
+	 * @response.representation.doc The assessment node metadatas
 	 * @response.representation.200.qname {http://www.example.com}courseNodeVO
-   * @response.representation.200.mediaType application/xml, application/json
-   * @response.representation.200.doc The course node metadatas
-   * @response.representation.200.example {@link org.olat.restapi.support.vo.Examples#SAMPLE_COURSENODEVO}
+	 * @response.representation.200.mediaType application/xml, application/json
+	 * @response.representation.200.doc The course node metadatas
+	 * @response.representation.200.example {@link org.olat.restapi.support.vo.Examples#SAMPLE_COURSENODEVO}
 	 * @response.representation.401.doc The roles of the authenticated user are not sufficient
-   * @response.representation.404.doc The course or parentNode not found
+	 * @response.representation.404.doc The course or parentNode not found
 	 * @param courseId The course resourceable's id
 	 * @param nodeId The node's id of this assessment
 	 * @param shortTitle The node short title
@@ -784,13 +783,13 @@ public class CourseElementWebService extends AbstractCourseNodeWebService {
 	/**
 	 * Attaches an assessment building block.
 	 * @response.representation.mediaType application/x-www-form-urlencoded
-   * @response.representation.doc The assessment node metadatas
+	 * @response.representation.doc The assessment node metadatas
 	 * @response.representation.200.qname {http://www.example.com}courseNodeVO
-   * @response.representation.200.mediaType application/xml, application/json
-   * @response.representation.200.doc The course node metadatas
-   * @response.representation.200.example {@link org.olat.restapi.support.vo.Examples#SAMPLE_COURSENODEVO}
+	 * @response.representation.200.mediaType application/xml, application/json
+	 * @response.representation.200.doc The course node metadatas
+	 * @response.representation.200.example {@link org.olat.restapi.support.vo.Examples#SAMPLE_COURSENODEVO}
 	 * @response.representation.401.doc The roles of the authenticated user are not sufficient
-   * @response.representation.404.doc The course or parentNode not found
+	 * @response.representation.404.doc The course or parentNode not found
 	 * @param courseId The course resourceable's id
 	 * @param parentNodeId The node's id which will be the parent of this assessment
 	 * @param position The node's position relative to its sibling nodes (optional)
@@ -817,13 +816,13 @@ public class CourseElementWebService extends AbstractCourseNodeWebService {
 	/**
 	 * Attaches an assessment building block.
 	 * @response.representation.mediaType application/x-www-form-urlencoded
-   * @response.representation.doc The assessment node metadatas
+	 * @response.representation.doc The assessment node metadatas
 	 * @response.representation.200.qname {http://www.example.com}courseNodeVO
-   * @response.representation.200.mediaType application/xml, application/json
-   * @response.representation.200.doc The course node metadatas
-   * @response.representation.200.example {@link org.olat.restapi.support.vo.Examples#SAMPLE_COURSENODEVO}
+	 * @response.representation.200.mediaType application/xml, application/json
+	 * @response.representation.200.doc The course node metadatas
+	 * @response.representation.200.example {@link org.olat.restapi.support.vo.Examples#SAMPLE_COURSENODEVO}
 	 * @response.representation.401.doc The roles of the authenticated user are not sufficient
-   * @response.representation.404.doc The course or parentNode not found
+	 * @response.representation.404.doc The course or parentNode not found
 	 * @param courseId The course resourceable's id
 	 * @param parentNodeId The node's id which will be the parent of this assessment
 	 * @param position The node's position relative to its sibling nodes (optional)
@@ -851,13 +850,13 @@ public class CourseElementWebService extends AbstractCourseNodeWebService {
 	/**
 	 * Attaches an wiki building block.
 	 * @response.representation.mediaType application/x-www-form-urlencoded
-   * @response.representation.doc The assessment node metadatas
+	 * @response.representation.doc The assessment node metadatas
 	 * @response.representation.200.qname {http://www.example.com}courseNodeVO
-   * @response.representation.200.mediaType application/xml, application/json
-   * @response.representation.200.doc The course node metadatas
-   * @response.representation.200.example {@link org.olat.restapi.support.vo.Examples#SAMPLE_COURSENODEVO}
+	 * @response.representation.200.mediaType application/xml, application/json
+	 * @response.representation.200.doc The course node metadatas
+	 * @response.representation.200.example {@link org.olat.restapi.support.vo.Examples#SAMPLE_COURSENODEVO}
 	 * @response.representation.401.doc The roles of the authenticated user are not sufficient
-   * @response.representation.404.doc The course or parentNode not found
+	 * @response.representation.404.doc The course or parentNode not found
 	 * @param courseId The course resourceable's id
 	 * @param nodeId The node's id which of this wiki
 	 * @param shortTitle The node short title
@@ -894,13 +893,13 @@ public class CourseElementWebService extends AbstractCourseNodeWebService {
 	/**
 	 * Attaches an wiki building block.
 	 * @response.representation.mediaType application/x-www-form-urlencoded
-   * @response.representation.doc The assessment node metadatas
+	 * @response.representation.doc The assessment node metadatas
 	 * @response.representation.200.qname {http://www.example.com}courseNodeVO
-   * @response.representation.200.mediaType application/xml, application/json
-   * @response.representation.200.doc The course node metadatas
-   * @response.representation.200.example {@link org.olat.restapi.support.vo.Examples#SAMPLE_COURSENODEVO}
+	 * @response.representation.200.mediaType application/xml, application/json
+	 * @response.representation.200.doc The course node metadatas
+	 * @response.representation.200.example {@link org.olat.restapi.support.vo.Examples#SAMPLE_COURSENODEVO}
 	 * @response.representation.401.doc The roles of the authenticated user are not sufficient
-   * @response.representation.404.doc The course or parentNode not found
+	 * @response.representation.404.doc The course or parentNode not found
 	 * @param courseId The course resourceable's id
 	 * @param parentNodeId The node's id which will be the parent of this assessment
 	 * @param position The node's position relative to its sibling nodes (optional)
@@ -927,13 +926,13 @@ public class CourseElementWebService extends AbstractCourseNodeWebService {
 	/**
 	 * Attaches an wiki building block.
 	 * @response.representation.mediaType application/x-www-form-urlencoded
-   * @response.representation.doc The assessment node metadatas
+	 * @response.representation.doc The assessment node metadatas
 	 * @response.representation.200.qname {http://www.example.com}courseNodeVO
-   * @response.representation.200.mediaType application/xml, application/json
-   * @response.representation.200.doc The course node metadatas
-   * @response.representation.200.example {@link org.olat.restapi.support.vo.Examples#SAMPLE_COURSENODEVO}
+	 * @response.representation.200.mediaType application/xml, application/json
+	 * @response.representation.200.doc The course node metadatas
+	 * @response.representation.200.example {@link org.olat.restapi.support.vo.Examples#SAMPLE_COURSENODEVO}
 	 * @response.representation.401.doc The roles of the authenticated user are not sufficient
-   * @response.representation.404.doc The course or parentNode not found
+	 * @response.representation.404.doc The course or parentNode not found
 	 * @param courseId The course resourceable's id
 	 * @param parentNodeId The node's id which will be the parent of this assessment
 	 * @param position The node's position relative to its sibling nodes (optional)
@@ -966,13 +965,13 @@ public class CourseElementWebService extends AbstractCourseNodeWebService {
 	/**
 	 * Update an blog building block.
 	 * @response.representation.mediaType application/x-www-form-urlencoded
-   * @response.representation.doc The assessment node metadatas
+	 * @response.representation.doc The assessment node metadatas
 	 * @response.representation.200.qname {http://www.example.com}courseNodeVO
-   * @response.representation.200.mediaType application/xml, application/json
-   * @response.representation.200.doc The course node metadatas
-   * @response.representation.200.example {@link org.olat.restapi.support.vo.Examples#SAMPLE_COURSENODEVO}
+	 * @response.representation.200.mediaType application/xml, application/json
+	 * @response.representation.200.doc The course node metadatas
+	 * @response.representation.200.example {@link org.olat.restapi.support.vo.Examples#SAMPLE_COURSENODEVO}
 	 * @response.representation.401.doc The roles of the authenticated user are not sufficient
-   * @response.representation.404.doc The course or parentNode not found
+	 * @response.representation.404.doc The course or parentNode not found
 	 * @param courseId The course resourceable's id
 	 * @param nodeId The node's id of this blog
 	 * @param shortTitle The node short title
@@ -1009,13 +1008,13 @@ public class CourseElementWebService extends AbstractCourseNodeWebService {
 	/**
 	 * Attaches an blog building block.
 	 * @response.representation.mediaType application/x-www-form-urlencoded
-   * @response.representation.doc The assessment node metadatas
+	 * @response.representation.doc The assessment node metadatas
 	 * @response.representation.200.qname {http://www.example.com}courseNodeVO
-   * @response.representation.200.mediaType application/xml, application/json
-   * @response.representation.200.doc The course node metadatas
-   * @response.representation.200.example {@link org.olat.restapi.support.vo.Examples#SAMPLE_COURSENODEVO}
+	 * @response.representation.200.mediaType application/xml, application/json
+	 * @response.representation.200.doc The course node metadatas
+	 * @response.representation.200.example {@link org.olat.restapi.support.vo.Examples#SAMPLE_COURSENODEVO}
 	 * @response.representation.401.doc The roles of the authenticated user are not sufficient
-   * @response.representation.404.doc The course or parentNode not found
+	 * @response.representation.404.doc The course or parentNode not found
 	 * @param courseId The course resourceable's id
 	 * @param parentNodeId The node's id which will be the parent of this assessment
 	 * @param position The node's position relative to its sibling nodes (optional)
@@ -1043,13 +1042,13 @@ public class CourseElementWebService extends AbstractCourseNodeWebService {
 	/**
 	 * Attaches an blog building block.
 	 * @response.representation.mediaType application/x-www-form-urlencoded
-   * @response.representation.doc The assessment node metadatas
+	 * @response.representation.doc The assessment node metadatas
 	 * @response.representation.200.qname {http://www.example.com}courseNodeVO
-   * @response.representation.200.mediaType application/xml, application/json
-   * @response.representation.200.doc The course node metadatas
-   * @response.representation.200.example {@link org.olat.restapi.support.vo.Examples#SAMPLE_COURSENODEVO}
+	 * @response.representation.200.mediaType application/xml, application/json
+	 * @response.representation.200.doc The course node metadatas
+	 * @response.representation.200.example {@link org.olat.restapi.support.vo.Examples#SAMPLE_COURSENODEVO}
 	 * @response.representation.401.doc The roles of the authenticated user are not sufficient
-   * @response.representation.404.doc The course or parentNode not found
+	 * @response.representation.404.doc The course or parentNode not found
 	 * @param courseId The course resourceable's id
 	 * @param parentNodeId The node's id which will be the parent of this assessment
 	 * @param position The node's position relative to its sibling nodes (optional)
@@ -1084,13 +1083,13 @@ public class CourseElementWebService extends AbstractCourseNodeWebService {
 	/**
 	 * Attaches an survey building block.
 	 * @response.representation.mediaType application/x-www-form-urlencoded
-   * @response.representation.doc The assessment node metadatas
+	 * @response.representation.doc The assessment node metadatas
 	 * @response.representation.200.qname {http://www.example.com}courseNodeVO
-   * @response.representation.200.mediaType application/xml, application/json
-   * @response.representation.200.doc The course node metadatas
-   * @response.representation.200.example {@link org.olat.restapi.support.vo.Examples#SAMPLE_COURSENODEVO}
+	 * @response.representation.200.mediaType application/xml, application/json
+	 * @response.representation.200.doc The course node metadatas
+	 * @response.representation.200.example {@link org.olat.restapi.support.vo.Examples#SAMPLE_COURSENODEVO}
 	 * @response.representation.401.doc The roles of the authenticated user are not sufficient
-   * @response.representation.404.doc The course or parentNode not found
+	 * @response.representation.404.doc The course or parentNode not found
 	 * @param courseId The course resourceable's id
 	 * @param parentNodeId The node's id which will be the parent of this assessment
 	 * @param position The node's position relative to its sibling nodes (optional)
@@ -1124,13 +1123,13 @@ public class CourseElementWebService extends AbstractCourseNodeWebService {
 	/**
 	 * Attaches an survey building block.
 	 * @response.representation.mediaType application/x-www-form-urlencoded
-   * @response.representation.doc The assessment node metadatas
+	 * @response.representation.doc The assessment node metadatas
 	 * @response.representation.200.qname {http://www.example.com}courseNodeVO
-   * @response.representation.200.mediaType application/xml, application/json
-   * @response.representation.200.doc The course node metadatas
-   * @response.representation.200.example {@link org.olat.restapi.support.vo.Examples#SAMPLE_COURSENODEVO}
+	 * @response.representation.200.mediaType application/xml, application/json
+	 * @response.representation.200.doc The course node metadatas
+	 * @response.representation.200.example {@link org.olat.restapi.support.vo.Examples#SAMPLE_COURSENODEVO}
 	 * @response.representation.401.doc The roles of the authenticated user are not sufficient
-   * @response.representation.404.doc The course or parentNode not found
+	 * @response.representation.404.doc The course or parentNode not found
 	 * @param courseId The course resourceable's id
 	 * @param parentNodeId The node's id which will be the parent of this assessment
 	 * @param position The node's position relative to its sibling nodes (optional)
@@ -1157,13 +1156,13 @@ public class CourseElementWebService extends AbstractCourseNodeWebService {
 	/**
 	 * Attaches an survey building block.
 	 * @response.representation.mediaType application/x-www-form-urlencoded
-   * @response.representation.doc The assessment node metadatas
+	 * @response.representation.doc The assessment node metadatas
 	 * @response.representation.200.qname {http://www.example.com}courseNodeVO
-   * @response.representation.200.mediaType application/xml, application/json
-   * @response.representation.200.doc The course node metadatas
-   * @response.representation.200.example {@link org.olat.restapi.support.vo.Examples#SAMPLE_COURSENODEVO}
+	 * @response.representation.200.mediaType application/xml, application/json
+	 * @response.representation.200.doc The course node metadatas
+	 * @response.representation.200.example {@link org.olat.restapi.support.vo.Examples#SAMPLE_COURSENODEVO}
 	 * @response.representation.401.doc The roles of the authenticated user are not sufficient
-   * @response.representation.404.doc The course or parentNode not found
+	 * @response.representation.404.doc The course or parentNode not found
 	 * @param courseId The course resourceable's id
 	 * @param parentNodeId The node's id which will be the parent of this assessment
 	 * @param position The node's position relative to its sibling nodes (optional)
@@ -1197,13 +1196,13 @@ public class CourseElementWebService extends AbstractCourseNodeWebService {
 	/**
 	 * Update an external page building block.
 	 * @response.representation.mediaType application/x-www-form-urlencoded
-   * @response.representation.doc The external page node metadatas
+	 * @response.representation.doc The external page node metadatas
 	 * @response.representation.200.qname {http://www.example.com}courseNodeVO
-   * @response.representation.200.mediaType application/xml, application/json
-   * @response.representation.200.doc The course node metadatas
-   * @response.representation.200.example {@link org.olat.restapi.support.vo.Examples#SAMPLE_COURSENODEVO}
+	 * @response.representation.200.mediaType application/xml, application/json
+	 * @response.representation.200.doc The course node metadatas
+	 * @response.representation.200.example {@link org.olat.restapi.support.vo.Examples#SAMPLE_COURSENODEVO}
 	 * @response.representation.401.doc The roles of the authenticated user are not sufficient
-   * @response.representation.404.doc The course or parentNode not found
+	 * @response.representation.404.doc The course or parentNode not found
 	 * @param courseId The course resourceable's id
 	 * @param nodeId The node's id of this external page
 	 * @param shortTitle The node short title
@@ -1220,7 +1219,7 @@ public class CourseElementWebService extends AbstractCourseNodeWebService {
 	@Consumes(MediaType.APPLICATION_FORM_URLENCODED)
 	@Produces({MediaType.APPLICATION_XML, MediaType.APPLICATION_JSON})
 	//fxdiff FXOLAT-122: course management
-	public Response updateExternalPage(@PathParam("courseId") Long courseId, @PathParam("parentNodeId") String nodeId,
+	public Response updateExternalPage(@PathParam("courseId") Long courseId, @PathParam("nodeId") String nodeId,
 			@FormParam("shortTitle") @DefaultValue("undefined") String shortTitle,
 			@FormParam("longTitle") @DefaultValue("undefined") String longTitle, @FormParam("objectives") @DefaultValue("undefined") String objectives,
 			@FormParam("visibilityExpertRules") String visibilityExpertRules, @FormParam("accessExpertRules") String accessExpertRules,
@@ -1240,13 +1239,13 @@ public class CourseElementWebService extends AbstractCourseNodeWebService {
 	/**
 	 * Attaches an external page building block.
 	 * @response.representation.mediaType application/x-www-form-urlencoded
-   * @response.representation.doc The external page node metadatas
+	 * @response.representation.doc The external page node metadatas
 	 * @response.representation.200.qname {http://www.example.com}courseNodeVO
-   * @response.representation.200.mediaType application/xml, application/json
-   * @response.representation.200.doc The course node metadatas
-   * @response.representation.200.example {@link org.olat.restapi.support.vo.Examples#SAMPLE_COURSENODEVO}
+	 * @response.representation.200.mediaType application/xml, application/json
+	 * @response.representation.200.doc The course node metadatas
+	 * @response.representation.200.example {@link org.olat.restapi.support.vo.Examples#SAMPLE_COURSENODEVO}
 	 * @response.representation.401.doc The roles of the authenticated user are not sufficient
-   * @response.representation.404.doc The course or parentNode not found
+	 * @response.representation.404.doc The course or parentNode not found
 	 * @param courseId The course resourceable's id
 	 * @param parentNodeId The node's id which will be the parent of this assessment
 	 * @param position The node's position relative to its sibling nodes (optional)
@@ -1274,14 +1273,14 @@ public class CourseElementWebService extends AbstractCourseNodeWebService {
 	/**
 	 * Attaches an external page building block.
 	 * @response.representation.mediaType application/x-www-form-urlencoded
-   * @response.representation.doc The external page node metadatas
+	 * @response.representation.doc The external page node metadatas
 	 * @response.representation.200.qname {http://www.example.com}courseNodeVO
-   * @response.representation.200.mediaType application/xml, application/json
-   * @response.representation.200.doc The course node metadatas
-   * @response.representation.200.example {@link org.olat.restapi.support.vo.Examples#SAMPLE_COURSENODEVO}
+	 * @response.representation.200.mediaType application/xml, application/json
+	 * @response.representation.200.doc The course node metadatas
+	 * @response.representation.200.example {@link org.olat.restapi.support.vo.Examples#SAMPLE_COURSENODEVO}
 	 * @response.representation.401.doc The roles of the authenticated user are not sufficient
-   * @response.representation.404.doc The course or parentNode not found
-   * @response.representation.409.doc The given URL is not valid
+	 * @response.representation.404.doc The course or parentNode not found
+	 * @response.representation.409.doc The given URL is not valid
 	 * @param courseId The course resourceable's id
 	 * @param parentNodeId The node's id which will be the parent of this assessment
 	 * @param position The node's position relative to its sibling nodes (optional)
@@ -1316,14 +1315,14 @@ public class CourseElementWebService extends AbstractCourseNodeWebService {
 	
 	/**
 	 * This attaches a Task file onto a given task element.
-   * @response.representation.mediaType application/x-www-form-urlencoded
-   * @response.representation.doc The task node metadatas
+	 * @response.representation.mediaType application/x-www-form-urlencoded
+	 * @response.representation.doc The task node metadatas
 	 * @response.representation.200.qname {http://www.example.com}courseNodeVO
-   * @response.representation.200.mediaType application/xml, application/json
-   * @response.representation.200.doc The course node metadatas
-   * @response.representation.200.example {@link org.olat.restapi.support.vo.Examples#SAMPLE_COURSENODEVO}
+	 * @response.representation.200.mediaType application/xml, application/json
+	 * @response.representation.200.doc The course node metadatas
+	 * @response.representation.200.example {@link org.olat.restapi.support.vo.Examples#SAMPLE_COURSENODEVO}
 	 * @response.representation.401.doc The roles of the authenticated user are not sufficient
-   * @response.representation.404.doc The course or parentNode not found
+	 * @response.representation.404.doc The course or parentNode not found
 	 * @param courseId The course resourceable id
 	 * @param nodeId The node's id which will be the parent of this task file
 	 * @param request The HTTP request
@@ -1340,15 +1339,15 @@ public class CourseElementWebService extends AbstractCourseNodeWebService {
 
 	/**
 	 * This attaches a Task file onto a given task element.
-   * @response.representation.mediaType application/x-www-form-urlencoded
-   * @response.representation.doc The task node metadatas
+	 * @response.representation.mediaType application/x-www-form-urlencoded
+	 * @response.representation.doc The task node metadatas
 	 * @response.representation.200.qname {http://www.example.com}courseNodeVO
-   * @response.representation.200.mediaType application/xml, application/json
-   * @response.representation.200.doc The course node metadatas
-   * @response.representation.200.example {@link org.olat.restapi.support.vo.Examples#SAMPLE_COURSENODEVO}
+	 * @response.representation.200.mediaType application/xml, application/json
+	 * @response.representation.200.doc The course node metadatas
+	 * @response.representation.200.example {@link org.olat.restapi.support.vo.Examples#SAMPLE_COURSENODEVO}
 	 * @response.representation.401.doc The roles of the authenticated user are not sufficient
-   * @response.representation.404.doc The course or parentNode not found
-   * @response.representation.406.doc The course node is not of type task
+	 * @response.representation.404.doc The course or parentNode not found
+	 * @response.representation.406.doc The course node is not of type task
 	 * @param courseId The course resourceable id
 	 * @param nodeId The node's id which will be the parent of this task file
 	 * @param request The HTTP request
@@ -1380,7 +1379,7 @@ public class CourseElementWebService extends AbstractCourseNodeWebService {
 			reader = new MultipartReader(request);
 			String filename = reader.getValue("filename", "task");
 			String taskFolderPath = TACourseNode.getTaskFolderPathRelToFolderRoot(course, node);
-			OlatRootFolderImpl taskFolder = new OlatRootFolderImpl(taskFolderPath, null);
+			VFSContainer taskFolder = VFSManager.olatRootContainer(taskFolderPath, null);
 			VFSLeaf singleFile = (VFSLeaf) taskFolder.resolve("/" + filename);
 			if (singleFile == null) {
 				singleFile = taskFolder.createChildLeaf("/" + filename);
@@ -1407,16 +1406,16 @@ public class CourseElementWebService extends AbstractCourseNodeWebService {
 	
 	/**
 	 * This attaches the run-time configuration onto a given task element.
-   * @response.representation.mediaType application/x-www-form-urlencoded
-   * @response.representation.doc The task node configuration
+	 * @response.representation.mediaType application/x-www-form-urlencoded
+	 * @response.representation.doc The task node configuration
 	 * @response.representation.200.qname {http://www.example.com}surveyConfigVO
-   * @response.representation.200.mediaType application/xml, application/json
-   * @response.representation.200.doc The task node configuration
-   * @response.representation.200.example {@link org.olat.restapi.support.vo.Examples#SAMPLE_COURSENODEVO}
+	 * @response.representation.200.mediaType application/xml, application/json
+	 * @response.representation.200.doc The task node configuration
+	 * @response.representation.200.example {@link org.olat.restapi.support.vo.Examples#SAMPLE_COURSENODEVO}
 	 * @response.representation.401.doc The roles of the authenticated user are not sufficient
-   * @response.representation.404.doc The course or task node not found
-   * @response.representation.406.doc The call is not applicable to task course node
-   * @response.representation.409.doc The configuration is not valid 
+	 * @response.representation.404.doc The course or task node not found
+	 * @response.representation.406.doc The call is not applicable to task course node
+	 * @response.representation.409.doc The configuration is not valid 
 	 * @param courseId
 	 * @param nodeId
 	 * @param enableAssignment
@@ -1488,16 +1487,16 @@ public class CourseElementWebService extends AbstractCourseNodeWebService {
 	
 	/**
 	 * This attaches the run-time configuration onto a given task element.
-   * @response.representation.mediaType application/x-www-form-urlencoded
-   * @response.representation.doc The task node configuration
+	 * @response.representation.mediaType application/x-www-form-urlencoded
+	 * @response.representation.doc The task node configuration
 	 * @response.representation.200.qname {http://www.example.com}surveyConfigVO
-   * @response.representation.200.mediaType application/xml, application/json
-   * @response.representation.200.doc The task node configuration
-   * @response.representation.200.example {@link org.olat.restapi.support.vo.Examples#SAMPLE_COURSENODEVO}
+	 * @response.representation.200.mediaType application/xml, application/json
+	 * @response.representation.200.doc The task node configuration
+	 * @response.representation.200.example {@link org.olat.restapi.support.vo.Examples#SAMPLE_COURSENODEVO}
 	 * @response.representation.401.doc The roles of the authenticated user are not sufficient
-   * @response.representation.404.doc The course or task node not found
-   * @response.representation.406.doc The call is not applicable to task course node
-   * @response.representation.409.doc The configuration is not valid 
+	 * @response.representation.404.doc The course or task node not found
+	 * @response.representation.406.doc The call is not applicable to task course node
+	 * @response.representation.409.doc The configuration is not valid 
 	 * @param courseId
 	 * @param nodeId
 	 * @param enableAssignment
@@ -1572,11 +1571,11 @@ public class CourseElementWebService extends AbstractCourseNodeWebService {
 	/**
 	 * Retrieves configuration of the task course node
 	 * @response.representation.200.qname {http://www.example.com}surveyConfigVO
-   * @response.representation.200.mediaType application/xml, application/json
-   * @response.representation.200.doc The course node configuration
-   * @response.representation.200.example {@link org.olat.restapi.support.vo.Examples#SAMPLE_COURSENODEVO}
+	 * @response.representation.200.mediaType application/xml, application/json
+	 * @response.representation.200.doc The course node configuration
+	 * @response.representation.200.example {@link org.olat.restapi.support.vo.Examples#SAMPLE_COURSENODEVO}
 	 * @response.representation.401.doc The roles of the authenticated user are not sufficient
-   * @response.representation.404.doc The course or task node not found
+	 * @response.representation.404.doc The course or task node not found
 	 * @param courseId
 	 * @param nodeId
 	 * @return the task course node configuration
@@ -1586,12 +1585,15 @@ public class CourseElementWebService extends AbstractCourseNodeWebService {
 	@Produces({MediaType.APPLICATION_XML, MediaType.APPLICATION_JSON})
 	public Response getTaskConfiguration(@PathParam("courseId") Long courseId, @PathParam("nodeId") String nodeId,
 			@Context HttpServletRequest httpRequest) {
-		if(!isAuthor(httpRequest)) {
+		ICourse course = CoursesWebService.loadCourse(courseId);
+		if(course == null) {
+			return Response.serverError().status(Status.NOT_FOUND).build();
+		}
+		if(!isAuthorEditor(course, httpRequest)) {
 			return Response.serverError().status(Status.UNAUTHORIZED).build();
 		}
-		
+
 		TaskConfigVO config = new TaskConfigVO();
-		ICourse course = CoursesWebService.loadCourse(courseId);
 		CourseNode courseNode = getParentNode(course, nodeId);
 		ModuleConfiguration moduleConfig = courseNode.getModuleConfiguration();
 		//build configuration with fallback to default values
@@ -1657,16 +1659,16 @@ public class CourseElementWebService extends AbstractCourseNodeWebService {
 	
 	/**
 	 * This attaches the run-time configuration onto a given survey element.
-   * @response.representation.mediaType application/x-www-form-urlencoded
-   * @response.representation.doc The test node configuration
+	 * @response.representation.mediaType application/x-www-form-urlencoded
+	 * @response.representation.doc The test node configuration
 	 * @response.representation.200.qname {http://www.example.com}surveyConfigVO
-   * @response.representation.200.mediaType application/xml, application/json
-   * @response.representation.200.doc The survey node configuration
-   * @response.representation.200.example {@link org.olat.restapi.support.vo.Examples#SAMPLE_COURSENODEVO}
+	 * @response.representation.200.mediaType application/xml, application/json
+	 * @response.representation.200.doc The survey node configuration
+	 * @response.representation.200.example {@link org.olat.restapi.support.vo.Examples#SAMPLE_COURSENODEVO}
 	 * @response.representation.401.doc The roles of the authenticated user are not sufficient
-   * @response.representation.404.doc The course or survey node not found
-   * @response.representation.406.doc The call is not applicable to survey course node
-   * @response.representation.409.doc The configuration is not valid 
+	 * @response.representation.404.doc The course or survey node not found
+	 * @response.representation.406.doc The call is not applicable to survey course node
+	 * @response.representation.409.doc The configuration is not valid 
 	 * @param courseId
 	 * @param nodeId
 	 * @param allowCancel
@@ -1698,16 +1700,16 @@ public class CourseElementWebService extends AbstractCourseNodeWebService {
 	
 	/**
 	 * This attaches the run-time configuration onto a given survey element.
-   * @response.representation.mediaType application/x-www-form-urlencoded
-   * @response.representation.doc The test node configuration
+	 * @response.representation.mediaType application/x-www-form-urlencoded
+	 * @response.representation.doc The test node configuration
 	 * @response.representation.200.qname {http://www.example.com}surveyConfigVO
-   * @response.representation.200.mediaType application/xml, application/json
-   * @response.representation.200.doc The survey node configuration
-   * @response.representation.200.example {@link org.olat.restapi.support.vo.Examples#SAMPLE_COURSENODEVO}
+	 * @response.representation.200.mediaType application/xml, application/json
+	 * @response.representation.200.doc The survey node configuration
+	 * @response.representation.200.example {@link org.olat.restapi.support.vo.Examples#SAMPLE_COURSENODEVO}
 	 * @response.representation.401.doc The roles of the authenticated user are not sufficient
-   * @response.representation.404.doc The course or survey node not found
-   * @response.representation.406.doc The call is not applicable to survey course node
-   * @response.representation.409.doc The configuration is not valid 
+	 * @response.representation.404.doc The course or survey node not found
+	 * @response.representation.406.doc The call is not applicable to survey course node
+	 * @response.representation.409.doc The configuration is not valid 
 	 * @param courseId
 	 * @param nodeId
 	 * @param allowCancel
@@ -1743,11 +1745,11 @@ public class CourseElementWebService extends AbstractCourseNodeWebService {
 	/**
 	 * Retrieves configuration of the survey course node
 	 * @response.representation.200.qname {http://www.example.com}surveyConfigVO
-   * @response.representation.200.mediaType application/xml, application/json
-   * @response.representation.200.doc The course node configuration
-   * @response.representation.200.example {@link org.olat.restapi.support.vo.Examples#SAMPLE_COURSENODEVO}
+	 * @response.representation.200.mediaType application/xml, application/json
+	 * @response.representation.200.doc The course node configuration
+	 * @response.representation.200.example {@link org.olat.restapi.support.vo.Examples#SAMPLE_COURSENODEVO}
 	 * @response.representation.401.doc The roles of the authenticated user are not sufficient
-   * @response.representation.404.doc The course or survey node not found
+	 * @response.representation.404.doc The course or survey node not found
 	 * @param courseId
 	 * @param nodeId
 	 * @return survey course node configuration
@@ -1757,12 +1759,15 @@ public class CourseElementWebService extends AbstractCourseNodeWebService {
 	@Produces({MediaType.APPLICATION_XML, MediaType.APPLICATION_JSON})
 	public Response getSurveyConfiguration(@PathParam("courseId") Long courseId, @PathParam("nodeId") String nodeId,
 			@Context HttpServletRequest httpRequest) {
-		if(!isAuthor(httpRequest)) {
+		ICourse course = CoursesWebService.loadCourse(courseId);
+		if(course == null) {
+			return Response.serverError().status(Status.NOT_FOUND).build();
+		}
+		if(!isAuthorEditor(course, httpRequest)) {
 			return Response.serverError().status(Status.UNAUTHORIZED).build();
 		}
 
 		SurveyConfigVO config = new SurveyConfigVO();
-		ICourse course = CoursesWebService.loadCourse(courseId);
 		CourseNode courseNode = getParentNode(course, nodeId);
 		ModuleConfiguration moduleConfig = courseNode.getModuleConfiguration();
 		//build configuration with fallback to default values
@@ -1785,16 +1790,16 @@ public class CourseElementWebService extends AbstractCourseNodeWebService {
 	
 	/**
 	 * This attaches the run-time configuration onto a given test element.
-   * @response.representation.mediaType application/x-www-form-urlencoded
-   * @response.representation.doc The test node configuration
+	 * @response.representation.mediaType application/x-www-form-urlencoded
+	 * @response.representation.doc The test node configuration
 	 * @response.representation.200.qname {http://www.example.com}testConfigVO
-   * @response.representation.200.mediaType application/xml, application/json
-   * @response.representation.200.doc The test node configuration
-   * @response.representation.200.example {@link org.olat.restapi.support.vo.Examples#SAMPLE_COURSENODEVO}
+	 * @response.representation.200.mediaType application/xml, application/json
+	 * @response.representation.200.doc The test node configuration
+	 * @response.representation.200.example {@link org.olat.restapi.support.vo.Examples#SAMPLE_COURSENODEVO}
 	 * @response.representation.401.doc The roles of the authenticated user are not sufficient
-   * @response.representation.404.doc The course or test node not found
-   * @response.representation.406.doc The call is not applicable to test course node
-   * @response.representation.409.doc The configuration is not valid 
+	 * @response.representation.404.doc The course or test node not found
+	 * @response.representation.406.doc The call is not applicable to test course node
+	 * @response.representation.409.doc The configuration is not valid 
 	 * @param courseId
 	 * @param nodeId
 	 * @param allowCancel
@@ -1845,16 +1850,16 @@ public class CourseElementWebService extends AbstractCourseNodeWebService {
 	
 	/**
 	 * This attaches the run-time configuration onto a given test element.
-   * @response.representation.mediaType application/x-www-form-urlencoded
-   * @response.representation.doc The test node configuration
+	 * @response.representation.mediaType application/x-www-form-urlencoded
+	 * @response.representation.doc The test node configuration
 	 * @response.representation.200.qname {http://www.example.com}testConfigVO
-   * @response.representation.200.mediaType application/xml, application/json
-   * @response.representation.200.doc The test node configuration
-   * @response.representation.200.example {@link org.olat.restapi.support.vo.Examples#SAMPLE_COURSENODEVO}
+	 * @response.representation.200.mediaType application/xml, application/json
+	 * @response.representation.200.doc The test node configuration
+	 * @response.representation.200.example {@link org.olat.restapi.support.vo.Examples#SAMPLE_COURSENODEVO}
 	 * @response.representation.401.doc The roles of the authenticated user are not sufficient
-   * @response.representation.404.doc The course or test node not found
-   * @response.representation.406.doc The call is not applicable to test course node
-   * @response.representation.409.doc The configuration is not valid 
+	 * @response.representation.404.doc The course or test node not found
+	 * @response.representation.406.doc The call is not applicable to test course node
+	 * @response.representation.409.doc The configuration is not valid 
 	 * @param courseId
 	 * @param nodeId
 	 * @param allowCancel
@@ -1910,11 +1915,11 @@ public class CourseElementWebService extends AbstractCourseNodeWebService {
 	/**
 	 * Retrieves configuration of the test course node
 	 * @response.representation.200.qname {http://www.example.com}testConfigVO
-   * @response.representation.200.mediaType application/xml, application/json
-   * @response.representation.200.doc The course node configuration
-   * @response.representation.200.example {@link org.olat.restapi.support.vo.Examples#SAMPLE_COURSENODEVO}
+	 * @response.representation.200.mediaType application/xml, application/json
+	 * @response.representation.200.doc The course node configuration
+	 * @response.representation.200.example {@link org.olat.restapi.support.vo.Examples#SAMPLE_COURSENODEVO}
 	 * @response.representation.401.doc The roles of the authenticated user are not sufficient
-   * @response.representation.404.doc The course or test node not found
+	 * @response.representation.404.doc The course or test node not found
 	 * @param courseId
 	 * @param nodeId
 	 * @return test course node configuration

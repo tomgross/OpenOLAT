@@ -40,9 +40,12 @@ import org.apache.http.util.EntityUtils;
 import org.junit.Assert;
 import org.junit.Test;
 import org.olat.basesecurity.GroupRoles;
+import org.olat.basesecurity.OrganisationService;
 import org.olat.core.commons.persistence.DB;
 import org.olat.core.id.Identity;
-import org.olat.core.util.FileUtils;
+import org.olat.core.id.Organisation;
+import org.apache.logging.log4j.Logger;
+import org.olat.core.logging.Tracing;
 import org.olat.core.util.vfs.VFSContainer;
 import org.olat.core.util.vfs.VFSItem;
 import org.olat.core.util.vfs.VFSLeaf;
@@ -53,7 +56,7 @@ import org.olat.repository.manager.RepositoryEntryRelationDAO;
 import org.olat.restapi.support.vo.FileVO;
 import org.olat.restapi.support.vo.LinkVO;
 import org.olat.test.JunitTestHelper;
-import org.olat.test.OlatJerseyTestCase;
+import org.olat.test.OlatRestTestCase;
 import org.springframework.beans.factory.annotation.Autowired;
 
 /**
@@ -62,10 +65,14 @@ import org.springframework.beans.factory.annotation.Autowired;
  * @author srosse, stephane.rosse@frentix.com, http://www.frentix.com
  *
  */
-public class SharedFolderTest extends OlatJerseyTestCase {
+public class SharedFolderTest extends OlatRestTestCase {
+	
+	private static final Logger log = Tracing.createLoggerFor(SharedFolderTest.class);
 	
 	@Autowired
 	private DB dbInstance;
+	@Autowired
+	private OrganisationService organisationService;
 	@Autowired
 	private RepositoryEntryRelationDAO repositoryEntryRelationDao;
 	
@@ -81,7 +88,8 @@ public class SharedFolderTest extends OlatJerseyTestCase {
 		Assert.assertTrue(conn.login("administrator", "openolat"));
 		
 		Identity owner = JunitTestHelper.createAndPersistIdentityAsRndUser("shared-owner-");
-		RepositoryEntry sharedFolder = new SharedFolderHandler().createResource(owner, "Shared 1", "A shared folder", null, Locale.ENGLISH);
+		Organisation defOrganisation = organisationService.getDefaultOrganisation();
+		RepositoryEntry sharedFolder = new SharedFolderHandler().createResource(owner, "Shared 1", "A shared folder", null, defOrganisation, Locale.ENGLISH);
 		VFSContainer container = SharedFolderManager.getInstance().getNamedSharedFolder(sharedFolder, true);
 		copyFileInResourceFolder(container, "portrait.jpg", "1_");
 		
@@ -90,8 +98,7 @@ public class SharedFolderTest extends OlatJerseyTestCase {
 		HttpResponse response = conn.execute(method);
 		Assert.assertEquals(200, response.getStatusLine().getStatusCode());
 		
-		InputStream body = response.getEntity().getContent();
-		List<LinkVO> links = parseLinkArray(body);
+		List<LinkVO> links = parseLinkArray(response.getEntity());
 		Assert.assertNotNull(links);
 		Assert.assertEquals(1, links.size());
 		Assert.assertTrue(links.get(0).getHref().contains("1_portrait.jpg"));
@@ -108,7 +115,8 @@ public class SharedFolderTest extends OlatJerseyTestCase {
 	@Test
 	public void putDirectories_owner() throws IOException, URISyntaxException {
 		Identity owner = JunitTestHelper.createAndPersistIdentityAsRndUser("shared-owner-");
-		RepositoryEntry sharedFolder = new SharedFolderHandler().createResource(owner, "Shared 2", "A shared folder", null, Locale.ENGLISH);
+		Organisation defOrganisation = organisationService.getDefaultOrganisation();
+		RepositoryEntry sharedFolder = new SharedFolderHandler().createResource(owner, "Shared 2", "A shared folder", null, defOrganisation, Locale.ENGLISH);
 		VFSContainer container = SharedFolderManager.getInstance().getNamedSharedFolder(sharedFolder, true);
 		copyFileInResourceFolder(container, "portrait.jpg", "2_");
 		
@@ -142,7 +150,8 @@ public class SharedFolderTest extends OlatJerseyTestCase {
 		Assert.assertTrue(conn.login("administrator", "openolat"));
 		
 		Identity owner = JunitTestHelper.createAndPersistIdentityAsRndUser("shared-owner-");
-		RepositoryEntry sharedFolder = new SharedFolderHandler().createResource(owner, "Shared 2", "Shared files", null, Locale.ENGLISH);
+		Organisation defOrganisation = organisationService.getDefaultOrganisation();
+		RepositoryEntry sharedFolder = new SharedFolderHandler().createResource(owner, "Shared 2", "Shared files", null, defOrganisation, Locale.ENGLISH);
 		VFSContainer container = SharedFolderManager.getInstance().getNamedSharedFolder(sharedFolder, true);
 		copyFileInResourceFolder(container, "portrait.jpg", "2_");
 		
@@ -151,12 +160,74 @@ public class SharedFolderTest extends OlatJerseyTestCase {
 		HttpResponse response = conn.execute(method);
 		Assert.assertEquals(200, response.getStatusLine().getStatusCode());
 
-		InputStream body = response.getEntity().getContent();
-		List<FileVO> links = parseFileArray(body);
+		List<FileVO> links = parseFileArray(response.getEntity());
 		
 		Assert.assertNotNull(links);
 		Assert.assertEquals(1, links.size());
 		Assert.assertTrue(links.get(0).getHref().contains("2_portrait.jpg"));
+
+		conn.shutdown();
+	}
+	
+	/**
+	 * GET for directory but a little deeper.
+	 * 
+	 * @throws IOException
+	 * @throws URISyntaxException
+	 */
+	@Test
+	public void getFolders_deep() throws IOException, URISyntaxException {
+		RestConnection conn = new RestConnection();
+		Assert.assertTrue(conn.login("administrator", "openolat"));
+		
+		Identity owner = JunitTestHelper.createAndPersistIdentityAsRndUser("shared-owner-");
+		Organisation defOrganisation = organisationService.getDefaultOrganisation();
+		RepositoryEntry sharedFolder = new SharedFolderHandler().createResource(owner, "Shared 5", "Shared files", null, defOrganisation, Locale.ENGLISH);
+		VFSContainer container = SharedFolderManager.getInstance().getNamedSharedFolder(sharedFolder, true);
+		VFSContainer firstContainer = container.createChildContainer("First");
+		VFSContainer secondContainer = firstContainer.createChildContainer("Second");
+		VFSContainer thirdContainer = secondContainer.createChildContainer("Third");
+		copyFileInResourceFolder(thirdContainer, "portrait.jpg", "2_");
+		
+		URI uri = UriBuilder.fromUri(getFolderURI(sharedFolder)).path("files")
+				.path("First").path("Second").build();
+		HttpGet method = conn.createGet(uri, MediaType.APPLICATION_JSON, true);
+		HttpResponse response = conn.execute(method);
+		Assert.assertEquals(200, response.getStatusLine().getStatusCode());
+
+		List<FileVO> links = parseFileArray(response.getEntity());
+		Assert.assertNotNull(links);
+		Assert.assertEquals(1, links.size());
+		Assert.assertEquals("Third", links.get(0).getTitle());
+
+		conn.shutdown();
+	}
+	
+	/**
+	 * GET for directory but a little deeper.
+	 * 
+	 * @throws IOException
+	 * @throws URISyntaxException
+	 */
+	@Test
+	public void getFolders_notFound() throws IOException, URISyntaxException {
+		RestConnection conn = new RestConnection();
+		Assert.assertTrue(conn.login("administrator", "openolat"));
+		
+		Identity owner = JunitTestHelper.createAndPersistIdentityAsRndUser("shared-owner-");
+		Organisation defOrganisation = organisationService.getDefaultOrganisation();
+		RepositoryEntry sharedFolder = new SharedFolderHandler().createResource(owner, "Shared 5", "Shared files", null, defOrganisation, Locale.ENGLISH);
+		VFSContainer container = SharedFolderManager.getInstance().getNamedSharedFolder(sharedFolder, true);
+		VFSContainer firstContainer = container.createChildContainer("First");
+		VFSContainer secondContainer = firstContainer.createChildContainer("Second");
+		VFSContainer thirdContainer = secondContainer.createChildContainer("Third");
+		copyFileInResourceFolder(thirdContainer, "portrait.jpg", "2_");
+		
+		URI uri = UriBuilder.fromUri(getFolderURI(sharedFolder)).path("files")
+				.path("First").path("Second").path("Trois").build();
+		HttpGet method = conn.createGet(uri, MediaType.APPLICATION_JSON, true);
+		HttpResponse response = conn.execute(method);
+		Assert.assertEquals(404, response.getStatusLine().getStatusCode());
 
 		conn.shutdown();
 	}
@@ -171,7 +242,8 @@ public class SharedFolderTest extends OlatJerseyTestCase {
 	public void putFiles_owner() throws IOException, URISyntaxException {
 		//create a shared folder
 		Identity owner = JunitTestHelper.createAndPersistIdentityAsRndUser("shared-owner-");
-		RepositoryEntry sharedFolder = new SharedFolderHandler().createResource(owner, "Shared 2", "Shared files", null, Locale.ENGLISH);
+		Organisation defOrganisation = organisationService.getDefaultOrganisation();
+		RepositoryEntry sharedFolder = new SharedFolderHandler().createResource(owner, "Shared 2", "Shared files", null, defOrganisation, Locale.ENGLISH);
 		VFSContainer container = SharedFolderManager.getInstance().getNamedSharedFolder(sharedFolder, true);
 		copyFileInResourceFolder(container, "certificate.pdf", "2_");
 		
@@ -208,7 +280,8 @@ public class SharedFolderTest extends OlatJerseyTestCase {
 		//a shared folder with a participant
 		Identity owner = JunitTestHelper.createAndPersistIdentityAsRndUser("shared-owner-");
 		Identity participant = JunitTestHelper.createAndPersistIdentityAsRndUser("shared-part-");
-		RepositoryEntry sharedFolder = new SharedFolderHandler().createResource(owner, "Shared 2", "Shared files", null, Locale.ENGLISH);
+		Organisation defOrganisation = organisationService.getDefaultOrganisation();
+		RepositoryEntry sharedFolder = new SharedFolderHandler().createResource(owner, "Shared 2", "Shared files", null, defOrganisation, Locale.ENGLISH);
 		VFSContainer container = SharedFolderManager.getInstance().getNamedSharedFolder(sharedFolder, true);
 		copyFileInResourceFolder(container, "portrait.jpg", "3_");
 		repositoryEntryRelationDao.addRole(participant, sharedFolder, GroupRoles.participant.name());
@@ -224,8 +297,7 @@ public class SharedFolderTest extends OlatJerseyTestCase {
 		HttpResponse response = conn.execute(method);
 		Assert.assertEquals(200, response.getStatusLine().getStatusCode());
 
-		InputStream body = response.getEntity().getContent();
-		List<FileVO> links = parseFileArray(body);
+		List<FileVO> links = parseFileArray(response.getEntity());
 		
 		Assert.assertNotNull(links);
 		Assert.assertEquals(1, links.size());
@@ -254,7 +326,8 @@ public class SharedFolderTest extends OlatJerseyTestCase {
 		//a shared folder with a participant
 		Identity owner = JunitTestHelper.createAndPersistIdentityAsRndUser("shared-owner-");
 		Identity participant = JunitTestHelper.createAndPersistIdentityAsRndUser("shared-part-");
-		RepositoryEntry sharedFolder = new SharedFolderHandler().createResource(owner, "Shared 5", "Shared files", null, Locale.ENGLISH);
+		Organisation defOrganisation = organisationService.getDefaultOrganisation();
+		RepositoryEntry sharedFolder = new SharedFolderHandler().createResource(owner, "Shared 5", "Shared files", null, defOrganisation, Locale.ENGLISH);
 		VFSContainer container = SharedFolderManager.getInstance().getNamedSharedFolder(sharedFolder, true);
 		copyFileInResourceFolder(container, "portrait.jpg", "5_");
 		repositoryEntryRelationDao.addRole(participant, sharedFolder, GroupRoles.participant.name());
@@ -283,12 +356,15 @@ public class SharedFolderTest extends OlatJerseyTestCase {
 			.build();
 	}
 	
-	private void copyFileInResourceFolder(VFSContainer container, String filename, String prefix) throws IOException {
-		InputStream pageStream = SharedFolderTest.class.getResourceAsStream(filename);
+	private void copyFileInResourceFolder(VFSContainer container, String filename, String prefix)
+	throws IOException {
 		VFSLeaf item = container.createChildLeaf(prefix + filename);
-		OutputStream outStream = item.getOutputStream(false);
-		IOUtils.copy(pageStream, outStream);
-		FileUtils.closeSafely(pageStream);
-		FileUtils.closeSafely(outStream);
+		try(InputStream pageStream = SharedFolderTest.class.getResourceAsStream(filename);
+				OutputStream outStream = item.getOutputStream(false)) {
+			IOUtils.copy(pageStream, outStream);
+		} catch(IOException e) {
+			log.error("", e);
+			Assert.fail();
+		}
 	}
 }

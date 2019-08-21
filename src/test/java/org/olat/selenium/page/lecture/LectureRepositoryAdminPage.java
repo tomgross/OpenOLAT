@@ -19,13 +19,10 @@
  */
 package org.olat.selenium.page.lecture;
 
-import java.util.List;
-
 import org.olat.selenium.page.course.CoursePageFragment;
 import org.olat.selenium.page.graphene.OOGraphene;
 import org.openqa.selenium.By;
 import org.openqa.selenium.WebDriver;
-import org.openqa.selenium.WebElement;
 
 /**
  * 
@@ -45,18 +42,6 @@ public class LectureRepositoryAdminPage {
 		By adminBy = By.cssSelector("div.o_sel_repo_lectures_admin");
 		OOGraphene.waitElement(adminBy, browser);
 		return this;
-	}
-	
-	public LectureRepositorySettingsPage settings() {
-		By enableBy = By.xpath("//label/input[@name='lecture.admin.enabled' and @value='on']");
-		List<WebElement> enableEls = browser.findElements(enableBy);
-		if(enableEls.isEmpty()) {
-			By settingBy = By.xpath("//div[contains(@class,'o_sel_repo_lectures_admin')]//a[contains(@onclick,'repo.settings')]");
-			browser.findElement(settingBy).click();
-			OOGraphene.waitBusy(browser);
-			OOGraphene.waitElement(enableBy, browser);
-		}
-		return new LectureRepositorySettingsPage(browser);
 	}
 	
 	public LectureRepositoryAdminListPage lectureList() {
@@ -82,9 +67,7 @@ public class LectureRepositoryAdminPage {
 	 */
 	public CoursePageFragment clickToolbarRootCrumb() {
 		OOGraphene.closeBlueMessageWindow(browser);
-		By toolbarBackBy = By.xpath("//li[contains(@class,'o_breadcrumb_back')]/following-sibling::li/a");
-		browser.findElement(toolbarBackBy).click();
-		OOGraphene.waitBusy(browser);
+		OOGraphene.clickBreadcrumbBack(browser);
 		return new CoursePageFragment(browser);
 	}
 

@@ -26,8 +26,8 @@
 
 package org.olat.core.commons.modules.bc;
 
-import org.olat.core.util.vfs.VFSContainer;
-import org.olat.core.util.vfs.version.FolderVersioningConfigurator;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 
 /**
  * Initial Date:  18.12.2002
@@ -38,7 +38,7 @@ public class FolderConfig {
 
 	// briefcase configuration default parameters
 	/** LIMITULKB_DEFAULT configuration default value */
-	private static final long LIMITULKB_DEFAULT = 20 * 1024;
+	private static final long LIMITULKB_DEFAULT = 20 * 1024l;
 	/** QUOTAKB_DEFAULT configuration default value */
 	private static final int QUOTAKB_DEFAULT = 20 * 1024;
 	/** MAXZIPMB_DEFAULT configuration default value */
@@ -67,7 +67,6 @@ public class FolderConfig {
 	private static final String META_DIR = "/.meta";
 	private static final String TMP_DIR = "/tmp";
 	private static final String VERSION_DIR = "/.version";
-	private static FolderVersioningConfigurator versioningConfigurator;
 	private static boolean sendDocumentToExtern;
 	private static boolean sendDocumentLinkOnly;
 	
@@ -83,7 +82,6 @@ public class FolderConfig {
 	private static String userHomePages = USERHOMEPAGES_DEFAULT;
 	private static String repositoryHome = REPOSITORY_DEFAULT;
 	private static String resourcesHome = RESOURCES_DEFAULT;
-	private static boolean ePortfolioAddEnabled;
 
 	/** CONFIG_KEY_FOLDERPATH configuration key */
 	public static final String CONFIG_KEY_FOLDERPATH = "folderpath";
@@ -173,6 +171,10 @@ public class FolderConfig {
 	public static String getCanonicalRoot() {
 		return folderRoot;
 	}
+	
+	public static Path getCanonicalRootPath() {
+		return Paths.get(folderRoot);
+	}
 
 	/**
 	 * Returns canonical tmp dir.
@@ -180,6 +182,10 @@ public class FolderConfig {
 	 */
 	public static String getCanonicalTmpDir() {
 		return getCanonicalRoot() + TMP_DIR;
+	}
+	
+	public static Path getCanonicalTmpPath() {
+		return Paths.get(getCanonicalRoot(), TMP_DIR);
 	}
 	
 	/**
@@ -282,11 +288,19 @@ public class FolderConfig {
 		return getCanonicalRoot() + META_DIR;
 	}
 	
+	public static Path getCanonicalMetaRootPath() {
+		return Paths.get(getCanonicalRoot(), META_DIR);
+	}
+	
 	/**
 	 * @return the canonical path to the version root directory
 	 */
 	public static String getCanonicalVersionRoot() {
 		return getCanonicalRoot() + VERSION_DIR;
+	}
+	
+	public static Path getCanonicalVersionRootPath() {
+		return Paths.get(getCanonicalRoot(), VERSION_DIR);
 	}
 
 	/**

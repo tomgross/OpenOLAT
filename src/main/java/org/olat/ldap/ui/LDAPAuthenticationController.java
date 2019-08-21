@@ -22,7 +22,6 @@ package org.olat.ldap.ui;
 import java.util.List;
 import java.util.Locale;
 
-import org.olat.admin.user.delete.service.UserDeletionManager;
 import org.olat.basesecurity.AuthHelper;
 import org.olat.basesecurity.BaseSecurityModule;
 import org.olat.core.commons.persistence.DB;
@@ -42,7 +41,7 @@ import org.olat.core.id.Identity;
 import org.olat.core.id.context.ContextEntry;
 import org.olat.core.id.context.StateEntry;
 import org.olat.core.logging.OLATRuntimeException;
-import org.olat.core.logging.OLog;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.StringHelper;
 import org.olat.core.util.UserSession;
@@ -64,7 +63,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 
 public class LDAPAuthenticationController extends AuthenticationController implements Activateable2 {
 	
-	private static final OLog log = Tracing.createLoggerFor(LDAPAuthenticationController.class);
+	private static final Logger log = Tracing.createLoggerFor(LDAPAuthenticationController.class);
 	
 	public static final String PROVIDER_LDAP = "LDAP";
 	
@@ -164,7 +163,7 @@ public class LDAPAuthenticationController extends AuthenticationController imple
 			if (loginModule.isLoginBlocked(login)) {
 				// do not proceed when already blocked
 				showError("login.blocked", loginModule.getAttackPreventionTimeoutMin().toString());
-				getLogger().audit("Login attempt on already blocked login for " + login + ". IP::" + ureq.getHttpReq().getRemoteAddr(), null);
+				getLogger().info(Tracing.M_AUDIT, "Login attempt on already blocked login for " + login + ". IP::" + ureq.getHttpReq().getRemoteAddr());
 				return;
 			}
 			authenticatedIdentity = ldapLoginManager.authenticate(login, pass, ldapError);
@@ -203,7 +202,7 @@ public class LDAPAuthenticationController extends AuthenticationController imple
 			// Still not found? register for hacking attempts
 			if (authenticatedIdentity == null) {
 				if (loginModule.registerFailedLoginAttempt(login)) {
-					logAudit("Too many failed login attempts for " + login + ". Login blocked. IP::" + ureq.getHttpReq().getRemoteAddr(), null);
+					logAudit("Too many failed login attempts for " + login + ". Login blocked. IP::" + ureq.getHttpReq().getRemoteAddr());
 					showError("login.blocked", loginModule.getAttackPreventionTimeoutMin().toString());
 				} else {
 					showError("login.error", ldapError.get());
@@ -228,7 +227,7 @@ public class LDAPAuthenticationController extends AuthenticationController imple
 				// accept disclaimer first
 				
 				removeAsListenerAndDispose(disclaimerCtr);
-				disclaimerCtr = new DisclaimerController(ureq, getWindowControl());
+				disclaimerCtr = new DisclaimerController(ureq, getWindowControl(), authenticatedIdentity, false);
 				listenTo(disclaimerCtr);
 				
 				removeAsListenerAndDispose(cmc);
@@ -291,7 +290,7 @@ public class LDAPAuthenticationController extends AuthenticationController imple
 			int loginStatus = AuthHelper.doLogin(authIdentity, myProvider, ureq);
 			if (loginStatus == AuthHelper.LOGIN_OK) {
 				//update last login date and register active user
-				UserDeletionManager.getInstance().setIdentityAsActiv(authIdentity);
+				userDeletionManager.setIdentityAsActiv(authIdentity);
 			} else if (loginStatus == AuthHelper.LOGIN_NOTAVAILABLE){
 				DispatcherModule.redirectToServiceNotAvailable( ureq.getHttpResp() );
 			} else {

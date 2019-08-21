@@ -29,12 +29,22 @@
 	#o_main_toolbar,
 	#jsMath_PrintWarning,
 	.o_segments,
+	.o_table_toolbar,
+	.o_breadcrumb,
+	.o_bookmark,
 	.o_noti,
 	.o_opener,
 	.o_hide,
 	.o_noprint { 
 		display: none !important;
 	} 
+	
+	/* Do not use bootstrap size width. It is too small for landscape layout */
+	.o_container_offcanvas {
+		max-width: 100%;
+		margin-left: 5px;
+		margin-right: 5px;
+	}
 
 	/* Page breaks */	
 	.o_print_break_avoid {
@@ -125,7 +135,16 @@
 		.ui-slider-handle {
 			-webkit-print-color-adjust: exact;
 			color-adjust: exact;
+		}
+	}
+	.o_has_value.ui-slider.ui-slider-horizontal.ui-widget-content {
+		.ui-slider-handle {
 			background-color: $o-slider-handler-background-color !important;
+		}
+	}
+	.o_no_value.ui-slider.ui-slider-horizontal.ui-widget-content {
+		.ui-slider-handle {
+			border: none !important
 		}
 	}
 	

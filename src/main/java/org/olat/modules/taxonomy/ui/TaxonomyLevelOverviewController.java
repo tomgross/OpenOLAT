@@ -106,7 +106,7 @@ public class TaxonomyLevelOverviewController extends BasicController implements 
 			return competencesCtrl.getInitialComponent();
 		});
 		
-		tabPane.addTab(translate("taxonomy.level.relations"),  uureq -> {
+		tabPane.addTab(translate("taxonomy.level.relations"), uureq -> {
 			relationsCtrl = new TaxonomyLevelRelationsController(uureq, getWindowControl(), taxonomyLevel);
 			listenTo(relationsCtrl);
 			return relationsCtrl.getInitialComponent();

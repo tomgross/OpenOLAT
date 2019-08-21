@@ -30,6 +30,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
+import org.apache.logging.log4j.Logger;
 import org.olat.core.commons.controllers.linkchooser.CustomLinkTreeModel;
 import org.olat.core.commons.fullWebApp.LayoutMain3ColsController;
 import org.olat.core.commons.fullWebApp.popup.BaseFullWebappPopupLayoutFactory;
@@ -49,7 +50,6 @@ import org.olat.core.id.Identity;
 import org.olat.core.id.OLATResourceable;
 import org.olat.core.logging.AssertException;
 import org.olat.core.logging.OLATRuntimeException;
-import org.olat.core.logging.OLog;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.StringHelper;
 import org.olat.core.util.Util;
@@ -108,6 +108,8 @@ import org.olat.util.logging.activity.LoggingResourceable;
  * @author BPS (<a href="http://www.bps-system.de/">BPS Bildungsportal Sachsen GmbH</a>)
  */
 public class STCourseNode extends AbstractAccessableCourseNode implements CalculatedAssessableCourseNode {
+	
+	private static final Logger log = Tracing.createLoggerFor(STCourseNode.class);
 
 	private static final long serialVersionUID = -7460670977531082040L;
 	private static final String TYPE = "st";
@@ -135,21 +137,15 @@ public class STCourseNode extends AbstractAccessableCourseNode implements Calcul
 	public TabbableController createEditController(UserRequest ureq, WindowControl wControl, BreadcrumbPanel stackPanel, ICourse course, UserCourseEnvironment euce) {
 		updateModuleConfigDefaults(false);
 		// only the precondition "access" can be configured till now
-		STCourseNodeEditController childTabCntrllr = new STCourseNodeEditController(ureq, wControl, this, course.getCourseFolderContainer(),
-				course.getEditorTreeModel(), euce);
-		NodeEditController nodeEditController = new NodeEditController(ureq, wControl, course.getEditorTreeModel(), course, euce, childTabCntrllr);
+		STCourseNodeEditController childTabCntrllr = new STCourseNodeEditController(ureq, wControl, this, course, euce);
+		CourseNode chosenNode = course.getEditorTreeModel().getCourseNode(euce.getCourseEditorEnv().getCurrentCourseNodeId());
+		NodeEditController nodeEditController = new NodeEditController(ureq, wControl, course.getEditorTreeModel(), course, chosenNode, euce, childTabCntrllr);
 		// special case: listen to st edit controller, must be informed when the short title is being modified
 		nodeEditController.addControllerListener(childTabCntrllr); 
 		return nodeEditController;
 
 	}
 
-	/**
-	 * @see org.olat.course.nodes.CourseNode#createNodeRunConstructionResult(org.olat.core.gui.UserRequest,
-	 *      org.olat.core.gui.control.WindowControl,
-	 *      org.olat.course.run.userview.UserCourseEnvironment,
-	 *      org.olat.course.run.userview.NodeEvaluation)
-	 */
 	@Override
 	public NodeRunConstructionResult createNodeRunConstructionResult(UserRequest ureq, WindowControl wControl,
 			final UserCourseEnvironment userCourseEnv, NodeEvaluation ne, String nodecmd) {
@@ -170,14 +166,14 @@ public class STCourseNode extends AbstractAccessableCourseNode implements Calcul
 			}
 			DeliveryOptions deliveryOptions = (DeliveryOptions)getModuleConfiguration().get(SPEditController.CONFIG_KEY_DELIVERYOPTIONS);
 			OLATResourceable ores = OresHelper.createOLATResourceableInstance(CourseModule.class, userCourseEnv.getCourseEnvironment().getCourseResourceableId());
+			Long courseRepoKey = userCourseEnv.getCourseEnvironment().getCourseGroupManager().getCourseEntry().getKey();
 			SinglePageController spCtr = new SinglePageController(ureq, wControl, userCourseEnv.getCourseEnvironment().getCourseFolderContainer(),
 					relPath, allowRelativeLinks.booleanValue(), null, ores, deliveryOptions,
-					userCourseEnv.getCourseEnvironment().isPreview());
+					userCourseEnv.getCourseEnvironment().isPreview(), courseRepoKey);
 			// check if user is allowed to edit the page in the run view
 			CourseGroupManager cgm = userCourseEnv.getCourseEnvironment().getCourseGroupManager();
-			boolean hasEditRights = (cgm.isIdentityCourseAdministrator(ureq.getIdentity()) 
-					|| cgm.hasRight(ureq.getIdentity(),CourseRights.RIGHT_COURSEEDITOR))
-					|| (getModuleConfiguration().getBooleanSafe(SPEditController.CONFIG_KEY_ALLOW_COACH_EDIT, false) && cgm.isIdentityCourseCoach(ureq.getIdentity()));
+			boolean hasEditRights = userCourseEnv.isAdmin() || cgm.hasRight(ureq.getIdentity(),CourseRights.RIGHT_COURSEEDITOR)
+					|| (getModuleConfiguration().getBooleanSafe(SPEditController.CONFIG_KEY_ALLOW_COACH_EDIT, false) && userCourseEnv.isCoach());
 			
 			if (hasEditRights) {
 				spCtr.allowPageEditing();
@@ -633,11 +629,6 @@ public class STCourseNode extends AbstractAccessableCourseNode implements Calcul
 		//do nothing
 	}
 
-	/**
-	 * @see org.olat.course.nodes.AssessableCourseNode#getDetailsEditController(org.olat.core.gui.UserRequest,
-	 *      org.olat.core.gui.control.WindowControl,
-	 *      org.olat.course.run.userview.UserCourseEnvironment)
-	 */
 	@Override
 	public Controller getDetailsEditController(UserRequest ureq, WindowControl wControl, BreadcrumbPanel stackPanel,
 			UserCourseEnvironment coachCourseEnv, UserCourseEnvironment assessedUserCourseEnv) {
@@ -645,13 +636,21 @@ public class STCourseNode extends AbstractAccessableCourseNode implements Calcul
 	}
 
 	@Override
+	public boolean hasResultsDetails() {
+		return false;
+	}
+
+	@Override
+	public Controller getResultDetailsController(UserRequest ureq, WindowControl wControl,
+			UserCourseEnvironment assessedUserCourseEnv) {
+		return null;
+	}
+
+	@Override
 	public String getDetailsListView(UserCourseEnvironment userCourseEnvironment) {
 		return null;
 	}
 
-	/**
-	 * @see org.olat.course.nodes.AssessableCourseNode#getDetailsListViewHeaderKey()
-	 */
 	@Override
 	public String getDetailsListViewHeaderKey() {
 		throw new OLATRuntimeException(STCourseNode.class, "Details not available in ST nodes", null);
@@ -814,9 +813,9 @@ public class STCourseNode extends AbstractAccessableCourseNode implements Calcul
 		List<ConditionExpression> retVal;
 		List<ConditionExpression> parentsConditions = super.getConditionExpressions();
 		if (parentsConditions.size() > 0) {
-			retVal = new ArrayList<ConditionExpression>(parentsConditions);
+			retVal = new ArrayList<>(parentsConditions);
 		} else {
-			retVal = new ArrayList<ConditionExpression>();
+			retVal = new ArrayList<>();
 		}
 		// init passedExpression and scoreExpression
 		getScoreCalculator();
@@ -857,21 +856,15 @@ public class STCourseNode extends AbstractAccessableCourseNode implements Calcul
 	public String getDisplayOption() {
 		// if nothing other defined, view content only, when a structure node
 		// contains an html-file.
-		OLog logger = Tracing.createLoggerFor(this.getClass());
 		ModuleConfiguration config = getModuleConfiguration();
 		String thisConf = super.getDisplayOption(false);
 		if (thisConf == null
 				&& config.get(STCourseNodeEditController.CONFIG_KEY_DISPLAY_TYPE).equals(STCourseNodeEditController.CONFIG_VALUE_DISPLAY_FILE)) {
-			if (logger.isDebug()) {
-				logger.debug("no displayOption set, use default (content)", thisConf);
-			}
+			log.debug("no displayOption set, use default (content) {}",  thisConf);
+
 			return CourseNode.DISPLAY_OPTS_CONTENT;
 		}
-		if (logger.isDebug()) {
-			logger.debug("there is a config set, use it: " + thisConf);
-		}
+		log.debug("there is a config set, use it: {}",  thisConf);
 		return super.getDisplayOption();
 	}
-
-	
 }

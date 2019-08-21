@@ -31,6 +31,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
 
+import org.apache.logging.log4j.Logger;
 import org.olat.core.commons.fullWebApp.LayoutMain3ColsController;
 import org.olat.core.gui.UserRequest;
 import org.olat.core.gui.components.Component;
@@ -68,7 +69,6 @@ import org.olat.core.gui.control.winmgr.JSCommand;
 import org.olat.core.id.OLATResourceable;
 import org.olat.core.id.context.BusinessControlFactory;
 import org.olat.core.id.context.ContextEntry;
-import org.olat.core.logging.OLog;
 import org.olat.core.logging.Tracing;
 import org.olat.core.logging.activity.ActionType;
 import org.olat.core.logging.activity.CourseLoggingAction;
@@ -92,6 +92,7 @@ import org.olat.course.CourseFactory;
 import org.olat.course.DisposedCourseRestartController;
 import org.olat.course.ICourse;
 import org.olat.course.assessment.AssessmentModeManager;
+import org.olat.course.folder.CourseContainerOptions;
 import org.olat.course.groupsandrights.CourseGroupManager;
 import org.olat.course.nodes.CourseNode;
 import org.olat.course.nodes.CourseNodeConfiguration;
@@ -187,7 +188,7 @@ public class EditorMainController extends MainLayoutBasicController implements G
 	private final OLATResourceable ores;
 	private RepositoryEntry repoEntry;
 	
-	private static final OLog log = Tracing.createLoggerFor(EditorMainController.class);
+	private static final Logger log = Tracing.createLoggerFor(EditorMainController.class);
 	private final static String RELEASE_LOCK_AT_CATCH_EXCEPTION = "Must release course lock since an exception occured in " + EditorMainController.class;
 	
 	@Autowired
@@ -941,16 +942,28 @@ public class EditorMainController extends MainLayoutBasicController implements G
 			position = atTheEnd ? -1 : 0;
 		} else {
 			CourseEditorTreeNode selectedNode = cetm.getCourseEditorNodeById(targetNodeId);
+			CourseEditorTreeNode droppedEditorNode = cetm.getCourseEditorNodeById(droppedNodeId);
 			if(selectedNode.getParent() == null) {
 				//root node
 				insertParent = selectedNode;
 				position = 0;
 			} else {
+				boolean currentlySiblings = droppedEditorNode != null && droppedEditorNode.getParent() != null
+						&& droppedEditorNode.getParent().getIdent().equals(selectedNode.getParent().getIdent());
+
 				insertParent = course.getEditorTreeModel().getCourseEditorNodeById(selectedNode.getParent().getIdent());
-				position = 0;
+				int currentDroppedNodePosition;
+				for(currentDroppedNodePosition=insertParent.getChildCount(); currentDroppedNodePosition-->0; ) {
+					if(insertParent.getChildAt(currentDroppedNodePosition).getIdent().equals(droppedNode.getIdent())) {
+						break;
+					}
+				}
+
 				for(position=insertParent.getChildCount(); position-->0; ) {
 					if(insertParent.getChildAt(position).getIdent().equals(selectedNode.getIdent())) {
-						position++;
+						if(!currentlySiblings || currentDroppedNodePosition > position) {
+							position++;
+						}
 						break;
 					}
 				}
@@ -1131,7 +1144,7 @@ public class EditorMainController extends MainLayoutBasicController implements G
 		removeAsListenerAndDispose(multiSPChooserCtr);
 		removeAsListenerAndDispose(cmc);
 		
-		VFSContainer rootContainer = course.getCourseEnvironment().getCourseFolderContainer();
+		VFSContainer rootContainer = course.getCourseEnvironment().getCourseFolderContainer(CourseContainerOptions.withoutElements());
 		CourseEditorTreeNode selectedNode = (CourseEditorTreeNode)menuTree.getSelectedNode();
 		multiSPChooserCtr = new MultiSPController(ureq, getWindowControl(), rootContainer, ores, selectedNode);
 		listenTo(multiSPChooserCtr);

@@ -17,7 +17,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <meta http-equiv="Content-type" content="text/html; charset=utf-8" />
 ## <!-- IE cache -->
-<script type="text/javascript">
+<script>
 /* <![CDATA[ */ 
 var o_info = new Object();
 o_info.initialPageLoadFinished = false;
@@ -26,6 +26,7 @@ o_info.o_winid = '$o_winid';
 o_info.uriprefix="$r.relWinLink()";
 o_info.bc="$o_bc";
 o_info.businessPath="";
+o_info.startBusinessPath="$startBusinessPath";
 o_info.serverUri="$o_serverUri"
 ## Legacy form-dirty message displayed by o2cl()
 o_info.dirty_form = "$r.escapeDoubleQuotes($r.translate("form.dirty"))";
@@ -39,6 +40,10 @@ o_info.i18n_noresponse = "$r.escapeDoubleQuotes($r.translate("server.no.response
 o_info.i18n_topnav_more = "$r.escapeDoubleQuotes($r.translate("header.topnav.more"))";
 o_info.oo_noresponse_title = "$r.escapeJavaScript($r.translateWithPackage("org.olat.login","timeout.title"))";
 o_info.oo_noresponse = "$r.escapeJavaScript($r.translateWithPackage("org.olat.login","timeout.message"))";
+## edu-sharing
+#if($edusharingEnabled)
+o_info.edusharing_enabled = true;
+#end
 ## Initialize zindex manager
 o_info.zseed = 0;
 #if($enforceTopFrame)
@@ -53,6 +58,7 @@ function o_start() {
 	## Needed to identify if call like Ext.onRead() makes any sense (often not the case in AJAX mode)
 	o_info.initialPageLoadFinished = true;
 }
+
 function o_mathjax(fct_success) {
 	window.MathJax = {
 		extensions: ["jsMath2jax.js"],
@@ -90,16 +96,19 @@ $!analytics
 
 /* ]]> */
 </script>
+<script>
+/* <![CDATA[ */ 
+try{
+	if(o_info.startBusinessPath != null && o_info.startBusinessPath.length > 0
+			&& window.history && !(typeof window.history === "undefined") && window.history.pushState) {
+		window.history.pushState('', document.title, o_info.startBusinessPath);
+		o_info.startBusinessPath = null;
+	}
+} catch(e) { }
+/* ]]> */
+</script>
 ## jQuery libraries
-<!--[if lt IE 9]>
-	<script type="text/javascript" src='$r.staticLink("js/jquery/jquery-1.9.1.min.js")'></script>
-## HTML5 Shim and Respond.js IE8 support of HTML5 elements and media queries - required by bootstrap
-	<script type="text/javascript" src='$r.staticLink("js/html5shiv/html5shiv.min.js")'></script>
-	<script type="text/javascript" src='$r.staticLink("js/respond/respond.min.js")'></script>
-<![endif]-->
-<!--[if gte IE 9]><!-->
-<script type="text/javascript" src='$r.staticLink("js/jquery/jquery-2.1.3.min.js")'></script>
-<!--<![endif]-->
+<script type="text/javascript" src='$r.staticLink("js/jquery/jquery-3.3.1.min.js")'></script>
 #if ($r.available("guidebug"))
 	## Are compressed as js/js.plugins.min.js in non-debug mode
 	<script type="text/javascript" src='$r.staticLink("js/jquery/periodic/jquery.periodic.js")'></script>
@@ -110,6 +119,7 @@ $!analytics
 	<script type="text/javascript" src='$r.staticLink("js/tinymce4/tinymce/jquery.tinymce.min.js")'></script>
 	<script type="text/javascript" src='$r.staticLink("js/functions.js")'></script>
 	<script type="text/javascript" src='$r.staticLink("js/jquery/transit/jquery.transit.js")'></script>
+	<script type="text/javascript" src='$r.staticLink("js/iframeResizer/iframeResizer.min.js")'></script>
 	## Bootstrap js
 	##<script type="text/javascript" src='$r.staticLink("bootstrap/javascripts/bootstrap/affix.js")'></script>
 	<script type="text/javascript" src='$r.staticLink("bootstrap/javascripts/bootstrap/alert.js")'></script>
@@ -128,6 +138,7 @@ $!analytics
 #else
 	<script type="text/javascript" src='$r.staticLink("js/js.plugins.min.js")'></script>
 	<script type="text/javascript" src='$r.staticLink("movie/player.min.js")'></script>
+	<script type="text/javascript" src='$r.staticLink("js/iframeResizer/iframeResizer.min.js")'></script>
 #end
 
 #if($r.available("guidebug"))
@@ -170,41 +181,15 @@ jQuery(function() {
 $r.render("jsCssRawHtmlHeader", "pre-theme")
 ## 2) CSS theme inclusion, theme JavaScript, favicons and appicons
 $theme.renderHTMLHeaderElements()
- ## 3) Insert IE specific class names
-<!--[if IE 7]>
-<script type="text/javascript">
-	jQuery(document).ready(function() { jQuery('body').addClass('o_browser_ie7'); });
-</script>
-<![endif]-->
-<!--[if IE 8]>
-<script type="text/javascript">
-	jQuery(document).ready(function() { jQuery('body').addClass('o_browser_ie8'); });
-</script>
-<![endif]-->
-<!--[if IE 9]>
-<script type="text/javascript">
-	jQuery(document).ready(function() { jQuery('body').addClass('o_browser_ie9'); });
-</script>
-<![endif]-->
-## Detect IE 10
-<script type="text/javascript">
-	if (Function('/*@cc_on return document.documentMode===10@*/')()){
-		jQuery(document).ready(function() { jQuery('body').addClass('o_browser_ie10'); });
-	}
-</script>
-## 4) IE 8 fix for icon fonts (see: http://stackoverflow.com/questions/9809351/ie8-css-font-face-fonts-only-working-for-before-content-on-over-and-sometimes/10557782#10557782)
-<!--[if IE 8]>
-<script type="text/javascript">
-jQuery(document).ready(function() {
-  var style;
-  style = jQuery('<style type="text/css">:before,:after{content:none !important}</style>');
-  jQuery('head').append(style);
-  return setTimeout((function() {
-    return style.remove();
-  }), 0);
-});
-</script>
-<![endif]-->
+## 3) Insert IE specific class names
+	<script type="text/javascript">
+        jQuery(document).ready(function() {
+            /* Detect IE below version 11 */
+            if (window.navigator.userAgent.indexOf('MSIE ') > 0) {
+                jQuery('body').addClass('o_browser_ie10');
+            }
+        });
+	</script>
 ## 5) Dynamic overriding of CSS rules
 $r.render("jsCssRawHtmlHeader", "post-theme")
 ## 6) Add user font size (id o_fontSize_css used to place on demand css)
@@ -229,7 +214,7 @@ $r.renderHeaderIncludes()
 <title>$r.translate("page.appname") - $r.translate("page.title")</title>
 </head>
 
-<body onload="o_start();" id="o_body" class="#foreach($cssClass in $bodyCssClasses)$cssClass #end o_lang_$r.getLanguageCode()">
+<body onload="o_start();" id="o_body" class="#foreach($cssClass in $bodyCssClasses)$cssClass #end o_lang_$r.getLanguageCode() $pageSizeCss">
 <div id="o_bg"></div>
 ## if in debug mode, it is a invisible component which is only visible by wrapping debug information around all other
 ## components.
@@ -301,8 +286,21 @@ $r.renderForce("development")
 				$r.render("topnavComponent")
 			#end	
 		</div>
+		
 	</div>
 </div>
+<div id="o_container_page_width_toggler">
+	<div id="o_go_standard_width" title="$r.translateInAttribute("content.width.standard")" class="btn btn-primary btn-xs o_noprint"><i class="o_icon o_icon_width_collapse o_icon-fw"> </i></div>
+	<div id="o_go_full_width" title="$r.translateInAttribute("content.width.standard")" class="btn btn-default btn-xs o_noprint"><i class="o_icon o_icon_width_expand o_icon-fw"> </i></div>
+</div>
+<div><script type="text/javascript">
+/* <![CDATA[ */ 
+	jQuery(document).ready(function() {
+		jQuery("#o_go_standard_width").click(function() { OPOL.setContainerFullWidth(0); $r.openNoResponseJavaScriptCommand("width.standard")); });
+		jQuery("#o_go_full_width").click(function() { OPOL.setContainerFullWidth(1); $r.openNoResponseJavaScriptCommand("width.full")); });
+	});
+/* ]]> */
+</script></div>
 #end
 ## ---- END #o_navbar ---
 $r.render("stickymsg")

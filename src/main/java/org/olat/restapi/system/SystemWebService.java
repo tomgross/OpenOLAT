@@ -19,7 +19,7 @@
  */
 package org.olat.restapi.system;
 
-import static org.olat.restapi.security.RestSecurityHelper.isAdminOrSystem;
+import static org.olat.restapi.security.RestSecurityHelper.getRoles;
 
 import java.lang.management.ManagementFactory;
 import java.lang.management.OperatingSystemMXBean;
@@ -34,11 +34,16 @@ import javax.ws.rs.core.MediaType;
 import javax.ws.rs.core.Response;
 
 import org.olat.core.CoreSpringFactory;
+import org.olat.core.gui.UserRequest;
 import org.olat.core.helpers.Settings;
+import org.olat.core.id.Roles;
 import org.olat.core.util.StringHelper;
 import org.olat.core.util.WebappHelper;
+import org.olat.restapi.security.RestApiLoginFilter;
+import org.olat.restapi.security.RestSecurityHelper;
 import org.olat.restapi.system.vo.EnvironmentInformationsVO;
 import org.olat.restapi.system.vo.ReleaseInfosVO;
+import org.springframework.stereotype.Component;
 
 /**
  * 
@@ -48,15 +53,12 @@ import org.olat.restapi.system.vo.ReleaseInfosVO;
  * @author srosse, stephane.rosse@frentix.com, www.frentix.com
  */
 @Path("system")
+@Component
 public class SystemWebService {
-
-	public SystemWebService() {
-		//make Spring happy
-	}
 	
 	@Path("log")
 	public LogWebService getLogsWS(@Context HttpServletRequest request) {
-		if(!isAdminOrSystem(request)) {
+		if(!isAdminOrSystemAdmin(request)) {
 			return null;
 		}
 		return new LogWebService();
@@ -76,10 +78,9 @@ public class SystemWebService {
 	@Path("environment")
 	@Produces({MediaType.APPLICATION_XML, MediaType.APPLICATION_JSON})
 	public Response getEnvironnementXml(@Context HttpServletRequest request) {
-		if(!isAdminOrSystem(request)) {
+		if(!isAdminOrSystemAdmin(request)) {
 			return null;
 		}
-		
 		OperatingSystemMXBean os = ManagementFactory.getOperatingSystemMXBean();
 		RuntimeMXBean runtime = ManagementFactory.getRuntimeMXBean();
 		EnvironmentInformationsVO vo = new EnvironmentInformationsVO(os, runtime);
@@ -100,10 +101,10 @@ public class SystemWebService {
 	@Path("release")
 	@Produces({MediaType.APPLICATION_XML, MediaType.APPLICATION_JSON})
 	public Response getReleaseInfos(@Context HttpServletRequest request) {
-		if(!isAdminOrSystem(request)) {
+		if(!isAdminOrSystemAdmin(request)) {
 			return null;
 		}
-		
+
 		ReleaseInfosVO version = new ReleaseInfosVO();
 		if(StringHelper.containsNonWhitespace(WebappHelper.getRevisionNumber())) {
 			String v = WebappHelper.getRevisionNumber() + ":" + WebappHelper.getChangeSet();
@@ -120,7 +121,7 @@ public class SystemWebService {
 	
 	@Path("monitoring")
 	public MonitoringWebService getImplementedProbes(@Context HttpServletRequest request) {
-		if(!isMonitoringEnabled() && !isAdminOrSystem(request)) {
+		if(!isMonitoringEnabled() && !isAdminOrSystemAdmin(request)) {
 			return null;
 		}
 		return new MonitoringWebService();
@@ -128,7 +129,7 @@ public class SystemWebService {
 	
 	@Path("indexer")
 	public IndexerWebService getIndexer(@Context HttpServletRequest request) {
-		if(!isAdminOrSystem(request)) {
+		if(!isAdminOrSystemAdmin(request)) {
 			return null;
 		}
 		return new IndexerWebService();
@@ -136,7 +137,7 @@ public class SystemWebService {
 	
 	@Path("notifications")
 	public NotificationsAdminWebService getNotifications(@Context HttpServletRequest request) {
-		if(!isAdminOrSystem(request)) {
+		if(!isAdminOrSystemAdmin(request)) {
 			return null;
 		}
 		return new NotificationsAdminWebService();
@@ -145,5 +146,19 @@ public class SystemWebService {
 	private boolean isMonitoringEnabled() {
 		MonitoringModule module = CoreSpringFactory.getImpl(MonitoringModule.class);
 		return module.isEnabled();
+	}
+	
+	private boolean isAdminOrSystemAdmin(HttpServletRequest request) {
+		try {
+			Roles roles = getRoles(request);
+			if(roles.isAdministrator()) {
+				return true;
+			}
+			UserRequest ureq = (UserRequest)request.getAttribute(RestSecurityHelper.SEC_USER_REQUEST);
+			return ureq != null && ureq.getUserSession() != null
+					&& ureq.getUserSession().getEntry(RestApiLoginFilter.SYSTEM_MARKER) != null;
+		} catch (Exception e) {
+			return false;
+		}
 	}
 }

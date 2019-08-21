@@ -29,20 +29,23 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 
+import org.olat.basesecurity.BaseSecurity;
 import org.olat.basesecurity.GroupRoles;
-import org.olat.core.commons.modules.bc.meta.MetaInfo;
-import org.olat.core.commons.modules.bc.meta.tagged.MetaTagged;
+import org.olat.core.CoreSpringFactory;
 import org.olat.core.commons.services.notifications.Publisher;
 import org.olat.core.commons.services.notifications.Subscriber;
 import org.olat.core.commons.services.notifications.model.SubscriptionListItem;
+import org.olat.core.commons.services.vfs.VFSMetadata;
 import org.olat.core.gui.translator.Translator;
 import org.olat.core.id.Identity;
+import org.olat.core.id.Roles;
 import org.olat.core.id.context.BusinessControlFactory;
 import org.olat.core.util.Formatter;
 import org.olat.core.util.StringHelper;
 import org.olat.core.util.Util;
 import org.olat.core.util.io.SystemFileFilter;
 import org.olat.core.util.io.SystemFilenameFilter;
+import org.olat.core.util.vfs.VFSConstants;
 import org.olat.core.util.vfs.VFSContainer;
 import org.olat.core.util.vfs.VFSItem;
 import org.olat.course.CourseFactory;
@@ -52,6 +55,7 @@ import org.olat.course.nodes.CourseNode;
 import org.olat.course.nodes.GTACourseNode;
 import org.olat.course.nodes.gta.GTAManager;
 import org.olat.course.nodes.gta.GTAType;
+import org.olat.course.nodes.gta.IdentityMark;
 import org.olat.course.nodes.gta.Task;
 import org.olat.course.nodes.gta.TaskList;
 import org.olat.course.nodes.gta.TaskProcess;
@@ -69,8 +73,12 @@ import org.olat.modules.assessment.AssessmentEntry;
 import org.olat.modules.assessment.Role;
 import org.olat.modules.assessment.manager.AssessmentEntryDAO;
 import org.olat.repository.RepositoryEntry;
+import org.olat.repository.RepositoryEntryRelationType;
+import org.olat.repository.RepositoryManager;
 import org.olat.repository.RepositoryService;
+import org.olat.repository.model.RepositoryEntrySecurity;
 import org.olat.user.UserManager;
+import org.springframework.beans.factory.annotation.Autowired;
 
 /**
  * 
@@ -87,6 +95,7 @@ class GTANotifications {
 	private TaskList taskList;
 	private String header;
 	private String displayName;
+	private boolean markedOnly;
 	private GTACourseNode gtaNode;
 	private CourseEnvironment courseEnv;
 	private Calendar cal = Calendar.getInstance();
@@ -94,22 +103,24 @@ class GTANotifications {
 	private final Translator translator;
 	private final Formatter formatter;
 	
-	private final GTAManager gtaManager;
-	private final UserManager userManager;
-	private final RepositoryService repositoryService;
-	private final BusinessGroupService businessGroupService;
-	private final AssessmentEntryDAO courseNodeAssessmentDao;
+	@Autowired
+	private GTAManager gtaManager;
+	@Autowired
+	private UserManager userManager;
+	@Autowired
+	private BaseSecurity securityManager;
+	@Autowired
+	private RepositoryManager repositoryManager;
+	@Autowired
+	private RepositoryService repositoryService;
+	@Autowired
+	private BusinessGroupService businessGroupService;
+	@Autowired
+	private AssessmentEntryDAO courseNodeAssessmentDao;
 	
-	public GTANotifications(Subscriber subscriber, Locale locale, Date compareDate,
-			RepositoryService repositoryService, GTAManager gtaManager,
-			BusinessGroupService businessGroupService, UserManager userManager,
-			AssessmentEntryDAO courseNodeAssessmentDao) {
-		this.gtaManager = gtaManager;
-		this.userManager = userManager;
-		this.repositoryService = repositoryService;
-		this.businessGroupService = businessGroupService;
-		this.courseNodeAssessmentDao = courseNodeAssessmentDao;
-		
+	public GTANotifications(Subscriber subscriber, boolean markedOnly, Locale locale, Date compareDate) {
+		CoreSpringFactory.autowireObject(this);
+		this.markedOnly = markedOnly;
 		this.subscriber = subscriber;
 		this.compareDate = compareDate;
 		formatter = Formatter.getInstance(locale);
@@ -127,19 +138,27 @@ class GTANotifications {
 		if(GTAType.group.name().equals(gtaNode.getModuleConfiguration().getStringValue(GTACourseNode.GTASK_TYPE))) {
 			return translator.translate("notifications.group.header", new String[]{ displayName });
 		}
+		
+		if(markedOnly) {
+			return translator.translate("notifications.individual.favorite.header", new String[]{ displayName });
+		}
 		return translator.translate("notifications.individual.header", new String[]{ displayName });
 	}
 
 	public List<SubscriptionListItem> getItems() {
 		Publisher p = subscriber.getPublisher();
 		ICourse course = CourseFactory.loadCourse(p.getResId());
-		CourseNode node = course.getRunStructure().getNode(p.getSubidentifier());
-		RepositoryEntry entry = course.getCourseEnvironment().getCourseGroupManager().getCourseEntry();
-		if(entry.getRepositoryEntryStatus().isClosed() || entry.getRepositoryEntryStatus().isUnpublished()) {
+		String subIdentifier = p.getSubidentifier();
+		if(subIdentifier.startsWith("Marked::")) {
+			subIdentifier = subIdentifier.substring("Marked::".length(), subIdentifier.length());
+		}
+		if(!course.getCourseEnvironment().getCourseGroupManager().isNotificationsAllowed()) {
 			return Collections.emptyList();
 		}
 		
-		if(entry != null && node instanceof GTACourseNode) {
+		CourseNode node = course.getRunStructure().getNode(subIdentifier);
+		RepositoryEntry entry = course.getCourseEnvironment().getCourseGroupManager().getCourseEntry();
+		if(node instanceof GTACourseNode) {
 			gtaNode = (GTACourseNode)node;
 			displayName = entry.getDisplayname();
 			courseEnv = course.getCourseEnvironment();
@@ -148,19 +167,31 @@ class GTANotifications {
 			if(GTAType.group.name().equals(gtaNode.getModuleConfiguration().getStringValue(GTACourseNode.GTASK_TYPE))) {
 				createBusinessGroupsSubscriptionInfo(subscriber.getIdentity());
 			} else {
-				createIndividualSubscriptionInfo(subscriber.getIdentity());
+				Identity subscriberIdentity = subscriber.getIdentity();
+				Set<Long> marks = null;
+				if(markedOnly) {
+					List<IdentityMark> identityMarks = gtaManager.getMarks(entry, gtaNode, subscriberIdentity);
+					marks = new HashSet<>(identityMarks.size());
+					for(IdentityMark identityMark:identityMarks) {
+						if(identityMark.getParticipant() != null) {
+							marks.add(identityMark.getParticipant().getKey());
+						}
+					}
+				}
+				createIndividualSubscriptionInfo(subscriberIdentity, marks);
 			}
 		}
 		
 		return items;
 	}
 	
-	private void createIndividualSubscriptionInfo(Identity subscriberIdentity) {
+	private void createIndividualSubscriptionInfo(Identity subscriberIdentity, Set<Long> marks) {
 		RepositoryEntry entry = courseEnv.getCourseGroupManager().getCourseEntry();
-		List<String> roles = repositoryService.getRoles(subscriberIdentity, entry);
+		Roles roles = securityManager.getRoles(subscriberIdentity);
+		RepositoryEntrySecurity reSecurity = repositoryManager.isAllowed(subscriberIdentity, roles, entry);
 		
-		boolean owner = roles.contains(GroupRoles.owner.name());
-		boolean coach = roles.contains(GroupRoles.coach.name());
+		boolean owner = reSecurity.isOwner() || reSecurity.isEntryAdmin();
+		boolean coach = reSecurity.isCourseCoach() || reSecurity.isCurriculumCoach() || reSecurity.isGroupCoach();
 		if(owner || coach) {
 			Set<Identity> duplicateKiller = new HashSet<>();
 			List<Identity> assessableIdentities = new ArrayList<>();
@@ -176,7 +207,8 @@ class GTANotifications {
 			}
 			
 			for(Identity participant:participants) {
-				if(!duplicateKiller.contains(participant)) {
+				if(!duplicateKiller.contains(participant)
+						&& (marks == null || marks.contains(participant.getKey()))) {
 					assessableIdentities.add(participant);
 					duplicateKiller.add(participant);
 				}
@@ -184,9 +216,10 @@ class GTANotifications {
 			
 			boolean repoTutor = owner || (coachedGroups.isEmpty() && repositoryService.hasRole(subscriberIdentity, entry, GroupRoles.coach.name()));
 			if(repoTutor) {
-				List<Identity> courseParticipants = repositoryService.getMembers(entry, GroupRoles.participant.name());
+				List<Identity> courseParticipants = repositoryService.getMembers(entry, RepositoryEntryRelationType.entryAndCurriculums, GroupRoles.participant.name());
 				for(Identity participant:courseParticipants) {
-					if(!duplicateKiller.contains(participant)) {
+					if(!duplicateKiller.contains(participant)
+							&& (marks == null || marks.contains(participant.getKey()))) {
 						assessableIdentities.add(participant);
 						duplicateKiller.add(participant);
 					}
@@ -205,7 +238,8 @@ class GTANotifications {
 			}
 		}
 		
-		if(roles.contains(GroupRoles.participant.name())) {
+		boolean participant = reSecurity.isCourseParticipant() || reSecurity.isCurriculumParticipant() || reSecurity.isGroupParticipant();
+		if(participant) {
 			createIndividualSubscriptionInfo(subscriberIdentity, false);
 			Task task = gtaManager.getTask(subscriberIdentity, taskList);
 			if(isSolutionVisible(subscriberIdentity, null, task)) {
@@ -232,18 +266,18 @@ class GTANotifications {
 				File[] submissions = submitDirectory.listFiles(SystemFileFilter.FILES_ONLY);
 				if(submissions.length == 0) {
 					String[] params = new String[] {
-							getTaskName(task),		// {0}
-							displayName,				// {1}
-							fullName					// {2}
+							getTaskName(task),		// 0
+							displayName,			// 1
+							fullName				// 2
 					};
 					appendSubscriptionItem("notifications.submission.individual", params, assessedIdentity, submissionDate, coach);
 				} else {
 					for(File submission:submissions) {
 						String[] params = new String[] {
-								getTaskName(task),		// {0}
-								displayName,				// {1}
-								submission.getName(),	// {2}
-								fullName					// {3}
+								getTaskName(task),		// 0
+								displayName,			// 1
+								submission.getName(),	// 2
+								fullName				// 3
 						};
 						appendSubscriptionItemForFile("notifications.submission.individual.doc", params, assessedIdentity,
 								"[submit:0]", submission, submissionDate, coach);
@@ -260,7 +294,10 @@ class GTANotifications {
 		RepositoryEntry entry = courseEnv.getCourseGroupManager().getCourseEntry();
 
 		Membership membership = gtaManager.getMembership(subscriberIdentity, entry, gtaNode);
-		boolean owner = repositoryService.hasRole(subscriberIdentity, entry, GroupRoles.owner.name());
+		Roles roles = securityManager.getRoles(subscriberIdentity);
+		RepositoryEntrySecurity reSecurity = repositoryManager.isAllowed(subscriberIdentity, roles, entry);
+		
+		boolean owner = reSecurity.isOwner() || reSecurity.isEntryAdmin();
 		if(owner) {
 			List<BusinessGroup> groups = gtaManager.getBusinessGroups(gtaNode);
 			for(BusinessGroup group:groups) {
@@ -318,11 +355,11 @@ class GTANotifications {
 					for(File submission:submisssions) {
 						String author = getAuthor(submission, submitContainer);
 						String[] params = new String[] {
-								getTaskName(task),		// {0}
-								displayName,				// {1}
-								submission.getName(),		// {2}
-								author,					// {3}
-								group.getName()					// {3}
+								getTaskName(task),		// 0
+								displayName,			// 1
+								submission.getName(),	// 2
+								author,					// 3
+								group.getName()			// 4
 						};
 						appendSubscriptionItemForFile("notifications.submission.group.doc", params, group,
 								"[submit:0]", submission, submissionDate, coach);
@@ -748,7 +785,7 @@ class GTANotifications {
 	 */
 	private Task checkRevisionStep(Identity assessedIdentity, BusinessGroup assessedGroup, Task task) {
 		if(task != null) {
-			if(task != null && task.getTaskStatus() == TaskProcess.revision
+			if(task.getTaskStatus() == TaskProcess.revision
 					&& task.getRevisionsDueDate() != null
 					&& task.getRevisionsDueDate().compareTo(new Date()) < 0) {
 				//push to the next step
@@ -769,7 +806,7 @@ class GTANotifications {
 				if(task.getTaskStatus() == TaskProcess.solution || task.getTaskStatus() == TaskProcess.grading || task.getTaskStatus() == TaskProcess.graded) {
 					// step solution or beyond
 					return true;
-				} else if((task == null || task.getTaskStatus() == TaskProcess.assignment || task.getTaskStatus() == TaskProcess.submit
+				} else if((task.getTaskStatus() == TaskProcess.assignment || task.getTaskStatus() == TaskProcess.submit
 						|| task.getTaskStatus() == TaskProcess.review || task.getTaskStatus() == TaskProcess.correction
 						|| task.getTaskStatus() == TaskProcess.revision)
 						&& gtaNode.getModuleConfiguration().getBooleanSafe(GTACourseNode.GTASK_SAMPLE_SOLUTION_VISIBLE_ALL, false)) {
@@ -799,14 +836,13 @@ class GTANotifications {
 	private String getAuthor(File file, VFSContainer container) {
 		String author = null;
 		VFSItem item = container.resolve(file.getName());
-		if(item instanceof MetaTagged) {
-			MetaInfo info = ((MetaTagged)item).getMetaInfo();
-			if(info != null) {
-				String username = info.getAuthor();
-				if(username != null) {
-					author = userManager.getUserDisplayName(username);
-				}		
-			}
+		if(item.canMeta() == VFSConstants.YES) {
+			VFSMetadata info = item.getMetaInfo();
+			Identity identityKey = info.getAuthor();
+			if(identityKey != null) {
+				author = userManager.getUserDisplayName(identityKey);
+			}		
+
 		}
 		return author == null ? "" : author;
 	}

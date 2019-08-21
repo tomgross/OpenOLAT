@@ -20,18 +20,22 @@
 package org.olat.modules.video;
 
 import java.io.File;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
 
 import org.olat.NewControllerFactory;
 import org.olat.core.configuration.AbstractSpringModule;
 import org.olat.core.id.context.SiteContextEntryControllerCreator;
-import org.olat.core.logging.OLog;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.StringHelper;
 import org.olat.core.util.coordinate.CoordinatorManager;
 import org.olat.core.util.vfs.LocalFolderImpl;
 import org.olat.core.util.vfs.VFSContainer;
 import org.olat.modules.video.site.VideoSite;
+import org.olat.repository.handlers.RepositoryHandlerFactory;
+import org.olat.repository.handlers.VideoHandler;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -46,7 +50,7 @@ import org.springframework.stereotype.Service;
 @Service
 public class VideoModule extends AbstractSpringModule {
 
-	private static final OLog log = Tracing.createLoggerFor(VideoModule.class);
+	private static final Logger log = Tracing.createLoggerFor(VideoModule.class);
 	
 	private static final String VIDEO_ENABLED = "video.enabled";
 	private static final String VIDEOCOURSENODE_ENABLED = "video.coursenode.enabled";
@@ -59,6 +63,8 @@ public class VideoModule extends AbstractSpringModule {
 	private boolean enabled;
 	@Value("${video.coursenode.enabled:true}")
 	private boolean coursenodeEnabled;
+	@Value("${video.marker.styles}")
+	private String markersStyles;
 	// transcoding related configuration
 	@Value("${video.transcoding.enabled:false}")
 	private boolean transcodingEnabled;
@@ -78,6 +84,8 @@ public class VideoModule extends AbstractSpringModule {
 	private int[] transcodingResolutionsArr; //= new int[] { 1080,720,480,360 };
 	private Integer preferredDefaultResolution;// = new Integer(720);
 
+	@Autowired
+	private VideoHandler videoHandler;
 
 	@Autowired
 	public VideoModule(CoordinatorManager coordinatorManager) {
@@ -110,6 +118,8 @@ public class VideoModule extends AbstractSpringModule {
 
 	@Override
 	public void init() {
+		RepositoryHandlerFactory.registerHandler(this.videoHandler, 43);
+		
 		String enabledObj = getStringPropertyValue(VIDEO_ENABLED, true);
 		if(StringHelper.containsNonWhitespace(enabledObj)) {
 			enabled = "true".equals(enabledObj);
@@ -152,6 +162,23 @@ public class VideoModule extends AbstractSpringModule {
 		NewControllerFactory.getInstance().addContextEntryControllerCreator(VideoSite.class.getSimpleName(),
 				new SiteContextEntryControllerCreator(VideoSite.class));
 
+	}
+	
+	public List<String> getMarkerStyles() {
+		return stylesToList(markersStyles);
+	}
+	
+	private List<String> stylesToList(String styles) {
+		List<String> styleList = new ArrayList<>();
+		if(StringHelper.containsNonWhitespace(styles)) {
+			String[] styleArr = styles.split("[,]");
+			for(String style:styleArr) {
+				if(StringHelper.containsNonWhitespace(style)) {
+					styleList.add(style);
+				}
+			}
+		}
+		return styleList;
 	}
 
 	/**

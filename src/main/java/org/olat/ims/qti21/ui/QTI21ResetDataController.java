@@ -63,6 +63,7 @@ import org.olat.modules.assessment.Role;
 import org.olat.modules.assessment.model.AssessmentEntryStatus;
 import org.olat.modules.assessment.model.AssessmentRunStatus;
 import org.olat.repository.RepositoryEntry;
+import org.olat.repository.RepositoryEntryRelationType;
 import org.olat.repository.RepositoryService;
 import org.springframework.beans.factory.annotation.Autowired;
 
@@ -73,8 +74,6 @@ import org.springframework.beans.factory.annotation.Autowired;
  *
  */
 public class QTI21ResetDataController extends FormBasicController {
-	
-	private final Roles studentRoles = new Roles(false, false, false, false, false, false, false, false);
 
 	private final String[] onKeys = new String[]{ "on" };
 
@@ -134,7 +133,7 @@ public class QTI21ResetDataController extends FormBasicController {
 		
 		options = new ArchiveOptions();
 		if(asOptions.getGroup() == null && asOptions.getIdentities() == null) {
-			identities = repositoryService.getMembers(assessedEntry, GroupRoles.participant.name());
+			identities = repositoryService.getMembers(assessedEntry, RepositoryEntryRelationType.entryAndCurriculums, GroupRoles.participant.name());
 			options.setIdentities(identities);
 		} else if (asOptions.getIdentities() != null) {
 			identities = asOptions.getIdentities();
@@ -206,7 +205,7 @@ public class QTI21ResetDataController extends FormBasicController {
 			qtiService.deleteAssessmentTestSession(identities, testEntry, courseEntry, courseNode.getIdent());
 			for(Identity identity:identities) {
 				ScoreEvaluation scoreEval = new ScoreEvaluation(null, null, AssessmentEntryStatus.notStarted, null, Boolean.FALSE, 0.0d, AssessmentRunStatus.notStarted, null);
-				IdentityEnvironment ienv = new IdentityEnvironment(identity, studentRoles);
+				IdentityEnvironment ienv = new IdentityEnvironment(identity, Roles.userRoles());
 				UserCourseEnvironment uce = new UserCourseEnvironmentImpl(ienv, courseEnv);
 				testCourseNode.updateUserScoreEvaluation(scoreEval, uce, getIdentity(), false, Role.coach);
 				testCourseNode.updateCurrentCompletion(uce, getIdentity(), null, AssessmentRunStatus.notStarted, Role.coach);
@@ -229,7 +228,7 @@ public class QTI21ResetDataController extends FormBasicController {
 		try(FileOutputStream fileStream = new FileOutputStream(exportFile);
 			ZipOutputStream exportStream = new ZipOutputStream(fileStream)) {
 			
-			courseNode.archiveNodeData(getLocale(), course, archiveOptions, exportStream, "UTF-8");
+			courseNode.archiveNodeData(getLocale(), course, archiveOptions, exportStream, "", "UTF-8");
 		} catch (IOException e) {
 			logError("", e);
 		}

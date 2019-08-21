@@ -44,13 +44,10 @@ import org.olat.group.ui.NewBGController;
 import org.olat.repository.RepositoryEntry;
 import org.olat.repository.RepositoryEntryManagedFlag;
 import org.olat.repository.RepositoryManager;
+import org.springframework.beans.factory.annotation.Autowired;
 
 /**
- * Description:<br>
- * TODO: patrickb Class Description for MultiSelectColumnController
- * <P>
  * Initial Date: 15.06.2007 <br>
- * 
  * @author patrickb
  */
 public class GroupSelectionController extends FormBasicController {
@@ -65,6 +62,9 @@ public class GroupSelectionController extends FormBasicController {
 	private String[] groupNames;
 	private String[] groupKeys;
 	private boolean createEnable;
+	
+	@Autowired
+	private RepositoryManager repositoryManager;
 
 	// OpenOlat behavior ...
 	@Deprecated
@@ -79,7 +79,7 @@ public class GroupSelectionController extends FormBasicController {
 		this.courseGrpMngr = courseGrpMngr;
 		this.disableSelectionOfGroupsWithManagedMembersManagement = disableSelectionOfGroupsWithManagedMembersManagement;
 
-		RepositoryEntry re = RepositoryManager.getInstance().lookupRepositoryEntry(courseGrpMngr.getCourseResource(), false);
+		RepositoryEntry re = repositoryManager.lookupRepositoryEntry(courseGrpMngr.getCourseResource(), false);
 		createEnable = allowCreate && !RepositoryEntryManagedFlag.isManaged(re, RepositoryEntryManagedFlag.groups);
 		// unique names from list to array
 		loadNamesAndKeys();
@@ -108,7 +108,7 @@ public class GroupSelectionController extends FormBasicController {
 			// user wants to create a new group -> show group create form
 			removeAsListenerAndDispose(groupCreateCntrllr);
 			
-			RepositoryEntry re = RepositoryManager.getInstance().lookupRepositoryEntry(courseGrpMngr.getCourseResource(), false);
+			RepositoryEntry re = repositoryManager.lookupRepositoryEntry(courseGrpMngr.getCourseResource(), false);
 			groupCreateCntrllr = new NewBGController(ureq, getWindowControl(), re, true, null);
 			listenTo(groupCreateCntrllr);
 			
@@ -139,9 +139,6 @@ public class GroupSelectionController extends FormBasicController {
 		} 
 	}
 
-	/**
-	 * @see org.olat.core.gui.control.DefaultController#doDispose(boolean)
-	 */
 	@Override
 	protected void doDispose() {
 		//
@@ -174,7 +171,7 @@ public class GroupSelectionController extends FormBasicController {
 	}
 	
 	public List<String> getSelectedNames() {
-		List<String> selectedNames = new ArrayList<String>();
+		List<String> selectedNames = new ArrayList<>();
 		for(int i=0; i<groupKeys.length; i++) {
 			if(entrySelector.isSelected(i)) {
 				selectedNames.add(groupNames[i]);
@@ -187,7 +184,7 @@ public class GroupSelectionController extends FormBasicController {
 		Collection<String> selectedKeys = entrySelector.getSelectedKeys();
 		List<Long> keys = new ArrayList<>();
 		for(String selectedKey:selectedKeys) {
-			keys.add(new Long(selectedKey));
+			keys.add(Long.valueOf(selectedKey));
 		}
 		return keys;
 	}

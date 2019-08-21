@@ -41,6 +41,7 @@ import org.olat.basesecurity.BaseSecurity;
 import org.olat.basesecurity.BaseSecurityModule;
 import org.olat.basesecurity.GroupRoles;
 import org.olat.basesecurity.IdentityImpl;
+import org.olat.core.CoreSpringFactory;
 import org.olat.core.commons.persistence.DB;
 import org.olat.core.commons.persistence.DBFactory;
 import org.olat.core.id.Identity;
@@ -52,6 +53,7 @@ import org.olat.group.BusinessGroup;
 import org.olat.group.BusinessGroupService;
 import org.olat.portfolio.manager.EPFrontendManager;
 import org.olat.portfolio.manager.EPStructureManager;
+import org.olat.portfolio.manager.EPStructureManagerTest;
 import org.olat.portfolio.model.artefacts.AbstractArtefact;
 import org.olat.portfolio.model.structel.ElementType;
 import org.olat.portfolio.model.structel.PortfolioStructure;
@@ -105,7 +107,7 @@ public class UserDeletionManagerTest extends OlatTestCase {
 		PortfolioStructureMap map = epFrontendManager.createAndPersistPortfolioDefaultMap(identity, "A map to delete", "This map must be deleted");
 		Assert.assertNotNull(map);
 		//a template
-		PortfolioStructureMap template = epStructureManager.createPortfolioMapTemplate(identity, "A template to delete", "This template must be deleted");
+		PortfolioStructureMap template = EPStructureManagerTest.createPortfolioMapTemplate(identity, "A template to delete", "This template must be deleted");
 		epStructureManager.savePortfolioStructure(template);
 		//an artefact
 		AbstractArtefact artefact = epFrontendManager.createAndPersistArtefact(identity, "Forum");
@@ -119,7 +121,7 @@ public class UserDeletionManagerTest extends OlatTestCase {
 		RepositoryEntry course = JunitTestHelper.deployBasicCourse(identity);
 		dbInstance.commitAndCloseSession();
 		Assert.assertEquals(username, course.getInitialAuthor());
-		Assert.assertTrue(repositoryService.hasRole(identity, false, GroupRoles.owner.name()));
+		Assert.assertTrue(repositoryService.hasRoleExpanded(identity, GroupRoles.owner.name()));
 		
 		//delete the identity
 		userDeletionManager.deleteIdentity(identity, null);
@@ -145,7 +147,7 @@ public class UserDeletionManagerTest extends OlatTestCase {
 		Assert.assertFalse(isMember);
 		RepositoryEntry reloadedCourse = repositoryService.loadByKey(course.getKey());
 		Assert.assertFalse(reloadedCourse.getInitialAuthor().equals(username));
-		boolean isOwner = repositoryService.hasRole(identity, false, GroupRoles.owner.name());
+		boolean isOwner = repositoryService.hasRoleExpanded(identity, GroupRoles.owner.name());
 		Assert.assertFalse(isOwner);
 		
 		User deletedUser = deletedIdentity.getUser();
@@ -242,11 +244,13 @@ public class UserDeletionManagerTest extends OlatTestCase {
 		private final Identity identity;
 		private final CountDownLatch countDown;
 		private final List<Exception> exceptionHolder = new ArrayList<>();
+		private final UserDeletionManager userDeletionManager;
 		
 		public ActivThread(Identity identity, int maxLoop, CountDownLatch countDown) {
 			this.identity = identity;
 			this.maxLoop = maxLoop;
 			this.countDown = countDown;
+			userDeletionManager = CoreSpringFactory.getImpl(UserDeletionManager.class);
 		}
 		
 		@Override
@@ -255,7 +259,7 @@ public class UserDeletionManagerTest extends OlatTestCase {
 				sleep(10);
 				for (int i=0; i<maxLoop; i++) {
 					try {
-						UserDeletionManager.getInstance().setIdentityAsActiv(identity);
+						userDeletionManager.setIdentityAsActiv(identity);
 					} catch (Exception e) {
 						exceptionHolder.add(e);
 					} finally {

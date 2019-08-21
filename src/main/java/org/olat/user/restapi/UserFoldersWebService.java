@@ -21,7 +21,6 @@ package org.olat.user.restapi;
 
 import static org.olat.restapi.security.RestSecurityHelper.getIdentity;
 import static org.olat.restapi.security.RestSecurityHelper.getRoles;
-import static org.olat.restapi.security.RestSecurityHelper.isAdmin;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -42,23 +41,24 @@ import javax.ws.rs.core.Response;
 import javax.ws.rs.core.Response.Status;
 
 import org.olat.basesecurity.BaseSecurityManager;
+import org.olat.basesecurity.OrganisationRoles;
 import org.olat.collaboration.CollaborationTools;
 import org.olat.collaboration.CollaborationToolsFactory;
 import org.olat.core.CoreSpringFactory;
 import org.olat.core.commons.modules.bc.BriefcaseWebDAVProvider;
 import org.olat.core.commons.modules.bc.FolderConfig;
-import org.olat.core.commons.modules.bc.vfs.OlatRootFolderImpl;
 import org.olat.core.commons.services.notifications.NotificationsManager;
 import org.olat.core.commons.services.notifications.Subscriber;
+import org.olat.core.commons.services.vfs.restapi.VFSWebservice;
 import org.olat.core.id.Identity;
 import org.olat.core.id.IdentityEnvironment;
 import org.olat.core.id.Roles;
 import org.olat.core.util.nodes.INode;
 import org.olat.core.util.tree.Visitor;
 import org.olat.core.util.vfs.VFSContainer;
+import org.olat.core.util.vfs.VFSManager;
 import org.olat.core.util.vfs.callbacks.ReadOnlyCallback;
 import org.olat.core.util.vfs.callbacks.VFSSecurityCallback;
-import org.olat.core.util.vfs.restapi.VFSWebservice;
 import org.olat.course.CourseFactory;
 import org.olat.course.ICourse;
 import org.olat.course.nodes.BCCourseNode;
@@ -94,12 +94,13 @@ public class UserFoldersWebService {
 		Identity ureqIdentity = getIdentity(request);
 		if(identity.getKey().equals(ureqIdentity.getKey())) {
 			//private and public folder
-			VFSContainer myFodlers = new BriefcaseWebDAVProvider().getContainer(ureqIdentity);
+			Roles roles = getRoles(request);
+			VFSContainer myFodlers = new BriefcaseWebDAVProvider().getContainer(ureqIdentity, roles);
 			return new VFSWebservice(myFodlers);
 		} else {
 			//only public
 			String chosenUserFolderRelPath = FolderConfig.getUserHome(identity.getName()) + "/" + "public";
-			OlatRootFolderImpl rootFolder = new OlatRootFolderImpl(chosenUserFolderRelPath, null);
+			VFSContainer rootFolder = VFSManager.olatRootContainer(chosenUserFolderRelPath, null);
 			VFSSecurityCallback secCallback = new ReadOnlyCallback();
 			rootFolder.setLocalSecurityCallback(secCallback);
 			return new VFSWebservice(rootFolder);
@@ -168,9 +169,9 @@ public class UserFoldersWebService {
 		if(ureqIdentity == null) {
 			return Response.serverError().status(Status.UNAUTHORIZED).build();
 		} else if(!identity.getKey().equals(ureqIdentity.getKey())) {
-			if(isAdmin(httpRequest)) {
+			roles = BaseSecurityManager.getInstance().getRoles(identity);
+			if(isAdminOf(roles, httpRequest)) {
 				ureqIdentity = identity;
-				roles = BaseSecurityManager.getInstance().getRoles(identity);
 			} else {
 				return Response.serverError().status(Status.UNAUTHORIZED).build();
 			}
@@ -178,8 +179,8 @@ public class UserFoldersWebService {
 			roles = getRoles(httpRequest);
 		}
 
-		final Map<Long,Long> groupNotified = new HashMap<Long,Long>();
-		final Map<Long,Collection<String>> courseNotified = new HashMap<Long,Collection<String>>();
+		final Map<Long,Long> groupNotified = new HashMap<>();
+		final Map<Long,Collection<String>> courseNotified = new HashMap<>();
 		NotificationsManager man = NotificationsManager.getInstance();
 		{//collect subscriptions
 			List<String> notiTypes = Collections.singletonList("FolderModule");
@@ -199,7 +200,7 @@ public class UserFoldersWebService {
 			}
 		}
 
-		final List<FolderVO> folderVOs = new ArrayList<FolderVO>();
+		final List<FolderVO> folderVOs = new ArrayList<>();
 		final IdentityEnvironment ienv = new IdentityEnvironment(ureqIdentity, roles);
 		for(Map.Entry<Long, Collection<String>> e:courseNotified.entrySet()) {
 			final Long courseKey = e.getKey();
@@ -218,35 +219,6 @@ public class UserFoldersWebService {
 				}
 			}, new VisibleTreeFilter());
 		}
-		
-		/*
-		RepositoryManager rm = RepositoryManager.getInstance();
-		ACService acManager = CoreSpringFactory.getImpl(ACService.class);
-		SearchRepositoryEntryParameters repoParams = new SearchRepositoryEntryParameters(retrievedUser, roles, "CourseModule");
-		repoParams.setOnlyExplicitMember(true);
-		List<RepositoryEntry> entries = rm.genericANDQueryWithRolesRestriction(repoParams, 0, -1, true);
-		for(RepositoryEntry entry:entries) {
-			AccessResult result = acManager.isAccessible(entry, retrievedUser, false);
-			if(result.isAccessible()) {
-				try {
-					final ICourse course = CourseFactory.loadCourse(entry.getOlatResource());
-					final IdentityEnvironment ienv = new IdentityEnvironment(retrievedUser, roles);
-					
-					new CourseTreeVisitor(course,  ienv).visit(new Visitor() {
-						@Override
-						public void visit(INode node) {
-							if(node instanceof BCCourseNode) {
-								BCCourseNode bcNode = (BCCourseNode)node;
-								FolderVO folder = BCWebService.createFolderVO(ienv, course, bcNode, courseNotified.get(course.getResourceableId()));
-								folderVOs.add(folder);
-							}
-						}
-					});
-				} catch (Exception e) {
-					log.error("", e);
-				}
-			}
-		}*/
 		
 		//start found forums in groups
 		BusinessGroupService bgs = CoreSpringFactory.getImpl(BusinessGroupService.class);
@@ -273,5 +245,12 @@ public class UserFoldersWebService {
 		voes.setFolders(folderVOs.toArray(new FolderVO[folderVOs.size()]));
 		voes.setTotalCount(folderVOs.size());
 		return Response.ok(voes).build();
+	}
+	
+	private boolean isAdminOf(Roles identityRoles, HttpServletRequest httpRequest) {
+		Roles managerRoles = getRoles(httpRequest);
+		return managerRoles.isManagerOf(OrganisationRoles.usermanager, identityRoles)
+				|| managerRoles.isManagerOf(OrganisationRoles.rolesmanager, identityRoles)
+				|| managerRoles.isManagerOf(OrganisationRoles.administrator, identityRoles);
 	}
 }

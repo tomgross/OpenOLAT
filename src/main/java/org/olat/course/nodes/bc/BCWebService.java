@@ -20,7 +20,6 @@
 package org.olat.course.nodes.bc;
 
 import static org.olat.restapi.security.RestSecurityHelper.getUserRequest;
-import static org.olat.restapi.security.RestSecurityHelper.isAuthor;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -47,9 +46,9 @@ import javax.ws.rs.core.Response;
 import javax.ws.rs.core.Response.Status;
 
 import org.olat.core.CoreSpringFactory;
-import org.olat.core.commons.modules.bc.vfs.OlatNamedContainerImpl;
 import org.olat.core.commons.services.notifications.NotificationsManager;
 import org.olat.core.commons.services.notifications.Subscriber;
+import org.olat.core.commons.services.vfs.restapi.VFSWebservice;
 import org.olat.core.gui.UserRequest;
 import org.olat.core.id.IdentityEnvironment;
 import org.olat.core.util.StringHelper;
@@ -57,16 +56,20 @@ import org.olat.core.util.nodes.INode;
 import org.olat.core.util.tree.Visitor;
 import org.olat.core.util.vfs.VFSContainer;
 import org.olat.core.util.vfs.callbacks.VFSSecurityCallback;
-import org.olat.core.util.vfs.restapi.VFSWebservice;
 import org.olat.course.ICourse;
 import org.olat.course.condition.Condition;
 import org.olat.course.nodes.BCCourseNode;
 import org.olat.course.nodes.CourseNode;
+import org.olat.course.run.environment.CourseEnvironment;
 import org.olat.course.run.userview.CourseTreeVisitor;
+import org.olat.course.run.userview.NodeEvaluation;
+import org.olat.course.run.userview.TreeEvaluation;
+import org.olat.course.run.userview.UserCourseEnvironmentImpl;
 import org.olat.course.run.userview.VisibleTreeFilter;
 import org.olat.modules.ModuleConfiguration;
 import org.olat.repository.RepositoryEntry;
 import org.olat.repository.RepositoryManager;
+import org.olat.repository.model.RepositoryEntrySecurity;
 import org.olat.resource.accesscontrol.ACService;
 import org.olat.resource.accesscontrol.AccessResult;
 import org.olat.restapi.repository.course.AbstractCourseNodeWebService;
@@ -74,6 +77,7 @@ import org.olat.restapi.repository.course.CourseWebService;
 import org.olat.restapi.repository.course.CoursesWebService;
 import org.olat.restapi.support.vo.FolderVO;
 import org.olat.restapi.support.vo.FolderVOes;
+import org.springframework.stereotype.Component;
 
 /**
  * 
@@ -84,6 +88,7 @@ import org.olat.restapi.support.vo.FolderVOes;
  *
  * @author srosse, stephane.rosse@frentix.com, http://www.frentix.com
  */
+@Component
 @Path("repo/courses/{courseId}/elements/folder")
 public class BCWebService extends AbstractCourseNodeWebService {
 	
@@ -91,11 +96,11 @@ public class BCWebService extends AbstractCourseNodeWebService {
 	/**
 	 * Retrieves metadata of the course node
 	 * @response.representation.200.qname {http://www.example.com}folderVOes
-   * @response.representation.200.mediaType application/xml, application/json
-   * @response.representation.200.doc The course node metadatas
-   * @response.representation.200.example {@link org.olat.restapi.support.vo.Examples#SAMPLE_FOLDERVOes}
+	 * @response.representation.200.mediaType application/xml, application/json
+	 * @response.representation.200.doc The course node metadatas
+	 * @response.representation.200.example {@link org.olat.restapi.support.vo.Examples#SAMPLE_FOLDERVOes}
 	 * @response.representation.401.doc The roles of the authenticated user are not sufficient
-   * @response.representation.404.doc The course or parentNode not found
+	 * @response.representation.404.doc The course or parentNode not found
 	 * @param courseId The course resourceable's id
 	 * @param nodeId The node's id
 	 * @param httpRequest The HTTP request
@@ -107,7 +112,7 @@ public class BCWebService extends AbstractCourseNodeWebService {
 		final ICourse course = CoursesWebService.loadCourse(courseId);
 		if(course == null) {
 			return Response.serverError().status(Status.NOT_FOUND).build();
-		} else if (!CourseWebService.isCourseAccessible(course, false, httpRequest)) {
+		} else if (!CourseWebService.isCourseAccessible(course, httpRequest)) {
 			return Response.serverError().status(Status.UNAUTHORIZED).build();
 		}
 
@@ -132,7 +137,7 @@ public class BCWebService extends AbstractCourseNodeWebService {
 			}
 		}
 		
-		final List<FolderVO> folderVOs = new ArrayList<FolderVO>();
+		final List<FolderVO> folderVOs = new ArrayList<>();
 		new CourseTreeVisitor(course, ureq.getUserSession().getIdentityEnvironment()).visit(new Visitor() {
 			@Override
 			public void visit(INode node) {
@@ -153,13 +158,13 @@ public class BCWebService extends AbstractCourseNodeWebService {
 	/**
 	 * This attaches a Folder Element onto a given course. The element will be
 	 * inserted underneath the supplied parentNodeId.
-   * @response.representation.mediaType application/x-www-form-urlencoded
+	 * @response.representation.mediaType application/x-www-form-urlencoded
 	 * @response.representation.200.qname {http://www.example.com}courseNodeVO
-   * @response.representation.200.mediaType application/xml, application/json
-   * @response.representation.200.doc The folder node metadatas
-   * @response.representation.200.example {@link org.olat.restapi.support.vo.Examples#SAMPLE_COURSENODEVO}
+	 * @response.representation.200.mediaType application/xml, application/json
+	 * @response.representation.200.doc The folder node metadatas
+	 * @response.representation.200.example {@link org.olat.restapi.support.vo.Examples#SAMPLE_COURSENODEVO}
 	 * @response.representation.401.doc The roles of the authenticated user are not sufficient
-   * @response.representation.404.doc The course or parentNode not found
+	 * @response.representation.404.doc The course or parentNode not found
 	 * @param courseId The course resourceable id
 	 * @param parentNodeId The node's id which will be the parent of this folder
 	 * @param position The node's position relative to its sibling nodes (optional)
@@ -188,13 +193,13 @@ public class BCWebService extends AbstractCourseNodeWebService {
 	/**
 	 * This attaches a Folder Element onto a given course. The element will be
 	 * inserted underneath the supplied parentNodeId.
-   * @response.representation.mediaType application/x-www-form-urlencoded
+	 * @response.representation.mediaType application/x-www-form-urlencoded
 	 * @response.representation.200.qname {http://www.example.com}courseNodeVO
-   * @response.representation.200.mediaType application/xml, application/json
-   * @response.representation.200.doc The folder node metadatas
-   * @response.representation.200.example {@link org.olat.restapi.support.vo.Examples#SAMPLE_COURSENODEVO}
+	 * @response.representation.200.mediaType application/xml, application/json
+	 * @response.representation.200.doc The folder node metadatas
+	 * @response.representation.200.example {@link org.olat.restapi.support.vo.Examples#SAMPLE_COURSENODEVO}
 	 * @response.representation.401.doc The roles of the authenticated user are not sufficient
-   * @response.representation.404.doc The course or parentNode not found
+	 * @response.representation.404.doc The course or parentNode not found
 	 * @param courseId The course resourceable's id
 	 * @param parentNodeId The node's id which will be the parent of this folder
 	 * @param position The node's position relative to its sibling nodes (optional)
@@ -220,13 +225,13 @@ public class BCWebService extends AbstractCourseNodeWebService {
 	
 	/**
 	 * This updates a Folder Element onto a given course.
-   * @response.representation.mediaType application/x-www-form-urlencoded
+	 * @response.representation.mediaType application/x-www-form-urlencoded
 	 * @response.representation.200.qname {http://www.example.com}courseNodeVO
-   * @response.representation.200.mediaType application/xml, application/json
-   * @response.representation.200.doc The folder node metadatas
-   * @response.representation.200.example {@link org.olat.restapi.support.vo.Examples#SAMPLE_COURSENODEVO}
+	 * @response.representation.200.mediaType application/xml, application/json
+	 * @response.representation.200.doc The folder node metadatas
+	 * @response.representation.200.example {@link org.olat.restapi.support.vo.Examples#SAMPLE_COURSENODEVO}
 	 * @response.representation.401.doc The roles of the authenticated user are not sufficient
-   * @response.representation.404.doc The course or parentNode not found
+	 * @response.representation.404.doc The course or parentNode not found
 	 * @param courseId The course resourceable's id
 	 * @param nodeId The node's id of this folder
 	 * @param shortTitle The node short title
@@ -242,7 +247,6 @@ public class BCWebService extends AbstractCourseNodeWebService {
 	@Path("{nodeId}")
 	@Consumes(MediaType.APPLICATION_FORM_URLENCODED)
 	@Produces({MediaType.APPLICATION_XML, MediaType.APPLICATION_JSON})
-	//fxdiff FXOLAT-122: course management
 	public Response updateFolder(@PathParam("courseId") Long courseId, @PathParam("nodeId") String nodeId,
 			@FormParam("shortTitle") @DefaultValue("undefined") String shortTitle,
 			@FormParam("longTitle") @DefaultValue("undefined") String longTitle, @FormParam("objectives") @DefaultValue("undefined") String objectives,
@@ -255,11 +259,11 @@ public class BCWebService extends AbstractCourseNodeWebService {
 	/**
 	 * Retrieves metadata of the course node
 	 * @response.representation.200.qname {http://www.example.com}folderVO
-   * @response.representation.200.mediaType application/xml, application/json
-   * @response.representation.200.doc The course node metadatas
-   * @response.representation.200.example {@link org.olat.restapi.support.vo.Examples#SAMPLE_FOLDERVO}
+	 * @response.representation.200.mediaType application/xml, application/json
+	 * @response.representation.200.doc The course node metadatas
+	 * @response.representation.200.example {@link org.olat.restapi.support.vo.Examples#SAMPLE_FOLDERVO}
 	 * @response.representation.401.doc The roles of the authenticated user are not sufficient
-   * @response.representation.404.doc The course or parentNode not found
+	 * @response.representation.404.doc The course or parentNode not found
 	 * @param courseId The course resourceable's id
 	 * @param nodeId The node's id
 	 * @param httpRequest The HTTP request
@@ -272,19 +276,19 @@ public class BCWebService extends AbstractCourseNodeWebService {
 		ICourse course = CoursesWebService.loadCourse(courseId);
 		if(course == null) {
 			return Response.serverError().status(Status.NOT_FOUND).build();
-		} else if (!CourseWebService.isCourseAccessible(course, false, httpRequest)) {
+		} else if (!CourseWebService.isCourseAccessible(course, httpRequest)) {
 			return Response.serverError().status(Status.UNAUTHORIZED).build();
 		}
 
 		CourseNode courseNode = course.getRunStructure().getNode(nodeId);
-		if(courseNode == null || !(courseNode instanceof BCCourseNode)) {
+		if(!(courseNode instanceof BCCourseNode)) {
 			return Response.serverError().status(Status.NOT_FOUND).build();
 		}
 
 		UserRequest ureq = getUserRequest(httpRequest);
 		boolean accessible = (new CourseTreeVisitor(course, ureq.getUserSession().getIdentityEnvironment())).isAccessible(courseNode, new VisibleTreeFilter());
 		if(accessible) {
-			Set<String> subscribed = new HashSet<String>();
+			Set<String> subscribed = new HashSet<>();
 			NotificationsManager man = NotificationsManager.getInstance();
 			List<String> notiTypes = Collections.singletonList("FolderModule");
 			List<Subscriber> subs = man.getSubscribers(ureq.getIdentity(), notiTypes);
@@ -311,12 +315,13 @@ public class BCWebService extends AbstractCourseNodeWebService {
 	 */
 	@Path("{nodeId}/files")
 	public VFSWebservice getVFSWebService(@PathParam("courseId") Long courseId, @PathParam("nodeId") String nodeId, @Context HttpServletRequest request) {
-		boolean author = isAuthor(request);
-
 		ICourse course = CoursesWebService.loadCourse(courseId);
 		if(course == null) {
 			throw new WebApplicationException( Response.serverError().status(Status.NOT_FOUND).build());
-		} else if (!author && !CourseWebService.isCourseAccessible(course, false, request)) {
+		}
+		
+		boolean author = isAuthorEditor(course, request);
+		if (!author && !CourseWebService.isCourseAccessible(course, request)) {
 			throw new WebApplicationException( Response.serverError().status(Status.UNAUTHORIZED).build());
 		}
 		
@@ -335,7 +340,7 @@ public class BCWebService extends AbstractCourseNodeWebService {
 		
 		BCCourseNode bcNode = (BCCourseNode)node;
 		UserRequest ureq = getUserRequest(request);
-		VFSContainer container = BCCourseNode.getSecurisedNodeFolderContainer(bcNode, course.getCourseEnvironment(), ureq.getUserSession().getIdentityEnvironment());
+		VFSContainer container = getSecurisedNodeFolderContainer(bcNode, course.getCourseEnvironment(), ureq.getUserSession().getIdentityEnvironment());
 		return new VFSWebservice(container);
 	}
 
@@ -364,14 +369,13 @@ public class BCWebService extends AbstractCourseNodeWebService {
 
 			if(StringHelper.containsNonWhitespace(uploadExpertRules)) {
 				Condition uploadCond = createExpertCondition("uploaders", uploadExpertRules);
-				//fxdiff: RESTAPI bug fix
 				bcCourseNode.setPreConditionUploaders(uploadCond);
 			}
 		}	
 	}
 	
 	public static FolderVO createFolderVO(IdentityEnvironment ienv, ICourse course, BCCourseNode bcNode, Collection<String> subscribed) {
-		OlatNamedContainerImpl container = BCCourseNode.getSecurisedNodeFolderContainer(bcNode, course.getCourseEnvironment(), ienv);
+		VFSContainer container = getSecurisedNodeFolderContainer(bcNode, course.getCourseEnvironment(), ienv);
 		VFSSecurityCallback secCallback = container.getLocalSecurityCallback();
 		
 		FolderVO folderVo = new FolderVO();
@@ -389,5 +393,18 @@ public class BCWebService extends AbstractCourseNodeWebService {
 		folderVo.setDelete(secCallback.canDelete());
 		folderVo.setList(secCallback.canList());
 		return folderVo;
+	}
+	
+	private static VFSContainer getSecurisedNodeFolderContainer(BCCourseNode node, CourseEnvironment courseEnv, IdentityEnvironment ienv) {
+		RepositoryEntry entry = courseEnv.getCourseGroupManager().getCourseEntry();
+		RepositoryEntrySecurity reSecurity = CoreSpringFactory.getImpl(RepositoryManager.class).isAllowed(ienv.getIdentity(), ienv.getRoles(), entry);
+		
+		UserCourseEnvironmentImpl uce = new UserCourseEnvironmentImpl(ienv, courseEnv);
+		NodeEvaluation ne = node.eval(uce.getConditionInterpreter(), new TreeEvaluation(), new VisibleTreeFilter());
+
+		VFSContainer container = BCCourseNode.getNodeFolderContainer(node, courseEnv);
+		VFSSecurityCallback secCallback = new FolderNodeCallback(container.getRelPath(), ne, reSecurity.isEntryAdmin(), ienv.getRoles().isGuestOnly(), null);
+		container.setLocalSecurityCallback(secCallback);
+		return container;
 	}
 }

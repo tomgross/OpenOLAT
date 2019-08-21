@@ -37,6 +37,7 @@ import javax.persistence.Temporal;
 import javax.persistence.TemporalType;
 
 import org.olat.core.id.Persistable;
+import org.olat.core.util.StringHelper;
 import org.olat.modules.forms.EvaluationFormResponse;
 import org.olat.modules.forms.EvaluationFormSession;
 
@@ -66,6 +67,8 @@ public class EvaluationFormResponseImpl implements EvaluationFormResponse, Persi
 	
 	@Column(name="e_responseidentifier", nullable=false, insertable=true, updatable=false)
 	private String responseIdentifier;
+	@Column(name="e_no_response", nullable=false, insertable=true, updatable=true)
+	private boolean noResponse;
 	@Column(name="e_numericalresponse", nullable=true, insertable=true, updatable=true)
 	private BigDecimal numericalResponse;
 	@Column(name="e_stringuifiedresponse", nullable=true, insertable=true, updatable=true)
@@ -115,6 +118,15 @@ public class EvaluationFormResponseImpl implements EvaluationFormResponse, Persi
 	}
 
 	@Override
+	public boolean isNoResponse() {
+		return noResponse;
+	}
+
+	public void setNoResponse(boolean noResponse) {
+		this.noResponse = noResponse;
+	}
+
+	@Override
 	public BigDecimal getNumericalResponse() {
 		return numericalResponse;
 	}
@@ -134,7 +146,7 @@ public class EvaluationFormResponseImpl implements EvaluationFormResponse, Persi
 
 	@Override
 	public Path getFileResponse() {
-		return fileResponsePath != null? Paths.get(fileResponsePath): null;
+		return StringHelper.containsNonWhitespace(fileResponsePath)? Paths.get(fileResponsePath): null;
 	}
 
 	public void setFileResponse(Path fileResponse) {

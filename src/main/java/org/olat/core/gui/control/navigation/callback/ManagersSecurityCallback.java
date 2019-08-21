@@ -22,6 +22,8 @@ package org.olat.core.gui.control.navigation.callback;
 
 import org.olat.core.gui.UserRequest;
 import org.olat.core.gui.control.navigation.SiteSecurityCallback;
+import org.olat.core.id.Roles;
+import org.olat.core.util.UserSession;
 
 /**
  * <h3>Description:</h3>
@@ -33,21 +35,19 @@ import org.olat.core.gui.control.navigation.SiteSecurityCallback;
  */
 public class ManagersSecurityCallback implements SiteSecurityCallback {
 
-	/**
-	 * @see com.frentix.olat.coursesite.SiteSecurityCallback#isAllowedToLaunchSite(org.olat.core.gui.UserRequest)
-	 */
 	@Override
 	public boolean isAllowedToLaunchSite(UserRequest ureq) {
-		if (ureq.getUserSession().getRoles() == null) {
+		UserSession usess = ureq.getUserSession();
+		if (usess == null || usess.getRoles() == null) {
 			return false;
-		} else if (ureq.getUserSession().getRoles().isOLATAdmin()
-				|| ureq.getUserSession().getRoles().isGroupManager()
-				|| ureq.getUserSession().getRoles().isInstitutionalResourceManager()
-				|| ureq.getUserSession().getRoles().isUserManager()
-				|| ureq.getUserSession().getRoles().isPoolAdmin()) {
-			return true;
-		} else {
-			return false; 
 		}
+		
+		Roles roles = usess.getRoles();
+		return roles.isAdministrator()
+				|| roles.isGroupManager() || roles.isLearnResourceManager()
+				|| roles.isUserManager() || roles.isRolesManager()
+				|| roles.isPoolManager() || roles.isQualityManager()
+				|| roles.isCurriculumManager() || roles.isLectureManager()
+				|| roles.isLineManager() || roles.isPrincipal();
 	}
 }

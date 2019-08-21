@@ -211,6 +211,15 @@ public class AssessmentItemEditorController extends BasicController implements A
 		putInitialPanel(mainVC);
 	}
 	
+	public TabbedPane getTabbedPane() {
+		return tabbedPane;
+	}
+	
+	public void addTab(int pos, String displayName, Controller controller) {
+		tabbedPane.addTab(pos, displayName, controller);
+		
+	}
+	
 	public QPoolInformations getPoolStatus() {
 		boolean isReadOnly = false;
 		boolean pooled = false;
@@ -219,7 +228,7 @@ public class AssessmentItemEditorController extends BasicController implements A
 		if(metadataBuilder != null) {
 			if(StringHelper.containsNonWhitespace(metadataBuilder.getOpenOLATMetadataIdentifier())) {
 				List<QuestionItem> items = qpoolService.loadItemByIdentifier(metadataBuilder.getOpenOLATMetadataIdentifier());
-				if(items.size() > 0) {
+				if(!items.isEmpty()) {
 					pooled = true;
 					isReadOnly = true;
 					if(items.size() == 1) {
@@ -230,7 +239,7 @@ public class AssessmentItemEditorController extends BasicController implements A
 
 			if(StringHelper.containsNonWhitespace(metadataBuilder.getOpenOLATMetadataIdentifier())) {
 				List<QuestionItem> items = qpoolService.loadItemByIdentifier(metadataBuilder.getOpenOLATMetadataMasterIdentifier());
-				if(items.size() > 0) {
+				if(!items.isEmpty()) {
 					pooled = true;
 					if(items.size() == 1) {
 						masterItem = items.get(0);
@@ -244,6 +253,14 @@ public class AssessmentItemEditorController extends BasicController implements A
 	
 	public String getTitle() {
 		return resolvedAssessmentItem.getRootNodeLookup().getRootNodeHolder().getRootNode().getTitle();
+	}
+	
+	public AssessmentItem getAssessmentItem() {
+		return resolvedAssessmentItem.getRootNodeLookup().getRootNodeHolder().getRootNode();
+	}
+	
+	public QTI21QuestionType getType() {
+		return itemBuilder.getQuestionType();
 	}
 	
 	@Override
@@ -541,6 +558,8 @@ public class AssessmentItemEditorController extends BasicController implements A
 			if(selectedCtrl instanceof SyncAssessmentItem) {
 				((SyncAssessmentItem)selectedCtrl).sync(ureq, itemBuilder);
 			} else if(selectedCtrl == displayCtrl) {
+				removeAsListenerAndDispose(displayCtrl);
+
 				if(testEntry != null) {
 					AssessmentEntry assessmentEntry = assessmentService.getOrCreateAssessmentEntry(getIdentity(), null, testEntry, null, testEntry);
 					displayCtrl = new AssessmentItemPreviewController(ureq, getWindowControl(),
@@ -552,8 +571,9 @@ public class AssessmentItemEditorController extends BasicController implements A
 				listenTo(displayCtrl);
 				tabbedPane.replaceTab(displayTabPosition, displayCtrl);
 			} else if(selectedCtrl == solutionCtrl) {
+				removeAsListenerAndDispose(solutionCtrl);
+				
 				solutionCtrl = new AssessmentItemPreviewSolutionController(ureq, getWindowControl(), resolvedAssessmentItem, rootDirectory, itemFile);
-
 				listenTo(displayCtrl);
 				tabbedPane.replaceTab(solutionTabPosition, solutionCtrl);
 			}

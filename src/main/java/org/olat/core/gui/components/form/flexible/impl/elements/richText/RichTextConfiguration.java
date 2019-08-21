@@ -20,6 +20,7 @@
 package org.olat.core.gui.components.form.flexible.impl.elements.richText;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -41,18 +42,24 @@ import org.olat.core.gui.render.StringOutput;
 import org.olat.core.gui.themes.Theme;
 import org.olat.core.gui.translator.Translator;
 import org.olat.core.helpers.Settings;
-import org.olat.core.logging.OLog;
+import org.olat.core.id.Identity;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.CodeHelper;
 import org.olat.core.util.Formatter;
 import org.olat.core.util.UserSession;
 import org.olat.core.util.Util;
+import org.olat.core.util.WebappHelper;
+import org.olat.core.util.filter.Filter;
 import org.olat.core.util.i18n.I18nManager;
 import org.olat.core.util.i18n.I18nModule;
 import org.olat.core.util.vfs.LocalFolderImpl;
 import org.olat.core.util.vfs.VFSContainer;
 import org.olat.core.util.vfs.VFSContainerMapper;
 import org.olat.core.util.vfs.VFSManager;
+import org.olat.modules.edusharing.EdusharingFilter;
+import org.olat.modules.edusharing.EdusharingModule;
+import org.olat.modules.edusharing.EdusharingProvider;
 
 /**
  * Description:<br>
@@ -93,7 +100,7 @@ public class RichTextConfiguration implements Disposable {
 		assert requiredJsLangFilesAvailable();
 	}
 
-	private static final OLog log = Tracing.createLoggerFor(RichTextConfiguration.class); 
+	private static final Logger log = Tracing.createLoggerFor(RichTextConfiguration.class); 
 	private static final String MODE = "mode";
 	private static final String MODE_VALUE_EXACT = "exact";
 	private static final String ELEMENTS = "elements";
@@ -194,6 +201,8 @@ public class RichTextConfiguration implements Disposable {
 	private List<TextMode> textModes = Collections.singletonList(TextMode.formatted);
 	private RichTextConfigurationDelegate additionalConfiguration;
 	
+	private Collection<Filter> valueFilters = new ArrayList<>(1);
+	
 	public RichTextConfiguration(Locale locale) {
 		this.locale = locale;
 		tinyConfig = TinyConfig.minimalisticConfig; 
@@ -245,6 +254,20 @@ public class RichTextConfiguration implements Disposable {
 		setQuotedConfigValue(INVALID_ELEMENTS, INVALID_ELEMENTS_FORM_MINIMALISTIC_VALUE_UNSAVE);
 		
 		tinyConfig = TinyConfig.minimalisticConfig;
+	}
+	
+	public void setConfigProfileFormParagraphEditor(Theme guiTheme) {
+		setConfigBasics(guiTheme);
+		// Add additional plugins
+		TinyMCECustomPluginFactory customPluginFactory = CoreSpringFactory.getImpl(TinyMCECustomPluginFactory.class);
+		List<TinyMCECustomPlugin> enabledCustomPlugins = customPluginFactory.getCustomPlugionsForProfile();
+		for (TinyMCECustomPlugin tinyMCECustomPlugin : enabledCustomPlugins) {
+			setCustomPluginEnabled(tinyMCECustomPlugin);
+		}
+		// Don't allow javascript or iframes
+		setQuotedConfigValue(INVALID_ELEMENTS, INVALID_ELEMENTS_FORM_MINIMALISTIC_VALUE_UNSAVE);
+		
+		tinyConfig = TinyConfig.paragraphEditorConfig;
 	}
 	
 	public void setConfigProfileFormCompactEditor(UserSession usess, Theme guiTheme, VFSContainer baseContainer) {
@@ -887,6 +910,34 @@ public class RichTextConfiguration implements Disposable {
 		setQuotedConfigValue("custom_elements", "~textentryinteraction,~hottext");
 		setQuotedConfigValue(EXTENDED_VALID_ELEMENTS, "script[src|type|defer],textentryinteraction[*],hottext[*]");
 	}
+	
+	public void enableEdusharing(Identity identity, EdusharingProvider provider) {
+		if (identity == null || provider == null) return;
+		
+		EdusharingModule edusharingModule = CoreSpringFactory.getImpl(EdusharingModule.class);
+		if (edusharingModule.isEnabled()) {
+			tinyConfig = tinyConfig.enableEdusharing();
+			EdusharingFilter filter = new EdusharingFilter(identity, provider);
+			addValueFilter(filter);
+		}
+	}
+	
+	public EdusharingFilter getEdusharingFilter() {
+		for (Filter filter : valueFilters) {
+			if (filter instanceof EdusharingFilter) {
+				return (EdusharingFilter) filter;
+			}
+		}
+		return null;
+	}
+	
+	public void addValueFilter(Filter filter) {
+		valueFilters.add(filter);
+	}
+	
+	Collection<Filter> getValueFilters() {
+		return valueFilters;
+	}
 
 	/**
 	 * Set a tiny configuration value that must not be quoted with quotes, e.g.
@@ -1050,7 +1101,9 @@ public class RichTextConfiguration implements Disposable {
 		  .append("remove_script_host:").append(isRemoveScriptHost()).append(",\n")
 		  .append("statusbar:").append(true).append(",\n")
 		  .append("resize:").append(true).append(",\n")
-		  .append("menubar:").append(tinyConfig.hasMenu()).append(",\n");
+		  .append("menubar:").append(tinyConfig.hasMenu()).append(",\n")
+		  .append("font_formats:").append("'Andale Mono=andale mono,times;Arial=arial,helvetica,sans-serif;Arial Black=arial black,avant garde;Book Antiqua=book antiqua,palatino;Comic Sans MS=comic sans ms,sans-serif;Courier New=courier new,courier;Georgia=georgia,palatino;Helvetica=helvetica;Impact=impact,chicago;Symbol=symbol;Tahoma=tahoma,arial,helvetica,sans-serif;Terminal=terminal,monaco;Times New Roman=times new roman,times;Trebuchet MS=trebuchet ms,geneva;Verdana=verdana,geneva',\n")
+		  ;
  		if(isReadOnly()) {
  			tinyMenuSb.append("readonly: 1,\n");
  		}

@@ -23,7 +23,6 @@ import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 
-import org.apache.commons.lang.StringEscapeUtils;
 import org.olat.NewControllerFactory;
 import org.olat.core.gui.UserRequest;
 import org.olat.core.gui.components.Component;
@@ -88,6 +87,7 @@ public class FOPeekviewController extends BasicController implements Controller 
 		List<MessagePeekview> messages = forumManager.getPeekviewMessages(forum, itemsToDisplay);
 
 		final boolean isModerator = forumCallback.mayEditMessageAsModerator();
+		// only take the configured amount of messages
 		List<MessageView> views = new ArrayList<MessageView>(itemsToDisplay);
 		for (MessagePeekview message : messages) {
 			Status status = Status.getStatus(message.getStatusCode());

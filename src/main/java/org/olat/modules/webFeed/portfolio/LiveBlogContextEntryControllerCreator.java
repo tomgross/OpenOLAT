@@ -31,7 +31,7 @@ import org.olat.core.id.OLATResourceable;
 import org.olat.core.id.context.ContextEntry;
 import org.olat.core.id.context.ContextEntryControllerCreator;
 import org.olat.core.id.context.DefaultContextEntryControllerCreator;
-import org.olat.core.logging.OLog;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
 import org.olat.fileresource.types.BlogFileResource;
 import org.olat.modules.webFeed.Feed;
@@ -53,7 +53,7 @@ import org.olat.resource.OLATResourceManager;
  */
 public class LiveBlogContextEntryControllerCreator  {
 	
-	private static final OLog log = Tracing.createLoggerFor(LiveBlogContextEntryControllerCreator.class);
+	private static final Logger log = Tracing.createLoggerFor(LiveBlogContextEntryControllerCreator.class);
 
 	public LiveBlogContextEntryControllerCreator(final FeedManager feedManager) {
 		
@@ -79,7 +79,7 @@ public class LiveBlogContextEntryControllerCreator  {
 			ores = OLATResourceManager.getInstance().findResourceable(ores.getResourceableId(), BlogFileResource.TYPE_NAME);
 			Feed feed = feedManager.loadFeed(ores);
 			boolean isOwner = feed.getAuthor() != null && ureq.getIdentity() != null && feed.getAuthor().equals(ureq.getIdentity().getName());
-			FeedSecurityCallback secCallback = new FeedResourceSecurityCallback(isOwner, isOwner);
+			FeedSecurityCallback secCallback = new FeedResourceSecurityCallback(isOwner);
 			FeedMainController controller = new FeedMainController(ores, ureq, wControl, BlogUIFactory.getInstance(ureq.getLocale()), secCallback);
 			return new LayoutMain3ColsController(ureq, wControl, controller);
 		}

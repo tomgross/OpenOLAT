@@ -41,7 +41,7 @@ import org.olat.core.gui.control.Event;
 import org.olat.core.gui.control.WindowControl;
 import org.olat.core.gui.control.controller.BasicController;
 import org.olat.core.gui.control.generic.closablewrapper.CloseableModalController;
-import org.olat.core.logging.OLog;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.StringHelper;
 import org.olat.core.util.vfs.LocalFolderImpl;
@@ -57,9 +57,9 @@ import org.olat.core.util.vfs.VFSContainer;
  */
 public class IframePortletRunController extends BasicController {	
 	
-	private OLog log = Tracing.createLoggerFor(this.getClass());
+	private static final Logger log = Tracing.createLoggerFor(IframePortletRunController.class);
 	
-	private VelocityContainer iframeVC;
+	private final VelocityContainer iframeVC;
 	private Link editLink;
 	private Controller editorCtr;
 	private String fileName;
@@ -95,7 +95,7 @@ public class IframePortletRunController extends BasicController {
 		iframeVC.contextPut("name", id);
 
 		// edit Link only for administrators
-		if (ureq.getUserSession().getRoles().isOLATAdmin()) {
+		if (ureq.getUserSession().getRoles().isAdministrator()) {
 			String editFilePath = configuration.get("editFilePath");
 			boolean editLinkEnabled = false;
 			if (StringHelper.containsNonWhitespace(editFilePath)) {
@@ -160,10 +160,7 @@ public class IframePortletRunController extends BasicController {
 		
 		return true;
 	}
-	
-	/**
-	 * @see org.olat.core.gui.control.DefaultController#event(org.olat.core.gui.UserRequest, org.olat.core.gui.components.Component, org.olat.core.gui.control.Event)
-	 */
+
 	@Override
 	public void event(UserRequest ureq, Component source, Event event) {
 		if (source == editLink) {
@@ -190,9 +187,6 @@ public class IframePortletRunController extends BasicController {
 		}
 	}
 
-	/**
-	 * @see org.olat.core.gui.control.DefaultController#doDispose(boolean)
-	 */
 	@Override
 	protected void doDispose() {
     // editorCtr is registerd with listenTo and gets disposed in BasicController		

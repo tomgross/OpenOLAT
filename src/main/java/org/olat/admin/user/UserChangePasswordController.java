@@ -25,8 +25,6 @@
 
 package org.olat.admin.user;
 
-import org.olat.basesecurity.BaseSecurity;
-import org.olat.basesecurity.Constants;
 import org.olat.core.gui.UserRequest;
 import org.olat.core.gui.components.Component;
 import org.olat.core.gui.components.velocity.VelocityContainer;
@@ -35,8 +33,6 @@ import org.olat.core.gui.control.Event;
 import org.olat.core.gui.control.WindowControl;
 import org.olat.core.gui.control.controller.BasicController;
 import org.olat.core.id.Identity;
-import org.olat.core.logging.OLATSecurityException;
-import org.olat.core.util.resource.OresHelper;
 import org.olat.login.auth.OLATAuthManager;
 import org.olat.user.UserModule;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -62,8 +58,6 @@ public class UserChangePasswordController extends BasicController {
 	@Autowired
 	private UserModule userModule;
 	@Autowired
-	private BaseSecurity securityManager;
-	@Autowired
 	private OLATAuthManager olatAuthenticationSpi;
 
 	/**
@@ -73,12 +67,6 @@ public class UserChangePasswordController extends BasicController {
 	 */
 	public UserChangePasswordController(UserRequest ureq, WindowControl wControl, Identity changeableUser) { 
 		super(ureq, wControl);
-		
-		if (!securityManager.isIdentityPermittedOnResourceable(
-				ureq.getIdentity(), 
-				Constants.PERMISSION_ACCESS, 
-				OresHelper.lookupType(this.getClass())))
-			throw new OLATSecurityException("Insufficient permissions to access UserChangePasswordController");
 
 		user = changeableUser;
 		mainVC = createVelocityContainer("pwd");
@@ -104,7 +92,7 @@ public class UserChangePasswordController extends BasicController {
 		if (source == chPwdForm && event.equals(Event.DONE_EVENT)) {
 			if (olatAuthenticationSpi.changePassword(ureq.getIdentity(), user, chPwdForm.getNewPassword())) {
 				showInfo("changeuserpwd.successful");
-				logAudit ("user password changed successfully of " +user.getKey(), this.getClass().getName());
+				logAudit ("user password changed successfully of " +user.getKey());
 			} else {
 				showError("changeuserpwd.failed");
 			}

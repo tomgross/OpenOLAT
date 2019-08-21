@@ -51,6 +51,7 @@ import org.olat.core.gui.control.generic.closablewrapper.CloseableModalControlle
 import org.olat.core.gui.control.generic.modal.DialogBoxController;
 import org.olat.core.gui.control.generic.modal.DialogBoxUIFactory;
 import org.olat.core.id.Identity;
+import org.olat.core.id.Roles;
 import org.olat.core.util.Util;
 import org.olat.core.util.mail.MailHelper;
 import org.olat.core.util.mail.MailPackage;
@@ -77,9 +78,9 @@ public class GroupOverviewController extends BasicController {
 	private static final String TABLE_ACTION_LAUNCH = "bgTblLaunch";
 	private static final String TABLE_ACTION_UNSUBSCRIBE = "unsubscribe";
 	
-	private VelocityContainer vc;
-	private TableController groupListCtr;
-	private BusinessGroupTableModelWithType tableDataModel;
+	private final VelocityContainer vc;
+	private final TableController groupListCtr;
+	private final BusinessGroupTableModelWithType tableDataModel;
 	
 	private Link addGroups;
 	private DialogBoxController confirmSendMailBox;
@@ -92,7 +93,7 @@ public class GroupOverviewController extends BasicController {
 	
 	private final Identity identity;
 
-	public GroupOverviewController(UserRequest ureq, WindowControl control, Identity identity, Boolean canStartGroups) {
+	public GroupOverviewController(UserRequest ureq, WindowControl control, Identity identity, boolean canEdit) {
 		super(ureq, control, Util.createPackageTranslator(BusinessGroupTableModelWithType.class, ureq.getLocale()));
 		setTranslator(Util.createPackageTranslator(BGRoleCellRenderer.class, getLocale(), getTranslator()));
 		
@@ -104,23 +105,25 @@ public class GroupOverviewController extends BasicController {
 		
 		groupListCtr = new TableController(null, ureq, control, getTranslator());
 		listenTo(groupListCtr);
-		groupListCtr.addColumnDescriptor(new BusinessGroupNameColumnDescriptor(canStartGroups ? TABLE_ACTION_LAUNCH : null, getLocale()));
+		groupListCtr.addColumnDescriptor(new BusinessGroupNameColumnDescriptor(TABLE_ACTION_LAUNCH, getLocale()));
 		groupListCtr.addColumnDescriptor(false, new DefaultColumnDescriptor(Cols.key.i18n(), Cols.key.ordinal(), null, getLocale()));
 		groupListCtr.addColumnDescriptor(new DefaultColumnDescriptor(Cols.firstTime.i18n(), Cols.firstTime.ordinal(), null, getLocale()));
 		groupListCtr.addColumnDescriptor(new DefaultColumnDescriptor(Cols.lastTime.i18n(), Cols.lastTime.ordinal(), null, getLocale()));
 		CustomCellRenderer roleRenderer = new BGRoleCellRenderer(getLocale());
 		groupListCtr.addColumnDescriptor(new CustomRenderColumnDescriptor(Cols.role.i18n(), Cols.role.ordinal(), null, getLocale(), ColumnDescriptor.ALIGNMENT_LEFT, roleRenderer));
-		groupListCtr.addColumnDescriptor(new BooleanColumnDescriptor(Cols.allowLeave.i18n(), Cols.allowLeave.ordinal(), TABLE_ACTION_UNSUBSCRIBE, translate("table.header.leave"), null));
+		if(canEdit) {
+			groupListCtr.addColumnDescriptor(new BooleanColumnDescriptor(Cols.allowLeave.i18n(), Cols.allowLeave.ordinal(),
+					TABLE_ACTION_UNSUBSCRIBE, translate("table.header.leave"), null));
+			
+			groupListCtr.setMultiSelect(true);
+			groupListCtr.addMultiSelectAction("table.leave", TABLE_ACTION_UNSUBSCRIBE);
+			addGroups = LinkFactory.createButton("add.groups", vc, this);
+		}
 		
-		groupListCtr.setMultiSelect(true);
-		groupListCtr.addMultiSelectAction("table.leave", TABLE_ACTION_UNSUBSCRIBE);
 		tableDataModel = new BusinessGroupTableModelWithType(getTranslator(), 4);
-		groupListCtr.setTableDataModel(tableDataModel);
-		
-		updateModel();
-		
-		addGroups = LinkFactory.createButton("add.groups", vc, this);		
+		groupListCtr.setTableDataModel(tableDataModel);		
 		vc.put("table.groups", groupListCtr.getInitialComponent());	
+		updateModel();
 		putInitialPanel(vc);
 	}
 
@@ -149,12 +152,12 @@ public class GroupOverviewController extends BasicController {
 
 		//retrieve all user's membership if there are more than 50 groups
 		List<BusinessGroupMembership> groupsAsOwner = businessGroupService.getBusinessGroupMembership(groupKeysWithMembers, identity);
-		Map<Long, BusinessGroupMembership> memberships = new HashMap<Long, BusinessGroupMembership>();
+		Map<Long, BusinessGroupMembership> memberships = new HashMap<>();
 		for(BusinessGroupMembership membership: groupsAsOwner) {
 			memberships.put(membership.getGroupKey(), membership);
 		}
 
-		List<GroupOverviewRow> items = new ArrayList<GroupOverviewRow>();
+		List<GroupOverviewRow> items = new ArrayList<>();
 		for(BusinessGroup group:groups) {
 			BusinessGroupMembership membership =  memberships.get(group.getKey());
 			GroupOverviewRow tableItem = new GroupOverviewRow(group, membership, Boolean.TRUE);
@@ -164,17 +167,11 @@ public class GroupOverviewController extends BasicController {
 		groupListCtr.modelChanged();
 	}
 
-	/**
-	 * @see org.olat.core.gui.control.DefaultController#doDispose()
-	 */
 	@Override
 	protected void doDispose() {
 		//
 	}
 
-	/**
-	 * @see org.olat.core.gui.control.DefaultController#event(org.olat.core.gui.UserRequest, org.olat.core.gui.components.Component, org.olat.core.gui.control.Event)
-	 */
 	@Override
 	protected void event(	UserRequest ureq, Component source, Event event) {
 		if (source == addGroups){
@@ -186,10 +183,7 @@ public class GroupOverviewController extends BasicController {
 			cmc.activate();
 		}
 	}
-	
-	/**
-	 * @see org.olat.core.gui.control.DefaultController#event(org.olat.core.gui.UserRequest, org.olat.core.gui.control.Controller, org.olat.core.gui.control.Event)
-	 */
+
 	@Override
 	protected void event(UserRequest ureq, Controller source, Event event) {
 		super.event(ureq, source, event);
@@ -264,7 +258,7 @@ public class GroupOverviewController extends BasicController {
 	}
 	
 	private void doAddToGroups(AddToGroupsEvent e, boolean sendMail) {
-		List<BusinessGroupMembershipChange> changes = new ArrayList<BusinessGroupMembershipChange>();
+		List<BusinessGroupMembershipChange> changes = new ArrayList<>();
 		if(e.getOwnerGroupKeys() != null && !e.getOwnerGroupKeys().isEmpty()) {
 			for(Long tutorGroupKey:e.getOwnerGroupKeys()) {
 				BusinessGroupMembershipChange change = new BusinessGroupMembershipChange(identity, tutorGroupKey);
@@ -285,7 +279,7 @@ public class GroupOverviewController extends BasicController {
 	}
 	
 	private void doLeave(UserRequest ureq, List<BusinessGroup> groupsToLeave) {
-		List<BusinessGroup> groupsToDelete = new ArrayList<BusinessGroup>(1);
+		List<BusinessGroup> groupsToDelete = new ArrayList<>(1);
 		for(BusinessGroup group:groupsToLeave) {
 			int numOfOwners = businessGroupService.countMembers(group, GroupRoles.coach.name());
 			int numOfParticipants = businessGroupService.countMembers(group, GroupRoles.participant.name());
@@ -308,6 +302,8 @@ public class GroupOverviewController extends BasicController {
 	 * @param doSendMail
 	 */
 	private void removeUserFromGroup(UserRequest ureq, List<BusinessGroup> groupsToLeave, List<BusinessGroup> groupsToDelete, boolean doSendMail) {
+		Roles roles = ureq.getUserSession().getRoles();
+		
 		for(BusinessGroup group:groupsToLeave) {
 			if (groupsToDelete.contains(group)) {
 				// really delete the group as it has no more owners/participants
@@ -325,7 +321,8 @@ public class GroupOverviewController extends BasicController {
 				MailPackage mailing = new MailPackage(doSendMail);
 				// 2) remove as participant
 				businessGroupService.removeParticipants(getIdentity(), Collections.singletonList(identity), group, mailing);
-				MailHelper.printErrorsAndWarnings(mailing.getResult(), getWindowControl(), ureq.getUserSession().getRoles().isOLATAdmin(), getLocale());
+				MailHelper.printErrorsAndWarnings(mailing.getResult(), getWindowControl(),
+						roles.isAdministrator() || roles.isSystemAdmin(), getLocale());
 			}
 		}
 
@@ -340,11 +337,10 @@ public class GroupOverviewController extends BasicController {
 	}
 	
 	private List<BusinessGroup> toBusinessGroups(List<GroupOverviewRow> items) {
-		List<Long> groupKeys = new ArrayList<Long>();
+		List<Long> groupKeys = new ArrayList<>();
 		for(GroupOverviewRow item:items) {
 			groupKeys.add(item.getKey());
 		}
-		List<BusinessGroup> groups = businessGroupService.loadBusinessGroups(groupKeys);
-		return groups;
+		return businessGroupService.loadBusinessGroups(groupKeys);
 	}
 }

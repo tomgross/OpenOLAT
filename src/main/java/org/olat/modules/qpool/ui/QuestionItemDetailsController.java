@@ -106,6 +106,7 @@ public class QuestionItemDetailsController extends BasicController implements To
 	private Link exportItemLink;
 	private Link copyItemLink;
 	private Link convertItemLink;
+	private Link convertItemButton;
 
 	private final VelocityContainer mainVC;
 	private final TooledStackedPanel stackPanel;
@@ -216,7 +217,7 @@ public class QuestionItemDetailsController extends BasicController implements To
 
 	private void setCommentsController(UserRequest ureq) {		
 		Roles roles = ureq.getUserSession().getRoles();
-		boolean moderator = roles.isOLATAdmin();
+		boolean moderator = roles.isAdministrator() || roles.isPoolManager();
 		boolean anonymous = roles.isGuestOnly() || roles.isInvitee();
 		commentAndRatingSecurityCallback = new CommentAndRatingDefaultSecurityCallback(getIdentity(), moderator, anonymous);
 		removeAsListenerAndDispose(commentsAndRatingCtr);
@@ -250,6 +251,9 @@ public class QuestionItemDetailsController extends BasicController implements To
 			convertItemLink = LinkFactory.createToolLink("convert", translate("convert.item"), this);
 			convertItemLink.setIconLeftCSS("o_icon o_icon-fw o_icon_qitem_convert");
 			commandDropdown.addComponent(convertItemLink);
+			
+			convertItemButton = LinkFactory.createButton("convert.item.long", mainVC, this);
+			convertItemButton.setIconLeftCSS("o_icon o_icon-fw o_FileResource-IMSQTI21_icon");
 		}
 		
 		if (qItemSecurityCallback.canDelete()) {
@@ -280,38 +284,42 @@ public class QuestionItemDetailsController extends BasicController implements To
 	private Dropdown buildStatusDrowdown() {
 		QuestionStatus actualStatus = metadatasCtrl.getItem().getQuestionStatus();
 
-		Dropdown statusDropdown = new Dropdown("process.states", "lifecycle.status." + actualStatus.name(), false, getTranslator());
-		statusDropdown.setElementCssClass("o_qpool_tools_status o_qpool_status_" + actualStatus.name());
+		Dropdown statusDropdown = new Dropdown("process.states", "lifecycle.status", false, getTranslator());
+		statusDropdown.setElementCssClass("o_qpool_tools_status o_with_labeled");
 		statusDropdown.setIconCSS("o_icon o_icon-fw o_icon_qitem_" + actualStatus.name());
+		statusDropdown.setInnerText(translate("lifecycle.status." + actualStatus.name()));
+		statusDropdown.setInnerCSS("o_labeled o_qpool_status_" + actualStatus.name());
+
+		
 		statusDropdown.setOrientation(DropdownOrientation.normal);
 	
 		statusDraftLink = LinkFactory.createToolLink("lifecycle.status.draft", translate("lifecycle.status.draft"), this);
 		statusDraftLink.setIconLeftCSS("o_icon o_icon-fw o_icon_qitem_draft");
-		statusDraftLink.setElementCssClass("o_labeled o_qpool_status o_qpool_status_draft");
+		statusDraftLink.setElementCssClass("o_labeled o_qpool_status_draft");
 		statusDraftLink.setVisible(qItemSecurityCallback.canSetDraft() && !QuestionStatus.draft.equals(actualStatus));
 		statusDropdown.addComponent(statusDraftLink);
 
 		statusRevisedLink = LinkFactory.createToolLink("lifecycle.status.revised", translate("lifecycle.status.revised"), this);
 		statusRevisedLink.setIconLeftCSS("o_icon o_icon-fw o_icon_qitem_revised");
-		statusRevisedLink.setElementCssClass("o_labeled o_qpool_status o_qpool_status_revised");
+		statusRevisedLink.setElementCssClass("o_labeled o_qpool_status_revised");
 		statusRevisedLink.setVisible(qItemSecurityCallback.canSetRevised() && !QuestionStatus.revised.equals(actualStatus));
 		statusDropdown.addComponent(statusRevisedLink);
 		
 		statusReviewLink = LinkFactory.createToolLink("lifecycle.status.review", translate("lifecycle.status.review"), this);
 		statusReviewLink.setIconLeftCSS("o_icon o_icon-fw o_icon_qitem_review");
-		statusReviewLink.setElementCssClass("o_labeled o_qpool_status o_qpool_status_review");
+		statusReviewLink.setElementCssClass("o_labeled o_qpool_status_review");
 		statusReviewLink.setVisible(qItemSecurityCallback.canSetReview() && !QuestionStatus.review.equals(actualStatus));
 		statusDropdown.addComponent(statusReviewLink);
 		
 		statusFinalLink = LinkFactory.createToolLink("lifecycle.status.finalVersion", translate("lifecycle.status.finalVersion"), this);
 		statusFinalLink.setIconLeftCSS("o_icon o_icon-fw o_icon_qitem_finalVersion");
-		statusFinalLink.setElementCssClass("o_labeled o_qpool_status o_qpool_status_finalVersion");
+		statusFinalLink.setElementCssClass("o_labeled o_qpool_status_finalVersion");
 		statusFinalLink.setVisible(qItemSecurityCallback.canSetFinal() && !QuestionStatus.finalVersion.equals(actualStatus));
 		statusDropdown.addComponent(statusFinalLink);
 		
 		statusEndOfLifeLink = LinkFactory.createToolLink("lifecycle.status.endOfLife", translate("lifecycle.status.endOfLife"), this);
 		statusEndOfLifeLink.setIconLeftCSS("o_icon o_icon-fw o_icon_qitem_endOfLife");
-		statusEndOfLifeLink.setElementCssClass("o_labeled o_qpool_status o_qpool_status_endOfLife");
+		statusEndOfLifeLink.setElementCssClass("o_labeled o_qpool_status_endOfLife");
 		statusEndOfLifeLink.setVisible(qItemSecurityCallback.canSetEndOfLife() && !QuestionStatus.endOfLife.equals(actualStatus));
 		statusDropdown.addComponent(statusEndOfLifeLink);
 
@@ -432,7 +440,7 @@ public class QuestionItemDetailsController extends BasicController implements To
 			doExport(ureq, metadatasCtrl.getItem());
 		} else if(source == copyItemLink) {
 			doConfirmCopy(ureq, metadatasCtrl.getItem());
-		} else if(source == convertItemLink) {
+		} else if(source == convertItemLink || source == convertItemButton) {
 			doConfirmConversion(ureq, metadatasCtrl.getItem());
 		} else if(source == exportLogLink) {
 			doExportLog(ureq, metadatasCtrl.getItem());

@@ -119,7 +119,7 @@ public class WeeklyStatisticUpdateManagerTest extends AbstractStatisticUpdateMan
 	
 	private String getWeekString(Calendar start) {
 		Calendar cal = Calendar.getInstance();
-		cal.setFirstDayOfWeek(Calendar.MONDAY);
+		cal.setFirstDayOfWeek(Calendar.SUNDAY);
 		cal.set(Calendar.YEAR, start.get(Calendar.YEAR));
 		cal.set(Calendar.MONTH, start.get(Calendar.MONTH));
 		cal.set(Calendar.DATE, start.get(Calendar.DATE));
@@ -148,6 +148,7 @@ public class WeeklyStatisticUpdateManagerTest extends AbstractStatisticUpdateMan
 		
 		String week = getWeekString(cal);
 		incrementInMemoryStatistics(repositoryEntry.getKey(), courseNode.getIdent(), week);
+		cal.getTime();
 		return week;
 	}
 }

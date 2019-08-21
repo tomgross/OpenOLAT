@@ -32,39 +32,21 @@ import java.util.Locale;
 import java.util.Map;
 
 import org.olat.core.id.Identity;
-import org.olat.core.id.OLATResourceable;
+import org.olat.core.id.Organisation;
+import org.olat.core.id.OrganisationRef;
 import org.olat.core.id.Roles;
+import org.olat.core.id.RolesByOrganisation;
 import org.olat.core.id.User;
 import org.olat.core.util.Encoder;
-import org.olat.resource.OLATResource;
 
 import javax.annotation.Nullable;
 
 /**
- * Description: <br>
- * TODO: Class Description
- * <P>
  * 
  * @author Felix Jost
  */
 public interface BaseSecurity {
 
-	/**
-	 * 
-	 */
-	public void init();
-
-	/**
-	 * is allowed to....
-	 * 
-	 * @param identity
-	 * @param permission
-	 * @param olatResourceable
-	 * @return true if permitted
-	 */
-	public boolean isIdentityPermittedOnResourceable(IdentityRef identity, String permission, OLATResourceable olatResourceable);
-
-	
 	
 	/**
 	 * Get the identity's roles
@@ -74,13 +56,17 @@ public interface BaseSecurity {
 	 */
 	public Roles getRoles(IdentityRef identity);
 	
+	public Roles getRoles(IdentityRef identity, boolean withInherited);
+	
 	/**
-	 * Get the list of roles as string without inheritence (an admin
+	 * Get the list of roles as string without inheritance (an admin
 	 * has only admin role and not the user manager role...).
 	 * @param identity
 	 * @return
 	 */
 	public List<String> getRolesAsString(IdentityRef identity);
+	
+	public List<String> getRolesAsString(IdentityRef identity, OrganisationRef organisation);
 	
 	/**
 	 * This method need several queries to catch all roles.
@@ -95,66 +81,12 @@ public interface BaseSecurity {
 	 * Update the roles
 	 * @param actingIdentity The identity who is performing the change
 	 * @param updatedIdentity The identity that is changed
-	 * @param roles The new roles to set on updatedIdentity
+	 * @param roles The new roles to set
 	 */
-	public void updateRoles(Identity actingIdentity, Identity updatedIdentity, Roles roles);
+	public void updateRoles(Identity actingIdentity, Identity updatedIdentity, RolesByOrganisation organisation);
 
-	/**
-	 * @param identity
-	 * @param permission
-	 * @param olatResourceable
-	 * @param checkTypeRight
-	 * @return true if permitted
-	 */
-	public boolean isIdentityPermittedOnResourceable(IdentityRef identity, String permission, OLATResourceable olatResourceable,
-			boolean checkTypeRight);
-
-	/**
-	 * use only if really needed. Normally better use
-	 * isIdentityPermittedOnResourceable!
-	 * 
-	 * @param identity
-	 * @param secGroup
-	 * @return true if the identity is in the group
-	 */
-	public boolean isIdentityInSecurityGroup(IdentityRef identity, SecurityGroup secGroup);
+	public boolean isGuest(IdentityRef identity);
 	
-	/**
-	 * Change the last modificaiton date of the membership
-	 * @param identity
-	 * @param secGroups
-	 */
-	public void touchMembership(Identity identity, List<SecurityGroup> secGroups);
-
-	/**
-	 * search
-	 * 
-	 * @param secGroup
-	 * @return list of Identities
-	 */
-	public List<Identity> getIdentitiesOfSecurityGroup(SecurityGroup secGroup);
-	
-	public List<Identity> getIdentitiesOfSecurityGroup(SecurityGroup secGroup, int firstResult, int maxResults);
-	
-	/**
-	 * Return the primary key of
-	 * @param secGroups
-	 * @return
-	 */
-	public List<Identity> getIdentitiesOfSecurityGroups(List<SecurityGroup> secGroups);
-
-	/**
-	 * @param secGroup
-	 * @return a List of Object[] with the array[0] = Identity, array[1] =
-	 *         addedToGroupTimestamp
-	 */
-	public List<Object[]> getIdentitiesAndDateOfSecurityGroup(SecurityGroup secGroup);
-	
-	/**
-	 * @param securityGroupName
-	 * @return the securitygroup
-	 */
-	public SecurityGroup findSecurityGroupByName(String securityGroupName);
 
 	/**
 	 * Find an identity by its name. This is an exact match. Use the
@@ -221,13 +153,6 @@ public interface BaseSecurity {
 	 * @return The identities
 	 */
 	public List<IdentityShort> findShortIdentitiesByKey(Collection<Long> identityKeys);
-	
-	/**
-	 * Find identities which are not in a business group
-	 * @param status
-	 * @return
-	 */
-	public List<Identity> findIdentitiesWithoutBusinessGroup(Integer status);
 
 	/**
 	 * find an identity by the key instead of the username. Prefer this method as
@@ -240,10 +165,22 @@ public interface BaseSecurity {
 	
 	/**
 	 * 
-	 * @param search
-	 * @return
+	 * @param search The search
+	 * @return A list of identities (short version)
 	 */
 	public List<IdentityShort> searchIdentityShort(String search, int maxResults);
+	
+	/**
+	 * The search look into name, first name, last name and email.
+	 * 
+	 * @param search Search string
+	 * @param searchableOrganisations The organisations where the identities are
+	 * @param repositoryEntryRole restrict to role
+	 * @param maxResults The max results or -1
+	 * @return A list of identities (short version)
+	 */
+	public List<IdentityShort> searchIdentityShort(String search,
+			List<? extends OrganisationRef> searchableOrganisations, GroupRoles repositoryEntryRole, int maxResults);
 
 	public IdentityShort loadIdentityShortByKey(Long identityKey);
 	
@@ -292,26 +229,6 @@ public interface BaseSecurity {
 	public Long countUniqueUserLoginsSince (Date lastLoginLimit);
 	
 	/**
-	 * @param secGroup
-	 * @return nr of members in the securitygroup
-	 */
-	public int countIdentitiesOfSecurityGroup(SecurityGroup secGroup);
-	
-
-
-	/**
-	 * @param username the username
-	 * @param user The persisted user (mandatory)
-	 * @param provider the provider of the authentication ("OLAT" or "AAI"). If
-	 *          null, no authentication token is generated.
-	 * @param authusername the username used as authentication credential
-	 *          (=username for provider "OLAT")
-	 * @param credential the credentials or null if not used
-	 * @return the new identity
-	 */
-	//public Identity createAndPersistIdentity(String username, User user, String provider, String authusername, String password);
-	
-	/**
 	 * @param username the username
 	 * @param user the unpresisted User
 	 * @param provider the provider of the authentication ("OLAT" or "AAI"). If
@@ -343,10 +260,11 @@ public interface BaseSecurity {
 	 * @param externalId
 	 * @param pwd null: no OLAT authentication is generated. If not null, the password will be 
 	 *   encrypted and and an OLAT authentication is generated.
-	 * @param newUser unpersisted users
+	 * @param newUser The unpersisted users
+	 * @param organisation The organization where it is user (if null the default organization will be choosed)
 	 * @return Identity
 	 */
-	public Identity createAndPersistIdentityAndUserWithDefaultProviderAndUserGroup(String loginName, String externalId, String pwd, User newUser);
+	public Identity createAndPersistIdentityAndUserWithDefaultProviderAndUserGroup(String loginName, String externalId, String pwd, User newUser, Organisation organisation);
 	
 	/**
 	 * Persists the given user, creates an identity for it and adds the user to
@@ -435,10 +353,12 @@ public interface BaseSecurity {
 	 * Check if the password is allowed.
 	 * 
 	 * @param identity
+	 * @param provider
 	 * @param password
+	 * @param historyLength
 	 * @return
 	 */
-	public boolean checkCredentialHistory(Identity identity, String provider, String password);
+	public boolean checkCredentialHistory(Identity identity, String provider, String password, int historyLength);
 	
 	/**
 	 * 
@@ -457,101 +377,6 @@ public interface BaseSecurity {
 	 * @return
 	 */
 	public Authentication updateCredentials(Authentication authentication, String password, Encoder.Algorithm algorithm);
-
-	// --- SecGroup management
-
-	/**
-	 * create only makes no sense, since there are no attibutes to set
-	 * 
-	 * @return a new persisted SecurityGroup or throws an Exception
-	 */
-	public SecurityGroup createAndPersistSecurityGroup();
-
-	/**
-	 * create only makes no sense, since there are no attibutes to set
-	 * 
-	 * @param groupName
-	 * @return the newly created securitygroup
-	 */
-	public SecurityGroup createAndPersistNamedSecurityGroup(String groupName); // 
-
-	/**
-	 * removes the group with all the idendities contained in it, the idenities
-	 * itself are of course not deleted.
-	 * 
-	 * @param secGroup
-	 */
-	public void deleteSecurityGroup(SecurityGroup secGroup);
-
-	/**
-	 * @param identity
-	 * @param secGroup
-	 */
-	public void addIdentityToSecurityGroup(Identity identity, SecurityGroup secGroup);
-
-	/**
-	 * Removes the identity from this security group or does nothing if the
-	 * identity is not in the group at all.
-	 * 
-	 * @param identity
-	 * @param secGroup
-	 */
-	public boolean removeIdentityFromSecurityGroup(Identity identity, SecurityGroup secGroup);
-
-	/**
-	 * Remove an Identity
-	 * @param identity
-	 * @param secGroups
-	 * @return
-	 */
-	public boolean removeIdentityFromSecurityGroups(List<Identity> identities, List<SecurityGroup> secGroups);
-
-	// --- Policy management
-	// again no pure RAM creation, since all attributes are mandatory and given by
-	// the system, not by user input
-	/**
-	 * the olatResourceable is not required to have some persisted implementation,
-	 * but the manager will use the OLATResource to persist it. If the
-	 * olatResourceable used OLATResource as its persister, then the same
-	 * OLATResource (same row in table) will be used by the manager use as
-	 * internal reference in the Policy table
-	 * 
-	 * @param secGroup
-	 * @param permission
-	 * @param olatResourceable
-	 * @return the newly created policy
-	 */
-	public Policy createAndPersistPolicy(SecurityGroup secGroup, String permission, OLATResourceable olatResourceable);
-
-	/**
-	 * Delete all policies of a resource
-	 */
-	public void deletePolicies(OLATResource olatResourceable);
-
-	// some queries mainly for the group/groupcontext management
-	/**
-	 * @param secGroup
-	 * @return a list of Policy objects
-	 */
-	public List<Policy> getPoliciesOfSecurityGroup(SecurityGroup secGroup);
-	
-
-	/**
-	 * Return the policies
-	 * @param resource The resource (mandatory)
-	 * @param securityGroup The securityGroup (optional)
-	 * @return
-	 */
-	public List<Policy> getPoliciesOfResource(OLATResource resource, SecurityGroup securityGroup);
-	
-	/**
-	 * for debugging and info by the olat admins:
-	 * 
-	 * @param identity
-	 * @return scalar query return list of object[] with SecurityGroupImpl,
-	 *         PolicyImpl, OLATResourceImpl
-	 */
-	public List<Policy> getPoliciesOfIdentity(Identity identity);
 
 	/**
 	 * @param authusername
@@ -587,7 +412,9 @@ public interface BaseSecurity {
 	 * @param createdBefore date before which the user has been created
 	 * @return List of identities
 	 */
-	public List<Identity> getVisibleIdentitiesByPowerSearch(String login, Map<String, String> userProperties, boolean userPropertiesAsIntersectionSearch, SecurityGroup[] groups, PermissionOnResourceable[] permissionOnResources, String[] authProviders, Date createdAfter,
+	public List<Identity> getVisibleIdentitiesByPowerSearch(String login,
+			Map<String, String> userProperties, boolean userPropertiesAsIntersectionSearch,
+			OrganisationRoles[] role, String[] authProviders, Date createdAfter,
 			Date createdBefore);
 	
 	public int countIdentitiesByPowerSearch(SearchIdentityParams params);
@@ -599,7 +426,9 @@ public interface BaseSecurity {
 	 */
 	public List<Identity> getIdentitiesByPowerSearch(SearchIdentityParams params, int firstResult, int maxResults);
 	
-	public List<Identity> getVisibleIdentitiesByPowerSearch(String login, Map<String, String> userProperties, boolean userPropertiesAsIntersectionSearch, SecurityGroup[] groups, PermissionOnResourceable[] permissionOnResources, String[] authProviders, Date createdAfter,
+	public List<Identity> getVisibleIdentitiesByPowerSearch(String login,
+			Map<String, String> userProperties, boolean userPropertiesAsIntersectionSearch,
+			OrganisationRoles[] roles, String[] authProviders, Date createdAfter,
 			Date createdBefore, int firstResult, int maxResults);
 	
 	/**
@@ -629,7 +458,7 @@ public interface BaseSecurity {
 	 * @return List of identities
 	 */
 	public List<Identity> getIdentitiesByPowerSearch(String login, Map<String, String> userProperties, boolean userPropertiesAsIntersectionSearch, 
-			SecurityGroup[] groups, PermissionOnResourceable[] permissionOnResources, String[] authProviders, Date createdAfter,
+			OrganisationRoles[] roles, String[] authProviders, Date createdAfter,
 			Date createdBefore, Date userLoginAfter, Date userLoginBefore, Integer status);
 	
 	/**
@@ -648,7 +477,7 @@ public interface BaseSecurity {
 	 * @return
 	 */
 	public long countIdentitiesByPowerSearch(String login, Map<String, String> userProperties, boolean userPropertiesAsIntersectionSearch, 
-			SecurityGroup[] groups, PermissionOnResourceable[] permissionOnResources, String[] authProviders, Date createdAfter,
+			OrganisationRoles[] roles, String[] authProviders, Date createdAfter,
 			Date createdBefore, Date userLoginAfter, Date userLoginBefore, Integer status);
 	
 	/**
@@ -709,13 +538,6 @@ public interface BaseSecurity {
 	 */
 	public boolean isIdentityVisible(Identity identity);
 	
-	
-	/**
-	 * Get all SecurtityGroups an Identity is in
-	 * @param identity
-	 * @return List with SecurityGroups
-	 */
-	public List<SecurityGroup> getSecurityGroupsForIdentity(Identity identity);
 
 	/**
 	 * Returns the anonymous identity for a given locale, normally used to log in

@@ -21,7 +21,6 @@ package org.olat.repository.portlet;
 
 import org.olat.core.gui.control.generic.portal.PortletEntry;
 import org.olat.repository.RepositoryEntry;
-import org.olat.repository.RepositoryEntryLight;
 
 /**
  * Description:<br>
@@ -32,91 +31,26 @@ import org.olat.repository.RepositoryEntryLight;
  * 
  * @author gnaegi
  */
-public class RepositoryPortletEntry implements PortletEntry<RepositoryEntryLight> {
-	private RepositoryEntryLight value;
+public class RepositoryPortletEntry implements PortletEntry<RepositoryEntry> {
+	
+	private RepositoryEntry value;
 
-	public RepositoryPortletEntry(RepositoryEntryLight repoEntry) {
-		value = new REShort(repoEntry);
-	}
 	
 	public RepositoryPortletEntry(RepositoryEntry repoEntry) {
-		value = new REShort(repoEntry);
+		value = repoEntry;
 	}
 
+	@Override
 	public Long getKey() {
 		return value.getKey();
 	}
 
-	public RepositoryEntryLight getValue() {
+	@Override
+	public RepositoryEntry getValue() {
 		return value;
 	}
 	
 	public String getDescription() {
 		return value.getDescription();
-	}
-
-	private static class REShort implements RepositoryEntryLight {
-		private final Long key;
-		private final String displayname;
-		private final String description;
-		private final String type;
-		private final int access;
-		private final int statusCode;
-		private final boolean membersOnly;
-		
-		public REShort(RepositoryEntryLight entry) {
-			key = entry.getKey();
-			displayname = entry.getDisplayname();
-			description = entry.getDescription();
-			type = entry.getResourceType();
-			statusCode = entry.getStatusCode();
-			access = entry.getAccess();
-			membersOnly = entry.isMembersOnly();
-		}
-		
-		public REShort(RepositoryEntry entry) {
-			key = entry.getKey();
-			displayname = entry.getDisplayname();
-			description = entry.getDescription();
-			type = entry.getOlatResource().getResourceableTypeName();
-			statusCode = entry.getStatusCode();
-			access = entry.getAccess();
-			membersOnly = entry.isMembersOnly();
-		}
-
-		@Override
-		public Long getKey() {
-			return key;
-		}
-
-		@Override
-		public String getDisplayname() {
-			return displayname;
-		}
-
-		@Override
-		public String getDescription() {
-			return description;
-		}
-
-		@Override
-		public int getAccess() {
-			return access;
-		}
-
-		@Override
-		public boolean isMembersOnly() {
-			return membersOnly;
-		}
-
-		@Override
-		public String getResourceType() {
-			return type;
-		}
-
-		@Override
-		public int getStatusCode() {
-			return statusCode;
-		}
 	}
 }

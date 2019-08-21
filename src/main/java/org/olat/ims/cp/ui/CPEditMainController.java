@@ -47,6 +47,7 @@ import org.olat.ims.cp.CPManager;
 import org.olat.ims.cp.ContentPackage;
 import org.olat.modules.cp.CPUIFactory;
 import org.olat.repository.ui.RepositoryEntryRuntimeController.ToolbarAware;
+import org.springframework.beans.factory.annotation.Autowired;
 
 /**
  * The content packaging main edit controller.
@@ -59,6 +60,9 @@ public class CPEditMainController extends BasicController implements ToolbarAwar
 	private final ContentPackage cp;
 	private LockResult lock;
 	private DeliveryOptions deliveryOptions;
+	
+	@Autowired
+	private CPManager cpManager;
 
 	public CPEditMainController(UserRequest ureq, WindowControl wControl, TooledStackedPanel toolbar,
 			VFSContainer cpContainer, OLATResourceable ores) {
@@ -67,9 +71,9 @@ public class CPEditMainController extends BasicController implements ToolbarAwar
 
 		// acquire lock for resource
 		lock = CoordinatorManager.getInstance().getCoordinator().getLocker().acquireLock(ores, ureq.getIdentity(), null);
-		cp = CPManager.getInstance().load(cpContainer, ores);
+		cp = cpManager.load(cpContainer, ores);
 		
-		CPPackageConfig packageConfig = CPManager.getInstance().getCPPackageConfig(ores);
+		CPPackageConfig packageConfig = cpManager.getCPPackageConfig(ores);
 		if(packageConfig != null) {
 			deliveryOptions = packageConfig.getDeliveryOptions();
 		}
@@ -108,7 +112,7 @@ public class CPEditMainController extends BasicController implements ToolbarAwar
 			Controller columnLayoutCtr = new LayoutMain3ColsController(ureq, wControl, null, new Panel("errorPanel"), "cptestmain");
 			putInitialPanel(columnLayoutCtr.getInitialComponent());
 		}
-		logAudit("cp editor started. oresId: " + ores.getResourceableId(), null);
+		logAudit("cp editor started. oresId: " + ores.getResourceableId());
 	}
 
 	@Override
@@ -124,14 +128,14 @@ public class CPEditMainController extends BasicController implements ToolbarAwar
 	@Override
 	protected void doDispose() {
 		Long oresId = cp.getResourcable().getResourceableId();
-		logAudit("cp editor closing. oresId: " + oresId, null);
+		logAudit("cp editor closing. oresId: " + oresId);
 		if (lock.isSuccess() && contentCtr != null) {
 			// Save CP to zip
-			CPManager.getInstance().writeToZip(cp);
+			cpManager.writeToZip(cp);
 		}
 		// In any case, release the lock
 		CoordinatorManager.getInstance().getCoordinator().getLocker().releaseLock(lock);
-		logAudit("finished editing cp. ores-id: " + oresId, null);
+		logAudit("finished editing cp. ores-id: " + oresId);
 	}
 
 	@Override

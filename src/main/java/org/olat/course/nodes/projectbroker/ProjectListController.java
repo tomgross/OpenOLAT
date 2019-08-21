@@ -150,9 +150,8 @@ public class ProjectListController extends BasicController implements GenericEve
 		contentVC.contextPut("infoProjectBrokerRunMode", infoProjectBrokerRunMode);
 		mainPanel = new SimpleStackedPanel("projectlist_panel");
 		CoursePropertyManager cpm = userCourseEnv.getCourseEnvironment().getCoursePropertyManager();
-		if (  (projectGroupManager.isAccountManager(ureq.getIdentity(), cpm, courseNode ) && !previewMode)
-				|| userCourseEnv.getCourseEnvironment().getCourseGroupManager().isIdentityCourseAdministrator(ureq.getIdentity())
-				|| ureq.getUserSession().getRoles().isOLATAdmin()) {
+		if ((projectGroupManager.isAccountManager(ureq.getIdentity(), cpm, courseNode ) && !previewMode)
+				|| userCourseEnv.isAdmin()) {
 			contentVC.contextPut("isAccountManager", true);
 			createNewProjectButton = LinkFactory.createButtonSmall("create.new.project.button", contentVC, this);
 			createNewProjectButton.setIconLeftCSS("o_icon o_icon_add");
@@ -184,23 +183,23 @@ public class ProjectListController extends BasicController implements GenericEve
 		BusinessControl bc = getWindowControl().getBusinessControl();
 		ContextEntry ce = bc.popLauncherContextEntry();
 		if ( ce != null) { // a context path is left for me
-			if (isLogDebugEnabled()) logDebug("businesscontrol (for further jumps) would be: ", bc.toString());
+			if (isLogDebugEnabled()) logDebug("businesscontrol (for further jumps) would be: " + bc);
 			OLATResourceable ores = ce.getOLATResourceable();
-			if (isLogDebugEnabled()) logDebug("OLATResourceable= " , ores.toString());
+			if (isLogDebugEnabled()) logDebug("OLATResourceable= " + ores.toString());
 			Long resId = ores.getResourceableId();
 			if (resId.longValue() != 0) {
-				if (isLogDebugEnabled()) logDebug("projectId=" , ores.getResourceableId().toString());
+				if (isLogDebugEnabled()) logDebug("projectId=" + ores.getResourceableId());
 
 				Project proj = projectBrokerManager.getProject(ores.getResourceableId());
 				if (proj != null) {
 					activateProjectController(proj, ureq);
 				} else {
 					// message not found, do nothing. Load normal start screen
-					logDebug("Invalid projectId=" , ores.getResourceableId().toString());
+					logDebug("Invalid projectId=" + ores.getResourceableId());
 				}
 			} else {
 				//FIXME:chg: Should not happen, occurs when course-node are called
-				if (isLogDebugEnabled()) logDebug("Invalid projectId=" , ores.getResourceableId().toString());
+				if (isLogDebugEnabled()) logDebug("Invalid projectId=" + ores.getResourceableId());
 			}
 		}
 

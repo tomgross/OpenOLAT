@@ -28,7 +28,7 @@ package org.olat.core.gui.translator;
 
 import java.util.Locale;
 
-import org.apache.log4j.Level;
+import org.apache.logging.log4j.Level;
 /**
  * @author Felix Jost
  */
@@ -37,6 +37,8 @@ public interface Translator {
 	 * A key that can't be translated should start with this error
 	 */
 	public static final String NO_TRANSLATION_ERROR_PREFIX = "no translation::::";
+	
+	public String getPackageName();
 
 	/**
 	 * @param key
@@ -62,12 +64,13 @@ public interface Translator {
 	public String translate(String key, String[] args, Level missingTranslationLogLevel);
 
 	/**
-	 * @param key
-	 * @param args the args to translate, may be null
-	 * @param fallBackToDefaultLocale  if true fall back to configurated default language. 
+	 * @param key The i18n key
+	 * @param args The arguments to translate, may be null
+	 * @param recursionLevel The current recursion level
+	 * @param fallBackToDefaultLocale  if true fall back to configurate default language. 
 	 * @return
 	 */
-	public String translate(String key, String[] args, boolean fallBackToDefaultLocale);
+	public String translate(String key, String[] args, int recursionLevel, boolean fallBackToDefaultLocale);
 
 	/**
 	 * @return

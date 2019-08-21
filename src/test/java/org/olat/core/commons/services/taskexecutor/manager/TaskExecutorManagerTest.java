@@ -29,7 +29,7 @@ import org.junit.Assert;
 import org.junit.Test;
 import org.olat.core.commons.persistence.DB;
 import org.olat.core.commons.services.taskexecutor.LongRunnable;
-import org.olat.core.logging.OLog;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
 import org.olat.test.OlatTestCase;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -42,7 +42,7 @@ import org.springframework.beans.factory.annotation.Autowired;
  */
 public class TaskExecutorManagerTest extends OlatTestCase {
 	
-	private static final OLog log = Tracing.createLoggerFor(TaskExecutorManagerTest.class);
+	private static final Logger log = Tracing.createLoggerFor(TaskExecutorManagerTest.class);
 	
 	@Autowired
 	private DB dbInstance;
@@ -81,7 +81,7 @@ public class TaskExecutorManagerTest extends OlatTestCase {
 		final int numOfExecutors = 5;
 		final Thread[] executors = new Thread[numOfExecutors];
 		for(int i=numOfExecutors; i-->0; ) {
-			executors[i] = new Thread(new ProcessTask(taskExecutorManager));
+			executors[i] = new Thread(new ProcessTask(taskExecutorManager, dbInstance));
 		}
 		
 		try {
@@ -104,15 +104,18 @@ public class TaskExecutorManagerTest extends OlatTestCase {
 	
 	public static class ProcessTask implements Runnable {
 		
+		private final DB db;
 		private final TaskExecutorManagerImpl executor;
 		
-		public ProcessTask(TaskExecutorManagerImpl executor) {
+		public ProcessTask(TaskExecutorManagerImpl executor, DB db) {
 			this.executor = executor;
+			this.db = db;
 		}
 
 		@Override
 		public void run() {
 			executor.processTaskToDo();
+			db.commitAndCloseSession();	
 		}
 	}
 	

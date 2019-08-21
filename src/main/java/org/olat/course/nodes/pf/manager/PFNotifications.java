@@ -25,6 +25,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Date;
 import java.util.Iterator;
 import java.util.List;
@@ -32,15 +33,15 @@ import java.util.Locale;
 
 import org.olat.core.commons.modules.bc.FileInfo;
 import org.olat.core.commons.modules.bc.FolderManager;
-import org.olat.core.commons.modules.bc.meta.MetaInfo;
 import org.olat.core.commons.services.notifications.NotificationsManager;
 import org.olat.core.commons.services.notifications.Publisher;
 import org.olat.core.commons.services.notifications.Subscriber;
 import org.olat.core.commons.services.notifications.model.SubscriptionListItem;
+import org.olat.core.commons.services.vfs.VFSMetadata;
 import org.olat.core.gui.translator.Translator;
 import org.olat.core.id.Identity;
 import org.olat.core.id.context.BusinessControlFactory;
-import org.olat.core.logging.OLog;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.Util;
 import org.olat.course.CourseFactory;
@@ -58,7 +59,7 @@ import org.olat.user.UserManager;
 *
 */
 public class PFNotifications {
-	private static final OLog log = Tracing.createLoggerFor(PFNotifications.class);
+	private static final Logger log = Tracing.createLoggerFor(PFNotifications.class);
 	
 	private final Date compareDate;
 	private final Subscriber subscriber;
@@ -83,19 +84,23 @@ public class PFNotifications {
 		translator = Util.createPackageTranslator(PFRunController.class, locale);
 	}
 	
-	public List<SubscriptionListItem> getItems() throws Exception {
+	public List<SubscriptionListItem> getItems() {
 		Publisher p = subscriber.getPublisher();
 		Identity identity = subscriber.getIdentity();
 		ICourse course = CourseFactory.loadCourse(p.getResId());
 		CourseEnvironment courseEnv = course.getCourseEnvironment();
-		CourseGroupManager groupManager = courseEnv.getCourseGroupManager();
+		if(!courseEnv.getCourseGroupManager().isNotificationsAllowed()) {
+			return Collections.emptyList();
+		}
+		
 		CourseNode node = course.getRunStructure().getNode(p.getSubidentifier());
-		RepositoryEntry entry = course.getCourseEnvironment().getCourseGroupManager().getCourseEntry();
 		Date latestNews = p.getLatestNewsDate();
 
 		if (notificationsManager.isPublisherValid(p) && compareDate.before(latestNews)) {
+			RepositoryEntry entry = course.getCourseEnvironment().getCourseGroupManager().getCourseEntry();
 			this.displayname = entry.getDisplayname();
-			
+
+			CourseGroupManager groupManager = courseEnv.getCourseGroupManager();
 			if (groupManager.isIdentityCourseCoach(identity) || groupManager.isIdentityCourseAdministrator(identity)) {
 				List<Identity> participants = pfManager.getParticipants(identity, courseEnv, groupManager.isIdentityCourseAdministrator(identity));
 
@@ -120,7 +125,7 @@ public class PFNotifications {
 		SubscriptionListItem subListItem;
 		for (Iterator<FileInfo> it_infos = fInfos.iterator(); it_infos.hasNext();) {
 			FileInfo fi = it_infos.next();
-			MetaInfo metaInfo = fi.getMetaInfo();
+			VFSMetadata metaInfo = fi.getMetaInfo();
 			String filePath = fi.getRelPath();
 			Date modDate = fi.getLastModified();
 			String action = "upload";
@@ -149,7 +154,7 @@ public class PFNotifications {
 			if (metaInfo != null) {
 				iconCssClass = metaInfo.getIconCssClass();
 			}
-			if (metaInfo != null && !metaInfo.getName().startsWith(".")) {
+			if (metaInfo != null && !metaInfo.getFilename().startsWith(".")) {
 				subListItem = new SubscriptionListItem(desc, urlToSend, businessPath, modDate, iconCssClass);
 				items.add(subListItem);
 			}

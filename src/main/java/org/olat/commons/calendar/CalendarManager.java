@@ -50,6 +50,7 @@ public interface CalendarManager {
 	public static final String TYPE_USER = "user";
 	public static final String TYPE_GROUP = "group";
 	public static final String TYPE_COURSE = "course";
+	public static final String TYPE_CURRICULUM_EL_AGGREGATED = "claggregated";
 	public static final String TYPE_USER_AGGREGATED = "paggregated";
 	
 	public static final String ICAL_X_OLAT_LINK = "X-OLAT-LINK";
@@ -60,6 +61,7 @@ public interface CalendarManager {
 	public static final String ICAL_X_OLAT_MANAGED = "X-OLAT-MANAGED";
 	public static final String ICAL_X_OLAT_EXTERNAL_ID = "X-OLAT-EXTERNAL-ID";
 	public static final String ICAL_X_OLAT_EXTERNAL_SOURCE = "X-OLAT-EXTERNAL-SOURCE";
+	public static final String ICAL_X_OLAT_VIDEO_STREAM_URL = "X-OLAT-VIDEO-STREAM-URL";
 
 	/** path prefix for personal iCal feed **/
 	public static final String ICAL_PREFIX_AGGREGATED = "/paggregated/";
@@ -238,14 +240,18 @@ public interface CalendarManager {
 	 * @param identity The user which want a token
 	 * @return A configuration with a security token
 	 */
-	public CalendarUserConfiguration createAggregatedCalendarConfig(Identity identity);
+	public CalendarUserConfiguration createAggregatedCalendarConfig(String calendarType, Long calendarId, Identity identity);
 	
 	public CalendarUserConfiguration createCalendarConfig(Identity identity, Kalendar calendar);
 	
-	public List<CalendarUserConfiguration> getCalendarUserConfigurationsList(IdentityRef identity, String... types);
+	public List<CalendarUserConfiguration> getCalendarUserConfigurationsList(IdentityRef identity, String calendarType, String calendarId);
 	
 	public CalendarUserConfiguration getCalendarUserConfiguration(IdentityRef identity, Kalendar calendar);
 	
+	/**
+	 * @param key The primary key of the configuration
+	 * @return The configuration
+	 */
 	public CalendarUserConfiguration getCalendarUserConfiguration(Long key);
 
 	/**
@@ -418,5 +424,6 @@ public interface CalendarManager {
 	 * @return OLATResourceable for given Kalendar
 	 */
 	public OLATResourceable getOresHelperFor(Kalendar cal);
+	
 	
 }

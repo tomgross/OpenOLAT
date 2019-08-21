@@ -33,7 +33,7 @@ import javax.servlet.http.HttpServletResponse;
 import org.olat.core.CoreSpringFactory;
 import org.olat.core.gui.media.MediaResource;
 import org.olat.core.gui.media.ServletUtil;
-import org.olat.core.logging.OLog;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.StringHelper;
 import org.olat.core.util.io.ShieldOutputStream;
@@ -52,7 +52,7 @@ import org.olat.modules.fo.archiver.ForumArchiveManager;
  */
 public class ForumDownloadResource implements MediaResource {
 	
-	private static final OLog log = Tracing.createLoggerFor(ForumDownloadResource.class);
+	private static final Logger log = Tracing.createLoggerFor(ForumDownloadResource.class);
 	
 	private final Forum forum;
 	private final ForumCallback foCallback;
@@ -132,11 +132,19 @@ public class ForumDownloadResource implements MediaResource {
 					File attachment = attachmentEntry.getKey();
 					DocReference ref = attachmentEntry.getValue();
 					zout.putNextEntry(new ZipEntry("attachments/" + ref.getFilename()));
-					Files.copy(attachment.toPath(), new ShieldOutputStream(zout));
+					copyShielded(attachment, zout);
 					zout.closeEntry();
 				}
 			}
 		} catch (Exception e) {
+			log.error("", e);
+		}
+	}
+	
+	private void copyShielded(File attachment, ZipOutputStream zout) {
+		try(OutputStream out = new ShieldOutputStream(zout)) {
+			Files.copy(attachment.toPath(), out);
+		} catch(Exception e) {
 			log.error("", e);
 		}
 	}

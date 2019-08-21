@@ -25,11 +25,11 @@ import java.util.List;
 
 import javax.persistence.TypedQuery;
 
-import org.olat.basesecurity.BaseSecurity;
 import org.olat.basesecurity.GroupRoles;
 import org.olat.basesecurity.IdentityRef;
 import org.olat.basesecurity.SecurityGroup;
 import org.olat.basesecurity.SecurityGroupMembershipImpl;
+import org.olat.basesecurity.manager.SecurityGroupDAO;
 import org.olat.core.commons.persistence.DB;
 import org.olat.core.id.Identity;
 import org.olat.modules.qpool.Pool;
@@ -56,7 +56,7 @@ public class PoolDAO {
 	@Autowired
 	private QuestionItemDAO questionItemDao;
 	@Autowired
-	private BaseSecurity securityManager;
+	private SecurityGroupDAO securityGroupDao;
 	
 	public PoolImpl createPool(Identity owner, String name, boolean publicPool) {
 		PoolImpl pool = new PoolImpl();
@@ -64,11 +64,11 @@ public class PoolDAO {
 		pool.setLastModified(new Date());
 		pool.setName(name);
 		pool.setPublicPool(publicPool);
-		SecurityGroup ownerGroup = securityManager.createAndPersistSecurityGroup();
+		SecurityGroup ownerGroup = securityGroupDao.createAndPersistSecurityGroup();
 		pool.setOwnerGroup(ownerGroup);
 		dbInstance.getCurrentEntityManager().persist(pool);
 		if(owner != null) {
-			securityManager.addIdentityToSecurityGroup(owner, ownerGroup);
+			securityGroupDao.addIdentityToSecurityGroup(owner, ownerGroup);
 		}
 		return pool;
 	}

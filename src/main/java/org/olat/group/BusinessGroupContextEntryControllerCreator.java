@@ -22,7 +22,6 @@ package org.olat.group;
 import java.util.Date;
 import java.util.List;
 
-import org.olat.basesecurity.Constants;
 import org.olat.core.CoreSpringFactory;
 import org.olat.core.gui.UserRequest;
 import org.olat.core.gui.control.Controller;
@@ -32,7 +31,6 @@ import org.olat.core.id.context.ContextEntry;
 import org.olat.core.id.context.ContextEntryControllerCreator;
 import org.olat.core.id.context.DefaultContextEntryControllerCreator;
 import org.olat.core.util.UserSession;
-import org.olat.group.right.BGRightManager;
 import org.olat.group.ui.BGControllerFactory;
 import org.olat.resource.accesscontrol.ACService;
 import org.olat.resource.accesscontrol.AccessControlModule;
@@ -72,9 +70,6 @@ public class BusinessGroupContextEntryControllerCreator extends DefaultContextEn
 		return ctrl;
 	}
 
-	/**
-	 * @see org.olat.core.id.context.ContextEntryControllerCreator#getTabName(org.olat.core.id.context.ContextEntry)
-	 */
 	@Override
 	public String getTabName(ContextEntry ce, UserRequest ureq) {
 		BusinessGroup bgroup = getBusinessGroup(ce);
@@ -103,10 +98,9 @@ public class BusinessGroupContextEntryControllerCreator extends DefaultContextEn
 			UserSession usess = ureq.getUserSession();
 			Object wildcard = usess.getEntry("wild_card_" + bgroup.getKey());
 			authorized = (wildcard != null && Boolean.TRUE.equals(wildcard))
-				|| usess.getRoles().isOLATAdmin()
+				|| usess.getRoles().isAdministrator()
 				|| usess.getRoles().isGroupManager() 
 				|| CoreSpringFactory.getImpl(BusinessGroupService.class).isIdentityInBusinessGroup(ureq.getIdentity(), bgroup)  
-				|| CoreSpringFactory.getImpl(BGRightManager.class).hasBGRight(Constants.PERMISSION_ACCESS, ureq.getIdentity(), bgroup.getResource())
 				|| isAccessControlled(bgroup);
 		}
 		return authorized.booleanValue();

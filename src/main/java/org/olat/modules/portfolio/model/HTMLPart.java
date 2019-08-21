@@ -22,6 +22,8 @@ package org.olat.modules.portfolio.model;
 import javax.persistence.Entity;
 import javax.persistence.Transient;
 
+import org.olat.modules.ceditor.model.HTMLRawElement;
+
 /**
  * 
  * Initial date: 09.06.2016<br>
@@ -29,7 +31,7 @@ import javax.persistence.Transient;
  *
  */
 @Entity(name="pfhtmlpart")
-public class HTMLPart extends AbstractPart {
+public class HTMLPart extends AbstractPart implements HTMLRawElement {
 
 	/**
 	 * 

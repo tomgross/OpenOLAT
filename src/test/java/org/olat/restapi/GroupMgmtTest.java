@@ -36,14 +36,17 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.util.Calendar;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.UUID;
 
 import javax.ws.rs.core.MediaType;
 import javax.ws.rs.core.UriBuilder;
 
+import org.apache.http.HttpEntity;
 import org.apache.http.HttpResponse;
 import org.apache.http.client.methods.HttpDelete;
 import org.apache.http.client.methods.HttpGet;
@@ -51,19 +54,19 @@ import org.apache.http.client.methods.HttpPost;
 import org.apache.http.client.methods.HttpPut;
 import org.apache.http.message.BasicNameValuePair;
 import org.apache.http.util.EntityUtils;
-import org.codehaus.jackson.map.ObjectMapper;
-import org.codehaus.jackson.type.TypeReference;
+import org.apache.logging.log4j.Logger;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 import org.olat.basesecurity.GroupRoles;
+import org.olat.basesecurity.OrganisationService;
 import org.olat.collaboration.CollaborationTools;
 import org.olat.collaboration.CollaborationToolsFactory;
-import org.olat.core.CoreSpringFactory;
+import org.olat.commons.calendar.restapi.EventVO;
 import org.olat.core.commons.persistence.DB;
 import org.olat.core.id.Identity;
 import org.olat.core.id.OLATResourceable;
-import org.olat.core.logging.OLog;
+import org.olat.core.id.Organisation;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.resource.OresHelper;
 import org.olat.group.BusinessGroup;
@@ -76,6 +79,7 @@ import org.olat.modules.fo.restapi.MessageVO;
 import org.olat.properties.NarrowedPropertyManager;
 import org.olat.properties.Property;
 import org.olat.repository.RepositoryEntry;
+import org.olat.repository.RepositoryEntryStatusEnum;
 import org.olat.repository.RepositoryService;
 import org.olat.resource.OLATResource;
 import org.olat.resource.OLATResourceManager;
@@ -83,9 +87,12 @@ import org.olat.restapi.support.vo.GroupConfigurationVO;
 import org.olat.restapi.support.vo.GroupInfoVO;
 import org.olat.restapi.support.vo.GroupVO;
 import org.olat.test.JunitTestHelper;
-import org.olat.test.OlatJerseyTestCase;
+import org.olat.test.OlatRestTestCase;
 import org.olat.user.restapi.UserVO;
 import org.springframework.beans.factory.annotation.Autowired;
+
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 /**
  * 
@@ -96,9 +103,9 @@ import org.springframework.beans.factory.annotation.Autowired;
  * Initial Date:  7 mai 2010 <br>
  * @author srosse, stephane.rosse@frentix.com
  */
-public class GroupMgmtTest extends OlatJerseyTestCase {
+public class GroupMgmtTest extends OlatRestTestCase {
 	
-	private static final OLog log = Tracing.createLoggerFor(GroupMgmtTest.class);
+	private static final Logger log = Tracing.createLoggerFor(GroupMgmtTest.class);
 	
 	private Identity owner1, owner2, owner3, part1, part2, part3;
 	private BusinessGroup g1, g2;
@@ -112,18 +119,19 @@ public class GroupMgmtTest extends OlatJerseyTestCase {
 	@Autowired
 	private ForumManager forumManager;
 	@Autowired
+	private RepositoryService repositoryService;
+	@Autowired
+	private OrganisationService organisationService;
+	@Autowired
 	private BusinessGroupService businessGroupService;
 	@Autowired
 	private BusinessGroupRelationDAO businessGroupRelationDao;
 	
 	/**
 	 * Set up a course with learn group and group area
-	 * @see org.olat.test.OlatJerseyTestCase#setUp()
 	 */
 	@Before
-	@Override
 	public void setUp() throws Exception {
-		super.setUp();
 		conn = new RestConnection();
 		//create a course with learn group
 
@@ -138,8 +146,9 @@ public class GroupMgmtTest extends OlatJerseyTestCase {
 		// create course and persist as OLATResourceImpl
 		OLATResourceable resourceable = OresHelper.createOLATResourceableInstance("junitcourse",System.currentTimeMillis());
 		course = rm.findOrPersistResourceable(resourceable);
-		RepositoryService rs = CoreSpringFactory.getImpl(RepositoryService.class);
-		RepositoryEntry re = rs.create("administrator", "-", "rest-re", null, course);
+		Organisation defOrganisation = organisationService.getDefaultOrganisation();
+		RepositoryEntry re = repositoryService.create(null, "administrator", "-", "rest-re", null, course,
+				RepositoryEntryStatusEnum.trash, defOrganisation);
 		dbInstance.commit();
 		assertNotNull(re);
 		
@@ -179,6 +188,7 @@ public class GroupMgmtTest extends OlatJerseyTestCase {
 		CollaborationTools collabTools1 = CollaborationToolsFactory.getInstance().getOrCreateCollaborationTools(g1);
 		collabTools1.setToolEnabled(CollaborationTools.TOOL_FORUM, true);
 		collabTools1.setToolEnabled(CollaborationTools.TOOL_WIKI, true);
+		collabTools1.setToolEnabled(CollaborationTools.TOOL_CALENDAR, true);
 		collabTools1.saveNews("<p>Hello world</p>");
     
 		try {
@@ -249,13 +259,11 @@ public class GroupMgmtTest extends OlatJerseyTestCase {
 		HttpGet method = conn.createGet(request, MediaType.APPLICATION_JSON, true);
 		HttpResponse response = conn.execute(method);
 		assertEquals(200, response.getStatusLine().getStatusCode());
-		InputStream body = response.getEntity().getContent();
-		
-		List<GroupVO> groups = parseGroupArray(body);
+		List<GroupVO> groups = parseGroupArray(response.getEntity());
 		assertNotNull(groups);
 		assertTrue(groups.size() >= 4);//g1, g2, g3 and g4 + from olat
 		
-		Set<Long> keys = new HashSet<Long>();
+		Set<Long> keys = new HashSet<>();
 		for(GroupVO vo:groups) {
 			keys.add(vo.getKey());
 		}
@@ -274,13 +282,11 @@ public class GroupMgmtTest extends OlatJerseyTestCase {
 		HttpGet method = conn.createGet(request, MediaType.APPLICATION_JSON, true);
 		HttpResponse response = conn.execute(method);
 		assertEquals(200, response.getStatusLine().getStatusCode());
-		InputStream body = response.getEntity().getContent();
-		
-		List<GroupVO> groups = parseGroupArray(body);
+		List<GroupVO> groups = parseGroupArray(response.getEntity());
 		assertNotNull(groups);
 		assertTrue(groups.size() >= 2);//g1, g2, g3 and g4 + from olat
 		
-		Set<Long> keys = new HashSet<Long>();
+		Set<Long> keys = new HashSet<>();
 		for(GroupVO vo:groups) {
 			keys.add(vo.getKey());
 		}
@@ -335,7 +341,6 @@ public class GroupMgmtTest extends OlatJerseyTestCase {
 		assertNotNull(vo.getForumKey());
 	}
 	
-	
 	@Test
 	public void testGetThreads() throws IOException, URISyntaxException {
 		assertTrue(conn.login("rest-one", "A6B7C8"));
@@ -344,9 +349,7 @@ public class GroupMgmtTest extends OlatJerseyTestCase {
 		HttpGet method = conn.createGet(request, MediaType.APPLICATION_JSON, true);
 		HttpResponse response = conn.execute(method);
 		assertEquals(200, response.getStatusLine().getStatusCode());
-		InputStream body = response.getEntity().getContent();
-		
-		List<MessageVO> messages = parseMessageArray(body);
+		List<MessageVO> messages = parseMessageArray(response.getEntity());
 		
 		assertNotNull(messages);
 		assertEquals(2, messages.size());
@@ -360,15 +363,49 @@ public class GroupMgmtTest extends OlatJerseyTestCase {
 		HttpGet method = conn.createGet(request, MediaType.APPLICATION_JSON, true);
 		HttpResponse response = conn.execute(method);
 		assertEquals(200, response.getStatusLine().getStatusCode());
-		InputStream body = response.getEntity().getContent();
-		
-		List<MessageVO> messages = parseMessageArray(body);
+		List<MessageVO> messages = parseMessageArray(response.getEntity());
 		
 		assertNotNull(messages);
 		assertEquals(4, messages.size());
 	}
 	
+	@Test
+	public void testGetGroupCalendarEvents() throws IOException, URISyntaxException {
+		assertTrue(conn.login("administrator", "openolat"));
+		
+		//create an event
+		EventVO event = new EventVO();
+		Calendar cal = Calendar.getInstance();
+		event.setBegin(cal.getTime());
+		cal.add(Calendar.HOUR_OF_DAY, 1);
+		event.setEnd(cal.getTime());
+		String subject = UUID.randomUUID().toString();
+		event.setSubject(subject);
+
+		URI eventUri = UriBuilder.fromUri(getContextURI()).path("/groups/" + g1.getKey() + "/calendar/event").build();
+		HttpPost postEventMethod = conn.createPost(eventUri, MediaType.APPLICATION_JSON);
+		conn.addJsonEntity(postEventMethod, event);
+		HttpResponse postEventResponse = conn.execute(postEventMethod);
+		assertEquals(200, postEventResponse.getStatusLine().getStatusCode());
+		
+		// Get the event
+		URI request = UriBuilder.fromUri(getContextURI()).path("/groups/" + g1.getKey() + "/calendar/events").build();
+		HttpGet method = conn.createGet(request, MediaType.APPLICATION_JSON, true);
+		HttpResponse response = conn.execute(method);
+		assertEquals(200, response.getStatusLine().getStatusCode());
+		List<EventVO> vos = parseEventArray(response);
+		assertNotNull(vos);
+	}
 	
+	private List<EventVO> parseEventArray(HttpResponse response) {
+		try(InputStream body = response.getEntity().getContent()) {
+			ObjectMapper mapper = new ObjectMapper(jsonFactory); 
+			return mapper.readValue(body, new TypeReference<List<EventVO>>(){/* */});
+		} catch (Exception e) {
+			log.error("", e);
+			return null;
+		}
+	}
 	
 	@Test
 	public void testUpdateCourseGroup() throws IOException, URISyntaxException {
@@ -444,7 +481,7 @@ public class GroupMgmtTest extends OlatJerseyTestCase {
 		//update the configuration
 		GroupConfigurationVO configVo = new GroupConfigurationVO();
 		configVo.setTools(new String[]{ "hasFolder", "hasNews" });
-		HashMap<String, Integer> toolsAccess = new HashMap<String, Integer>();
+		HashMap<String, Integer> toolsAccess = new HashMap<>();
 		toolsAccess.put("hasFolder", new Integer(CollaborationTools.FOLDER_ACCESS_OWNERS));
 		configVo.setToolsAccess(toolsAccess);
 		configVo.setOwnersVisible(Boolean.TRUE);
@@ -609,8 +646,7 @@ public class GroupMgmtTest extends OlatJerseyTestCase {
 		HttpGet method = conn.createGet(request, MediaType.APPLICATION_JSON, true);
 		HttpResponse response = conn.execute(method);
 		assertEquals(200, response.getStatusLine().getStatusCode());
-		InputStream body = response.getEntity().getContent();
-		List<UserVO> participants = parseUserArray(body);
+		List<UserVO> participants = parseUserArray(response.getEntity());
 		assertNotNull(participants);
 		assertEquals(participants.size(), 2);
 		
@@ -646,8 +682,7 @@ public class GroupMgmtTest extends OlatJerseyTestCase {
 		HttpGet method = conn.createGet(request, MediaType.APPLICATION_JSON, true);
 		HttpResponse response = conn.execute(method);
 		assertEquals(200, response.getStatusLine().getStatusCode());
-		InputStream body = response.getEntity().getContent();
-		List<UserVO> owners = parseUserArray(body);
+		List<UserVO> owners = parseUserArray(response.getEntity());
 		assertNotNull(owners);
 		assertEquals(owners.size(), 2);
 		
@@ -756,32 +791,32 @@ public class GroupMgmtTest extends OlatJerseyTestCase {
 		assertFalse(found);
 	}
 	
-	protected List<UserVO> parseUserArray(InputStream body) {
-		try {
+	protected List<UserVO> parseUserArray(HttpEntity body) {
+		try(InputStream in=body.getContent()) {
 			ObjectMapper mapper = new ObjectMapper(jsonFactory); 
-			return mapper.readValue(body, new TypeReference<List<UserVO>>(){/* */});
+			return mapper.readValue(in, new TypeReference<List<UserVO>>(){/* */});
 		} catch (Exception e) {
-			e.printStackTrace();
+			log.error("", e);
 			return null;
 		}
 	}
 	
-	protected List<GroupVO> parseGroupArray(InputStream body) {
-		try {
+	protected List<GroupVO> parseGroupArray(HttpEntity body) {
+		try(InputStream in=body.getContent()) {
 			ObjectMapper mapper = new ObjectMapper(jsonFactory); 
-			return mapper.readValue(body, new TypeReference<List<GroupVO>>(){/* */});
+			return mapper.readValue(in, new TypeReference<List<GroupVO>>(){/* */});
 		} catch (Exception e) {
-			e.printStackTrace();
+			log.error("", e);
 			return null;
 		}
 	}
 	
-	protected List<MessageVO> parseMessageArray(InputStream body) {
-		try {
+	protected List<MessageVO> parseMessageArray(HttpEntity body) {
+		try(InputStream in=body.getContent()) {
 			ObjectMapper mapper = new ObjectMapper(jsonFactory); 
-			return mapper.readValue(body, new TypeReference<List<MessageVO>>(){/* */});
+			return mapper.readValue(in, new TypeReference<List<MessageVO>>(){/* */});
 		} catch (Exception e) {
-			e.printStackTrace();
+			log.error("", e);
 			return null;
 		}
 	}

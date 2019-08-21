@@ -169,7 +169,7 @@ public class GroupAssessmentController extends FormBasicController {
 		
 		if(withComment) {
 			String comment = "";
-			groupCommentEl = uifactory.addTextAreaElement("usercomment", "group.comment", 2500, 5, 40, true, comment, groupGradingCont);
+			groupCommentEl = uifactory.addTextAreaElement("usercomment", "group.comment", 2500, 5, 40, true, false, comment, groupGradingCont);
 			groupCommentEl.setElementCssClass("o_sel_course_gta_group_comment");
 		}
 		
@@ -382,7 +382,7 @@ public class GroupAssessmentController extends FormBasicController {
 				}
 			}
 			
-			if(withScore || withPassed || withPassed) {
+			if(withScore || withPassed) {
 				Boolean userVisible = scoreEval.getUserVisible();
 				if(userVisible == null) {
 					userVisible = Boolean.TRUE;

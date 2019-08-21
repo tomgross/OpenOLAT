@@ -59,7 +59,7 @@ public class AboutController extends BasicController {
 		VelocityContainer aboutVC = createVelocityContainer("about");
 		// add license text
 		String licenses = "Not found";
-		try(InputStream licensesStream = AboutController.class.getResourceAsStream("../../../NOTICE.TXT")) {
+		try(InputStream licensesStream = AboutController.class.getResourceAsStream("../../../NOTICE.TXT")) {		    
 			licenses = IOUtils.toString(licensesStream, "UTF-8");
 		} catch (IOException e) {
 			logError("Error while reading NOTICE.TXT", e);

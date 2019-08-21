@@ -29,6 +29,8 @@ import java.util.List;
 
 import org.junit.Assert;
 import org.junit.Test;
+import org.olat.basesecurity.Group;
+import org.olat.basesecurity.GroupMembershipInheritance;
 import org.olat.basesecurity.GroupRoles;
 import org.olat.basesecurity.model.GroupMembershipImpl;
 import org.olat.core.commons.persistence.DB;
@@ -71,9 +73,7 @@ import org.olat.repository.RepositoryManager;
 import org.olat.repository.manager.RepositoryEntryLifecycleDAO;
 import org.olat.repository.manager.RepositoryEntryRelationDAO;
 import org.olat.repository.model.RepositoryEntryLifecycle;
-import org.olat.repository.model.RepositoryEntryToGroupRelation;
 import org.olat.resource.OLATResource;
-import org.olat.restapi.repository.course.CoursesWebService;
 import org.olat.test.JunitTestHelper;
 import org.olat.test.OlatTestCase;
 import org.olat.user.UserManager;
@@ -347,9 +347,9 @@ public class ReminderRuleEngineTest extends OlatTestCase {
 		Identity id1 = JunitTestHelper.createAndPersistIdentityAsRndUser("initial-launch-1");
 		Identity id2 = JunitTestHelper.createAndPersistIdentityAsRndUser("initial-launch-2");
 		Identity id3 = JunitTestHelper.createAndPersistIdentityAsRndUser("initial-launch-3");
+		
+		RepositoryEntry re = JunitTestHelper.deployBasicCourse(null);
 
-		ICourse course = CoursesWebService.createEmptyCourse(null, "initial-launch-dates", "course long name", null);
-		RepositoryEntry re = course.getCourseEnvironment().getCourseGroupManager().getCourseEntry();
 		repositoryEntryRelationDao.addRole(id1, re, GroupRoles.owner.name());
 		repositoryEntryRelationDao.addRole(id2, re, GroupRoles.coach.name());
 		repositoryEntryRelationDao.addRole(id3, re, GroupRoles.participant.name());
@@ -467,9 +467,9 @@ public class ReminderRuleEngineTest extends OlatTestCase {
 		Identity id1 = JunitTestHelper.createAndPersistIdentityAsRndUser("initial-launch-1");
 		Identity id2 = JunitTestHelper.createAndPersistIdentityAsRndUser("initial-launch-2");
 		Identity id3 = JunitTestHelper.createAndPersistIdentityAsRndUser("initial-launch-3");
+		
+		RepositoryEntry re = JunitTestHelper.deployBasicCourse(null);
 
-		ICourse course = CoursesWebService.createEmptyCourse(null, "initial-launch-dates", "course long name", null);
-		RepositoryEntry re = course.getCourseEnvironment().getCourseGroupManager().getCourseEntry();
 		repositoryEntryRelationDao.addRole(id1, re, GroupRoles.owner.name());
 		repositoryEntryRelationDao.addRole(id2, re, GroupRoles.coach.name());
 		repositoryEntryRelationDao.addRole(id3, re, GroupRoles.participant.name());
@@ -587,9 +587,10 @@ public class ReminderRuleEngineTest extends OlatTestCase {
 		Identity id1 = JunitTestHelper.createAndPersistIdentityAsRndUser("initial-launch-1");
 		Identity id2 = JunitTestHelper.createAndPersistIdentityAsRndUser("initial-launch-2");
 		Identity id3 = JunitTestHelper.createAndPersistIdentityAsRndUser("initial-launch-3");
-
-		ICourse course = CoursesWebService.createEmptyCourse(null, "initial-launch-dates", "course long name", null);
-		RepositoryEntry re = course.getCourseEnvironment().getCourseGroupManager().getCourseEntry();
+		
+		RepositoryEntry re = JunitTestHelper.deployBasicCourse(null);
+		dbInstance.commit();
+		
 		addEnrollmentDate(re, id1, GroupRoles.owner,  -5, Calendar.DATE);
 		addEnrollmentDate(re, id2, GroupRoles.coach, -35, Calendar.DATE);
 		addEnrollmentDate(re, id3, GroupRoles.participant, -75, Calendar.DATE);
@@ -665,8 +666,7 @@ public class ReminderRuleEngineTest extends OlatTestCase {
 	}
 	
 	private void addEnrollmentDate(RepositoryEntry entry, Identity id, GroupRoles role, int amount, int field) {
-		RepositoryEntryToGroupRelation rel = entry.getGroups().iterator().next();
-		rel.getGroup();
+		Group group = repositoryEntryRelationDao.getDefaultGroup(entry);
 		
 		Calendar cal = Calendar.getInstance();
 		cal.setTime(new Date());
@@ -675,9 +675,10 @@ public class ReminderRuleEngineTest extends OlatTestCase {
 		GroupMembershipImpl membership = new GroupMembershipImpl();
 		membership.setCreationDate(cal.getTime());
 		membership.setLastModified(cal.getTime());
-		membership.setGroup(rel.getGroup());
+		membership.setGroup(group);
 		membership.setIdentity(id);
 		membership.setRole(role.name());
+		membership.setInheritanceMode(GroupMembershipInheritance.none);
 		dbInstance.getCurrentEntityManager().persist(membership);
 		dbInstance.commit();
 	}
@@ -701,8 +702,7 @@ public class ReminderRuleEngineTest extends OlatTestCase {
 		Identity id2 = JunitTestHelper.createAndPersistIdentityAsRndUser("before-begin-2");
 		Identity id3 = JunitTestHelper.createAndPersistIdentityAsRndUser("before-begin-3");
 
-		ICourse course = CoursesWebService.createEmptyCourse(null, "initial-launch-dates", "course long name", null);
-		RepositoryEntry re = course.getCourseEnvironment().getCourseGroupManager().getCourseEntry();
+		RepositoryEntry re = JunitTestHelper.deployBasicCourse(null);
 		
 		Calendar cal = Calendar.getInstance();
 		cal.setTime(new Date());//now
@@ -785,10 +785,9 @@ public class ReminderRuleEngineTest extends OlatTestCase {
 		Identity id1 = JunitTestHelper.createAndPersistIdentityAsRndUser("after-end-1");
 		Identity id2 = JunitTestHelper.createAndPersistIdentityAsRndUser("after-end-2");
 		Identity id3 = JunitTestHelper.createAndPersistIdentityAsRndUser("after-end-3");
-
-		ICourse course = CoursesWebService.createEmptyCourse(null, "initial-launch-dates", "course long name", null);
-		RepositoryEntry re = course.getCourseEnvironment().getCourseGroupManager().getCourseEntry();
 		
+		RepositoryEntry re = JunitTestHelper.deployBasicCourse(null);
+
 		Calendar cal = Calendar.getInstance();
 		cal.setTime(new Date());//now
 		cal.add(Calendar.DATE, -25);

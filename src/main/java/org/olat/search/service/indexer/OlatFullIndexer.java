@@ -55,17 +55,14 @@ import org.apache.lucene.index.IndexWriterConfig;
 import org.apache.lucene.index.IndexWriterConfig.OpenMode;
 import org.apache.lucene.index.LogDocMergePolicy;
 import org.apache.lucene.index.LogMergePolicy;
-import org.apache.lucene.queryparser.classic.ParseException;
 import org.apache.lucene.store.Directory;
 import org.apache.lucene.store.FSDirectory;
 import org.olat.core.commons.persistence.DBFactory;
-import org.olat.core.logging.OLog;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.coordinate.CoordinatorManager;
-import org.olat.search.QueryException;
 import org.olat.search.SearchModule;
 import org.olat.search.SearchService;
-import org.olat.search.ServiceNotAvailableException;
 import org.olat.search.model.OlatDocument;
 import org.olat.search.service.SearchResourceContext;
 
@@ -77,7 +74,7 @@ import org.olat.search.service.SearchResourceContext;
  */
 public class OlatFullIndexer {
 	
-	private static final OLog log = Tracing.createLoggerFor(OlatFullIndexer.class);
+	private static final Logger log = Tracing.createLoggerFor(OlatFullIndexer.class);
 	private static final int INDEX_MERGE_FACTOR = 1000;
 	private static final int MAX_WAITING_COUNT = 600;// = 10Min
 	private static final IndexerThreadFactory indexWriterThreadFactory = new IndexerThreadFactory("writer");
@@ -200,7 +197,7 @@ public class OlatFullIndexer {
 	 */
 	public void stopIndexing() {
 		stopIndexing = true;
-		if (log.isDebug()) log.debug("stop current indexing when");
+		if (log.isDebugEnabled()) log.debug("stop current indexing when");
 	}
 	
 	
@@ -213,8 +210,8 @@ public class OlatFullIndexer {
 
 	
 	public IndexWriterConfig newIndexWriterConfig() {
-		Analyzer analyzer = new StandardAnalyzer(SearchService.OO_LUCENE_VERSION);
-		IndexWriterConfig indexWriterConfig = new IndexWriterConfig(SearchService.OO_LUCENE_VERSION, analyzer);
+		Analyzer analyzer = new StandardAnalyzer();
+		IndexWriterConfig indexWriterConfig = new IndexWriterConfig(analyzer);
 		indexWriterConfig.setMergePolicy(newLogMergePolicy());
 		indexWriterConfig.setRAMBufferSizeMB(ramBufferSizeMB);// for better performance set to 48MB (see lucene docu 'how to make indexing faster")
 		indexWriterConfig.setOpenMode(OpenMode.CREATE_OR_APPEND);
@@ -240,8 +237,10 @@ public class OlatFullIndexer {
 				indexerWriterExecutor = new ThreadPoolExecutor(1, 1, 0L, TimeUnit.MILLISECONDS, queue, indexWriterThreadFactory);
 			}
 			
+			searchService.refresh();// make sure all is up-to-date
+			
 			File tempIndexDir = new File(tempIndexPath);
-			Directory tmpIndexPath = FSDirectory.open(new File(tempIndexDir, "main"));
+			Directory tmpIndexPath = FSDirectory.open(new File(tempIndexDir, "main").toPath());
 			indexWriter = new IndexWriter(tmpIndexPath, newIndexWriterConfig());// analyzer, true, IndexWriter.MAX_TERM_LENGTH.UNLIMITED);
 			indexWriter.deleteAll();
 			
@@ -256,7 +255,6 @@ public class OlatFullIndexer {
 			indexerExecutor.awaitTermination(10, TimeUnit.MINUTES);
 			DBFactory.getInstance().commitAndCloseSession();
 			
-
 			log.info("Wait until index writer executor is finished");
 			int waitWriter = 0;
 			while (indexerWriterExecutor.getActiveCount() > 0 && (waitWriter++ < MAX_WAITING_COUNT)) { 
@@ -345,14 +343,6 @@ public class OlatFullIndexer {
 		}
 	}
 	
-	public Document getDocument(String businessPath) {
-		try {
-			return searchService.doSearch(businessPath);
-		} catch (ServiceNotAvailableException | ParseException | QueryException e) {
-			return null;
-		}
-	}
-	
 	/**
 	 * Add a document to the index writer. The document is indexed by a single threaded executor,
 	 * Lucene want that write operations happen within a single thread. The access is synchronized
@@ -362,7 +352,7 @@ public class OlatFullIndexer {
 	 * @param document
 	 * @throws IOException
 	 */
-	public void addDocument(Document document) throws IOException,InterruptedException {
+	public void addDocument(Document document) throws InterruptedException {
 		DBFactory.getInstance().commitAndCloseSession();
 		
 		if (!stopIndexing && indexerWriterExecutor != null && !indexerWriterExecutor.isShutdown()) {

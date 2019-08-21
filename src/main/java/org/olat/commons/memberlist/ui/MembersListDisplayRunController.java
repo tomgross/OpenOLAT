@@ -31,11 +31,11 @@ import java.util.Set;
 
 import org.olat.basesecurity.BaseSecurityModule;
 import org.olat.commons.memberlist.manager.MembersExportManager;
+import org.olat.commons.memberlist.model.CurriculumMemberInfos;
 import org.olat.commons.memberlist.ui.MembersAvatarDisplayRunController.IdentityComparator;
 import org.olat.core.commons.fullWebApp.popup.BaseFullWebappPopupLayoutFactory;
 import org.olat.core.gui.UserRequest;
 import org.olat.core.gui.components.Component;
-import org.olat.core.gui.components.form.flexible.elements.FlexiTableElement;
 import org.olat.core.gui.components.form.flexible.impl.FormBasicController;
 import org.olat.core.gui.components.link.Link;
 import org.olat.core.gui.components.link.LinkFactory;
@@ -51,24 +51,22 @@ import org.olat.core.gui.media.MediaResource;
 import org.olat.core.gui.translator.Translator;
 import org.olat.core.helpers.Settings;
 import org.olat.core.id.Identity;
-import org.olat.core.id.IdentityEnvironment;
 import org.olat.core.id.Roles;
 import org.olat.core.id.UserConstants;
 import org.olat.core.util.Util;
 import org.olat.course.assessment.manager.UserCourseInformationsManager;
 import org.olat.course.nodes.members.Member;
 import org.olat.course.run.environment.CourseEnvironment;
+import org.olat.course.run.userview.UserCourseEnvironment;
 import org.olat.group.BusinessGroup;
 import org.olat.group.BusinessGroupMembership;
-import org.olat.group.ui.main.MemberListTableModel;
-import org.olat.group.ui.main.MemberView;
+import org.olat.group.ui.main.MemberRow;
 import org.olat.modules.co.ContactFormController;
 import org.olat.repository.RepositoryEntry;
 import org.olat.user.DisplayPortraitManager;
 import org.olat.user.UserManager;
 import org.olat.user.propertyhandlers.UserPropertyHandler;
 import org.springframework.beans.factory.annotation.Autowired;
-
 
 
 /**
@@ -96,26 +94,29 @@ public class MembersListDisplayRunController extends BasicController {
 	private List<Identity> coaches;
 	private List<Identity> participants;
 	private List<Identity> waiting;
+	private Map<Long,CurriculumMemberInfos> curriculumInfos;
 
 	private final boolean showOwners;
 	private final boolean showCoaches;
 	private final boolean showParticipants;
 	private final boolean showWaiting;
+	private final boolean deduplicateList;
 	
 	private final CourseEnvironment courseEnv;
+	private final UserCourseEnvironment userCourseEnv;
 	private final BusinessGroup businessGroup;
 	private final RepositoryEntry repoEntry;
 	
-	protected FlexiTableElement ownersTable, coachesTable, participantsTable, waitingTable;
-	protected MemberListTableModel ownersModel, coachesModel, participantsModel, waitingModel;
-	
-	private MembersTableController ownersTableCtrl, coachesTableCtrl, participantsTableCtrl, waitingTableCtrl;
+	private MembersTableController ownersTableCtrl;
+	private MembersTableController coachesTableCtrl;
+	private MembersTableController participantsTableCtrl;
+	private MembersTableController waitingTableCtrl;
 	
 	private Map<Long,BusinessGroupMembership> groupmemberships;
-	private	Map<Long,Date> recentLaunches, initialLaunches;
+	private	Map<Long,Date> recentLaunches;
+	private	Map<Long,Date> initialLaunches;
 
-	
-	private VelocityContainer mainVC;
+	private final VelocityContainer mainVC;
 	
 	@Autowired
 	private UserManager userManager;
@@ -128,19 +129,20 @@ public class MembersListDisplayRunController extends BasicController {
 	@Autowired
 	private UserCourseInformationsManager userInfosMgr;
 
-	
-	public MembersListDisplayRunController(UserRequest ureq, WindowControl wControl, Translator translator, CourseEnvironment courseEnv, BusinessGroup businessGroup,
-			List<Identity> owners, List<Identity> coaches, List<Identity> participants, List<Identity> waiting, boolean canEmail, boolean canDownload,
-			boolean deduplicateList, boolean showOwners, boolean showCoaches, boolean showParticipants, boolean showWaiting, boolean editable) {
+	public MembersListDisplayRunController(UserRequest ureq, WindowControl wControl, Translator translator, UserCourseEnvironment userCourseEnv, BusinessGroup businessGroup,
+			List<Identity> owners, List<Identity> coaches, List<Identity> participants, List<Identity> waiting, Map<Long,CurriculumMemberInfos> curriculumInfos,
+			boolean canEmail, boolean canDownload, boolean deduplicateList, boolean showOwners, boolean showCoaches, boolean showParticipants, boolean showWaiting, boolean editable) {
 		super(ureq, wControl);
 		Translator fallback = userManager.getPropertyHandlerTranslator(getTranslator());		
 		setTranslator(Util.createPackageTranslator(translator, fallback, getLocale()));		
 		
 		mainVC = createVelocityContainer("membersTable");
 		
-		this.courseEnv = courseEnv;
+		this.userCourseEnv = userCourseEnv;
+		courseEnv = userCourseEnv == null ? null : userCourseEnv.getCourseEnvironment();
 		this.businessGroup = businessGroup;
-		this.repoEntry = courseEnv != null ? courseEnv.getCourseGroupManager().getCourseEntry() : null;
+		this.curriculumInfos = curriculumInfos;
+		repoEntry = courseEnv != null ? courseEnv.getCourseGroupManager().getCourseEntry() : null;
 
 		Roles roles = ureq.getUserSession().getRoles();
 		boolean isAdministrativeUser = securityModule.isUserAllowedAdminProps(roles);
@@ -156,15 +158,16 @@ public class MembersListDisplayRunController extends BasicController {
 		this.showCoaches = showCoaches;
 		this.showParticipants = showParticipants;
 		this.showWaiting = showWaiting;
+		this.deduplicateList = deduplicateList;
 		
 		if(canEmail) {
 			allEmailLink = LinkFactory.createLink(null, "email", "email.all", "members.email.title", getTranslator(), mainVC, this, Link.BUTTON);
 			allEmailLink.setIconLeftCSS("o_icon o_icon_mail");
+			allEmailLink.setElementCssClass("o_sel_cmembers_email_all");
 		}
 		
-		IdentityEnvironment idEnv = ureq.getUserSession().getIdentityEnvironment();
-		Identity ownId = idEnv.getIdentity();
-		if (editable && (roles.isOLATAdmin() || roles.isGroupManager() || owners.contains(ownId) || coaches.contains(ownId) 
+		Identity ownId = getIdentity();
+		if (editable && (isManager(ureq) || owners.contains(ownId) || coaches.contains(ownId) 
 				|| (canDownload && !waiting.contains(ownId)))) {
 			downloadLink = LinkFactory.createLink(null, "download", "download", "members.download", getTranslator(), mainVC, this, Link.BUTTON);
 			downloadLink.setIconLeftCSS("o_icon o_icon_download");
@@ -183,42 +186,48 @@ public class MembersListDisplayRunController extends BasicController {
 		Collections.sort(waiting, idComparator);
 		waitingtList = convertIdentitiesToMembers(waiting);
 		
-		Set<MemberView> duplicateCatcher = new HashSet<>();
+		Set<MemberRow> duplicateCatcher = new HashSet<>();
 		boolean userLastTimeVisible = cacheGroupMemberships(ureq);
 		
 		if (showOwners && !owners.isEmpty()) {
-			ownersTableCtrl = new MembersTableController(ureq, wControl, owners, duplicateCatcher, recentLaunches, initialLaunches, 
-					userPropertyHandlers, groupmemberships,	repoEntry, businessGroup, courseEnv, deduplicateList, getTranslator(), 
-					editable, canEmail, userLastTimeVisible);
+			ownersTableCtrl = new MembersTableController(ureq, wControl, owners, duplicateCatcher, recentLaunches, initialLaunches, curriculumInfos,
+					userPropertyHandlers, groupmemberships,	repoEntry, businessGroup, courseEnv,
+					deduplicateList, getTranslator(), editable, canEmail, userLastTimeVisible);
 			listenTo(ownersTableCtrl);
 			mainVC.put("ownerList", ownersTableCtrl.getInitialComponent());
 		}
 		if (showCoaches && !coaches.isEmpty()) {
-			coachesTableCtrl = new MembersTableController(ureq, wControl, coaches, duplicateCatcher, recentLaunches, initialLaunches, 
-					userPropertyHandlers, groupmemberships, repoEntry, businessGroup, courseEnv, deduplicateList, getTranslator(), editable,
-					canEmail, userLastTimeVisible);
+			coachesTableCtrl = new MembersTableController(ureq, wControl, coaches, duplicateCatcher, recentLaunches, initialLaunches, curriculumInfos,
+					userPropertyHandlers, groupmemberships, repoEntry, businessGroup, courseEnv,
+					deduplicateList, getTranslator(), editable, canEmail, userLastTimeVisible);
 			listenTo(coachesTableCtrl);
 			mainVC.put("coachList", coachesTableCtrl.getInitialComponent());
 		}
 		if (showParticipants && !participants.isEmpty()) {
-			participantsTableCtrl = new MembersTableController(ureq, wControl, participants, duplicateCatcher, recentLaunches, initialLaunches,
-					userPropertyHandlers, groupmemberships,	repoEntry, businessGroup, courseEnv, deduplicateList, getTranslator(), editable,
-					canEmail, userLastTimeVisible);
+			participantsTableCtrl = new MembersTableController(ureq, wControl, participants, duplicateCatcher, recentLaunches, initialLaunches, curriculumInfos,
+					userPropertyHandlers, groupmemberships,	repoEntry, businessGroup, courseEnv,
+					deduplicateList, getTranslator(), editable, canEmail, userLastTimeVisible);
 			listenTo(participantsTableCtrl);
 			mainVC.put("participantList", participantsTableCtrl.getInitialComponent());
 		}
 		if (showWaiting && !waiting.isEmpty()) {
-			waitingTableCtrl = new MembersTableController(ureq, wControl, waiting, duplicateCatcher, recentLaunches, initialLaunches,
-					userPropertyHandlers, groupmemberships, repoEntry, businessGroup, courseEnv, deduplicateList, getTranslator(), editable, 
-					canEmail, userLastTimeVisible);
+			waitingTableCtrl = new MembersTableController(ureq, wControl, waiting, duplicateCatcher, recentLaunches, initialLaunches, curriculumInfos,
+					userPropertyHandlers, groupmemberships, repoEntry, businessGroup, courseEnv,
+					deduplicateList, getTranslator(), editable, canEmail, userLastTimeVisible);
 			listenTo(waitingTableCtrl);
 			mainVC.put("waitingList", waitingTableCtrl.getInitialComponent());
 		}
 		
 		putInitialPanel(mainVC);		
 	}
-
-
+	
+	private boolean isManager(UserRequest ureq) {
+		if(businessGroup != null) {
+			Roles roles = ureq.getUserSession().getRoles();
+			return roles.isAdministrator() || roles.isGroupManager();
+		}
+		return userCourseEnv != null && userCourseEnv.isAdmin();
+	}
 	
 	@Override
 	public void event(UserRequest ureq, Component source, Event event) {
@@ -235,10 +244,7 @@ public class MembersListDisplayRunController extends BasicController {
 	protected void event(UserRequest ureq, Controller source, Event event) {
 		if(source == cmc) {
 			cleanUp();
-		} else if (source == emailController) {
-			cmc.deactivate();
-			cleanUp();
-		} else if(source == mailCtrl) {
+		} else if (source == emailController || source == mailCtrl) {
 			cmc.deactivate();
 			cleanUp();
 		}
@@ -296,7 +302,7 @@ public class MembersListDisplayRunController extends BasicController {
 	}
 	
 	private String createBodyTemplate() {
-		if (courseEnv == null) {
+		if (userCourseEnv == null) {
 			String groupName = businessGroup.getName();
 			// Build REST URL to business group, use hack via group manager to access
 			StringBuilder groupLink = new StringBuilder();
@@ -315,28 +321,24 @@ public class MembersListDisplayRunController extends BasicController {
 		}
 	}
 	
-	
 	private void doExport(UserRequest ureq) {
 		MediaResource resource = exportManager.getXlsMediaResource(showOwners, showCoaches, showParticipants, showWaiting, 
-				owners, coaches, participants, waiting, getTranslator(), userPropertyHandlers, repoEntry, businessGroup);
+				owners, coaches, participants, waiting, curriculumInfos, getTranslator(), userPropertyHandlers, repoEntry, businessGroup);
 		
 		ureq.getDispatchResult().setResultingMediaResource(resource);
 	}
 	
 	private void doPrint(UserRequest ureq) {
-		ControllerCreator printControllerCreator = new ControllerCreator() {
-			@Override
-			public Controller createController(UserRequest lureq, WindowControl lwControl) {
-				lwControl.getWindowBackOffice().getChiefController().addBodyCssClass("o_cmembers_print");
-				return new MembersPrintController(lureq, lwControl, getTranslator(), owners, coaches,
-						participants, waiting, showOwners, showCoaches, showParticipants, showWaiting, 
-						courseEnv != null ? courseEnv.getCourseTitle() : businessGroup.getName());
-			}					
+		final String title = businessGroup != null ? businessGroup.getName() : courseEnv.getCourseTitle();
+		
+		ControllerCreator printControllerCreator = (lureq, lwControl) -> {
+			lwControl.getWindowBackOffice().getChiefController().addBodyCssClass("o_cmembers_print");
+			return new MembersPrintController(lureq, lwControl, getTranslator(), owners, coaches,
+					participants, waiting, curriculumInfos, showOwners, showCoaches, showParticipants, showWaiting, deduplicateList, title);
 		};
 		ControllerCreator layoutCtrlr = BaseFullWebappPopupLayoutFactory.createPrintPopupLayout(printControllerCreator);
 		openInNewBrowserWindow(ureq, layoutCtrlr);
 	}
-	
 	
 	private List<Member> convertIdentitiesToMembers(List<Identity> identities) {
 		List<Member> memberList = new ArrayList<>();
@@ -360,6 +362,6 @@ public class MembersListDisplayRunController extends BasicController {
 			portraitCssClass = DisplayPortraitManager.DUMMY_BIG_CSS_CLASS;
 		}
 		String fullname = userManager.getUserDisplayName(identity);
-		return new Member(identity, fullname, userPropertyHandlers, getLocale(), hasPortrait, portraitCssClass);
+		return new Member(identity, fullname, null, userPropertyHandlers, getLocale(), hasPortrait, portraitCssClass);
 	}
 }

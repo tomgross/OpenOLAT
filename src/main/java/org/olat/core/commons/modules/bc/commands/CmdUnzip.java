@@ -31,12 +31,11 @@ import java.util.Collections;
 import java.util.List;
 
 import org.olat.core.commons.modules.bc.FileSelection;
-import org.olat.core.commons.modules.bc.FolderConfig;
 import org.olat.core.commons.modules.bc.components.FolderComponent;
-import org.olat.core.commons.modules.bc.meta.MetaInfo;
-import org.olat.core.commons.modules.bc.meta.tagged.MetaTagged;
 import org.olat.core.commons.services.notifications.NotificationsManager;
 import org.olat.core.commons.services.notifications.SubscriptionContext;
+import org.olat.core.commons.services.vfs.VFSMetadata;
+import org.olat.core.commons.services.vfs.VFSRepositoryService;
 import org.olat.core.gui.UserRequest;
 import org.olat.core.gui.components.Component;
 import org.olat.core.gui.control.Controller;
@@ -46,7 +45,6 @@ import org.olat.core.gui.control.controller.BasicController;
 import org.olat.core.gui.control.generic.modal.DialogBoxController;
 import org.olat.core.gui.translator.Translator;
 import org.olat.core.id.Identity;
-import org.olat.core.id.Roles;
 import org.olat.core.logging.AssertException;
 import org.olat.core.util.StringHelper;
 import org.olat.core.util.ZipUtil;
@@ -57,6 +55,7 @@ import org.olat.core.util.vfs.VFSItem;
 import org.olat.core.util.vfs.VFSLeaf;
 import org.olat.core.util.vfs.VFSManager;
 import org.olat.core.util.vfs.callbacks.VFSSecurityCallback;
+import org.springframework.beans.factory.annotation.Autowired;
 
 public class CmdUnzip extends BasicController implements FolderCommand {
 
@@ -64,6 +63,9 @@ public class CmdUnzip extends BasicController implements FolderCommand {
 	
 	private Translator translator;
 	private DialogBoxController lockedFiledCtr;
+	
+	@Autowired
+	private VFSRepositoryService vfsRepositoryService;
 	
 	public CmdUnzip(UserRequest ureq, WindowControl wControl) {
 		super(ureq, wControl);
@@ -88,8 +90,7 @@ public class CmdUnzip extends BasicController implements FolderCommand {
 			VFSItem vfsItem = currentContainer.resolve(sItem);
 			if (vfsItem instanceof VFSLeaf) {
 				try {
-					Roles roles = ureq.getUserSession().getRoles();
-					lockedFiles.addAll(checkLockedFiles((VFSLeaf)vfsItem, currentContainer, ureq.getIdentity(), roles));
+					lockedFiles.addAll(checkLockedFiles((VFSLeaf)vfsItem, currentContainer, ureq.getIdentity()));
 				} catch (Exception e) {
 					String name = vfsItem == null ? "NULL" : vfsItem.getName();
 					getWindowControl().setError(translator.translate("FileUnzipFailed", new String[]{name}));
@@ -109,7 +110,7 @@ public class CmdUnzip extends BasicController implements FolderCommand {
 			boolean fileNotExist = false;
 			for (String sItem:selection.getFiles()) {
 				currentVfsItem = currentContainer.resolve(sItem);
-				if (currentVfsItem != null && (currentVfsItem instanceof VFSLeaf)) {
+				if (currentVfsItem instanceof VFSLeaf) {
 					if (!doUnzip((VFSLeaf)currentVfsItem, currentContainer, ureq, wContr)) {
 						status = FolderCommandStatus.STATUS_FAILED;
 						break;
@@ -144,14 +145,13 @@ public class CmdUnzip extends BasicController implements FolderCommand {
 		return null;
 	}
 	
-	private List<String> checkLockedFiles(VFSLeaf vfsItem, VFSContainer currentContainer, Identity identity, Roles roles) {
+	private List<String> checkLockedFiles(VFSLeaf vfsItem, VFSContainer currentContainer, Identity identity) {
 		String name = vfsItem.getName();
 		if (!name.toLowerCase().endsWith(".zip")) {
 			return Collections.emptyList();
 		}
 	
-		boolean versioning = FolderConfig.versionsEnabled(currentContainer);
-		if(!versioning) {
+		if(currentContainer.canVersion() != VFSConstants.YES) {
 			//this command don't overwrite existing folders
 			return Collections.emptyList();
 		}
@@ -161,7 +161,7 @@ public class CmdUnzip extends BasicController implements FolderCommand {
 		if(zipContainer == null) {
 			return Collections.emptyList();
 		} else if (zipContainer instanceof VFSContainer) {
-			return ZipUtil.checkLockedFileBeforeUnzipNonStrict(vfsItem, (VFSContainer)zipContainer, identity, roles);
+			return ZipUtil.checkLockedFileBeforeUnzipNonStrict(vfsItem, (VFSContainer)zipContainer, identity);
 		} else {
 			//replace a file with a folder ???
 			return Collections.emptyList();
@@ -178,7 +178,7 @@ public class CmdUnzip extends BasicController implements FolderCommand {
 		// we make a new folder with the same name as the zip file
 		String sZipContainer = name.substring(0, name.length() - 4);
 		
-		boolean versioning = FolderConfig.versionsEnabled(currentContainer);
+		boolean versioning = currentContainer.canVersion() == VFSConstants.YES;
 		
 		VFSContainer zipContainer = currentContainer.createChildContainer(sZipContainer);
 		if (zipContainer == null) {
@@ -201,11 +201,11 @@ public class CmdUnzip extends BasicController implements FolderCommand {
 				wControl.setError(translator.translate("unzip.alreadyexists", new String[] {sZipContainer}));
 				return false;
 			}
-		} else if (zipContainer instanceof MetaTagged) {
-			MetaInfo info = ((MetaTagged)zipContainer).getMetaInfo();
+		} else if (zipContainer.canMeta() == VFSConstants.YES) {
+			VFSMetadata info = zipContainer.getMetaInfo();
 			if(info != null && ureq.getIdentity() != null) {
 				info.setAuthor(ureq.getIdentity());
-				info.write();
+				vfsRepositoryService.updateMetadata(info);
 			}
 		}
 		

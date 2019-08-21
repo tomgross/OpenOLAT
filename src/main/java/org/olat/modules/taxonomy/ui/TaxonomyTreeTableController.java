@@ -128,13 +128,13 @@ public class TaxonomyTreeTableController extends FormBasicController implements 
 
 		FlexiTableColumnModel columnsModel = FlexiTableDataModelFactory.createFlexiTableColumnModel();
 		columnsModel.addFlexiColumnModel(new DefaultFlexiColumnModel(false, TaxonomyLevelCols.key));
-		TreeNodeFlexiCellRenderer treeNodeRenderer = new TreeNodeFlexiCellRenderer();
+		TreeNodeFlexiCellRenderer treeNodeRenderer = new TreeNodeFlexiCellRenderer("select");
 		treeNodeRenderer.setFlatBySearchAndFilter(true);
 		columnsModel.addFlexiColumnModel(new DefaultFlexiColumnModel(TaxonomyLevelCols.displayName, treeNodeRenderer));
-		columnsModel.addFlexiColumnModel(new DefaultFlexiColumnModel(TaxonomyLevelCols.identifier));
+		columnsModel.addFlexiColumnModel(new DefaultFlexiColumnModel(TaxonomyLevelCols.identifier, "select"));
 		columnsModel.addFlexiColumnModel(new DefaultFlexiColumnModel(TaxonomyLevelCols.typeIdentifier));
 		columnsModel.addFlexiColumnModel(new DefaultFlexiColumnModel(TaxonomyLevelCols.numOfChildren));
-		DefaultFlexiColumnModel selectColumn = new DefaultFlexiColumnModel("select", translate("select"), "select");
+		DefaultFlexiColumnModel selectColumn = new DefaultFlexiColumnModel("zoom", translate("zoom"), "tt-focus");
 		selectColumn.setExportable(false);
 		columnsModel.addFlexiColumnModel(selectColumn);
 		DefaultFlexiColumnModel toolsColumn = new DefaultFlexiColumnModel(TaxonomyLevelCols.tools);
@@ -153,6 +153,7 @@ public class TaxonomyTreeTableController extends FormBasicController implements 
 		tableEl.setMultiSelect(true);
 		tableEl.setFilters(null, getFilters(), true);
 		tableEl.setRootCrumb(new TaxonomyCrumb(taxonomy.getDisplayName()));
+		tableEl.setAndLoadPersistedPreferences(ureq, "tax-tree-" + taxonomy.getKey());
 	}
 	
 	private List<FlexiTableFilter> getFilters() {

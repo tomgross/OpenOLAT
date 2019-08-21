@@ -66,11 +66,6 @@ public class InfoMessageControllerSingleVM extends BasicController {
 	@Autowired
 	private CustomStaticFolderManager staticFolderMgr;
 	
-	/**
-	 * 
-	 * @param ureq
-	 * @param control
-	 */
 	public InfoMessageControllerSingleVM(UserRequest ureq, WindowControl control) {
 		super(ureq, control);
 		infoMsgView = createVelocityContainer("infomsg");
@@ -81,6 +76,9 @@ public class InfoMessageControllerSingleVM extends BasicController {
 		Property p = pm.findProperty(null, null, null, AdminModule.SYSTEM_PROPERTY_CATEGORY, AdminModule.PROPERTY_MAINTENANCE_MESSAGE);
 		String adminToken = (p == null ? "" : p.getStringValue());
 		infoMsgView.contextPut("admintoken", adminToken);
+		String protocol = Settings.getURIScheme().substring(0, Settings.getURIScheme().length()-1);
+		String changeUrl = Settings.getServerContextPathURI() + "admin.html?token=TOKEN&cmd=setinfomessage&msg=Lorem Ipsum";
+		infoMsgView.contextPut("admintokenusage", translate("infomsg.token.usage", new String[] { protocol, changeUrl }));
 		
 		infomsgEditButton = LinkFactory.createButton("infomsgEdit", infoMsgView, this);
 		infomsgClearButton = LinkFactory.createButton("infomsgClear", infoMsgView, this);
@@ -110,10 +108,10 @@ public class InfoMessageControllerSingleVM extends BasicController {
 		// /customizing/static/
 		staticFolderCtrl = new FolderRunController(staticFolderMgr.getRootContainer(), true, ureq, control);
 		listenTo(staticFolderCtrl);
-		infoMsgEdit.put("staticFolder", staticFolderCtrl.getInitialComponent());
+		infoMsgView.put("staticFolder", staticFolderCtrl.getInitialComponent());
 		
 		String url = Settings.getServerContextPathURI() + "/raw/static/";
-		infoMsgEdit.contextPut("extlink", url);
+		infoMsgView.contextPut("extlink", url);
 
 		container = putInitialPanel(infoMsgView);
 	}

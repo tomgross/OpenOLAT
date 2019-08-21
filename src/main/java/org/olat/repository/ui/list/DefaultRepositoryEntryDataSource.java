@@ -98,11 +98,11 @@ public class DefaultRepositoryEntryDataSource implements FlexiTableDataSourceDel
 	}
 
 	@Override
-    public final ResultInfos<RepositoryEntryRow> getRows(String query, List<FlexiTableFilter> filters,
-            List<String> condQueries, int firstResult, int maxResults, SortKey... orderBy) {
-
-        if(filters != null && filters.size() > 0 && filters.get(0) != null) {
-            String filter = filters.get(0).getFilter();
+	public final ResultInfos<RepositoryEntryRow> getRows(String query, List<FlexiTableFilter> filters, 
+			List<String> condQueries, int firstResult, int maxResults, SortKey... orderBy) {
+		
+		if(filters != null && !filters.isEmpty() && filters.get(0) != null) {
+			String filter = filters.get(0).getFilter();
 			if(StringHelper.containsNonWhitespace(filter)) {
 				searchParams.setFilters(Collections.singletonList(Filter.valueOf(filter)));
 			} else {
@@ -126,9 +126,9 @@ public class DefaultRepositoryEntryDataSource implements FlexiTableDataSourceDel
 		
 		List<RepositoryEntryMyView> views = repositoryService.searchMyView(searchParams, firstResult, maxResults);
 		List<RepositoryEntryRow> rows = processViewModel(views);
-		ResultInfos<RepositoryEntryRow> results = new DefaultResultInfos<RepositoryEntryRow>(firstResult + rows.size(), -1, rows);
+		ResultInfos<RepositoryEntryRow> results = new DefaultResultInfos<>(firstResult + rows.size(), -1, rows);
 		if(firstResult == 0 && views.size() < maxResults) {
-			count = new Integer(views.size());
+			count = Integer.valueOf(views.size());
 		}
 		return results;
 	}
@@ -147,6 +147,7 @@ public class DefaultRepositoryEntryDataSource implements FlexiTableDataSourceDel
 		List<OLATResourceAccess> resourcesWithOffer = acService.filterResourceWithAC(resourcesWithAC);
 		repositoryService.filterMembership(searchParams.getIdentity(), repoKeys);
 
+<<<<<<< HEAD
 		LinkedHashMap<RepositoryEntryMyView, RepositoryEntryRow> mapOfRepositoryEntryViewsAndRepositoryEntryRows =
 				repositoryEntryRowsFactory.create(repoEntries);
 
@@ -170,6 +171,19 @@ public class DefaultRepositoryEntryDataSource implements FlexiTableDataSourceDel
 								.getTranslator()
 								.translate("cif.access.membersonly.short")));
 			} else {
+=======
+		List<RepositoryEntryRow> items = new ArrayList<>();
+		for(RepositoryEntryMyView entry:repoEntries) {
+			RepositoryEntryRow row = new RepositoryEntryRow(entry);
+
+			VFSLeaf image = repositoryManager.getImage(entry.getKey(), entry.getOlatResource());
+			if(image != null) {
+				row.setThumbnailRelPath(uifactory.getMapperThumbnailUrl() + "/" + image.getName());
+			}
+
+			List<PriceMethod> types = new ArrayList<>(3);
+			if(entry.isBookable()) {
+>>>>>>> OpenOLAT_14.0.2
 				// collect access control method icons
 				OLATResource resource = entry.getOlatResource();
 				for(OLATResourceAccess resourceAccess:resourcesWithOffer) {
@@ -185,8 +199,16 @@ public class DefaultRepositoryEntryDataSource implements FlexiTableDataSourceDel
 						}
 					}
 				}
+<<<<<<< HEAD
 			}
 
+=======
+			} else if (!entry.isAllUsers() && !entry.isGuests()) {
+				// members only always show lock icon
+				types.add(new PriceMethod("", "o_ac_membersonly_icon", uifactory.getTranslator().translate("cif.access.membersonly.short")));
+			} 
+			
+>>>>>>> OpenOLAT_14.0.2
 			row.setMember(repoKeys.contains(entry.getKey()));
 
 			if(!types.isEmpty()) {

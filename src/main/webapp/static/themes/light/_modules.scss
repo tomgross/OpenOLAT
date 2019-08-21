@@ -50,10 +50,12 @@
 
 /* sites specific styles */
 @import "modules/cal";
+@import "modules/pagecontenteditor";
 @import "modules/coursesite";
 @import "modules/repository";
 @import "modules/course";
 @import "modules/courseeditor";
+@import "modules/curriculum";
 @import "modules/qti";
 @import "modules/qti21";
 @import "modules/devel";
@@ -61,6 +63,7 @@
 @import "modules/portfolio";
 @import "modules/portfolio_v2";
 @import "modules/evaluation_form";
+@import "modules/quality";
 @import "modules/citation";
 @import "modules/video";
 @import "modules/admin";
@@ -75,6 +78,8 @@
 @import "modules/grouptask";
 @import "modules/lecture";
 @import "modules/edubase";
+@import "modules/edusharing";
+@import "modules/doceditor";
 @import "modules/taxonomy";
 
 @import "modules/thirdparty";

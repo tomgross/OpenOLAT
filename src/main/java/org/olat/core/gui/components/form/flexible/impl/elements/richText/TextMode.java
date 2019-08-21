@@ -19,18 +19,20 @@
  */
 package org.olat.core.gui.components.form.flexible.impl.elements.richText;
 
-import java.io.ByteArrayInputStream;
+import java.io.StringReader;
 import java.util.ArrayList;
 import java.util.List;
 
-import org.cyberneko.html.parsers.SAXParser;
-import org.olat.core.logging.OLog;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.StringHelper;
 import org.xml.sax.Attributes;
 import org.xml.sax.InputSource;
 import org.xml.sax.SAXException;
 import org.xml.sax.helpers.DefaultHandler;
+
+import nu.validator.htmlparser.common.XmlViolationPolicy;
+import nu.validator.htmlparser.sax.HtmlParser;
 
 /**
  * 
@@ -44,7 +46,7 @@ public enum TextMode {
 	multiLine,
 	formatted;
 
-	private static final OLog log = Tracing.createLoggerFor(TextMode.class);
+	private static final Logger log = Tracing.createLoggerFor(TextMode.class);
 	
 	public static TextMode guess(String text) {
 		if(StringHelper.containsNonWhitespace(text)) {
@@ -118,12 +120,9 @@ public enum TextMode {
 	}
 	
 	private static void parse(String text, DefaultHandler handler) throws Exception {
-		SAXParser parser = new SAXParser();
-		parser.setProperty("http://cyberneko.org/html/properties/names/elems", "lower");
-		parser.setFeature("http://cyberneko.org/html/features/balance-tags/document-fragment", true);
-		parser.setProperty("http://cyberneko.org/html/properties/default-encoding", "UTF-8");
+		HtmlParser parser = new HtmlParser(XmlViolationPolicy.ALTER_INFOSET);
 		parser.setContentHandler(handler);
-		parser.parse(new InputSource(new ByteArrayInputStream(text.getBytes())));
+		parser.parseFragment(new InputSource(new StringReader(text)), "");
 	}
 	
 	private static final class TextAnalyser extends DefaultHandler {
@@ -170,6 +169,9 @@ public enum TextMode {
 
 		public String getText() {
 			StringBuilder content = new StringBuilder(1024);
+			if(sb.length() > 0) {
+				content.append(sb);
+			}
 			for(String line:lines) {
 				line = line.trim();
 				if(StringHelper.containsNonWhitespace(line)) {

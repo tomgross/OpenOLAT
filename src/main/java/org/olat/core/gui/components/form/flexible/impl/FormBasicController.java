@@ -33,6 +33,7 @@ import org.olat.core.gui.components.Component;
 import org.olat.core.gui.components.form.flexible.FormItem;
 import org.olat.core.gui.components.form.flexible.FormItemContainer;
 import org.olat.core.gui.components.form.flexible.FormUIFactory;
+import org.olat.core.gui.components.form.flexible.elements.FormLink;
 import org.olat.core.gui.components.form.flexible.elements.InlineElement;
 import org.olat.core.gui.components.panel.StackedPanel;
 import org.olat.core.gui.control.Controller;
@@ -294,6 +295,7 @@ public abstract class FormBasicController extends BasicController {
 	}
 	
 	
+	@Override
 	protected void removeAsListenerAndDispose(Controller controller) {
 		super.removeAsListenerAndDispose(controller);
 		
@@ -327,6 +329,8 @@ public abstract class FormBasicController extends BasicController {
 	 * called if form validation was not ok.<br>
 	 * default implementation does nothing. Each element is assumed to set
 	 * errormessages. Needed only if complex business logic is checked even
+	 * 
+	 * @param ureq 
 	 */
 	protected void formNOK(UserRequest ureq) {
 	// by default nothing to do -> e.g. looping until form is ok
@@ -355,6 +359,7 @@ public abstract class FormBasicController extends BasicController {
 	/**
 	 * called if an element inside of the form triggered an event
 	 * 
+	 * @param ureq 
 	 * @param source
 	 * @param event
 	 */
@@ -430,8 +435,13 @@ public abstract class FormBasicController extends BasicController {
 	
 	protected void propagateDirtinessToContainer(FormItem fiSrc, @SuppressWarnings("unused") FormEvent fe) {
 		// check for InlineElments remove as the tag library has been replaced
-		if(fiSrc instanceof InlineElement){
-			if(!((InlineElement) fiSrc).isInlineEditingElement()){ //OO-137
+		if(fiSrc instanceof FormLink) {
+			FormLink link = (FormLink)fiSrc;
+			if(!link.isPopup() && !link.isNewWindow()) {
+				flc.setDirty(true);
+			}
+		} else if(fiSrc instanceof InlineElement) {
+			if(!((InlineElement) fiSrc).isInlineEditingElement()) {
 				//the container need to be redrawn because every form item element
 				//is made of severals components. If a form item is set to invisible
 				//the layout which glue the different components stay visible
@@ -458,9 +468,10 @@ public abstract class FormBasicController extends BasicController {
 		if (i18nKey == null) {
 			flc.contextRemove("off_title");
 		} else {
-			flc.contextPut("off_title", getTranslator().translate(i18nKey));			
+			flc.contextPut("off_title", getTranslator().translate(i18nKey));
 		}
 	}
+	
 	/**
 	 * Set an optional form title that is rendered as a fieldset legend. If you
 	 * use a custom template this will have no effect
@@ -524,6 +535,14 @@ public abstract class FormBasicController extends BasicController {
 			flc.contextPut("off_desc", getTranslator().translate(i18nKey, args));
 		}
 	}
+	
+	protected void setFormTranslatedDescription(String translatedDescription) {
+		if (translatedDescription == null) {
+			flc.contextRemove("off_desc");
+		} else {
+			flc.contextPut("off_desc", translatedDescription);
+		}
+	}
 
 	/**
 	 * Set a warning. This will appear before the form, after the description.
@@ -552,6 +571,20 @@ public abstract class FormBasicController extends BasicController {
 			flc.contextRemove("off_warn");
 		} else {
 			flc.contextPut("off_warn", getTranslator().translate(i18nKey));
+		}
+	}
+	
+	/**
+	 * Set a warning. This will appear before the form, after the description.
+	 * If you use a custom template this will have no effect
+	 * 
+	 * @param translatedWarning The warning
+	 */
+	protected void setFormTranslatedWarning(String translatedWarning) {
+		if (translatedWarning == null) {
+			flc.contextRemove("off_warn");
+		} else {
+			flc.contextPut("off_warn", translatedWarning);
 		}
 	}
 	
@@ -640,16 +673,13 @@ public abstract class FormBasicController extends BasicController {
 	@Override
 	public void dispose() {
 		super.dispose();
-		ThreadLocalUserActivityLoggerInstaller.runWithUserActivityLogger(new Runnable() {
-			public void run() {
-				// Dispose also disposable form items (such as file uploads that needs to
-				// cleanup temporary files)
-				Iterable<FormItem> formItems = FormBasicController.this.flc.getFormItems();
-				for (FormItem formItem : formItems) {
-					if (formItem instanceof Disposable) {
-						Disposable disposableFormItem = (Disposable) formItem;
-						disposableFormItem.dispose();				
-					}
+		ThreadLocalUserActivityLoggerInstaller.runWithUserActivityLogger(() -> {
+			// Dispose also disposable form items (such as file uploads that needs to
+			// cleanup temporary files)
+			for (FormItem formItem : FormBasicController.this.flc.getFormItems()) {
+				if (formItem instanceof Disposable) {
+					Disposable disposableFormItem = (Disposable) formItem;
+					disposableFormItem.dispose();				
 				}
 			}
 		}, getUserActivityLogger());

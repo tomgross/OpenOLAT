@@ -25,6 +25,7 @@
                         <property name="password" value="openolat" />
                         <property name="language" value="${defaultlang}" />
                         <property name="admin" value="true" />
+                        <property name="sysAdmin" value="true" />
                 </bean>
 			</list>
        </constructor-arg>
@@ -248,9 +249,6 @@
 		<property name="userPropertiesConfig">
                 <ref bean="org.olat.user.UserPropertiesConfig" />
         </property>
-        <property name="userNameAndPasswordSyntaxChecker">
-        	<ref bean="org.olat.user.UserNameAndPasswordSyntaxChecker"/>
-        </property>
 		<property name="userDisplayNameCreator">
 			 <ref bean="${userDisplayName}"/>
         </property>
@@ -259,16 +257,48 @@
 	<bean id="org.olat.core.commons.creator.UserAvatarDisplayControllerCreator"
 		class="org.olat.user.UserAvatarDisplayControllerCreatorImpl"/>
 
-	<!-- Generic regexp based email  and password checker. 
-	     If you customize this, make sure you adjusted the i18n keys                            
-	 	form.checkUsername
-		form.checkPassword
-	     of the package org.olat.user
-	-->
-	<bean id="org.olat.user.UserNameAndPasswordSyntaxChecker" class="org.olat.user.UserNameAndPasswordSyntaxCheckerWithEmail" />
-
 	<bean id="personalFolderManager" class="org.olat.user.PersonalFolderManager"/>
 	<bean class="org.olat.user.DisplayPortraitManager"/>
+	
+	<!-- Organisation admin. panel -->
+	<bean class="org.olat.core.extensions.action.GenericActionExtension" init-method="initExtensionPoints">
+		<property name="order" value="9012" />
+		<property name="actionController">	
+			<bean class="org.olat.core.gui.control.creator.AutoCreator" scope="prototype">
+				<property name="className" value="org.olat.user.ui.organisation.OrganisationAdminController"/>
+			</bean>
+		</property>
+		<property name="navigationKey" value="organisations" />
+		<property name="parentTreeNodeIdentifier" value="modulesParent" /> 
+		<property name="i18nActionKey" value="admin.menu.title"/>
+		<property name="i18nDescriptionKey" value="admin.menu.title.alt"/>
+		<property name="translationPackage" value="org.olat.user.ui.organisation"/>
+		<property name="extensionPoints">
+			<list>	
+				<value>org.olat.admin.SystemAdminMainController</value>		
+			</list>
+		</property>
+	</bean>
+	
+	<!-- Roles and rights for identities relationships -->
+	<bean class="org.olat.core.extensions.action.GenericActionExtension" init-method="initExtensionPoints">
+		<property name="order" value="9013" />
+		<property name="actionController">	
+			<bean class="org.olat.core.gui.control.creator.AutoCreator" scope="prototype">
+				<property name="className" value="org.olat.user.ui.role.RelationRolesAdminController"/>
+			</bean>
+		</property>
+		<property name="navigationKey" value="identityroles" />
+		<property name="parentTreeNodeIdentifier" value="modulesParent" /> 
+		<property name="i18nActionKey" value="admin.menu.title"/>
+		<property name="i18nDescriptionKey" value="admin.menu.title.alt"/>
+		<property name="translationPackage" value="org.olat.user.ui.role"/>
+		<property name="extensionPoints">
+			<list>	
+				<value>org.olat.admin.SystemAdminMainController</value>		
+			</list>
+		</property>
+	</bean>
 	
 	<!--  user properties admin-gui -->
 	<bean class="org.olat.core.extensions.action.GenericActionExtension" init-method="initExtensionPoints">
@@ -288,6 +318,26 @@
 		</property>
 		<property name="parentTreeNodeIdentifier" value="sysAdminMenueNodeCustomizing" />
 		<property name="order" value="7411" />
+	</bean>
+	
+	<!-- User request to delete account -->
+	<bean class="org.olat.core.extensions.action.GenericActionExtension" init-method="initExtensionPoints">
+		<property name="order" value="9014" />
+		<property name="actionController">	
+			<bean class="org.olat.core.gui.control.creator.AutoCreator" scope="prototype">
+				<property name="className" value="org.olat.user.ui.admin.UserAccountDeletionSettingsController"/>
+			</bean>
+		</property>
+		<property name="navigationKey" value="requestdeleteaccount" />
+		<property name="parentTreeNodeIdentifier" value="modulesParent" /> 
+		<property name="i18nActionKey" value="admin.menu.title.request"/>
+		<property name="i18nDescriptionKey" value="admin.menu.title.request.alt"/>
+		<property name="translationPackage" value="org.olat.user.ui.admin"/>
+		<property name="extensionPoints">
+			<list>	
+				<value>org.olat.admin.SystemAdminMainController</value>		
+			</list>
+		</property>
 	</bean>
 	
 	<!-- Delete old user data export job -->

@@ -84,6 +84,8 @@ public interface VideoManager {
 	 * @param newPosterFile the new poster file
 	 */
 	public void setPosterframeResizeUploadfile(OLATResource videoResource, VFSLeaf newPosterFile);
+	
+	public void deletePosterframe(OLATResource videoResource);
 
 	/**
 	 * get all available Tracks of given videoResource
@@ -91,14 +93,6 @@ public interface VideoManager {
 	 * @return HashMap<String, VFSLeaf>
 	 */
 	public Map<String, VFSLeaf> getAllTracks(OLATResource videoResource);
-//
-//	/**
-//	 * add track file for given language to videoResource
-//	 * @param videoResource
-//	 * @param lang
-//	 * @param trackFile
-//	 */
-//	public void addTrack(OLATResource videoResource, String lang, VFSLeaf trackFile);
 
 	/**
 	 * get Track in given lang as VFSLeaf
@@ -123,7 +117,7 @@ public interface VideoManager {
 	 * @return true if successfull or false
 	 * @throws IOException
 	 */
-	public boolean getFrame(OLATResource videoResource, int frameNumber, VFSLeaf frame) throws IOException;
+	public boolean getFrame(VFSLeaf video, int frameNumber, VFSLeaf frame) throws IOException;
 
 	/**
 	 * Read the the metdatadata-xml in the videoresource folder
@@ -282,7 +276,7 @@ public interface VideoManager {
 	 * @param sourceResource the existing video resource
 	 * @param targetResource the empty new resource
 	 */
-	public void copyVideo(OLATResource sourceResource, OLATResource targetResource);
+	public void copyVideo(RepositoryEntry sourceEntry, RepositoryEntry targetEntry);
 
 	/**
 	 * Delete the video transcodings on disk an in database
@@ -348,7 +342,24 @@ public interface VideoManager {
 	 * @param chapters the chapters
 	 * @param olatResource the video resource
 	 */
-	public void saveChapters(List<VideoChapterTableRow> chapters, OLATResource olatResource);	
+	public void saveChapters(List<VideoChapterTableRow> chapters, OLATResource olatResource);
+	
+	
+	public VideoMarkers loadMarkers(OLATResource olatResource);
+	
+	public void saveMarkers(VideoMarkers markers, OLATResource olatResource);
+	
+	public VideoQuestions loadQuestions(OLATResource videoResource);
+
+	public void saveQuestions(VideoQuestions questions, OLATResource videoResource);
+	
+
+	public File getAssessmentDirectory(OLATResource videoResource);
+	
+	public File getQuestionDirectory(OLATResource videoResource, VideoQuestion question);
+	
+	public VFSContainer getQuestionContainer(OLATResource videoResource, VideoQuestion question);
+	
 	
 	/**
 	 * Gets the video duration.
@@ -358,7 +369,11 @@ public interface VideoManager {
 	 */
 	public long getVideoDuration(OLATResource videoResource);
 	
-	public long getVideoFrameCount(OLATResource videoResource);
+	public long getVideoFrameCount(VFSLeaf videoFile);
+	
+	public VFSLeaf getMasterVideo(OLATResource videoResource);
+	
+	public VFSLeaf downloadTmpVideo(OLATResource videoResource, VideoMeta videoMetadata);
 	
 	/**
 	 * Gets the video resolution from olat resource.
@@ -367,15 +382,7 @@ public interface VideoManager {
 	 * @return the video resolution from olat resource
 	 */
 	public Size getVideoResolutionFromOLATResource (OLATResource videoResource);
-
-//	/**
-//	 * Gets the meta data from olat resource.
-//	 *
-//	 * @param OLATResource videoResource the video resource
-//	 * @return the metadata from videoResource 
-//	 */
-//	public VideoMetadata getMetaDataFromOLATResource(OLATResource videoResource);
-//	
+	
 	/**
 	 * Gets the all video resources metadata.
 	 *
@@ -407,6 +414,26 @@ public interface VideoManager {
 	public void updateVideoMetadata(OLATResource videoResource, VFSLeaf uploadVideo);
 	
 	/**
+	 * Only for downloadable URL.
+	 * 
+	 * @param videoResource
+	 * @param url
+	 */
+	public RepositoryEntry updateVideoMetadata(RepositoryEntry entry, String url, VideoFormat format);
+	
+	/**
+	 * Update the duration of the video, in repository entry as expenditure of work
+	 * and in video metadata.
+	 * 
+	 * @param entry The resource
+	 * @param durationInSeconds The duration in seconds.
+	 * @return The updated repository entry
+	 */
+	public RepositoryEntry updateVideoMetadata(RepositoryEntry entry, Long durationInSeconds);
+	
+	public VideoMeta updateVideoMetadata(VideoMeta meta);
+	
+	/**
 	 * Gets the all video repo entries.
 	 *
 	 * @param typename of a type
@@ -430,6 +457,16 @@ public interface VideoManager {
 	 * @return the video meta
 	 */
 	public VideoMeta createVideoMetadata(RepositoryEntry repoEntry, long size, String fileName);
+	
+	public VideoMeta createVideoMetadata(RepositoryEntry repoEntry, String url, VideoFormat type);
+	
+	/**
+	 * Rewrite a Panopto video URL to a useable mp4 URL.
+	 * 
+	 * @param url
+	 * @return
+	 */
+	public String toPodcastVideoUrl(String url);
 
 	/**
 	 * Start transcoding process if enabled.
@@ -479,6 +516,6 @@ public interface VideoManager {
 	 * @param frame resource
 	 * @return true if image proposal is mostly black
 	 */
-	public boolean getFrameWithFilter(OLATResource videoResource, int frameNumber, long duration, VFSLeaf frame);
+	public boolean getFrameWithFilter(VFSLeaf video, int frameNumber, long duration, VFSLeaf frame);
 
 }

@@ -32,13 +32,14 @@ import org.olat.core.CoreSpringFactory;
 import org.olat.core.commons.persistence.DefaultResultInfos;
 import org.olat.core.commons.persistence.ResultInfos;
 import org.olat.core.commons.persistence.SortKey;
-import org.olat.core.commons.services.license.ResourceLicense;
 import org.olat.core.commons.services.license.LicenseService;
+import org.olat.core.commons.services.license.ResourceLicense;
 import org.olat.core.gui.components.form.flexible.elements.FlexiTableFilter;
 import org.olat.core.gui.components.form.flexible.impl.elements.table.FlexiTableDataSourceDelegate;
 import org.olat.core.id.OLATResourceable;
 import org.olat.core.util.StringHelper;
 import org.olat.repository.RepositoryEntryAuthorView;
+import org.olat.repository.RepositoryEntryAuthorViewResults;
 import org.olat.repository.RepositoryService;
 import org.olat.repository.model.SearchAuthorRepositoryEntryViewParams;
 import org.olat.repository.model.SearchAuthorRepositoryEntryViewParams.OrderBy;
@@ -105,7 +106,7 @@ public class AuthoringEntryDataSource implements FlexiTableDataSourceDelegate<Au
 	public final ResultInfos<AuthoringEntryRow> getRows(String query, List<FlexiTableFilter> filters,
 			List<String> condQueries, int firstResult, int maxResults, SortKey... orderBy) {
 
-		if(filters != null && filters.size() > 0) {
+		if(filters != null && !filters.isEmpty()) {
 			String filter = filters.get(0).getFilter();
 			if(StringHelper.containsNonWhitespace(filter)) {
 				searchParams.setResourceTypes(Collections.singletonList(filter));
@@ -128,11 +129,12 @@ public class AuthoringEntryDataSource implements FlexiTableDataSourceDelegate<Au
 			searchParams.setIdRefsAndTitle(null);
 		}
 		
-		List<RepositoryEntryAuthorView> views = repositoryService.searchAuthorView(searchParams, firstResult, maxResults);
+		RepositoryEntryAuthorViewResults viewResults = repositoryService.searchAuthorView(searchParams, firstResult, maxResults);
+		List<RepositoryEntryAuthorView> views = viewResults.getViews();
 		List<AuthoringEntryRow> rows = processViewModel(views);
 		ResultInfos<AuthoringEntryRow> results = new DefaultResultInfos<>(firstResult + rows.size(), -1, rows);
-		if(firstResult == 0 && views.size() < maxResults) {
-			count = new Integer(views.size() );
+		if(viewResults.isComplete() || (firstResult == 0 && views.size() < maxResults)) {
+			count = Integer.valueOf(views.size() );
 		}
 		return results;
 	}
@@ -167,11 +169,8 @@ public class AuthoringEntryDataSource implements FlexiTableDataSourceDelegate<Au
 			row.setMarked(entry.isMarked());
 
 			// access control
-			List<PriceMethod> types = new ArrayList<>();
-			if (entry.isMembersOnly()) {
-				// members only always show lock icon
-				types.add(new PriceMethod("", "o_ac_membersonly_icon", uifactory.getTranslator().translate("cif.access.membersonly.short")));
-			} else {
+			List<PriceMethod> types = new ArrayList<>(3);
+			if(entry.isBookable()) {
 				// collect access control method icons
 				OLATResource resource = entry.getOlatResource();
 				for(OLATResourceAccess resourceAccess:resourcesWithOffer) {
@@ -185,6 +184,9 @@ public class AuthoringEntryDataSource implements FlexiTableDataSourceDelegate<Au
 						}
 					}
 				}
+			} else if(!entry.isAllUsers() && !entry.isGuests()) {
+				// members only always show lock icon
+				types.add(new PriceMethod("", "o_ac_membersonly_icon", uifactory.getTranslator().translate("cif.access.membersonly.short")));
 			}
 			
 			if(!types.isEmpty()) {

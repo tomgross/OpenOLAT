@@ -36,6 +36,6 @@ public interface FilterableFlexiTableModel {
 	 * @param key
 	 * @return True if a reload is needed
 	 */
-	public void filter(List<FlexiTableFilter> filters);
+	public void filter(String searchString, List<FlexiTableFilter> filters);
 
 }

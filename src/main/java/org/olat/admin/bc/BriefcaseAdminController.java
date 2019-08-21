@@ -21,10 +21,9 @@ package org.olat.admin.bc;
 
 import java.io.File;
 
-import org.olat.core.CoreSpringFactory;
 import org.olat.core.commons.modules.bc.FolderConfig;
-import org.olat.core.commons.modules.bc.meta.MetaInfoFactory;
 import org.olat.core.commons.services.taskexecutor.TaskExecutorManager;
+import org.olat.core.commons.services.vfs.VFSRepositoryService;
 import org.olat.core.gui.UserRequest;
 import org.olat.core.gui.components.form.flexible.FormItem;
 import org.olat.core.gui.components.form.flexible.FormItemContainer;
@@ -34,6 +33,7 @@ import org.olat.core.gui.components.form.flexible.impl.FormEvent;
 import org.olat.core.gui.components.link.Link;
 import org.olat.core.gui.control.Controller;
 import org.olat.core.gui.control.WindowControl;
+import org.springframework.beans.factory.annotation.Autowired;
 
 /**
  * 
@@ -44,14 +44,13 @@ import org.olat.core.gui.control.WindowControl;
 public class BriefcaseAdminController extends FormBasicController {
 	
 	private FormLink thumbnailReset;
-	private final TaskExecutorManager taskExecutor;
-	private final MetaInfoFactory metaInfoFactory;
+	@Autowired
+	private TaskExecutorManager taskExecutor;
+	@Autowired
+	private VFSRepositoryService vfsRepositoryService;
 
 	public BriefcaseAdminController(UserRequest ureq, WindowControl wControl) {
 		super(ureq, wControl, "bc_admin");
-		
-		taskExecutor = CoreSpringFactory.getImpl(TaskExecutorManager.class);
-		metaInfoFactory = CoreSpringFactory.getImpl(MetaInfoFactory.class);
 		
 		initForm(ureq);
 	}
@@ -86,26 +85,13 @@ public class BriefcaseAdminController extends FormBasicController {
 		@Override
 		public void run() {
 			long start = System.currentTimeMillis();
-			logInfo("Start reset of thumbnails", null);
+			logInfo("Start reset of thumbnails");
 			
 			String metaRoot = FolderConfig.getCanonicalMetaRoot();
-			File metaRootFile = new File(metaRoot);
-			resetThumbnails(metaRootFile);
+			vfsRepositoryService.resetThumbnails(new File(metaRoot));
 			flc.contextPut("recalculating", Boolean.FALSE);
 			
-			logInfo("Finished reset of thumbnails in " + (System.currentTimeMillis() - start) + " (ms)", null);
-		}
-			
-		private void resetThumbnails(File directory) {
-			for(File file:directory.listFiles()) {
-				if(file.isHidden()) {
-					//do nothing
-				} else if(file.isDirectory()) {
-					resetThumbnails(file);
-				} else if(file.getName().endsWith(".xml")) {
-					metaInfoFactory.resetThumbnails(file);
-				}
-			}
+			logInfo("Finished reset of thumbnails in " + (System.currentTimeMillis() - start) + " (ms)");
 		}
 	}
 }

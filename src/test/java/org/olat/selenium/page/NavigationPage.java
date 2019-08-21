@@ -21,7 +21,6 @@ package org.olat.selenium.page;
 
 import java.util.List;
 
-import org.jboss.arquillian.drone.api.annotation.Drone;
 import org.junit.Assert;
 import org.olat.selenium.page.core.AdministrationPage;
 import org.olat.selenium.page.course.MyCoursesPage;
@@ -61,15 +60,15 @@ public class NavigationPage {
 	public static final By portalAssertBy = By.className("o_portal");
 	public static final By toolbarBackBy = By.cssSelector("li.o_breadcrumb_back>a");
 	
-	@Drone
-	private WebDriver browser;
+	private final WebDriver browser;
 	
-	public NavigationPage() {
-		//
+	private NavigationPage(WebDriver browser) {
+		this.browser = browser;
 	}
 	
-	public NavigationPage(WebDriver browser) {
-		this.browser = browser;
+	public static final NavigationPage load(WebDriver browser) {
+		OOGraphene.waitElement(navigationSitesBy, browser);
+		return new NavigationPage(browser);
 	}
 	
 	public NavigationPage assertOnNavigationPage() {
@@ -79,9 +78,8 @@ public class NavigationPage {
 	}
 	
 	public AuthoringEnvPage openAuthoringEnvironment() {
-		navigate(authoringEnvTabBy);
-		backToTheTop();
 		OOGraphene.closeBlueMessageWindow(browser);
+		navigate(authoringEnvTabBy);
 		return new AuthoringEnvPage(browser);
 	}
 	
@@ -124,7 +122,7 @@ public class NavigationPage {
 	
 	public GroupsPage openGroups(WebDriver currentBrowser) {
 		navigate(groupsBy);
-		return new GroupsPage(currentBrowser);
+		return GroupsPage.getPage(currentBrowser);
 	}
 	
 	private void navigate(By linkBy) {
@@ -157,28 +155,11 @@ public class NavigationPage {
 	
 	private void openMoreMenu() {
 		By openMoreBy = By.cssSelector("#o_navbar_more a.dropdown-toggle");
-		List<WebElement> openMoreLinks = browser.findElements(openMoreBy);
-		Assert.assertFalse(openMoreLinks.isEmpty());
-		openMoreLinks.get(0).click();
+		OOGraphene.waitElement(openMoreBy, browser);
+		browser.findElement(openMoreBy).click();
 		//wait the small transition
 		By openedMoreMenuby = By.cssSelector("#o_navbar_more ul.dropdown-menu.dropdown-menu-right");
-		OOGraphene.waitElement(openedMoreMenuby, 5, browser);
-	}
-	
-	public NavigationPage backToTheTop() {
-		List<WebElement> backList = browser.findElements(toolbarBackBy);
-		
-		int count = 0;
-		while(backList.size() > 0) {
-			backList.get(count).click();
-			OOGraphene.waitBusy(browser);
-			backList = browser.findElements(toolbarBackBy);
-			
-			Assert.assertTrue(count++ < 3);
-		}
-
-		OOGraphene.closeBlueMessageWindow(browser);
-		return this;
+		OOGraphene.waitElement(openedMoreMenuby, browser);
 	}
 	
 	public NavigationPage closeTab() {

@@ -22,14 +22,13 @@ package org.olat.modules.portfolio.manager;
 import java.util.Date;
 import java.util.List;
 
+import org.apache.logging.log4j.Logger;
 import org.olat.basesecurity.IdentityRef;
 import org.olat.core.commons.persistence.DB;
 import org.olat.core.id.Identity;
 import org.olat.core.id.OLATResourceable;
-import org.olat.core.logging.OLog;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.coordinate.CoordinatorManager;
-import org.olat.core.util.coordinate.SyncerExecutor;
 import org.olat.core.util.resource.OresHelper;
 import org.olat.modules.portfolio.Binder;
 import org.olat.modules.portfolio.BinderRef;
@@ -47,7 +46,7 @@ import org.springframework.stereotype.Service;
 @Service
 public class BinderUserInformationsDAO {
 	
-	private static final OLog log = Tracing.createLoggerFor(BinderUserInformationsDAO.class);
+	private static final Logger log = Tracing.createLoggerFor(BinderUserInformationsDAO.class);
 
 	@Autowired
 	private DB dbInstance;
@@ -64,17 +63,14 @@ public class BinderUserInformationsDAO {
 		dbInstance.commit();//to make it quick
 		if(updatedRows == 0) {
 			OLATResourceable lockRes = OresHelper.createOLATResourceableInstance("BinderLaunchDate::Identity", identity.getKey());
-			CoordinatorManager.getInstance().getCoordinator().getSyncer().doInSync(lockRes, new SyncerExecutor(){
-				@Override
-				public void execute() {
-					try {
-						int retryUpdatedRows = lowLevelUpdate(binder, identity);
-						if(retryUpdatedRows == 0) {
-							createAndPersistUserInfos(binder, identity);
-						}
-					} catch (Exception e) {
-						log.error("Cannot update binder informations for: " + identity + " from " + identity, e);
+			CoordinatorManager.getInstance().getCoordinator().getSyncer().doInSync(lockRes, () -> {
+				try {
+					int retryUpdatedRows = lowLevelUpdate(binder, identity);
+					if(retryUpdatedRows == 0) {
+						createAndPersistUserInfos(binder, identity);
 					}
+				} catch (Exception e) {
+					log.error("Cannot update binder informations for: " + identity + " from " + identity, e);
 				}
 			});
 		}
@@ -127,7 +123,7 @@ public class BinderUserInformationsDAO {
 				.setParameter("identityKey", identity.getKey())
 				.setParameter("binderKey", binder.getKey())
 				.getResultList();
-		return infos != null && infos.size() > 0 ? infos.get(0) : null;
+		return infos != null && !infos.isEmpty() ? infos.get(0) : null;
 	}
 	
 	public int deleteBinderUserInfos(BinderRef binder) {

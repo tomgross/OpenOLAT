@@ -42,11 +42,10 @@ import org.olat.commons.info.InfoMessageFrontendManager;
 import org.olat.commons.info.InfoMessageManager;
 import org.olat.commons.info.InfoSubscriptionManager;
 import org.olat.commons.info.model.InfoMessageImpl;
-import org.olat.core.commons.modules.bc.vfs.OlatRootFolderImpl;
 import org.olat.core.commons.services.notifications.SubscriptionContext;
 import org.olat.core.id.Identity;
 import org.olat.core.id.OLATResourceable;
-import org.olat.core.logging.OLog;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.StringHelper;
 import org.olat.core.util.coordinate.CoordinatorManager;
@@ -57,9 +56,11 @@ import org.olat.core.util.mail.MailContext;
 import org.olat.core.util.mail.MailContextImpl;
 import org.olat.core.util.mail.MailManager;
 import org.olat.core.util.mail.MailerResult;
+import org.olat.core.util.vfs.LocalFolderImpl;
 import org.olat.core.util.vfs.VFSContainer;
 import org.olat.core.util.vfs.VFSItem;
 import org.olat.core.util.vfs.VFSLeaf;
+import org.olat.core.util.vfs.VFSManager;
 import org.olat.group.BusinessGroup;
 import org.olat.group.BusinessGroupRef;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -78,7 +79,7 @@ import org.springframework.stereotype.Service;
 public class InfoMessageFrontendManagerImpl implements InfoMessageFrontendManager {
 
 	private final DateFormat formater = new SimpleDateFormat("yyyyMMdd'T'HHmmss");
-	private static final OLog log = Tracing.createLoggerFor(InfoMessageFrontendManagerImpl.class);
+	private static final Logger log = Tracing.createLoggerFor(InfoMessageFrontendManagerImpl.class);
 	
 	@Autowired
 	private MailManager mailManager;
@@ -124,7 +125,7 @@ public class InfoMessageFrontendManagerImpl implements InfoMessageFrontendManage
 		for(String path:paths) {
 			VFSItem item = ressourceContainer.resolve(path);
 			if(item instanceof VFSLeaf) {
-				((VFSLeaf)item).delete();
+				((VFSLeaf)item).deleteSilently();
 			}
 		}
 	}
@@ -166,8 +167,30 @@ public class InfoMessageFrontendManagerImpl implements InfoMessageFrontendManage
 		return resourceFile;
 	}
 	
-    private OlatRootFolderImpl getStoragePath() {
-    		return new OlatRootFolderImpl("/infomessages/", null);
+	private VFSContainer getResourceContainer(OLATResourceable ores) {
+		VFSContainer root = getStoragePath();
+		String type = ores.getResourceableTypeName().toLowerCase();
+		VFSItem typePath = root.resolve(type);
+		if(typePath == null) {
+			typePath = root.createChildContainer(type);
+		}
+		String id = ores.getResourceableId().toString();
+		if(typePath instanceof VFSContainer) {
+			VFSContainer typeContainer = (VFSContainer)typePath;
+			VFSItem resourceItem = typeContainer.resolve(id);
+			if(resourceItem == null) {
+				resourceItem = typeContainer.createChildContainer(id);
+			}
+			
+			if(resourceItem instanceof VFSContainer) {
+				return (VFSContainer)resourceItem;
+			}
+		}
+		return null;
+	}
+	
+    private LocalFolderImpl getStoragePath() {
+    	return VFSManager.olatRootContainer("/infomessages/", null);
 	}
 
 	@Override
@@ -176,7 +199,7 @@ public class InfoMessageFrontendManagerImpl implements InfoMessageFrontendManage
 		
 		boolean send = false;
 		if(tos != null && !tos.isEmpty()) {
-			Set<Long> identityKeySet = new HashSet<Long>();
+			Set<Long> identityKeySet = new HashSet<>();
 			ContactList contactList = new ContactList("Infos");
 			for(Identity to:tos) {
 				if(identityKeySet.contains(to.getKey())) continue;
@@ -265,9 +288,19 @@ public class InfoMessageFrontendManagerImpl implements InfoMessageFrontendManage
 		}			
 		String resName = group.getResourceableTypeName();
 		Long resId = group.getResourceableId();
-		SubscriptionContext subscriptionContext =  new SubscriptionContext(resName, resId, "");
+		SubscriptionContext subscriptionContext = new SubscriptionContext(resName, resId, "");
 		infoSubscriptionManager.deleteSubscriptionContext(subscriptionContext);
 		deleteAttachments(pathToDelete);
+		// make sure all meta and version informations are deleted and the main directory
+		deleteStorage(group);
+	}
+
+	@Override
+	public void deleteStorage(OLATResourceable ores) {
+		VFSContainer resourceContainer = getResourceContainer(ores);
+		if(resourceContainer != null) {
+			resourceContainer.deleteSilently();
+		}
 	}
 
 	@Override

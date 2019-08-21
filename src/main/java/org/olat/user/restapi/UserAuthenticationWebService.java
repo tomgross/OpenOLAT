@@ -20,8 +20,6 @@
 package org.olat.user.restapi;
 
 import static org.olat.restapi.security.RestSecurityHelper.getIdentity;
-import static org.olat.restapi.security.RestSecurityHelper.isAdmin;
-import static org.olat.restapi.security.RestSecurityHelper.isUserManager;
 
 import java.util.List;
 
@@ -42,28 +40,36 @@ import javax.ws.rs.core.Response.Status;
 
 import org.olat.basesecurity.Authentication;
 import org.olat.basesecurity.BaseSecurity;
-import org.olat.basesecurity.BaseSecurityManager;
-import org.olat.core.CoreSpringFactory;
+import org.olat.basesecurity.OrganisationRoles;
 import org.olat.core.id.Identity;
-import org.olat.core.logging.OLog;
+import org.olat.core.id.Roles;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
 import org.olat.login.auth.OLATAuthManager;
 import org.olat.restapi.security.RestSecurityHelper;
 import org.olat.restapi.support.ObjectFactory;
 import org.olat.restapi.support.vo.AuthenticationVO;
 import org.olat.restapi.support.vo.ErrorVO;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Component;
 
 /**
  * This web service handles functionalities related to authentication credentials of users.
  * 
  * @author srosse, stephane.rosse@frentix.com
  */
+@Component
 @Path("users/{username}/auth")
 public class UserAuthenticationWebService {
 	
-	private static final OLog log = Tracing.createLoggerFor(UserAuthenticationWebService.class);
+	private static final Logger log = Tracing.createLoggerFor(UserAuthenticationWebService.class);
 	
 	private static final String VERSION = "1.0";
+	
+	@Autowired
+	private BaseSecurity securityManager;
+	@Autowired
+	private OLATAuthManager authManager;
 	
 	/**
 	 * The version of the User Authentication Web Service
@@ -94,16 +100,15 @@ public class UserAuthenticationWebService {
 	@GET
 	@Produces({MediaType.APPLICATION_XML, MediaType.APPLICATION_JSON})
 	public Response getAuthenticationTokenList(@PathParam("username") String username, @Context HttpServletRequest request) {
-		if(!isUserManager(request)) {
-			return Response.serverError().status(Status.UNAUTHORIZED).build();
-		}
-		
-		BaseSecurity baseSecurity = BaseSecurityManager.getInstance();
-		Identity identity = baseSecurity.findIdentityByName(username);
+		Identity identity = securityManager.findIdentityByName(username);
 		if(identity == null) {
 			return Response.serverError().status(Status.NOT_FOUND).build();
 		}
-		List<Authentication> authentications = baseSecurity.getAuthentications(identity);
+		if(!isManager(identity, request)) {
+			return Response.serverError().status(Status.UNAUTHORIZED).build();
+		}
+		
+		List<Authentication> authentications = securityManager.getAuthentications(identity);
 		AuthenticationVO[] vos = new AuthenticationVO[authentications.size()];
 		int count = 0;
 		for(Authentication authentication:authentications) {
@@ -135,14 +140,12 @@ public class UserAuthenticationWebService {
 	@Consumes({MediaType.APPLICATION_XML, MediaType.APPLICATION_JSON})
 	@Produces({MediaType.APPLICATION_XML, MediaType.APPLICATION_JSON})
 	public Response create(@PathParam("username") String username, AuthenticationVO authenticationVO, @Context HttpServletRequest request) {
-		if(!RestSecurityHelper.isUserManager(request)) {
-			return Response.serverError().status(Status.UNAUTHORIZED).build();
-		}
-
-		BaseSecurity baseSecurity = BaseSecurityManager.getInstance();
-		Identity identity = baseSecurity.loadIdentityByKey(authenticationVO.getIdentityKey(), false);
+		Identity identity = securityManager.loadIdentityByKey(authenticationVO.getIdentityKey(), false);
 		if(identity == null) {
 			return Response.serverError().status(Status.NOT_FOUND).build();
+		}
+		if(!isManager(identity, request)) {
+			return Response.serverError().status(Status.UNAUTHORIZED).build();
 		}
 		if(!identity.getName().equals(username)) {
 			return Response.serverError().status(Status.NOT_FOUND).build();
@@ -152,7 +155,7 @@ public class UserAuthenticationWebService {
 		String authUsername = authenticationVO.getAuthUsername();
 		String credentials = authenticationVO.getCredential();
 		
-		Authentication currentAuthentication = baseSecurity.findAuthenticationByAuthusername(authUsername, provider);
+		Authentication currentAuthentication = securityManager.findAuthenticationByAuthusername(authUsername, provider);
 		if(currentAuthentication != null) {
 			if(!currentAuthentication.getIdentity().equals(identity)) {
 				ErrorVO error = new ErrorVO();
@@ -162,11 +165,11 @@ public class UserAuthenticationWebService {
 			}
 		}
 		
-		Authentication authentication = baseSecurity.createAndPersistAuthentication(identity, provider, authUsername, credentials, null);
+		Authentication authentication = securityManager.createAndPersistAuthentication(identity, provider, authUsername, credentials, null);
 		if(authentication == null) {
 			return Response.serverError().status(Status.NOT_ACCEPTABLE).build();
 		}
-		log.audit("New authentication created for " + authUsername + " with provider " + provider);
+		log.info(Tracing.M_AUDIT, "New authentication created for " + authUsername + " with provider " + provider);
 		AuthenticationVO savedAuth = ObjectFactory.get(authentication, true);
 		return Response.ok(savedAuth).build();
 	}
@@ -185,18 +188,18 @@ public class UserAuthenticationWebService {
 	@DELETE
 	@Path("{authKey}")
 	public Response delete(@PathParam("username") String username, @PathParam("authKey") Long authKey, @Context HttpServletRequest request) {
-		if(!isUserManager(request)) {
-			return Response.serverError().status(Status.UNAUTHORIZED).build();
-		}
-		BaseSecurity baseSecurity = BaseSecurityManager.getInstance();
-		Identity identity = baseSecurity.findIdentityByName(username);
+		Identity identity = securityManager.findIdentityByName(username);
 		if(identity == null) {
 			return Response.serverError().status(Status.NOT_FOUND).build();
 		}
-		List<Authentication> authentications = baseSecurity.getAuthentications(identity);
+		if(!isManager(identity, request)) {
+			return Response.serverError().status(Status.UNAUTHORIZED).build();
+		}
+		
+		List<Authentication> authentications = securityManager.getAuthentications(identity);
 		for(Authentication authentication:authentications) {
 			if(authKey.equals(authentication.getKey())) {
-				baseSecurity.deleteAuthentication(authentication);
+				securityManager.deleteAuthentication(authentication);
 				return Response.ok().build();
 			}
 		}
@@ -219,22 +222,28 @@ public class UserAuthenticationWebService {
 	@Path("password")
 	public Response changePassword(@PathParam("username") String username, @FormParam("newPassword") String newPassword,
 			@Context HttpServletRequest request) {
-		if(!isAdmin(request)) {
-			return Response.serverError().status(Status.UNAUTHORIZED).build();
-		}
 		Identity doer = getIdentity(request);
 		if(doer == null) {
 			return Response.serverError().status(Status.UNAUTHORIZED).build();
 		}
-		
-		BaseSecurity baseSecurity = BaseSecurityManager.getInstance();
-		Identity identity = baseSecurity.findIdentityByName(username);
+		Identity identity = securityManager.findIdentityByName(username);
 		if(identity == null) {
 			return Response.serverError().status(Status.NOT_FOUND).build();
 		}
+		if(!isManager(identity, request)) {
+			return Response.serverError().status(Status.UNAUTHORIZED).build();
+		}
 		
-		OLATAuthManager authManager = CoreSpringFactory.getImpl(OLATAuthManager.class);
 		boolean ok = authManager.changePassword(doer, identity, newPassword);
 		return (ok ? Response.ok() : Response.notModified()).build();
+	}
+	
+	private boolean isManager(Identity identity, HttpServletRequest request) {
+		Roles managerRoles = RestSecurityHelper.getRoles(request);
+		Roles identityRoles = securityManager.getRoles(identity);
+		return managerRoles.isManagerOf(OrganisationRoles.usermanager, identityRoles)
+				|| managerRoles.isManagerOf(OrganisationRoles.rolesmanager, identityRoles)
+				|| managerRoles.isManagerOf(OrganisationRoles.administrator, identityRoles);
+		
 	}
 }

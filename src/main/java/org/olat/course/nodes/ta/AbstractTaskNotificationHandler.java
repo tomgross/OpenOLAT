@@ -30,10 +30,10 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Locale;
 
+import org.apache.logging.log4j.Logger;
 import org.olat.basesecurity.BaseSecurityManager;
 import org.olat.core.commons.modules.bc.FileInfo;
 import org.olat.core.commons.modules.bc.FolderManager;
-import org.olat.core.commons.modules.bc.meta.MetaInfo;
 import org.olat.core.commons.services.notifications.NotificationHelper;
 import org.olat.core.commons.services.notifications.NotificationsManager;
 import org.olat.core.commons.services.notifications.Publisher;
@@ -45,13 +45,13 @@ import org.olat.core.commons.services.notifications.manager.NotificationsUpgrade
 import org.olat.core.commons.services.notifications.model.SubscriptionListItem;
 import org.olat.core.commons.services.notifications.model.TitleItem;
 import org.olat.core.commons.services.notifications.ui.ContextualSubscriptionController;
+import org.olat.core.commons.services.vfs.VFSMetadata;
 import org.olat.core.gui.UserRequest;
 import org.olat.core.gui.control.WindowControl;
 import org.olat.core.gui.translator.Translator;
 import org.olat.core.id.Identity;
 import org.olat.core.id.context.BusinessControlFactory;
-import org.olat.core.logging.LogDelegator;
-import org.olat.core.logging.OLog;
+import org.olat.core.logging.Tracing;
 import org.olat.core.util.Util;
 import org.olat.core.util.resource.OresHelper;
 import org.olat.course.CourseFactory;
@@ -63,9 +63,10 @@ import org.olat.repository.RepositoryManager;
  * Basic abstract notification-handler for all task-notification-handler. 
  * @author guretzki
  */
-public abstract class AbstractTaskNotificationHandler extends LogDelegator {
-
+public abstract class AbstractTaskNotificationHandler {
 	
+	private static final Logger log = Tracing.createLoggerFor(AbstractTaskNotificationHandler.class);
+
 	/**
 	 * @see org.olat.core.commons.services.notifications.NotificationsHandler#createSubscriptionInfo(org.olat.core.commons.services.notifications.Subscriber,
 	 *      java.util.Locale, java.util.Date)
@@ -80,8 +81,10 @@ public abstract class AbstractTaskNotificationHandler extends LogDelegator {
 		try {
 			if (NotificationsManager.getInstance().isPublisherValid(p) && compareDate.before(latestNews)) {
 				String folderRoot = p.getData();
-				if (isLogDebugEnabled()){
-					logDebug("folderRoot=", folderRoot);
+				
+				boolean logDebug = log.isDebugEnabled();
+				if (logDebug){
+					log.debug("folderRoot=" + folderRoot);
 				}
 				final List<FileInfo> fInfos = FolderManager.getFileInfos(folderRoot, compareDate);
 				final Translator translator = Util.createPackageTranslator(AbstractTaskNotificationHandler.class, locale);
@@ -91,18 +94,18 @@ public abstract class AbstractTaskNotificationHandler extends LogDelegator {
 					if(!checkPublisher(p)) {
 						return NotificationsManager.getInstance().getNoSubscriptionInfo();
 					}
-				} else if(re.getRepositoryEntryStatus().isClosed()) {
+				} else if(re.getEntryStatus().decommissioned()) {
 					return NotificationsManager.getInstance().getNoSubscriptionInfo();
 				}
 				
-				String displayName = re.getDisplayname();
+				String displayName = re == null ? "" : re.getDisplayname();
 				si = new SubscriptionInfo(subscriber.getKey(), p.getType(), new TitleItem(translator.translate(getNotificationHeaderKey(), new String[]{displayName}), getCssClassIcon() ), null);
 				SubscriptionListItem subListItem;
 				for (Iterator<FileInfo> it_infos = fInfos.iterator(); it_infos.hasNext();) {
 					FileInfo fi = it_infos.next();
-					MetaInfo metaInfo = fi.getMetaInfo();
+					VFSMetadata metaInfo = fi.getMetaInfo();
 					String filePath = fi.getRelPath();
-					if(isLogDebugEnabled()) logDebug("filePath=", filePath);
+					if(logDebug) log.debug("filePath=" + filePath);
 					String fullUserName = getUserNameFromFilePath(metaInfo, filePath);
 							
 					Date modDate = fi.getLastModified();
@@ -121,7 +124,7 @@ public abstract class AbstractTaskNotificationHandler extends LogDelegator {
 				si = NotificationsManager.getInstance().getNoSubscriptionInfo();
 			}
 		} catch (Exception e) {
-			getLogger().error("Cannot create task notifications for subscriber: " + subscriber.getKey(), e);
+			log.error("Cannot create task notifications for subscriber: " + subscriber.getKey(), e);
 			checkPublisher(p);
 			si = NotificationsManager.getInstance().getNoSubscriptionInfo();
 		}
@@ -138,38 +141,36 @@ public abstract class AbstractTaskNotificationHandler extends LogDelegator {
 	 * @param filePath E.g. '/username/abgabe.txt'
 	 * @return 'firstname lastname'
 	 */
-	protected String getUserNameFromFilePath(MetaInfo info, String filePath) {
+	protected String getUserNameFromFilePath(VFSMetadata info, String filePath) {
 		// remove first '/'
 		try {
 			if(info != null) {
-				Identity identity = info.getAuthorIdentity();
-				return NotificationHelper.getFormatedName(identity);
+				return NotificationHelper.getFormatedName(info.getAuthor());
 			}
 
 			String path = filePath.substring(1);
-			if (path.indexOf("/") != -1) {
-				String userName = path.substring(0,path.indexOf("/"));
+			int slashIndex = path.indexOf('/');
+			if (slashIndex != -1) {
+				String userName = path.substring(0, slashIndex);
 				Identity identity = BaseSecurityManager.getInstance().findIdentityByName(userName);
 				return NotificationHelper.getFormatedName(identity);
 			}
 			return "";
 		} catch (Exception e) {
-			logWarn("Can not extract user from path=" + filePath, null);
+			log.warn("Can not extract user from path=" + filePath);
 			return "";
 		}
 	}
 
 	private boolean checkPublisher(Publisher p) {
 		try {
-			if ("CourseModule".equals(p.getResName())) {
-				if(!NotificationsUpgradeHelper.checkCourse(p)) {
-					getLogger().info("deactivating publisher with key; " + p.getKey(), null);
-					NotificationsManager.getInstance().deactivate(p);
-					return false;
-				}
+			if ("CourseModule".equals(p.getResName()) && !NotificationsUpgradeHelper.checkCourse(p)) {
+				log.info("deactivating publisher with key; " + p.getKey());
+				NotificationsManager.getInstance().deactivate(p);
+				return false;
 			}
 		} catch (Exception e) {
-			getLogger().error("Could not check Publisher", e);
+			log.error("Could not check Publisher", e);
 		}
 		return true;
 	}
@@ -184,7 +185,7 @@ public abstract class AbstractTaskNotificationHandler extends LogDelegator {
 			String shortName = (node != null ? node.getShortName() : "");
 			return translator.translate(getNotificationHeaderKey(), new String[]{displayName, shortName});
 		} catch (Exception e) {
-			getLogger().error("Error while creating task notifications for subscriber: " + subscriber.getKey(), e);
+			log.error("Error while creating task notifications for subscriber: " + subscriber.getKey(), e);
 			checkPublisher(subscriber.getPublisher());
 			return "-";
 		}
@@ -200,14 +201,14 @@ public abstract class AbstractTaskNotificationHandler extends LogDelegator {
 			SubscriptionContext subsContext, Class<?> callerClass) {
 		String businessPath = wControl.getBusinessControl().getAsString();
 		PublisherData pdata = new PublisherData(OresHelper.calculateTypeName(callerClass), folderPath, businessPath);
-		ContextualSubscriptionController contextualSubscriptionCtr = new ContextualSubscriptionController(ureq, wControl, subsContext, pdata);
-		return contextualSubscriptionCtr;
+		return new ContextualSubscriptionController(ureq, wControl, subsContext, pdata);
 	}
 
 	// Abstract methods
 	////////////////////
-	abstract protected String getCssClassIcon();
-	abstract protected String getNotificationHeaderKey();
-	abstract protected String getNotificationEntryKey();
-	abstract protected OLog getLogger();
+	protected abstract String getCssClassIcon();
+	
+	protected abstract String getNotificationHeaderKey();
+	
+	protected abstract String getNotificationEntryKey();
 }

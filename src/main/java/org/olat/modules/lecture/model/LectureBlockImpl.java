@@ -31,7 +31,6 @@ import javax.persistence.GenerationType;
 import javax.persistence.Id;
 import javax.persistence.JoinColumn;
 import javax.persistence.ManyToOne;
-import javax.persistence.NamedQueries;
 import javax.persistence.NamedQuery;
 import javax.persistence.OneToMany;
 import javax.persistence.Table;
@@ -46,6 +45,7 @@ import org.olat.modules.lecture.LectureBlock;
 import org.olat.modules.lecture.LectureBlockManagedFlag;
 import org.olat.modules.lecture.LectureBlockStatus;
 import org.olat.modules.lecture.LectureBlockToGroup;
+import org.olat.modules.lecture.LectureBlockToTaxonomyLevel;
 import org.olat.modules.lecture.LectureRollCallStatus;
 import org.olat.modules.lecture.Reason;
 import org.olat.repository.RepositoryEntry;
@@ -58,9 +58,7 @@ import org.olat.repository.RepositoryEntry;
  */
 @Entity(name="lectureblock")
 @Table(name="o_lecture_block")
-@NamedQueries(
-	@NamedQuery(name="lectureBlocksByRepositoryEntry", query="select block from lectureblock block where block.entry.key=:repoEntryKey")
-)
+@NamedQuery(name="lectureBlocksByRepositoryEntry", query="select block from lectureblock block where block.entry.key=:repoEntryKey")
 public class LectureBlockImpl implements Persistable, LectureBlock {
 
 	private static final long serialVersionUID = -1010006683915268916L;
@@ -125,7 +123,7 @@ public class LectureBlockImpl implements Persistable, LectureBlock {
 	private Reason reasonEffectiveEnd;
 	
 	@ManyToOne(targetEntity=RepositoryEntry.class,fetch=FetchType.LAZY,optional=false)
-	@JoinColumn(name="fk_entry", nullable=false, insertable=true, updatable=false)
+	@JoinColumn(name="fk_entry", nullable=false, insertable=true, updatable=true)
 	private RepositoryEntry entry;
 	
 	@ManyToOne(targetEntity=GroupImpl.class,fetch=FetchType.LAZY,optional=false)
@@ -134,6 +132,10 @@ public class LectureBlockImpl implements Persistable, LectureBlock {
 	@OneToMany(targetEntity=LectureBlockToGroupImpl.class, fetch=FetchType.LAZY, orphanRemoval=false)
 	@JoinColumn(name="fk_lecture_block")
 	private Set<LectureBlockToGroup> groups;
+	
+	@OneToMany(targetEntity=LectureBlockToTaxonomyLevelImpl.class, fetch=FetchType.LAZY)
+	@JoinColumn(name="fk_lecture_block")
+	private Set<LectureBlockToTaxonomyLevel> taxonomyLevels;
 	
 	
 	@Override
@@ -383,6 +385,18 @@ public class LectureBlockImpl implements Persistable, LectureBlock {
 
 	public void setTeacherGroup(Group teacherGroup) {
 		this.teacherGroup = teacherGroup;
+	}
+
+	@Override
+	public Set<LectureBlockToTaxonomyLevel> getTaxonomyLevels() {
+		if(taxonomyLevels == null) {
+			taxonomyLevels = new HashSet<>();
+		}
+		return taxonomyLevels;
+	}
+
+	public void setTaxonomyLevels(Set<LectureBlockToTaxonomyLevel> taxonomyLevels) {
+		this.taxonomyLevels = taxonomyLevels;
 	}
 
 	@Override

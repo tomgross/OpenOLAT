@@ -174,7 +174,7 @@ public abstract class AbstractFlexiTableRenderer extends DefaultComponentRendere
 		//filter
 		if(ftE.isFilterEnabled()) {
 			List<FlexiTableFilter> filters = ftE.getFilters();
-			if(filters != null && filters.size() > 0) {
+			if(filters != null && !filters.isEmpty()) {
 				filterIndication = renderFilterDropdown(sb, ftE, filters);
 			}
 		}
@@ -182,7 +182,7 @@ public abstract class AbstractFlexiTableRenderer extends DefaultComponentRendere
 		//sort
 		if(ftE.isSortEnabled()) {
 			List<FlexiTableSort> sorts = ftE.getSorts();
-			if(sorts != null && sorts.size() > 0) {
+			if(sorts != null && !sorts.isEmpty()) {
 				renderSortDropdown(sb, ftE, sorts);
 			}
 		}
@@ -288,14 +288,20 @@ public abstract class AbstractFlexiTableRenderer extends DefaultComponentRendere
 		  .append("<i class='o_icon o_icon_filter o_icon-lg'> </i> <b class='caret'></b></button>")
 		  .append("<div id='table-filters-").append(dispatchId).append("' class='hide'><ul class='o_dropdown list-unstyled' role='menu'>");
 		
+		List<FlexiTableFilter> selectedFilters = ftE.getSelectedFilters();
+		List<FlexiTableFilter> selectedExtendedFilters = ftE.getSelectedExtendedFilters();
+		
+		
 		for(FlexiTableFilter filter:filters) {
 			if(FlexiTableFilter.SPACER.equals(filter)) {
 				sb.append("<li class='divider'></li>");
 			} else {
+				boolean isSelected = filter.isSelected() || (filter.isShowAll() && selectedFilters.isEmpty() && selectedExtendedFilters.isEmpty());
+				
 				sb.append("<li><a href=\"javascript:")
 				  .append(FormJSHelper.getXHRFnCallFor(theForm, dispatchId, 1, true, true, true,
 						  new NameValuePair("filter", filter.getFilter())))
-				  .append("\">").append("<i class='o_icon o_icon_check o_icon-fw'> </i> ", filter.isSelected());
+				  .append("\">").append("<i class='o_icon o_icon_check o_icon-fw'> </i> ", isSelected);
 				if(filter.getIconLeftCSS() != null) {
 					sb.append("<i class='o_icon ").append(filter.getIconLeftCSS()).append("'> </i> ");
 				}
@@ -387,13 +393,11 @@ public abstract class AbstractFlexiTableRenderer extends DefaultComponentRendere
 	}
 	
 	protected void renderBreadcrumbs(StringOutput sb, FlexiTableElementImpl ftE, FlexiTreeTableNode crumb, String index) {
-		Form theForm = ftE.getRootForm();
-		String dispatchId = ftE.getFormItemComponent().getDispatchID();
-		sb.append("<li><a href=\"javascript:")
-		  .append(FormJSHelper.getXHRFnCallFor(theForm, dispatchId, 1, true, true, true,
+		String dispatchId = ftE.getFormDispatchId();
+		sb.append("<li><a id='").append(dispatchId).append("_").append(index).append("_bc' href=\"javascript:;\" onclick=\"")
+		  .append(FormJSHelper.getXHRFnCallFor(ftE.getRootForm(), dispatchId, 1, true, true, true,
 				  new NameValuePair("tt-crumb", index)))
 		  .append("\">").append(crumb.getCrump()).append("</a></li>");
-
 	}
 	
 	protected void renderFormItem(Renderer renderer, StringOutput sb, FormItem item, URLBuilder ubu, Translator translator,
@@ -406,25 +410,54 @@ public abstract class AbstractFlexiTableRenderer extends DefaultComponentRendere
 	
 	protected void renderFooterButtons(StringOutput sb, FlexiTableComponent ftC, Translator translator) {
 		FlexiTableElementImpl ftE = ftC.getFlexiTableElement();
-		if(ftE.isSelectAllEnable()) {
+		if(ftE.isSelectAllEnable() || ftE.getTreeTableDataModel() != null) {
 			String formName = ftE.getRootForm().getFormName();
 			String dispatchId = ftE.getFormDispatchId();
 
 			sb.append("<div class='o_table_footer'><div class='o_table_checkall input-sm'>");
 
-			sb.append("<label class='checkbox-inline'><a id='")
-			  .append(dispatchId).append("_sa' href=\"javascript:o_table_toggleCheck('").append(formName).append("', true);")
-			  .append(FormJSHelper.getXHRFnCallFor(ftE.getRootForm(), dispatchId, 1, true, true, true,
-					  new NameValuePair("select", "checkall")))
-			  .append("\"><i class='o_icon o_icon-lg o_icon_check_on'> </i> <span>").append(translator.translate("form.checkall"))
-			  .append("</span></a></label>");
+			if(ftE.isSelectAllEnable()) {
+				FlexiTableDataModel<?> dataModel = ftE.getTableDataModel();
+				int numOfRows = dataModel.getRowCount();
+				
+				sb.append("<a id='")
+				  .append(dispatchId).append("_sa' href=\"javascript:o_table_toggleCheck('").append(formName).append("', true);")
+				  .append(FormJSHelper.getXHRFnCallFor(ftE.getRootForm(), dispatchId, 1, true, true, true,
+						  new NameValuePair("select", "checkall")))
+				  .append("\"><i class='o_icon o_icon-lg o_icon_check_on'> </i> <span>")
+				  .append(translator.translate("form.checkall.numbered", new String[] { Integer.toString(numOfRows) }))
+				  .append("</span></a>");
+				
+				sb.append("<a id='")
+				  .append(dispatchId).append("_sa' href=\"javascript:o_table_toggleCheck('").append(formName).append("', true);")
+				  .append(FormJSHelper.getXHRFnCallFor(ftE.getRootForm(), dispatchId, 1, true, true, true,
+						  new NameValuePair("select", "checkpage")))
+				  .append("\"><i class='o_icon o_icon-lg o_icon_check_on'> </i> <span>").append(translator.translate("form.checkpage"))
+				  .append("</span></a>");
+	
+				sb.append("<a id='")
+				  .append(dispatchId).append("_dsa' href=\"javascript:o_table_toggleCheck('").append(formName).append("', false);")
+				  .append(FormJSHelper.getXHRFnCallFor(ftE.getRootForm(), dispatchId, 1, true, true, true,
+						  new NameValuePair("select", "uncheckall")))
+				  .append("\"><i class='o_icon o_icon-lg o_icon_check_off'> </i> <span>").append(translator.translate("form.uncheckall"))
+				  .append("</span></a>");
+			}
+			
+			if(ftE.getTreeTableDataModel() != null) {
+				sb.append("<a id='")
+				  .append(dispatchId).append("_toa' href=\"javascript:;\" onclick=\"")
+				  .append(FormJSHelper.getXHRFnCallFor(ftE.getRootForm(), dispatchId, 1, true, true, true,
+						  new NameValuePair("tt-openclose", "openall")))
+				  .append("\"><i class='o_icon o_icon-lg o_icon_close_tree'> </i> <span>").append(translator.translate("form.openall"))
+				  .append("</span></a>");
 
-			sb.append("<label class='checkbox-inline'><a id='")
-			  .append(dispatchId).append("_dsa' href=\"javascript:o_table_toggleCheck('").append(formName).append("', false);")
-			  .append(FormJSHelper.getXHRFnCallFor(ftE.getRootForm(), dispatchId, 1, true, true, true,
-					  new NameValuePair("select", "uncheckall")))
-			  .append("\"><i class='o_icon o_icon-lg o_icon_check_off'> </i> <span>").append(translator.translate("form.uncheckall"))
-			  .append("</span></a></label>");
+				sb.append("<a id='")
+				  .append(dispatchId).append("_tca' href=\"javascript:;\" onclick=\"")
+				  .append(FormJSHelper.getXHRFnCallFor(ftE.getRootForm(), dispatchId, 1, true, true, true,
+						  new NameValuePair("tt-openclose", "closeall")))
+				  .append("\"><i class='o_icon o_icon-lg o_icon_open_tree'> </i> <span>").append(translator.translate("form.closeall"))
+				  .append("</span></a>");
+			}
 
 			sb.append("</div></div>");
 		}

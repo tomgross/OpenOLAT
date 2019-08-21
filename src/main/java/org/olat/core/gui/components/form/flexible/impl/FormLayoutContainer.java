@@ -29,7 +29,6 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 
@@ -37,8 +36,6 @@ import org.olat.core.gui.UserRequest;
 import org.olat.core.gui.components.Component;
 import org.olat.core.gui.components.form.flexible.FormItem;
 import org.olat.core.gui.components.form.flexible.FormItemContainer;
-import org.olat.core.gui.components.form.flexible.FormItemDependencyRule;
-import org.olat.core.gui.components.form.flexible.FormLayouter;
 import org.olat.core.gui.components.form.flexible.FormMultipartItem;
 import org.olat.core.gui.components.velocity.VelocityContainer;
 import org.olat.core.gui.control.Disposable;
@@ -57,7 +54,7 @@ import org.olat.core.util.ValidationStatus;
  * 
  * @author patrickb
  */
-public class FormLayoutContainer extends FormItemImpl implements FormItemContainer, FormLayouter, Disposable {
+public class FormLayoutContainer extends FormItemImpl implements FormItemContainer, Disposable {
 
 	private static final String VELOCITY_ROOT = Util.getPackageVelocityRoot(FormLayoutContainer.class);
 	private static final String LAYOUT_DEFAULT = VELOCITY_ROOT + "/form_default.html";
@@ -74,7 +71,7 @@ public class FormLayoutContainer extends FormItemImpl implements FormItemContain
 	/**
 	 * manage the form components of this form container
 	 */
-	private VelocityContainer formLayoutContainer;
+	private final VelocityContainer formLayoutContainer;
 	/**
 	 * formComponents and formComponentNames are managed together, change something here needs a change there.
 	 * formComponents contain the FormItem based on their name
@@ -86,7 +83,6 @@ public class FormLayoutContainer extends FormItemImpl implements FormItemContain
 	private List<String> formComponentsNames;
 	private Map<String,FormItem> listeningOnlyFormComponents;
 	private boolean hasRootForm=false;
-	private Map<String, Map<String, FormItemDependencyRule>> dependencyRules;
 
 
 	/**
@@ -126,19 +122,13 @@ public class FormLayoutContainer extends FormItemImpl implements FormItemContain
 		formLayoutContainer.contextPut("f", new FormDecorator(this));
 		// this container manages the form items, the GUI form item componentes are
 		// managed in the associated velocitycontainer
-		formComponentsNames = new ArrayList<String>(5);
+		formComponentsNames = new ArrayList<>(5);
 		formLayoutContainer.contextPut("formitemnames", formComponentsNames);
-		formComponents = new HashMap<String, FormItem>();
-		listeningOnlyFormComponents = new HashMap<String, FormItem>();
-		dependencyRules = new HashMap<String, Map<String, FormItemDependencyRule>>();
+		formComponents = new HashMap<>();
+		listeningOnlyFormComponents = new HashMap<>();
 	}
 
-	
-	
-	/**
-	 * @see org.olat.core.gui.components.form.flexible.FormComponent#rememberFormRequest(org.olat.core.gui.UserRequest,
-	 *      long[], int)
-	 */
+	@Override
 	public void evalFormRequest(UserRequest ureq) {
 		// form layouter has no values to store temporary
 	}
@@ -160,10 +150,7 @@ public class FormLayoutContainer extends FormItemImpl implements FormItemContain
 		hasRootForm = true;
 	}
 
-	/**
-	 * @see org.olat.core.gui.components.form.flexible.FormContainer#add(java.lang.String,
-	 *      org.olat.core.gui.components.form.flexible.FormComponentImpl)
-	 */
+	@Override
 	public void add(FormItem formComp) {
 		add(formComp.getName(), formComp);
 	}
@@ -175,7 +162,8 @@ public class FormLayoutContainer extends FormItemImpl implements FormItemContain
 		}
 		// set the formtranslator, and parent
 		Translator itemTranslator = formComp.getTranslator();
-		if (itemTranslator != null && itemTranslator instanceof PackageTranslator) {
+		if (itemTranslator != null && !itemTranslator.equals(translator)
+				&& itemTranslator instanceof PackageTranslator) {
 			// let the FormItem provide a more specialized translator
 			PackageTranslator itemPt = (PackageTranslator) itemTranslator;
 			itemTranslator = PackageTranslator.cascadeTranslators(itemPt, translator);
@@ -219,7 +207,7 @@ public class FormLayoutContainer extends FormItemImpl implements FormItemContain
 		
 		//make collection accessible with <name> in the container.
 		//collection contains then only the names.
-		List<String> foItemsCollectionAsNames = new ArrayList<String>();
+		List<String> foItemsCollectionAsNames = new ArrayList<>();
 		formLayoutContainer.contextPut(name, foItemsCollectionAsNames);
 
 		//add all items as form items to the container
@@ -241,7 +229,8 @@ public class FormLayoutContainer extends FormItemImpl implements FormItemContain
 		}
 		// set the formtranslator, and parent
 		Translator itemTranslator = formComp.getTranslator();
-		if(formComp.getTranslator()!=null && itemTranslator instanceof PackageTranslator){
+		if(formComp.getTranslator() != null && !formComp.getTranslator().equals(translator)
+				&& itemTranslator instanceof PackageTranslator) {
 			//let the FormItem provide a more specialized translator
 			PackageTranslator itemPt = (PackageTranslator)itemTranslator;
 			itemTranslator = PackageTranslator.cascadeTranslators(itemPt, translator);
@@ -278,7 +267,8 @@ public class FormLayoutContainer extends FormItemImpl implements FormItemContain
 		
 	// set the formtranslator, and parent
 		Translator itemTranslator = with.getTranslator();
-		if(with.getTranslator()!=null && itemTranslator instanceof PackageTranslator){
+		if(itemTranslator != null && !itemTranslator.equals(translator)
+				&& itemTranslator instanceof PackageTranslator) {
 			//let the FormItem provide a more specialized translator
 			PackageTranslator itemPt = (PackageTranslator)itemTranslator;
 			itemTranslator = PackageTranslator.cascadeTranslators(itemPt, translator);
@@ -307,9 +297,12 @@ public class FormLayoutContainer extends FormItemImpl implements FormItemContain
 	 * remove the component with the give name from this container	  
 	 * @param binderName
 	 */
+	@Override
 	public void remove(String formCompName) {
 		FormItem toBeRemoved = getFormComponent(formCompName);
-		remove(formCompName, toBeRemoved);
+		if(toBeRemoved != null) {
+			remove(formCompName, toBeRemoved);
+		}
 	}
 	
 	private void remove(String formCompName, FormItem toBeRemoved) {
@@ -341,14 +334,14 @@ public class FormLayoutContainer extends FormItemImpl implements FormItemContain
 	
 	@Override
 	public Iterable<FormItem> getFormItems() {
-		List<FormItem> merged = new ArrayList<FormItem>(formComponents.values());
+		List<FormItem> merged = new ArrayList<>(formComponents.values());
 		merged.addAll(listeningOnlyFormComponents.values());
 		return merged;
 	}
 
 	@Override
 	public Map<String, FormItem> getFormComponents() {
-		Map<String,FormItem> merged = new HashMap<String, FormItem>(formComponents);
+		Map<String,FormItem> merged = new HashMap<>(formComponents);
 		merged.putAll(listeningOnlyFormComponents);
 		return Collections.unmodifiableMap(merged);
 	}
@@ -359,6 +352,7 @@ public class FormLayoutContainer extends FormItemImpl implements FormItemContain
 				||  listeningOnlyFormComponents.containsValue(item);
 	}
 
+	@Override
 	public FormItem getFormComponent(String name){
 		if(formComponents.containsKey(name)) {
 			return formComponents.get(name);
@@ -389,7 +383,8 @@ public class FormLayoutContainer extends FormItemImpl implements FormItemContain
 	public Component getComponent(String name) {
 		return formLayoutContainer.getComponent(name);
 	}
-	
+
+	@Override
 	public boolean isDomReplacementWrapperRequired() {
 		return formLayoutContainer.isDomReplacementWrapperRequired();
 	}
@@ -454,42 +449,6 @@ public class FormLayoutContainer extends FormItemImpl implements FormItemContain
 	public void setDirty(boolean dirty){
 		formLayoutContainer.setDirty(dirty);
 	}
-	
-	/**
-	 * @see org.olat.core.gui.components.form.flexible.api.FormItemContainer#addDependencyRule(org.olat.core.gui.components.form.flexible.api.FormItemDependencyRule)
-	 */
-	public void addDependencyRule(FormItemDependencyRule depRule) {
-		String key = depRule.getTriggerElement().getName();
-		Map<String, FormItemDependencyRule> rules;
-		if(dependencyRules.containsKey(key)){
-			//already rules for this element
-			rules = dependencyRules.get(key);
-		}else{
-			//no rules yet, create
-			rules = new HashMap<String, FormItemDependencyRule>();
-			dependencyRules.put(key, rules);
-		}
-		rules.put(depRule.getIdentifier(), depRule);	
-	}
-	
-	
-	/**
-	 * @see org.olat.core.gui.components.form.flexible.api.FormItemContainer#evalDependencyRuleSetFor(org.olat.core.gui.UserRequest, org.olat.core.gui.components.form.flexible.api.FormItem)
-	 */
-	public void evalDependencyRuleSetFor(UserRequest ureq, FormItem dispatchFormItem) {
-		String key = dispatchFormItem.getName();
-		if(dependencyRules.containsKey(key)){
-			Map<String, FormItemDependencyRule> ruleSet = dependencyRules.get(key);
-			Collection<FormItemDependencyRule> rules = ruleSet.values();
-			for (Iterator<FormItemDependencyRule> iter = rules.iterator(); iter.hasNext();) {
-				FormItemDependencyRule tmp = iter.next();
-				if (tmp.applyRule(this)) {
-					setDirty(true);
-				}
-			}
-		}
-		
-	}
 
 	/**
 	 * @see org.olat.core.gui.components.form.flexible.FormItemImpl#setEnabled(boolean)
@@ -512,8 +471,7 @@ public class FormLayoutContainer extends FormItemImpl implements FormItemContain
 	 * @return
 	 */
 	public static FormLayoutContainer createDefaultFormLayout(String name, Translator formTranslator){
-		FormLayoutContainer tmp = new FormLayoutContainer(name, formTranslator, LAYOUT_DEFAULT);
-		return tmp;
+		return new FormLayoutContainer(name, formTranslator, LAYOUT_DEFAULT);
 	}
 	
 	/**
@@ -523,8 +481,7 @@ public class FormLayoutContainer extends FormItemImpl implements FormItemContain
 	 * @return
 	 */
 	public static FormLayoutContainer createDefaultFormLayout_6_6(String name, Translator formTranslator){
-		FormLayoutContainer tmp = new FormLayoutContainer(name, formTranslator, LAYOUT_DEFAULT_6_6);
-		return tmp;
+		return new FormLayoutContainer(name, formTranslator, LAYOUT_DEFAULT_6_6);
 	}
 	
 	
@@ -535,8 +492,7 @@ public class FormLayoutContainer extends FormItemImpl implements FormItemContain
 	 * @return
 	 */
 	public static FormLayoutContainer createDefaultFormLayout_9_3(String name, Translator formTranslator){
-		FormLayoutContainer tmp = new FormLayoutContainer(name, formTranslator, LAYOUT_DEFAULT_9_3);
-		return tmp;
+		return new FormLayoutContainer(name, formTranslator, LAYOUT_DEFAULT_9_3);
 	}
 	
 	/**
@@ -546,8 +502,7 @@ public class FormLayoutContainer extends FormItemImpl implements FormItemContain
 	 * @return
 	 */
 	public static FormLayoutContainer createDefaultFormLayout_2_10(String name, Translator formTranslator){
-		FormLayoutContainer tmp = new FormLayoutContainer(name, formTranslator, LAYOUT_DEFAULT_2_10);
-		return tmp;
+		return new FormLayoutContainer(name, formTranslator, LAYOUT_DEFAULT_2_10);
 	}
 	
 	/**
@@ -558,8 +513,7 @@ public class FormLayoutContainer extends FormItemImpl implements FormItemContain
 	 * @return
 	 */
 	public static FormLayoutContainer createHorizontalFormLayout(String name, Translator formTranslator){
-		FormLayoutContainer tmp = new FormLayoutContainer(name, formTranslator, LAYOUT_HORIZONTAL);
-		return tmp;
+		return new FormLayoutContainer(name, formTranslator, LAYOUT_HORIZONTAL);
 	}
 
 	/**
@@ -572,8 +526,7 @@ public class FormLayoutContainer extends FormItemImpl implements FormItemContain
 	 * @return
 	 */
 	public static FormLayoutContainer createVerticalFormLayout(String name, Translator formTranslator){
-		FormLayoutContainer tmp = new FormLayoutContainer(name, formTranslator, LAYOUT_VERTICAL);
-		return tmp;
+		return new FormLayoutContainer(name, formTranslator, LAYOUT_VERTICAL);
 	}
 	
 	/**
@@ -584,8 +537,7 @@ public class FormLayoutContainer extends FormItemImpl implements FormItemContain
 	 * @return
 	 */
 	public static FormLayoutContainer createBareBoneFormLayout(String name, Translator formTranslator){
-		FormLayoutContainer tmp = new FormLayoutContainer(name, formTranslator, LAYOUT_BAREBONE);
-		return tmp;
+		return new FormLayoutContainer(name, formTranslator, LAYOUT_BAREBONE);
 	}
 	
 	/**
@@ -595,8 +547,7 @@ public class FormLayoutContainer extends FormItemImpl implements FormItemContain
 	 * @return
 	 */
 	public static FormLayoutContainer createPanelFormLayout(String name, Translator formTranslator){
-		FormLayoutContainer tmp = new FormLayoutContainer(name, formTranslator, LAYOUT_PANEL);
-		return tmp;
+		return new FormLayoutContainer(name, formTranslator, LAYOUT_PANEL);
 	}
 
 	/**
@@ -609,8 +560,7 @@ public class FormLayoutContainer extends FormItemImpl implements FormItemContain
 	 * @return
 	 */
 	public static FormLayoutContainer createButtonLayout(String name, Translator formTranslator) {
-		FormLayoutContainer tmp = new FormLayoutContainer(name, formTranslator, LAYOUT_BUTTONGROUP);
-		return tmp;
+		return new FormLayoutContainer(name, formTranslator, LAYOUT_BUTTONGROUP);
 	}
 
 	/**
@@ -637,12 +587,12 @@ public class FormLayoutContainer extends FormItemImpl implements FormItemContain
 		return tmp;
 	}
 
-	
 	/**
+	 * Create a layout based on a velocity template.
 	 * 
-	 * @param name
-	 * @param formTranslator
-	 * @param page
+	 * @param name The name of the component
+	 * @param formTranslator The translator
+	 * @param page The velocity template
 	 * @return
 	 */
 	public static FormLayoutContainer createCustomFormLayout(String name, Translator formTranslator, String page) {
@@ -650,11 +600,8 @@ public class FormLayoutContainer extends FormItemImpl implements FormItemContain
 	}
 
 	public static FormLayoutContainer createCustomFormLayout(String id, String name, Translator formTranslator, String page) {	
-		FormLayoutContainer tmp = new FormLayoutContainer(id, name, formTranslator, page);
-		return tmp;
+		return new FormLayoutContainer(id, name, formTranslator, page);
 	}
-
-
 
 	@Override
 	public void setTranslator(Translator translator) {

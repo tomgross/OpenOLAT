@@ -24,6 +24,8 @@ import java.util.List;
 import org.olat.admin.user.UserSearchListProvider;
 import org.olat.basesecurity.BaseSecurity;
 import org.olat.basesecurity.BaseSecurityModule;
+import org.olat.basesecurity.OrganisationRoles;
+import org.olat.basesecurity.OrganisationService;
 import org.olat.basesecurity.events.SingleIdentityChosenEvent;
 import org.olat.core.gui.UserRequest;
 import org.olat.core.gui.components.form.flexible.FormItem;
@@ -37,6 +39,7 @@ import org.olat.core.gui.control.generic.ajax.autocompletion.EntriesChosenEvent;
 import org.olat.core.gui.control.generic.ajax.autocompletion.FlexiAutoCompleterController;
 import org.olat.core.gui.control.generic.ajax.autocompletion.ListProvider;
 import org.olat.core.id.Identity;
+import org.olat.core.id.Organisation;
 import org.olat.core.id.Roles;
 import org.olat.core.util.CodeHelper;
 import org.olat.core.util.StringHelper;
@@ -63,6 +66,8 @@ public class EMailCalloutCtrl extends FormBasicController {
 	private BaseSecurity securityManager;
 	@Autowired
 	private BaseSecurityModule securityModule;
+	@Autowired
+	private OrganisationService organisationService;
 	
 	public EMailCalloutCtrl(UserRequest ureq, WindowControl wControl, boolean allowExternalAddress) {
 		super(ureq, wControl, LAYOUT_VERTICAL);
@@ -78,7 +83,9 @@ public class EMailCalloutCtrl extends FormBasicController {
 		boolean autoCompleteAllowed = securityModule.isUserAllowedAutoComplete(roles);
 		boolean isAdministrativeUser = securityModule.isUserAllowedAdminProps(roles);
 		if (autoCompleteAllowed) {
-			ListProvider provider = new UserSearchListProvider();
+			List<Organisation> searcheableOrganisations = organisationService.getOrganisations(getIdentity(), roles,
+					OrganisationRoles.valuesWithoutGuestAndInvitee());
+			ListProvider provider = new UserSearchListProvider(searcheableOrganisations);
 			autocompleterC = new FlexiAutoCompleterController(ureq, getWindowControl(), provider, null, isAdministrativeUser, allowExternalAddress, 60, 3, null, mainForm);
 			autocompleterC.setFormElement(false);
 			listenTo(autocompleterC);
@@ -125,7 +132,7 @@ public class EMailCalloutCtrl extends FormBasicController {
 
 	@Override
 	protected boolean validateFormLogic(UserRequest ureq) {
-		boolean allOk = true;
+		boolean allOk = super.validateFormLogic(ureq);
 		
 		if(emailEl != null) {
 			emailEl.clearError();
@@ -135,7 +142,7 @@ public class EMailCalloutCtrl extends FormBasicController {
 			}
 		}
 		
-		return allOk & super.validateFormLogic(ureq);
+		return allOk;
 	}
 
 	@Override

@@ -33,6 +33,7 @@ import java.util.Iterator;
 import java.util.List;
 
 import org.checkerframework.checker.initialization.qual.UnknownInitialization;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.gui.ShortName;
 import org.olat.core.gui.UserRequest;
 import org.olat.core.gui.components.Component;
@@ -52,7 +53,6 @@ import org.olat.core.gui.control.generic.closablewrapper.CloseableCalloutWindowC
 import org.olat.core.gui.media.MediaResource;
 import org.olat.core.gui.translator.Translator;
 import org.olat.core.logging.AssertException;
-import org.olat.core.logging.OLog;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.Util;
 
@@ -115,7 +115,7 @@ public class TableController extends BasicController {
 
 	private static final String VC_VAR_HAS_TABLE_SEARCH = "hasTableSearch";
 
-	private OLog log = Tracing.createLoggerFor(this.getClass());
+	private static final Logger log = Tracing.createLoggerFor(TableController.class);
 	
 	private static final String CMD_FILTER = "cmd.filter.";
 	private static final String CMD_FILTER_NOFILTER = "cmd.filter.nofilter";
@@ -153,26 +153,6 @@ public class TableController extends BasicController {
 	private Link preferenceLink;
 	private Link downloadLink;
 
-	/**
-	 * Constructor for the table controller using the table filter.
-	 * 
-	 * @param tableConfig The table GUI configuration determines the tables
-	 *          behavior, may be <code>null</code> to use default table configuration.
-	 * @param ureq The user request
-	 * @param wControl The window control
-	 * @param filters A list of filter objects ({@link ShortName})
-	 * @param activeFilter The initially activated filter object
-	 * @param filterTitle The translated title of the filter
-	 * @param noFilterOption The translated key for the no-filter filter or
-	 *          <code>null</code> if not used
-	 * @param tableTrans The translator that is used to translate the table
-	 */
-	public TableController(final TableGuiConfiguration tableConfig, final UserRequest ureq, final WindowControl wControl, final List<ShortName> filters, final ShortName activeFilter,
-			final String filterTitle, final String noFilterOption, final Translator tableTrans) {
-		// init using regular constructor
-		this(tableConfig, ureq, wControl, filters, activeFilter, filterTitle, noFilterOption, false, tableTrans);
-
-	}
 	
 	/**
 	 * Constructor for the table controller using the table filter.

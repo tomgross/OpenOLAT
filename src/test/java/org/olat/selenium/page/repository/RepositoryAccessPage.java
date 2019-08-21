@@ -19,15 +19,11 @@
  */
 package org.olat.selenium.page.repository;
 
-import java.util.List;
-
-import org.junit.Assert;
 import org.olat.selenium.page.core.BookingPage;
 import org.olat.selenium.page.graphene.OOGraphene;
 import org.openqa.selenium.By;
 import org.openqa.selenium.WebDriver;
 import org.openqa.selenium.WebElement;
-import org.openqa.selenium.support.ui.Select;
 
 /**
  * 
@@ -44,39 +40,46 @@ public class RepositoryAccessPage {
 	}
 	
 	public RepositoryAccessPage setUserAccess(UserAccess access) {
-		if(access == UserAccess.none) {
-			By userSwitch = By.cssSelector("#o_cousersSwitch input[type='radio'][value='n']");
-			browser.findElement(userSwitch).click();
-			OOGraphene.waitBusy(browser);
-		} else {
-			By userSwitch = By.cssSelector("#o_cousersSwitch input[type='radio'][value='y']");
-			browser.findElement(userSwitch).click();
+		if(access == UserAccess.registred || access == UserAccess.guest) {
+			By allUsersBy = By.xpath("//div[@id='o_coentry_access_type']/div/label/input[@name='entry.access.type' and @value='shared']");
+			browser.findElement(allUsersBy).click();
 			OOGraphene.waitBusy(browser);
 			
-			By publishForUserBy = By.cssSelector("#o_fiopublishedForUsers_SELBOX");
-			WebElement publishForUserEl = browser.findElement(publishForUserBy);
-			Select publishForUserSelect = new Select(publishForUserEl);
-			switch(access) {
-				case registred: publishForUserSelect.selectByValue("u"); break;
-				case guest: publishForUserSelect.selectByValue("g"); break;
-				case membersOnly: publishForUserSelect.selectByValue("m"); break;
-				default: {}
+			By guestsBy = By.xpath("//div[contains(@class,'o_sel_repositoryentry_access_guest')]//label/input[@name='entry.access.guest' and @value='on']");
+			OOGraphene.waitElement(guestsBy, browser);
+			
+			if(access == UserAccess.guest) {
+				WebElement guestsEl = browser.findElement(guestsBy);
+				OOGraphene.check(guestsEl, Boolean.TRUE);
 			}
+		} else if(access == UserAccess.membersOnly) {
+			By allUsersBy = By.xpath("//div[@id='o_coentry_access_type']/div/label/input[@name='entry.access.type' and @value='private']");
+			browser.findElement(allUsersBy).click();
 			OOGraphene.waitBusy(browser);
+		} else if(access == UserAccess.booking) {
+			By allUsersBy = By.xpath("//div[@id='o_coentry_access_type']/div/label/input[@name='entry.access.type' and @value='booking']");
+			browser.findElement(allUsersBy).click();
+			OOGraphene.waitBusy(browser);
+			
+			By bookingFieldsetBy = By.cssSelector("fieldset.o_ac_configuration");
+			OOGraphene.waitElement(bookingFieldsetBy, browser);
 		}
-		
-		By saveSwitch = By.cssSelector("fieldset.o_sel_repositoryentry_access button.btn.btn-primary");
+		return this;
+	}
+
+	public BookingPage boooking() {
+		By bookingFieldsetBy = By.cssSelector("fieldset.o_ac_configuration");
+		OOGraphene.waitElement(bookingFieldsetBy, browser);
+		return new BookingPage(browser);
+	}
+	
+	public RepositoryAccessPage save() {
+		By saveSwitch = By.cssSelector("fieldset.o_sel_repo_access_configuration button.btn.btn-primary");
 		browser.findElement(saveSwitch).click();
 		OOGraphene.waitBusy(browser);
 		return this;
 	}
-	
-	public BookingPage boooking() {
-		By bookingFieldsetBy = By.cssSelector("fieldset.o_ac_configuration");
-		List<WebElement> bookingFieldsetEls = browser.findElements(bookingFieldsetBy);
-		Assert.assertEquals(1, bookingFieldsetEls.size());
-		return new BookingPage(browser);
-	}
+
 	
 	/**
 	 * Click toolbar
@@ -86,12 +89,5 @@ public class RepositoryAccessPage {
 		By toolbarBackBy = By.cssSelector("li.o_breadcrumb_back>a");
 		browser.findElement(toolbarBackBy).click();
 		OOGraphene.waitBusy(browser);
-	}
-	
-	public enum UserAccess {
-		none,
-		registred,
-		guest,
-		membersOnly
 	}
 }

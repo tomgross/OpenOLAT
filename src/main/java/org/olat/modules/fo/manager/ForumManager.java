@@ -42,7 +42,6 @@ import javax.persistence.TypedQuery;
 
 import org.olat.basesecurity.IdentityRef;
 import org.olat.core.commons.modules.bc.FolderConfig;
-import org.olat.core.commons.modules.bc.vfs.OlatRootFolderImpl;
 import org.olat.core.commons.persistence.DB;
 import org.olat.core.commons.persistence.PersistenceHelper;
 import org.olat.core.commons.services.mark.MarkingService;
@@ -51,7 +50,7 @@ import org.olat.core.commons.services.text.TextService;
 import org.olat.core.id.Identity;
 import org.olat.core.id.OLATResourceable;
 import org.olat.core.logging.AssertException;
-import org.olat.core.logging.OLog;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.Encoder;
 import org.olat.core.util.Encoder.Algorithm;
@@ -60,6 +59,7 @@ import org.olat.core.util.coordinate.CoordinatorManager;
 import org.olat.core.util.resource.OresHelper;
 import org.olat.core.util.vfs.VFSContainer;
 import org.olat.core.util.vfs.VFSItem;
+import org.olat.core.util.vfs.VFSManager;
 import org.olat.login.LoginModule;
 import org.olat.modules.fo.Forum;
 import org.olat.modules.fo.ForumChangedEvent;
@@ -89,7 +89,7 @@ import org.springframework.stereotype.Service;
  */
 @Service
 public class ForumManager {
-	private static final OLog log = Tracing.createLoggerFor(ForumManager.class);
+	private static final Logger log = Tracing.createLoggerFor(ForumManager.class);
 
 	@Autowired
 	private DB dbInstance;
@@ -246,8 +246,8 @@ public class ForumManager {
 	/**
 	 * Return the title of a message of the forum.
 	 */
-	public int countMessagesByForumID(Long forum_id) {
-		return countMessagesByForumID(forum_id, false);
+	public int countMessagesByForumID(Long forumId) {
+		return countMessagesByForumID(forumId, false);
 	}
 	
 	public List<MessagePeekview> getPeekviewMessages(Forum forum, int maxResults) {
@@ -890,8 +890,8 @@ public class ForumManager {
 			markingService.getMarkManager().deleteMarks(ores, m.getKey().toString());
 		}
 		
-		if(log.isDebug()){
-			log.debug("Deleting message ", m.getKey().toString());
+		if(log.isDebugEnabled()){
+			log.debug("Deleting message: " + m.getKey());
 		}
 	}
 
@@ -974,16 +974,16 @@ public class ForumManager {
 
 	private void deleteMessageContainer(Long forumKey, Long messageKey) {
 		VFSContainer mContainer = getMessageContainer(forumKey, messageKey);
-		mContainer.delete();
+		mContainer.deleteSilently();
 	}
 
 	private void deleteForumContainer(Long forumKey) {
 		VFSContainer fContainer = getForumContainer(forumKey);
-		fContainer.delete();
+		fContainer.deleteSilently();
 	}
 
 	public VFSContainer getForumContainer(Long forumKey) {
-		OlatRootFolderImpl fContainer = new OlatRootFolderImpl("/forum", null);
+		VFSContainer fContainer = VFSManager.olatRootContainer("/forum", null);
 		VFSItem forumContainer = fContainer.resolve(forumKey.toString());
 		if(forumContainer == null) {
 			return fContainer.createChildContainer(forumKey.toString());

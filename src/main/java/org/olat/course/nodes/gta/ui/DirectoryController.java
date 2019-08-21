@@ -24,9 +24,8 @@ import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 
-import org.olat.core.commons.modules.bc.meta.MetaInfo;
-import org.olat.core.commons.modules.bc.meta.tagged.MetaTagged;
 import org.olat.core.commons.modules.singlepage.SinglePageController;
+import org.olat.core.commons.services.vfs.VFSMetadata;
 import org.olat.core.gui.UserRequest;
 import org.olat.core.gui.components.Component;
 import org.olat.core.gui.components.download.DisplayOrDownloadComponent;
@@ -41,6 +40,7 @@ import org.olat.core.gui.control.generic.closablewrapper.CloseableModalControlle
 import org.olat.core.gui.control.generic.dtabs.Activateable2;
 import org.olat.core.gui.media.FileMediaResource;
 import org.olat.core.gui.media.MediaResource;
+import org.olat.core.gui.media.ZippedDirectoryMediaResource;
 import org.olat.core.gui.util.CSSHelper;
 import org.olat.core.id.context.BusinessControlFactory;
 import org.olat.core.id.context.ContextEntry;
@@ -49,10 +49,10 @@ import org.olat.core.util.CodeHelper;
 import org.olat.core.util.Formatter;
 import org.olat.core.util.StringHelper;
 import org.olat.core.util.io.SystemFileFilter;
+import org.olat.core.util.vfs.VFSConstants;
 import org.olat.core.util.vfs.VFSContainer;
 import org.olat.core.util.vfs.VFSItem;
 import org.olat.course.nodes.gta.ui.component.DownloadDocumentMapper;
-import org.olat.fileresource.ZippedDirectoryMediaResource;
 import org.olat.user.UserManager;
 import org.springframework.beans.factory.annotation.Autowired;
 
@@ -129,10 +129,10 @@ public class DirectoryController extends BasicController implements Activateable
 			if(documentsContainer != null) {
 				VFSItem item = documentsContainer.resolve(document.getName());
 				lastModified = format.formatDateAndTime(new Date(item.getLastModified()));
-				if(item instanceof MetaTagged) {
-					MetaInfo metaInfo = ((MetaTagged)item).getMetaInfo();
-					if(metaInfo != null && metaInfo.getAuthorIdentityKey() != null) {
-						uploadedBy = userManager.getUserDisplayName(metaInfo.getAuthorIdentityKey());
+				if(item.canMeta() == VFSConstants.YES) {
+					VFSMetadata metaInfo = item.getMetaInfo();
+					if(metaInfo != null && metaInfo.getAuthor() != null) {
+						uploadedBy = userManager.getUserDisplayName(metaInfo.getAuthor());
 					}
 				}
 			}

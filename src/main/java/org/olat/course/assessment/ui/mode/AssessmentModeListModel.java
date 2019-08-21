@@ -22,12 +22,13 @@ package org.olat.course.assessment.ui.mode;
 import java.util.ArrayList;
 import java.util.List;
 
+import org.apache.logging.log4j.Logger;
 import org.olat.core.commons.persistence.SortKey;
 import org.olat.core.gui.components.form.flexible.impl.elements.table.DefaultFlexiTableDataModel;
+import org.olat.core.gui.components.form.flexible.impl.elements.table.FlexiSortableColumnDef;
 import org.olat.core.gui.components.form.flexible.impl.elements.table.FlexiTableColumnModel;
 import org.olat.core.gui.components.form.flexible.impl.elements.table.SortableFlexiTableDataModel;
 import org.olat.core.gui.translator.Translator;
-import org.olat.core.logging.OLog;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.StringHelper;
 import org.olat.course.CorruptedCourseException;
@@ -48,7 +49,7 @@ import org.olat.course.nodes.CourseNode;
  */
 public class AssessmentModeListModel extends DefaultFlexiTableDataModel<AssessmentMode> implements SortableFlexiTableDataModel<AssessmentMode> {
 	
-	private static final OLog log = Tracing.createLoggerFor(AssessmentModeListModel.class);
+	private static final Logger log = Tracing.createLoggerFor(AssessmentModeListModel.class);
 	
 	private final Translator translator;
 	private final AssessmentModeCoordinationService coordinationService;
@@ -160,7 +161,7 @@ public class AssessmentModeListModel extends DefaultFlexiTableDataModel<Assessme
 		return updated;
 	}
 	
-	public enum Cols {
+	public enum Cols implements FlexiSortableColumnDef {
 		status("table.header.status"),
 		course("table.header.course"),
 		externalId("table.header.externalId"),
@@ -179,9 +180,20 @@ public class AssessmentModeListModel extends DefaultFlexiTableDataModel<Assessme
 		private Cols(String i18nKey) {
 			this.i18nKey = i18nKey;
 		}
-		
-		public String i18nKey() {
+
+		@Override
+		public String i18nHeaderKey() {
 			return i18nKey;
+		}
+
+		@Override
+		public boolean sortable() {
+			return true;
+		}
+
+		@Override
+		public String sortKey() {
+			return name();
 		}
 	}
 }

@@ -43,7 +43,7 @@ import org.olat.core.CoreSpringFactory;
 import org.olat.core.configuration.Destroyable;
 import org.olat.core.configuration.Initializable;
 import org.olat.core.helpers.Settings;
-import org.olat.core.logging.OLog;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.StartupException;
 import org.olat.core.logging.Tracing;
 import org.springframework.beans.factory.BeanInitializationException;
@@ -61,7 +61,7 @@ import org.springframework.web.context.ServletContextAware;
  */
 public class WebappHelper implements Initializable, Destroyable, ServletContextAware {
 	
-	private static final OLog log = Tracing.createLoggerFor(WebappHelper.class);
+	private static final Logger log = Tracing.createLoggerFor(WebappHelper.class);
 	private static int nodeId;
 	private static final String bootId = UUID.randomUUID().toString();
 	private static String fullPathToSrc;
@@ -72,7 +72,7 @@ public class WebappHelper implements Initializable, Destroyable, ServletContextA
 	private static String userDataRoot;
 	private static String defaultCharset;
 	private static boolean enforceUtf8Filesystem;
-	private static Map<String, String> mailConfig = new HashMap<String, String>(6);
+	private static Map<String, String> mailConfig = new HashMap<>(6);
 	private static long timeOfServerStartup = System.currentTimeMillis();
 	
 	private static String mathJaxCdn;
@@ -115,20 +115,15 @@ public class WebappHelper implements Initializable, Destroyable, ServletContextA
 		}
 		servletContextPath = servletContext.getContextPath();
 		
-		try {
-			InputStream meta = servletContext.getResourceAsStream("/META-INF/MANIFEST.MF");
+		try(InputStream meta = servletContext.getResourceAsStream("/META-INF/MANIFEST.MF")) {
 			if(meta != null) {
-				try {
-					Properties props = new Properties();
-					props.load(meta);
-					changeSet = props.getProperty("Build-Change-Set");
-					changeSetDate = props.getProperty("Build-Change-Set-Date");
-					revisionNumber = props.getProperty("Build-Revision-Number");
-					implementationVersion = props.getProperty("Implementation-Version");
-					buildJdk = props.getProperty("Build-Jdk");
-				} catch (IOException e) {
-					log.error("", e);
-				}
+				Properties props = new Properties();
+				props.load(meta);
+				changeSet = props.getProperty("Build-Change-Set");
+				changeSetDate = props.getProperty("Build-Change-Set-Date");
+				revisionNumber = props.getProperty("Build-Revision-Number");
+				implementationVersion = props.getProperty("Implementation-Version");
+				buildJdk = props.getProperty("Build-Jdk");
 			}
 		} catch (Exception e) {
 			log.warn("MANIFEST.MF not found", e);
@@ -151,6 +146,7 @@ public class WebappHelper implements Initializable, Destroyable, ServletContextA
 	 */
 	public void setNodeId(int nodeId) {
 		WebappHelper.nodeId = nodeId;
+		System.setProperty("nodeId", Integer.toString(nodeId));
 	}
 
 	/**

@@ -50,7 +50,7 @@ import org.apache.commons.lang.time.DurationFormatUtils;
 import org.olat.core.dispatcher.impl.StaticMediaDispatcher;
 import org.olat.core.gui.render.StringOutput;
 import org.olat.core.helpers.Settings;
-import org.olat.core.util.filter.impl.NekoHTMLMathScanner;
+import org.olat.core.util.filter.impl.HtmlMathScanner;
 
 /**
  * enclosing_type Description: <br>
@@ -237,35 +237,6 @@ public class Formatter {
 		formattedDate = formattedDate.replace("1", "%d");
 		return formattedDate;
 	}
-
-	/**
-	 * Generate a simple date pattern that formats a date with time using the
-	 * locale of the formatter
-	 * 
-	 * @return
-	 */
-	public String getSimpleDatePatternForDateAndTime() {
-		Calendar cal = new GregorianCalendar();
-		cal.set( 1999, Calendar.MARCH, 1, 4, 5, 0 );  		
-		Date testDate = cal.getTime();
-		String formattedDate = formatDateAndTime(testDate);
-		formattedDate = formattedDate.replace("1999", "%Y");
-		formattedDate = formattedDate.replace("99", "%Y");
-		formattedDate = formattedDate.replace("03", "%m");
-		formattedDate = formattedDate.replace("3", "%m");
-		formattedDate = formattedDate.replace("01", "%d");
-		formattedDate = formattedDate.replace("1", "%d");
-		formattedDate = formattedDate.replace("04", "%H");
-		formattedDate = formattedDate.replace("4", "%H");
-		formattedDate = formattedDate.replace("05", "%M");
-		formattedDate = formattedDate.replace("5", "%M");
-		if(formattedDate.endsWith("AM")) {
-			formattedDate = formattedDate.replace("%H","%I").replace("AM", "%p");
-		}
-		return formattedDate;
-	}
-
-
 	
 	/**
 	 * Formats the given date with the ISO 8601 standard also known as 'datetime'
@@ -652,7 +623,7 @@ public class Formatter {
 	public static String formatLatexFormulas(String htmlFragment) {
 		if (htmlFragment == null) return "";
 		// optimize, reduce jsmath calls on client
-		if (new NekoHTMLMathScanner().scan(htmlFragment)) {
+		if (new HtmlMathScanner().scan(htmlFragment)) {
 			// add math wrapper
 			String domid = "mw_" + CodeHelper.getRAMUniqueID();
 			String elem = htmlFragment.contains("<div") || htmlFragment.contains("<p") ? "div" : "span";

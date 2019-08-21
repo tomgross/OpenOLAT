@@ -42,7 +42,7 @@ import org.olat.core.gui.translator.Translator;
 import org.olat.core.id.Identity;
 import org.olat.core.id.OLATResourceable;
 import org.olat.core.id.context.BusinessControlFactory;
-import org.olat.core.logging.OLog;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.FileUtils;
 import org.olat.core.util.StringHelper;
@@ -73,7 +73,7 @@ import org.springframework.stereotype.Service;
 @Service
 public class ForumUserDataManager implements UserDataExportable {
 	
-	private static final OLog log = Tracing.createLoggerFor(ForumUserDataManager.class);
+	private static final Logger log = Tracing.createLoggerFor(ForumUserDataManager.class);
 
 	public static final String FORUM_KEY = "forumKey";// course and group
 	
@@ -115,7 +115,7 @@ public class ForumUserDataManager implements UserDataExportable {
 			List<File> attachments;
 			File msgContainer = forumManager.getMessageDirectory(forum.getKey(), message.getKey(), false);
 			if(msgContainer != null && msgContainer.exists()) {
-				File[] attachmentArr = msgContainer.listFiles(new SystemFileFilter(true, false));
+				File[] attachmentArr = msgContainer.listFiles(SystemFileFilter.FILES_ONLY);
 				attachments = Arrays.asList(attachmentArr);
 				if(!attachments.isEmpty()) {
 					File messageAttachementDir = new File(forumArchive, name);

@@ -52,7 +52,7 @@ public class UserAdminPage {
 	}
 	
 	public UserAdminPage openCreateUser() {
-		By createBy = By.cssSelector(".o_tree li.o_sel_useradmin_create>div>span.o_tree_link>a");
+		By createBy = By.cssSelector("ul.o_tools a.o_sel_useradmin_create");
 		WebElement createMenuItem = browser.findElement(createBy);
 		createMenuItem.click();
 		OOGraphene.waitBusy(browser);
@@ -70,9 +70,9 @@ public class UserAdminPage {
 	}
 	
 	public UserAdminPage openDirectDeleteUser() {
-		By createBy = By.cssSelector(".o_tree li.o_sel_useradmin_direct_delete>div>span.o_tree_link>a");
-		WebElement createMenuItem = browser.findElement(createBy);
-		createMenuItem.click();
+		By createBy = By.cssSelector("ul.o_tools a.o_sel_useradmin_direct_delete");
+		OOGraphene.waitElement(createBy, browser);
+		browser.findElement(createBy).click();
 		OOGraphene.waitBusy(browser);
 		return this;
 	}
@@ -87,7 +87,7 @@ public class UserAdminPage {
 	public UserAdminPage searchUserToDelete(String username) {
 		OOGraphene.closeBlueMessageWindow(browser);
 		By createBy = By.cssSelector("fieldset.o_sel_user_search_form div.o_sel_user_search_username input[type='text']");
-		OOGraphene.waitElement(createBy, 5, browser);
+		OOGraphene.waitElement(createBy, browser);
 		browser.findElement(createBy).sendKeys(username);
 		
 		//search
@@ -131,7 +131,8 @@ public class UserAdminPage {
 	}
 	
 	public UserAdminPage openImportUsers() {
-		By importBy = By.cssSelector(".o_tree li.o_sel_useradmin_import>div>span.o_tree_link>a");
+		By importBy = By.cssSelector("ul.o_tools a.o_sel_useradmin_import");
+		OOGraphene.waitElement(importBy, browser);
 		browser.findElement(importBy).click();
 		OOGraphene.waitBusy(browser);
 		return this;
@@ -139,8 +140,9 @@ public class UserAdminPage {
 	
 	public ImportUserPage startImport() {
 		By importBy = By.cssSelector("a.o_sel_id_start_import_user_button.btn-primary");
+		OOGraphene.waitElement(importBy, browser);
 		browser.findElement(importBy).click();
-		OOGraphene.waitBusy(browser);
+		OOGraphene.waitModalDialog(browser);
 		By dataBy = By.cssSelector("fieldset.o_sel_import_users_data");
 		OOGraphene.waitElement(dataBy, browser);
 		return new ImportUserPage(browser);
@@ -163,28 +165,23 @@ public class UserAdminPage {
 	
 	public UserAdminPage fillUserForm(UserVO userVo) {
 		By usernameBy = By.cssSelector(".o_sel_id_create .o_sel_id_username input[type='text']");
-		WebElement usernameEl = browser.findElement(usernameBy);
-		usernameEl.sendKeys(userVo.getLogin());
+		OOGraphene.waitElement(usernameBy, browser);
+		browser.findElement(usernameBy).sendKeys(userVo.getLogin());
 		
 		By firstNameBy = By.cssSelector(".o_sel_id_create .o_sel_id_firstname input[type='text']");
-		WebElement firstNameEL = browser.findElement(firstNameBy);
-		firstNameEL.sendKeys(userVo.getFirstName());
+		browser.findElement(firstNameBy).sendKeys(userVo.getFirstName());
 		
 		By lastNameBy = By.cssSelector(".o_sel_id_create .o_sel_id_lastname input[type='text']");
-		WebElement lastNameEl = browser.findElement(lastNameBy);
-		lastNameEl.sendKeys(userVo.getLastName());
+		browser.findElement(lastNameBy).sendKeys(userVo.getLastName());
 		
 		By emailBy = By.cssSelector(".o_sel_id_create .o_sel_id_email input[type='text']");
-		WebElement emailEl = browser.findElement(emailBy);
-		emailEl.sendKeys(userVo.getEmail());
+		browser.findElement(emailBy).sendKeys(userVo.getEmail());
 
 		By password1By = By.cssSelector(".o_sel_id_create .o_sel_id_password1 input[type='password']");
-		WebElement password1El = browser.findElement(password1By);
-		password1El.sendKeys(userVo.getPassword());
+		browser.findElement(password1By).sendKeys(userVo.getPassword());
 
 		By password2By = By.cssSelector(".o_sel_id_create .o_sel_id_password2 input[type='password']");
-		WebElement password2El = browser.findElement(password2By);
-		password2El.sendKeys(userVo.getPassword());
+		browser.findElement(password2By).sendKeys(userVo.getPassword());
 		
 		By saveBy = By.cssSelector(".o_sel_id_create button.btn-primary");
 		browser.findElement(saveBy).click();
@@ -194,35 +191,25 @@ public class UserAdminPage {
 	}
 	
 	public UserAdminPage assertOnUserEditView(String username) {
-		By userInfoTdBy = By.cssSelector(".o_user_infos table tr td");
-		List<WebElement> tds = browser.findElements(userInfoTdBy);
-		boolean found = false;
-		for(WebElement td:tds) {
-			String text = td.getText();
-			if(text != null && text.equals(username)) {
-				found = true;
-				break;
-			}
-		}
-		Assert.assertTrue(found);
+		By userInfoBy = By.xpath("//div[contains(@class,'o_user_infos')]//table//tr/td[contains(text(),'" + username + "')]");
+		OOGraphene.waitElement(userInfoBy, browser);
 		return this;
 	}
 	
 	public UserAdminPage searchByUsername(String username) {
 		By usernameBy = By.cssSelector(".o_sel_user_search_form .o_sel_user_search_username input[type='text']");
-		WebElement usernameEl = browser.findElement(usernameBy);
-		usernameEl.sendKeys(username);
+		OOGraphene.waitElement(usernameBy, browser);
+		browser.findElement(usernameBy).sendKeys(username);
 		
 		By searchBy = By.cssSelector(".o_sel_user_search_form a.btn-default");
-		OOGraphene.clickAndWait(searchBy, browser);
-		
+		OOGraphene.click(searchBy, browser);
+		OOGraphene.waitBusy(browser);
 		return this;
 	}
 	
 	public UserAdminPage assertOnUserInList(String username) {
-		By userLinksBy = By.xpath("//div[contains(@class,'o_table_wrapper')]//table//tr//td//a[text()[contains(.,'" + username + "')]]");
-		List<WebElement> usernameEls = browser.findElements(userLinksBy);
-		Assert.assertFalse(usernameEls.isEmpty());
+		By userLinksBy = By.xpath("//div[contains(@class,'o_table_wrapper')]//table//tr/td/a[text()[contains(.,'" + username + "')]]");
+		OOGraphene.waitElement(userLinksBy, browser);
 		return this;
 	}
 	
@@ -234,25 +221,9 @@ public class UserAdminPage {
 	}
 	
 	public UserAdminPage selectByUsername(String username) {
-		By rows = By.cssSelector("div.o_table_wrapper table tbody tr");
-		By usernameLinksBy = By.xpath("td//a[text()[contains(.,'" + username + "')]]");
-		By selectBy = By.xpath("td//a[contains(@href,'select.user')]");
-		
-		WebElement selectEl = null;
-		List<WebElement> rowEls = browser.findElements(rows);
-		for(WebElement rowEl:rowEls) {
-			List<WebElement> usernameLinkEls = rowEl.findElements(usernameLinksBy);
-			if(usernameLinkEls.size() > 0) {
-				List<WebElement> selectEls = rowEl.findElements(selectBy);
-				if(selectEls.size() > 0) {
-					selectEl = selectEls.get(0);
-				}
-				
-			}
-		}
-		
-		Assert.assertNotNull(selectEl);
-		selectEl.click();
+		By selectBy = By.xpath("//div[contains(@class,'o_table_wrapper')]//td/a[text()[contains(.,'" + username + "')]]");
+		OOGraphene.waitElement(selectBy, browser);
+		browser.findElement(selectBy).click();
 		OOGraphene.waitBusy(browser);
 		return this;
 	}

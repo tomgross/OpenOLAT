@@ -37,14 +37,17 @@ import org.olat.core.commons.persistence.DBFactory;
 import org.olat.core.configuration.Initializable;
 import org.olat.core.gui.control.Event;
 import org.olat.core.logging.AssertException;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.StartupException;
-import org.olat.core.manager.BasicManager;
+import org.olat.core.logging.Tracing;
 import org.olat.core.util.WebappHelper;
 import org.olat.core.util.event.FrameworkStartedEvent;
 import org.olat.core.util.event.FrameworkStartupEventChannel;
 import org.olat.core.util.event.GenericEventListener;
 import org.olat.core.util.xml.XStreamHelper;
 import org.springframework.beans.factory.annotation.Autowired;
+
+import com.thoughtworks.xstream.XStream;
 
 /**
  * 
@@ -60,8 +63,12 @@ import org.springframework.beans.factory.annotation.Autowired;
  * @author guido
  */
 
-public abstract class UpgradeManager extends BasicManager implements Initializable, GenericEventListener {
-
+public abstract class UpgradeManager implements Initializable, GenericEventListener {
+	
+	protected final XStream upgradesXStream = XStreamHelper.createXStreamInstance();
+	
+	private static final Logger log = Tracing.createLoggerFor(UpgradeManager.class);
+	
 	protected String INSTALLED_UPGRADES_XML = "installed_upgrades.xml";
 	public static final String SYSTEM_DIR = "system";
 
@@ -95,6 +102,7 @@ public abstract class UpgradeManager extends BasicManager implements Initializab
 	 * Initialize the upgrade manager: get all upgrades from the configuration file and load
 	 * the upgrade history from the olatdata directory
 	 */
+	@Override
 	public void init() {
 		//register for framework starup event
 		FrameworkStartupEventChannel.registerForStartupEvent(this);
@@ -103,28 +111,20 @@ public abstract class UpgradeManager extends BasicManager implements Initializab
 		// load history of previous upgrades using xstream
 		initUpgradesHistories();
 		if (needsUpgrade) {
-			boolean sevenOrNewer = false;
+			boolean tenOrNewer = false;
 			for(OLATUpgrade upgrade:upgradesDefinitions.getUpgrades()) {
-				if(upgrade.getVersion().startsWith("OLAT_7") || upgrade.getVersion().startsWith("OLAT_8")) {
-					sevenOrNewer = true;
+				if(upgrade.getVersion().startsWith("OLAT_1")) {
+					tenOrNewer = true;
 				}
 			}
-			if(!sevenOrNewer) {
-				throw new AssertException("Upgrade first your installtion to OLAT 7.0 and after go with OpenOLAT");
+			if(!tenOrNewer) {
+				throw new AssertException("Upgrade first your installation to OpenOLAT 10.0 and after go with this OpenOLAT release");
 			}
-			
-			doPreSystemInitUpgrades();
-			
+
 			//post system init task are triggered by an event
 			DBFactory.getInstance().commitAndCloseSession();
 		}
 	}
-
-	/**
-	 * Execute the pre system init code of all upgrades in the order as they were configured
-	 * in the configuration file
-	 */
-	public abstract void doPreSystemInitUpgrades();
 
 	/**
 	 * Execute the post system init code of all upgrades in the order as they were configured
@@ -150,7 +150,7 @@ public abstract class UpgradeManager extends BasicManager implements Initializab
 		File upgradesDir = new File(WebappHelper.getUserDataRoot(), SYSTEM_DIR);
 		upgradesDir.mkdirs(); // create if not exists
 		File upgradesHistoriesFile = new File(upgradesDir, INSTALLED_UPGRADES_XML);
-		XStreamHelper.writeObject(upgradesHistoriesFile, this.upgradesHistories);
+		XStreamHelper.writeObject(upgradesXStream, upgradesHistoriesFile, upgradesHistories);
 	}
 
 	/**
@@ -161,13 +161,13 @@ public abstract class UpgradeManager extends BasicManager implements Initializab
 		File upgradesDir = new File(WebappHelper.getUserDataRoot(), SYSTEM_DIR);
 		File upgradesHistoriesFile = new File(upgradesDir, INSTALLED_UPGRADES_XML);
 		if (upgradesHistoriesFile.exists()) {
-			this.upgradesHistories = (Map<String, UpgradeHistoryData>) XStreamHelper.createXStreamInstance().fromXML(upgradesHistoriesFile);
+			upgradesHistories = (Map<String, UpgradeHistoryData>)upgradesXStream.fromXML(upgradesHistoriesFile);
 		} else {
-			if (this.upgradesHistories == null) {
-				this.upgradesHistories = new HashMap<String, UpgradeHistoryData>();
+			if (upgradesHistories == null) {
+				upgradesHistories = new HashMap<>();
 			}
 			needsUpgrade = false; //looks like a new install, no upgrade necessary
-			logInfo("This looks like a new install or droped data, will not do any upgrades.");
+			log.info("This looks like a new install or droped data, will not do any upgrades.");
 			createUpgradeData();
 		}
 	}
@@ -181,6 +181,7 @@ public abstract class UpgradeManager extends BasicManager implements Initializab
 			uhd.setInstallationComplete(true);
 			uhd.setBooleanDataValue(OLATUpgrade.TASK_DP_UPGRADE, true);
 			setUpgradesHistory(uhd, upgrade.getVersion());
+			upgrade.doNewSystemInit();
 		}
 	}
 
@@ -193,9 +194,9 @@ public abstract class UpgradeManager extends BasicManager implements Initializab
 	protected void abort(Throwable e) {
 		if (e instanceof StartupException) {
 			StartupException se = (StartupException) e;
-			logWarn("Message: " + se.getLogMsg(), se);
+			log.warn("Message: " + se.getLogMsg(), se);
 			Throwable cause = se.getCause();
-			logWarn("Cause: " + (cause != null ? cause.getMessage() : "n/a"), se);
+			log.warn("Cause: " + (cause != null ? cause.getMessage() : "n/a"), se);
 		}
 		throw new RuntimeException("*** CRITICAL ERROR IN UPGRADE MANAGER. Loading aborted.", e);
 	}

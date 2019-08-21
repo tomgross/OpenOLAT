@@ -19,14 +19,12 @@
  */
 package org.olat.restapi;
 
-import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.URL;
 import java.util.List;
-import java.util.UUID;
 
 import javax.ws.rs.core.MediaType;
 import javax.ws.rs.core.UriBuilder;
@@ -36,8 +34,6 @@ import org.apache.http.client.methods.HttpDelete;
 import org.apache.http.client.methods.HttpGet;
 import org.apache.http.client.methods.HttpPut;
 import org.apache.http.util.EntityUtils;
-import org.codehaus.jackson.map.ObjectMapper;
-import org.codehaus.jackson.type.TypeReference;
 import org.junit.Assert;
 import org.junit.Test;
 import org.olat.core.commons.persistence.DB;
@@ -61,9 +57,12 @@ import org.olat.course.run.userview.VisibleTreeFilter;
 import org.olat.modules.fo.Forum;
 import org.olat.repository.RepositoryEntry;
 import org.olat.test.JunitTestHelper;
-import org.olat.test.OlatJerseyTestCase;
+import org.olat.test.OlatRestTestCase;
 import org.olat.user.restapi.UserVOFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 /**
  * 
@@ -71,7 +70,7 @@ import org.springframework.beans.factory.annotation.Autowired;
  * @author srosse, stephane.rosse@frentix.com, http://www.frentix.com
  *
  */
-public class NotificationsSubscribersTest extends OlatJerseyTestCase {
+public class NotificationsSubscribersTest extends OlatRestTestCase {
 
 	@Autowired
 	private DB dbInstance;
@@ -84,18 +83,15 @@ public class NotificationsSubscribersTest extends OlatJerseyTestCase {
 		Identity id2 = JunitTestHelper.createAndPersistIdentityAsRndUser("rest-sub-2");
 		
 		//deploy a course with forums
-		URL courseWithForumsUrl = MyForumsTest.class.getResource("myCourseWS.zip");
-		Assert.assertNotNull(courseWithForumsUrl);
-		File courseWithForums = new File(courseWithForumsUrl.toURI());
-		String softKey = UUID.randomUUID().toString().replace("-", "");
-		RepositoryEntry courseEntry = CourseFactory.deployCourseFromZIP(courseWithForums, softKey, 4);	
+		URL courseUrl = MyForumsTest.class.getResource("myCourseWS.zip");
+		RepositoryEntry courseEntry = JunitTestHelper.deployCourse(null, "My course", courseUrl);// 4);	
 		Assert.assertNotNull(courseEntry);
 		
 		//load the course and found the first forum
 		ICourse course = CourseFactory.loadCourse(courseEntry);
 		
 		//find the forum
-		IdentityEnvironment ienv = new IdentityEnvironment(id1, new Roles(false, false, false, false, false, false, false));
+		IdentityEnvironment ienv = new IdentityEnvironment(id1, Roles.userRoles());
 		ForumVisitor forumVisitor = new ForumVisitor(course);
 		new CourseTreeVisitor(course, ienv).visit(forumVisitor, new VisibleTreeFilter());
 		FOCourseNode courseNode = forumVisitor.firstNode;
@@ -148,18 +144,15 @@ public class NotificationsSubscribersTest extends OlatJerseyTestCase {
 		Identity id3 = JunitTestHelper.createAndPersistIdentityAsRndUser("rest-sub-5");
 		
 		//deploy a course with forums
-		URL courseWithForumsUrl = MyForumsTest.class.getResource("myCourseWS.zip");
-		Assert.assertNotNull(courseWithForumsUrl);
-		File courseWithForums = new File(courseWithForumsUrl.toURI());
-		String softKey = UUID.randomUUID().toString().replace("-", "");
-		RepositoryEntry courseEntry = CourseFactory.deployCourseFromZIP(courseWithForums, softKey, 4);	
+		URL courseUrl = MyForumsTest.class.getResource("myCourseWS.zip");
+		RepositoryEntry courseEntry = JunitTestHelper.deployCourse(null, "My course", courseUrl);	
 		Assert.assertNotNull(courseEntry);
 		
 		//load the course and found the first forum
 		ICourse course = CourseFactory.loadCourse(courseEntry);
 		
 		//find the forum
-		IdentityEnvironment ienv = new IdentityEnvironment(id1, new Roles(false, false, false, false, false, false, false));
+		IdentityEnvironment ienv = new IdentityEnvironment(id1, Roles.userRoles());
 		ForumVisitor forumVisitor = new ForumVisitor(course);
 		new CourseTreeVisitor(course, ienv).visit(forumVisitor, new VisibleTreeFilter());
 		FOCourseNode courseNode = forumVisitor.firstNode;

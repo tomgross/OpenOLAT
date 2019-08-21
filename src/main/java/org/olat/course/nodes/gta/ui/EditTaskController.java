@@ -97,7 +97,7 @@ public class EditTaskController extends FormBasicController {
 		titleEl.setMandatory(true);
 
 		String description = task.getDescription() == null ? "" : task.getDescription();
-		descriptionEl = uifactory.addTextAreaElement("descr", "task.description", 2048, 10, -1, true, description, formLayout);
+		descriptionEl = uifactory.addTextAreaElement("descr", "task.description", 2048, 10, -1, true, false, description, formLayout);
 
 		fileEl = uifactory.addFileElement(getWindowControl(), "file", "task.file", formLayout);
 		fileEl.setMandatory(true);
@@ -135,7 +135,7 @@ public class EditTaskController extends FormBasicController {
 		if(fileEl.getInitialFile() == null && fileEl.getUploadFile() == null) {
 			fileEl.setErrorKey("form.mandatory.hover", null);
 			allOk &= false;
-		} else if (!FileUtils.validateFilename(fileEl.getUploadFileName())) {
+		} else if (fileEl.getUploadFile() != null && !FileUtils.validateFilename(fileEl.getUploadFileName())) {
 			fileEl.setErrorKey("error.file.invalid", null);
 			allOk = false;
 		} else if(!replaceFile && fileEl.getUploadFile() != null) {

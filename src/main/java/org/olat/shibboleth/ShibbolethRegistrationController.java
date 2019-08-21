@@ -32,7 +32,6 @@ import javax.servlet.http.HttpServletRequest;
 import org.olat.basesecurity.AuthHelper;
 import org.olat.basesecurity.Authentication;
 import org.olat.basesecurity.BaseSecurity;
-import org.olat.basesecurity.BaseSecurityManager;
 import org.olat.basesecurity.BaseSecurityModule;
 import org.olat.core.CoreSpringFactory;
 import org.olat.core.commons.chiefcontrollers.LanguageChangedEvent;
@@ -109,6 +108,8 @@ public class ShibbolethRegistrationController extends DefaultController implemen
 	Locale locale;
 
 	@Autowired
+	private BaseSecurity securityManager;
+	@Autowired
 	private ShibbolethModule shibbolethModule;
 	@Autowired
 	private ShibbolethManager shibbolethManager;
@@ -168,7 +169,7 @@ public class ShibbolethRegistrationController extends DefaultController implemen
 					setErrorPage("sm.error.no_username", wControl);
 				}
 			} else {
-				Identity identity = BaseSecurityManager.getInstance().findIdentityByName(proposedUsername);
+				Identity identity = securityManager.findIdentityByName(proposedUsername);
 				if(identity != null) {
 					if(interceptor.allowChangeOfUsername()) {
 						setRegistrationForm(ureq, wControl, proposedUsername);
@@ -193,7 +194,7 @@ public class ShibbolethRegistrationController extends DefaultController implemen
 			setRegistrationForm(ureq, wControl, null);
 		}
 
-		dclController = new DisclaimerController(ureq, getWindowControl());
+		dclController = new DisclaimerController(ureq, getWindowControl(), null, false);
 		dclController.addControllerListener(this);
 		mainContainer.put("dclComp", dclController.getInitialComponent());
 
@@ -261,9 +262,8 @@ public class ShibbolethRegistrationController extends DefaultController implemen
 			}
 		} else if (source == regForm) {
 			if (event == Event.DONE_EVENT) {
-				String choosenLogin = regForm.getLogin();
-				BaseSecurity secMgr = BaseSecurityManager.getInstance();
-				Identity identity = secMgr.findIdentityByName(choosenLogin);
+				String choosenLogin = regForm.getUsernameEl();
+				Identity identity = securityManager.findIdentityByName(choosenLogin);
 
 
 				if (identity == null) { // ok, create new user
@@ -277,7 +277,7 @@ public class ShibbolethRegistrationController extends DefaultController implemen
 						mainContainer.setPage(VELOCITY_ROOT + "/disclaimer.html");
 					}
 				} else { // offer identity migration, if OLAT provider exists
-					Authentication auth = secMgr.findAuthentication(identity, BaseSecurityModule.getDefaultAuthProviderIdentifier());
+					Authentication auth = securityManager.findAuthentication(identity, BaseSecurityModule.getDefaultAuthProviderIdentifier());
 					if (auth == null) { // no OLAT provider, migration not possible...
 						getWindowControl().setError(translator.translate("sr.error.loginexists", new String[] {WebappHelper.getMailConfig("mailSupport")}));
 					}	else { // OLAT provider exists, offer migration...
@@ -304,14 +304,11 @@ public class ShibbolethRegistrationController extends DefaultController implemen
 					if(regForm == null ) {
 						choosenLogin = proposedUsername;
 					} else {
-						choosenLogin = regForm.getLogin();
+						choosenLogin = regForm.getUsernameEl();
 					}
 
 					// check if login has been taken by another user in the meantime...
-					BaseSecurity secMgr = BaseSecurityManager.getInstance();
-
-					// check if login has been taken by another user in the meantime...
-					Identity identity = secMgr.findIdentityByName(choosenLogin);
+					Identity identity = securityManager.findIdentityByName(choosenLogin);
 					if (identity != null) {
 						getWindowControl().setError(translator.translate("sr.login.meantimetaken"));
 						mainContainer.setPage(VELOCITY_ROOT + "/register.html");
@@ -339,8 +336,7 @@ public class ShibbolethRegistrationController extends DefaultController implemen
 					// create additional authentication
 					Authentication auth = migrationForm.getAuthentication();
 					Identity authenticationedIdentity = auth.getIdentity();
-					BaseSecurity secMgr = BaseSecurityManager.getInstance();
-					secMgr.createAndPersistAuthentication(authenticationedIdentity, ShibbolethDispatcher.PROVIDER_SHIB, shibbolethUniqueID, null, null);
+					securityManager.createAndPersistAuthentication(authenticationedIdentity, ShibbolethDispatcher.PROVIDER_SHIB, shibbolethUniqueID, null, null);
 
 					// update user profile
 					shibbolethManager.syncUser(authenticationedIdentity, shibbolethAttributes);
@@ -372,15 +368,10 @@ public class ShibbolethRegistrationController extends DefaultController implemen
 	private void doLogin(Identity identity, UserRequest ureq) {
 		int loginStatus = AuthHelper.doLogin(identity, ShibbolethDispatcher.PROVIDER_SHIB, ureq);
 		if (loginStatus != AuthHelper.LOGIN_OK) {
-			//REVIEW:2010-01-11:revisited:pb: do not redirect if already MediaResource is set before
-			//ureq.getDispatchResult().setResultingMediaResource(resultingMediaResource);
-			//instead set the media resource accordingly
-			//pb -> provide a DispatcherAction.getDefaultDispatcherRedirectMediaresource();
-			//to be used here. (and some more places like CatalogController.
 			DispatcherModule.redirectToDefaultDispatcher(ureq.getHttpResp()); // error, redirect to login screen
 			return;
 		}
-		// successfull login
+		// successful login
 		ureq.getUserSession().getIdentityEnvironment().addAttributes(
 				shibbolethModule.getAttributeTranslator().translateAttributesMap(shibbolethAttributes.toMap()));
 	}

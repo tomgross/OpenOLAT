@@ -20,6 +20,7 @@
 
 package org.olat.core.gui.components.form.flexible.impl.elements;
 
+import java.io.BufferedInputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
@@ -32,6 +33,7 @@ import java.util.Set;
 import org.olat.core.CoreSpringFactory;
 import org.olat.core.commons.services.image.Crop;
 import org.olat.core.commons.services.image.ImageService;
+import org.olat.core.commons.services.vfs.VFSRepositoryService;
 import org.olat.core.gui.UserRequest;
 import org.olat.core.gui.components.Component;
 import org.olat.core.gui.components.form.flexible.FormItem;
@@ -49,7 +51,7 @@ import org.olat.core.gui.control.WindowControl;
 import org.olat.core.gui.control.generic.modal.DialogBoxController;
 import org.olat.core.gui.control.generic.modal.DialogBoxUIFactory;
 import org.olat.core.gui.translator.Translator;
-import org.olat.core.logging.OLog;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.CodeHelper;
 import org.olat.core.util.FileUtils;
@@ -82,12 +84,13 @@ import org.olat.core.util.vfs.VFSManager;
 public class FileElementImpl extends FormItemImpl
 		implements FileElement, FormItemCollection, ControllerEventListener, Disposable {
 
-	private static final OLog log = Tracing.createLoggerFor(FileElementImpl.class);
+	private static final Logger log = Tracing.createLoggerFor(FileElementImpl.class);
 
 	private final FileElementComponent component;
 	private ImageFormItem previewEl;
 
-	private File initialFile, tempUploadFile;
+	private File initialFile;
+	private File tempUploadFile;
 	private Set<String> mimeTypes;
 	private long maxUploadSizeKB = UPLOAD_UNLIMITED;
 	private String uploadFilename;
@@ -111,7 +114,6 @@ public class FileElementImpl extends FormItemImpl
 	private String[] fileExampleParams;
 
 	private WindowControl wControl;
-	private DialogBoxController dialogCtr;
 
 	/**
 	 * Constructor for a file element. Use the limitToMimeType and setter
@@ -202,7 +204,7 @@ public class FileElementImpl extends FormItemImpl
 				getTranslator());
 		String title = fileTranslator.translate("confirm.delete.file.title");
 		String text = fileTranslator.translate("confirm.delete.file");
-		dialogCtr = DialogBoxUIFactory.createOkCancelDialog(ureq, wControl, title, text);
+		DialogBoxController dialogCtr = DialogBoxUIFactory.createOkCancelDialog(ureq, wControl, title, text);
 		dialogCtr.addControllerListener(this);
 		dialogCtr.activate();
 	}
@@ -467,7 +469,7 @@ public class FileElementImpl extends FormItemImpl
 		if (tempUploadFile == null)
 			return null;
 		try {
-			return new FileInputStream(tempUploadFile);
+			return new BufferedInputStream(new FileInputStream(tempUploadFile), FileUtils.BSIZE);
 		} catch (FileNotFoundException e) {
 			log.error("Could not open stream for file element::" + getName(), e);
 		}
@@ -531,26 +533,28 @@ public class FileElementImpl extends FormItemImpl
 				if (crop && cropSelection != null) {
 					CoreSpringFactory.getImpl(ImageService.class).cropImage(tempUploadFile, targetFile, cropSelection);
 					targetLeaf = (VFSLeaf) destinationContainer.resolve(targetFile.getName());
+					CoreSpringFactory.getImpl(VFSRepositoryService.class).itemSaved(targetLeaf);
 				} else if (FileUtils.copyFileToFile(tempUploadFile, targetFile, true)) {
 					targetLeaf = (VFSLeaf) destinationContainer.resolve(targetFile.getName());
+					CoreSpringFactory.getImpl(VFSRepositoryService.class).itemSaved(targetLeaf);
 				} else {
 					log.error("Error after copying content from temp file, cannot copy file::"
 							+ (tempUploadFile == null ? "NULL" : tempUploadFile) + " - "
-							+ (targetFile == null ? "NULL" : targetFile), null);
+							+ (targetFile == null ? "NULL" : targetFile));
 				}
 
 				if (targetLeaf == null) {
 					log.error("Error after copying content from temp file, cannot resolve copied file::"
 							+ (tempUploadFile == null ? "NULL" : tempUploadFile) + " - "
-							+ (targetFile == null ? "NULL" : targetFile), null);
+							+ (targetFile == null ? "NULL" : targetFile));
 				}
 			} else {
 				// Copy stream in case the destination is a non-local container
 				VFSLeaf leaf = destinationContainer.createChildLeaf(uploadFilename);
 				boolean success = false;
 				try {
-					success = VFSManager.copyContent(new FileInputStream(tempUploadFile), leaf);
-				} catch (FileNotFoundException e) {
+					success = VFSManager.copyContent(tempUploadFile, leaf);
+				} catch (Exception e) {
 					log.error("Error while copying content from temp file::"
 							+ (tempUploadFile == null ? "NULL" : tempUploadFile.getAbsolutePath()), e);
 				}
@@ -561,7 +565,7 @@ public class FileElementImpl extends FormItemImpl
 					targetLeaf = leaf;
 				}
 			}
-		} else if (log.isDebug()) {
+		} else if (log.isDebugEnabled()) {
 			log.debug("Error while copying content from temp file, no temp file::"
 					+ (tempUploadFile == null ? "NULL" : tempUploadFile.getAbsolutePath()));
 		}

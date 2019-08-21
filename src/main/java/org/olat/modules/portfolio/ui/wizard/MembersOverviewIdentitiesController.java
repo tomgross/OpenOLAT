@@ -24,8 +24,8 @@ import java.util.List;
 
 import org.olat.basesecurity.BaseSecurity;
 import org.olat.basesecurity.BaseSecurityModule;
-import org.olat.basesecurity.Constants;
-import org.olat.basesecurity.SecurityGroup;
+import org.olat.basesecurity.OrganisationRoles;
+import org.olat.basesecurity.OrganisationService;
 import org.olat.core.commons.persistence.PersistenceHelper;
 import org.olat.core.gui.UserRequest;
 import org.olat.core.gui.components.form.flexible.FormItemContainer;
@@ -68,6 +68,8 @@ public class MembersOverviewIdentitiesController extends StepFormBasicController
 	private BaseSecurity securityManager;
 	@Autowired
 	private BaseSecurityModule securityModule;
+	@Autowired
+	private OrganisationService organisationService;
 
 	public MembersOverviewIdentitiesController(UserRequest ureq, WindowControl wControl, Form rootForm, StepsRunContext runContext) {
 		super(ureq, wControl, rootForm, runContext, LAYOUT_VERTICAL, null);
@@ -82,6 +84,10 @@ public class MembersOverviewIdentitiesController extends StepFormBasicController
 			@SuppressWarnings("unchecked")
 			List<String> keys = (List<String>)runContext.get("keys");
 			loadModel(keys);
+		} else if(containsRunContextKey("identities")) {
+			@SuppressWarnings("unchecked")
+			List<Identity> identities = (List<Identity>)runContext.get("identities");
+			loadModelByIdentities(identities);
 		}
 
 		isAdministrativeUser = securityModule.isUserAllowedAdminProps(ureq.getUserSession().getRoles());
@@ -115,7 +121,7 @@ public class MembersOverviewIdentitiesController extends StepFormBasicController
 			tableColumnModel.addFlexiColumnModel(new DefaultFlexiColumnModel("table.user.login", colIndex++));
 		}
 		List<UserPropertyHandler> userPropertyHandlers = userManager.getUserPropertyHandlersFor(USER_PROPS_ID, isAdministrativeUser);
-		List<UserPropertyHandler> resultingPropertyHandlers = new ArrayList<UserPropertyHandler>();
+		List<UserPropertyHandler> resultingPropertyHandlers = new ArrayList<>();
 		// followed by the users fields
 		for (int i = 0; i < userPropertyHandlers.size(); i++) {
 			UserPropertyHandler userPropertyHandler	= userPropertyHandlers.get(i);
@@ -133,17 +139,30 @@ public class MembersOverviewIdentitiesController extends StepFormBasicController
 		tableEl.setCustomizeColumns(false);
 	}
 	
-	private void loadModel(List<String> keys) {
-		oks = new ArrayList<Identity>();
+	private void loadModelByIdentities(List<Identity> identities) {
+		oks = new ArrayList<>();
 		List<String> isanonymous = new ArrayList<>();
 		notfounds = new ArrayList<>();
 
-		SecurityGroup anonymousSecGroup = securityManager.findSecurityGroupByName(Constants.GROUP_ANONYMOUS);
+		for (Identity ident : identities) {
+			if (organisationService.hasRole(ident, OrganisationRoles.guest)) {
+				isanonymous.add(ident.getKey().toString());
+			} else if (!PersistenceHelper.containsPersistable(oks, ident)) {
+				oks.add(ident);
+			}
+		}
+	}
+	
+	private void loadModel(List<String> keys) {
+		oks = new ArrayList<>();
+		List<String> isanonymous = new ArrayList<>();
+		notfounds = new ArrayList<>();
+
 		for (String identityKey : keys) {
 			Identity ident = securityManager.loadIdentityByKey(Long.parseLong(identityKey));
 			if (ident == null) { // not found, add to not-found-list
 				notfounds.add(identityKey);
-			} else if (securityManager.isIdentityInSecurityGroup(ident, anonymousSecGroup)) {
+			} else if (organisationService.hasRole(ident, OrganisationRoles.guest)) {
 				isanonymous.add(identityKey);
 			} else if (!PersistenceHelper.containsPersistable(oks, ident)) {
 				oks.add(ident);
@@ -152,12 +171,10 @@ public class MembersOverviewIdentitiesController extends StepFormBasicController
 	}
 	
 	private void loadModel(String inp) {
-		oks = new ArrayList<Identity>();
-		notfounds = new ArrayList<String>();
+		oks = new ArrayList<>();
+		notfounds = new ArrayList<>();
 
-		SecurityGroup anonymousSecGroup = securityManager.findSecurityGroupByName(Constants.GROUP_ANONYMOUS);
-
-		List<String> identList = new ArrayList<String>();
+		List<String> identList = new ArrayList<>();
 		String[] lines = inp.split("\r?\n");
 		for (int i = 0; i < lines.length; i++) {
 			String username = lines[i].trim();
@@ -173,13 +190,12 @@ public class MembersOverviewIdentitiesController extends StepFormBasicController
 			if(userIdent != null) {
 				identList.remove(userIdent);
 			}
-			if (!PersistenceHelper.containsPersistable(oks, identity)
-					&& !securityManager.isIdentityInSecurityGroup(identity, anonymousSecGroup)) {
+			if (!PersistenceHelper.containsPersistable(oks, identity) && !organisationService.hasRole(identity, OrganisationRoles.guest)) {
 				oks.add(identity);
 			}
 		}
 		// make a lowercase copy of identList for processing username and email
-		List<String> identListLowercase = new ArrayList<String>(identList.size());
+		List<String> identListLowercase = new ArrayList<>(identList.size());
 		for (String ident:identList) {
 			identListLowercase.add(ident.toLowerCase());
 		}
@@ -188,7 +204,7 @@ public class MembersOverviewIdentitiesController extends StepFormBasicController
 		for(Identity identity:identities) {
 			identListLowercase.remove(identity.getName().toLowerCase());
 			if (!PersistenceHelper.containsPersistable(oks, identity)
-					&& !securityManager.isIdentityInSecurityGroup(identity, anonymousSecGroup)) {
+					&& !organisationService.hasRole(identity, OrganisationRoles.guest)) {
 				oks.add(identity);
 			}
 		}
@@ -205,7 +221,7 @@ public class MembersOverviewIdentitiesController extends StepFormBasicController
 				identListLowercase.remove(institutEmail.toLowerCase());
 			}
 			if (!PersistenceHelper.containsPersistable(oks, identity)
-					&& !securityManager.isIdentityInSecurityGroup(identity, anonymousSecGroup)) {
+					&& !organisationService.hasRole(identity, OrganisationRoles.guest)) {
 				oks.add(identity);
 			}
 		}

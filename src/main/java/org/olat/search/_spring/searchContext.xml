@@ -134,6 +134,7 @@
 				<ref bean="epDefaultMapIndexer" />
 				<ref bean="epStructuredMapIndexer" />
 				<ref bean="documentPoolIndexer" />
+				<ref bean="libraryIndexer" />
 			</list>
 		</property>
 	</bean>
@@ -141,6 +142,7 @@
 	<!-- Repository -->
 	<bean id="repositoryIndexer" class="org.olat.search.service.indexer.repository.RepositoryIndexer">
 		<property name="repositoryManager" ref="repositoryManager" />
+		<property name="repositoryService" ref="repositoryService" />
 		<property name="searchModule" ref="searchModule" />
 		<property name="repositoryEntryDocumentFactory" ref="repositoryEntryDocumentFactory" />
 		<property name="dbInstance" ref="database" />
@@ -249,7 +251,8 @@
 	
 	<!--  Groups indexers -->
 	<bean id="groupIndexer"	class="org.olat.search.service.indexer.group.GroupIndexer">
-	  <property name="indexerList">
+		<property name="businessGroupService" ref="businessGroupService" />
+		<property name="indexerList">
 			<list>
 				<ref bean="groupForumIndexer" />
 				<ref bean="groupFolderIndexer" />

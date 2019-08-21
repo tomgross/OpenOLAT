@@ -49,7 +49,8 @@ public class BinderPublicationPage {
 	public BinderMemberWizardPage addMember() {
 		By memberBy = By.cssSelector("a.o_sel_pf_access_member");
 		browser.findElement(memberBy).click();
-		OOGraphene.waitModalDialog(browser);
+		OOGraphene.waitBusy(browser);
+		OOGraphene.waitModalWizard(browser);
 		return new BinderMemberWizardPage(browser);
 	}
 	
@@ -81,11 +82,9 @@ public class BinderPublicationPage {
 	
 	public BinderPublicationPage fillAccessRights(String name, Boolean check) {
 		By checkBy = By.xpath("//div[contains(@class,'o_portfolio_rights')]//table//tr[td[contains(text(),'" + name + "')]]/td//input[@type='checkbox']");
-		By labelCheckBy = By.xpath("//div[contains(@class,'o_portfolio_rights')]//table//tr[td[contains(text(),'" + name + "')]]/td//label[input[@type='checkbox']]");
 		WebElement checkEl = browser.findElement(checkBy);
-		WebElement labelCheckEl = browser.findElement(labelCheckBy);
-		OOGraphene.scrollTo(labelCheckBy, browser);
-		OOGraphene.check(labelCheckEl, checkEl, check);
+		OOGraphene.scrollTo(checkBy, browser);
+		OOGraphene.check(checkEl, check);
 		OOGraphene.waitBusy(browser);
 		return this;
 	}
@@ -100,9 +99,6 @@ public class BinderPublicationPage {
 		By submitBy = By.cssSelector(".o_sel_pf_invitation_button_group button.btn-primary");
 		browser.findElement(submitBy).click();
 		OOGraphene.waitBusy(browser);
-		
-		//close error smtp
-		OOGraphene.closeErrorBox(browser);
 		return this;
 	}
 }

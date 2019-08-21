@@ -32,7 +32,7 @@ import org.olat.core.gui.components.form.flexible.impl.FormEvent;
 import org.olat.core.gui.components.form.flexible.impl.elements.AbstractTextElement;
 import org.olat.core.gui.control.Disposable;
 import org.olat.core.helpers.Settings;
-import org.olat.core.logging.OLog;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.StringHelper;
 import org.olat.core.util.Util;
@@ -53,7 +53,7 @@ import org.olat.core.util.filter.FilterFactory;
 public class RichTextElementImpl extends AbstractTextElement implements
 		RichTextElement, Disposable {
 	
-	private static final OLog log = Tracing.createLoggerFor(RichTextElementImpl.class);
+	private static final Logger log = Tracing.createLoggerFor(RichTextElementImpl.class);
 	private final RichTextElementComponent component;
 	private RichTextConfiguration configuration;
 	private TextMode renderingMode;
@@ -105,16 +105,19 @@ public class RichTextElementImpl extends AbstractTextElement implements
 	}
 	
 	/**
-	 * @see org.olat.core.gui.components.form.flexible.impl.elements.AbstractTextElement#getValue()
-	 * The returned value is XSS save and
-	 * does not contain executable JavaScript code. If you want to get the raw
-	 * user data use the getRawValue() method.
+	 * The returned value is XSS save and does not contain executable JavaScript
+	 * code. Further all value filter of the configuration are applied. If you want
+	 * to get the raw user data, use the getRawValue() method.
 	 */
 	@Override
 	public String getValue() {
 		String val = getRawValue();
-		Filter xssFilter = FilterFactory.getXSSFilter(val.length() + 1);
-		return xssFilter.filter(val);
+		Filter xssFilter = FilterFactory.getXSSFilter();
+		val = xssFilter.filter(val);
+		for (Filter filter : configuration.getValueFilters()) {
+			val = filter.filter(val);
+		}
+		return val;
 	}
 	
 	@Override

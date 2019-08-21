@@ -38,7 +38,6 @@ import org.olat.core.util.vfs.filters.VFSItemFilter;
  * Initial Date:  4 mai 2011 <br>
  * @author srosse, stephane.rosse@frentix.com, http://www.frentix.com
  */
-//fxdiff FXOLAT-125: virtual file system for CP
 public class VFSMediaFilesContainer extends AbstractVirtualContainer implements VFSContainer {
 	
 	private final VFSContainer rootContainer;
@@ -54,6 +53,11 @@ public class VFSMediaFilesContainer extends AbstractVirtualContainer implements 
 	@Override
 	public boolean exists() {
 		return rootContainer != null && rootContainer.exists();
+	}
+	
+	@Override
+	public boolean isHidden() {
+		return rootContainer != null && rootContainer.isHidden();
 	}
 
 	@Override
@@ -76,6 +80,11 @@ public class VFSMediaFilesContainer extends AbstractVirtualContainer implements 
 		return rootContainer.getItems(filter);
 	}
 	
+	@Override
+	public String getRelPath() {
+		return rootContainer.getRelPath();
+	}
+
 	@Override
 	public VFSContainer getParentContainer() {
 		return null;

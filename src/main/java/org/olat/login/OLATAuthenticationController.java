@@ -42,6 +42,7 @@ import org.olat.core.id.Identity;
 import org.olat.core.id.context.ContextEntry;
 import org.olat.core.id.context.StateEntry;
 import org.olat.core.logging.OLATSecurityException;
+import org.olat.core.logging.Tracing;
 import org.olat.core.util.StringHelper;
 import org.olat.core.util.UserSession;
 import org.olat.core.util.Util;
@@ -149,6 +150,7 @@ public class OLATAuthenticationController extends AuthenticationController imple
 		
 		subController = new RegistrationController(ureq, getWindowControl());
 		listenTo(subController);
+		
 		cmc = new CloseableModalController(getWindowControl(), translate("close"), subController.getInitialComponent());
 		listenTo(cmc);
 		cmc.activate();
@@ -174,9 +176,6 @@ public class OLATAuthenticationController extends AuthenticationController imple
 		cmc.activate();
 	}
 
-	/**
-	 * @see org.olat.core.gui.control.DefaultController#event(org.olat.core.gui.UserRequest, org.olat.core.gui.control.Controller, org.olat.core.gui.control.Event)
-	 */
 	@Override
 	public void event(UserRequest ureq, Controller source, Event event) {
 		if (source == loginForm && event == Event.DONE_EVENT) {
@@ -185,13 +184,13 @@ public class OLATAuthenticationController extends AuthenticationController imple
 			if (loginModule.isLoginBlocked(login)) {
 				// do not proceed when blocked
 				showError("login.blocked", loginModule.getAttackPreventionTimeoutMin().toString());
-				getLogger().audit("Login attempt on already blocked login for " + login + ". IP::" + ureq.getHttpReq().getRemoteAddr(), null);
+				getLogger().info(Tracing.M_AUDIT, "Login attempt on already blocked login for " + login + ". IP::" + ureq.getHttpReq().getRemoteAddr());
 				return;
 			}
 			authenticatedIdentity = olatAuthenticationSpi.authenticate(null, login, pass);
 			if (authenticatedIdentity == null) {
 				if (loginModule.registerFailedLoginAttempt(login)) {
-					getLogger().audit("Too many failed login attempts for " + login + ". Login blocked. IP::" + ureq.getHttpReq().getRemoteAddr(), null);
+					getLogger().info(Tracing.M_AUDIT, "Too many failed login attempts for " + login + ". Login blocked. IP::" + ureq.getHttpReq().getRemoteAddr());
 					showError("login.blocked", loginModule.getAttackPreventionTimeoutMin().toString());
 					return;
 				} else {
@@ -217,7 +216,7 @@ public class OLATAuthenticationController extends AuthenticationController imple
 				// accept disclaimer first
 				
 				removeAsListenerAndDispose(disclaimerCtr);
-				disclaimerCtr = new DisclaimerController(ureq, getWindowControl());
+				disclaimerCtr = new DisclaimerController(ureq, getWindowControl(), authenticatedIdentity, false);
 				listenTo(disclaimerCtr);
 				
 				removeAsListenerAndDispose(cmc);

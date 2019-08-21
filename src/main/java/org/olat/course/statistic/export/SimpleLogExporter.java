@@ -27,12 +27,13 @@
 package org.olat.course.statistic.export;
 
 import java.io.File;
+import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.file.Files;
 import java.nio.file.StandardOpenOption;
 import java.util.Calendar;
 import java.util.Date;
-import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import javax.persistence.EntityManager;
 import javax.persistence.TemporalType;
@@ -42,7 +43,7 @@ import org.olat.basesecurity.IdentityImpl;
 import org.olat.core.commons.persistence.DB;
 import org.olat.core.id.Identity;
 import org.olat.core.id.User;
-import org.olat.core.logging.OLog;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
 import org.olat.core.logging.activity.LoggingObject;
 import org.olat.core.util.openxml.OpenXMLWorkbook;
@@ -66,7 +67,7 @@ import org.springframework.stereotype.Service;
 @Service("courseLogExporter")
 public class SimpleLogExporter implements ICourseLogExporter {
 
-	private static final OLog log = Tracing.createLoggerFor(SimpleLogExporter.class);
+	private static final Logger log = Tracing.createLoggerFor(SimpleLogExporter.class);
 	
 	@Autowired
 	private DB dbInstance;
@@ -112,21 +113,24 @@ public class SimpleLogExporter implements ICourseLogExporter {
 				OpenXMLWorkbook workbook = new OpenXMLWorkbook(out, 1)) {
 			OpenXMLWorksheet sheet = workbook.nextWorksheet();
 			logLineConverter.setHeader(sheet, anonymize, isAdministrativeUser);
-			
-			int count = 0;
-			List<Object[]> queryResult = dbQuery.getResultList();
-			for (Object[] rawObject : queryResult) {
-				LoggingObject loggingObject = (LoggingObject)rawObject[0];
-				Identity identity = (Identity)rawObject[1];
-				User user = (User)rawObject[2];
-				
-				logLineConverter.setRow(workbook, sheet, loggingObject, identity, user, anonymize, resourceableId, isAdministrativeUser);
-				if(count++ % 1000 == 0) {
-					out.flush();
-					em.clear();
-				}
-			}
-			
+
+			AtomicInteger count = new AtomicInteger(0);
+			dbQuery.getResultStream()
+				.forEach(objects -> {
+					LoggingObject loggingObject = (LoggingObject)objects[0];
+					Identity identity = (Identity)objects[1];
+					User user = (User)objects[2];
+					
+					logLineConverter.setRow(workbook, sheet, loggingObject, identity, user, anonymize, resourceableId, isAdministrativeUser);
+					if(count.incrementAndGet() % 1000 == 0) {
+						try {
+							out.flush();
+						} catch (IOException e) {
+							log.error("", e);
+						}
+						em.clear();
+					}
+				});
 		} catch(Exception e) {
 			log.error("", e);
 		} finally {

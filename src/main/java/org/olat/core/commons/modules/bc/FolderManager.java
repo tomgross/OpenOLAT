@@ -31,23 +31,23 @@ import java.util.Date;
 import java.util.List;
 
 import org.olat.core.CoreSpringFactory;
-import org.olat.core.commons.modules.bc.meta.MetaInfo;
-import org.olat.core.commons.modules.bc.meta.MetaInfoFactory;
-import org.olat.core.commons.modules.bc.vfs.OlatRootFolderImpl;
+import org.olat.core.commons.services.vfs.VFSMetadata;
 import org.olat.core.helpers.Settings;
-import org.olat.core.manager.BasicManager;
 import org.olat.core.util.WebappHelper;
-import org.olat.core.util.vfs.OlatRelPathImpl;
+import org.olat.core.util.vfs.LocalFolderImpl;
+import org.olat.core.util.vfs.VFSConstants;
+import org.olat.core.util.vfs.VFSContainer;
 import org.olat.core.util.vfs.VFSItem;
 import org.olat.core.util.vfs.VFSLeaf;
-import org.olat.core.util.vfs.filters.SystemItemFilter;
+import org.olat.core.util.vfs.VFSManager;
+import org.olat.core.util.vfs.filters.VFSSystemItemFilter;
 
 /**
  * Initial Date:  18.12.2002
  *
  * @author Mike Stock
  */
-public class FolderManager  extends BasicManager {
+public class FolderManager {
 	
 	private static FolderModule folderModule;
 
@@ -78,26 +78,29 @@ public class FolderManager  extends BasicManager {
 		
 		final List<FileInfo> fileInfos = new ArrayList<>();
 		final long newerThanLong = newerThan.getTime();
-		OlatRootFolderImpl rootFolder = new OlatRootFolderImpl(olatRelPath, null);
+		LocalFolderImpl rootFolder = VFSManager.olatRootContainer(olatRelPath, null);
 		getFileInfosRecursively(rootFolder, fileInfos, newerThanLong, olatRelPath.length());
 		return fileInfos;
 	}
 
-	private static void getFileInfosRecursively(OlatRelPathImpl relPath, List<FileInfo> fileInfos, long newerThan, int basePathlen) {
+	private static void getFileInfosRecursively(VFSItem relPath, List<FileInfo> fileInfos, long newerThan, int basePathlen) {
 		if (relPath instanceof VFSLeaf) {
 			// is a file
-			long lastModified = ((VFSLeaf)relPath).getLastModified();
-			if (lastModified > newerThan) {
-				MetaInfo meta = CoreSpringFactory.getImpl(MetaInfoFactory.class).createMetaInfoFor(relPath);
-				String bcrootPath = relPath.getRelPath();
-				String bcRelPath = bcrootPath.substring(basePathlen);
-				fileInfos.add(new FileInfo(bcRelPath, meta, new Date(lastModified)));
+			VFSLeaf leaf = (VFSLeaf)relPath;
+			if(leaf.canMeta() == VFSConstants.YES) {
+				long lastModified = leaf.getLastModified();
+				if (lastModified > newerThan) {
+					VFSMetadata meta = leaf.getMetaInfo();
+					String bcrootPath = relPath.getRelPath();
+					String bcRelPath = bcrootPath.substring(basePathlen);
+					fileInfos.add(new FileInfo(bcRelPath, meta, new Date(lastModified)));
+				}
 			}
-		} else {
+		} else if(relPath instanceof VFSContainer) {
 			// is a folder
-			OlatRootFolderImpl container = (OlatRootFolderImpl)relPath;
-			for (VFSItem item : container.getItems(new SystemItemFilter())) {
-				getFileInfosRecursively((OlatRelPathImpl)item, fileInfos, newerThan, basePathlen);
+			VFSContainer container = (VFSContainer)relPath;
+			for (VFSItem item : container.getItems(new VFSSystemItemFilter())) {
+				getFileInfosRecursively(item, fileInfos, newerThan, basePathlen);
 			}
 		}
 	}

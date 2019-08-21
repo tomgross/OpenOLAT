@@ -62,7 +62,7 @@ import org.olat.core.gui.util.SyntheticUserRequest;
 import org.olat.core.gui.util.WindowControlMocker;
 import org.olat.core.id.Identity;
 import org.olat.core.id.Roles;
-import org.olat.core.logging.OLog;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.FileUtils;
 import org.olat.core.util.Formatter;
@@ -88,7 +88,7 @@ import org.olat.user.UserManager;
 
 public class QTI21ResultsExportMediaResource implements MediaResource {
 
-	private static final OLog log = Tracing.createLoggerFor(QTI21ResultsExportMediaResource.class);
+	private static final Logger log = Tracing.createLoggerFor(QTI21ResultsExportMediaResource.class);
 	
 	private static final String DATA = "userdata/";
 	private static final String SEP = File.separator;
@@ -114,21 +114,20 @@ public class QTI21ResultsExportMediaResource implements MediaResource {
 	private final QTI21Service qtiService;
 	
 	public QTI21ResultsExportMediaResource(CourseEnvironment courseEnv, List<Identity> identities,
-			QTICourseNode courseNode, Locale locale) {	
+			QTICourseNode courseNode, String archivePath, Locale locale) {	
 		this.courseNode = courseNode;
 		this.identities = identities;
 		this.courseEnv = courseEnv;
 		
 		ureq = new SyntheticUserRequest(new TransientIdentity(), locale, new UserSession());
-		Roles roles = new Roles(false, false, false, false, false, false, false);
-		ureq.getUserSession().setRoles(roles);
+		ureq.getUserSession().setRoles(Roles.userRoles());
 
 		velocityHelper = VelocityHelper.getInstance();
 		qtiService = CoreSpringFactory.getImpl(QTI21Service.class);
 		userManager = CoreSpringFactory.getImpl(UserManager.class);
 		entry = courseEnv.getCourseGroupManager().getCourseEntry();
 		translator = Util.createPackageTranslator(QTI21ResultsExportMediaResource.class, locale);
-		exportFolderName = translator.translate("export.folder.name");
+		exportFolderName = ZipUtil.concat(archivePath, translator.translate("export.folder.name"));
 	}
 
 	@Override

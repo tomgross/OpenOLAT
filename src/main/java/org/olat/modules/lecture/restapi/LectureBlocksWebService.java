@@ -20,9 +20,9 @@
 package org.olat.modules.lecture.restapi;
 
 import static org.olat.restapi.security.RestSecurityHelper.getIdentity;
-import static org.olat.restapi.security.RestSecurityHelper.getRoles;
 
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.List;
 
 import javax.servlet.http.HttpServletRequest;
@@ -33,19 +33,26 @@ import javax.ws.rs.PUT;
 import javax.ws.rs.Path;
 import javax.ws.rs.PathParam;
 import javax.ws.rs.Produces;
+import javax.ws.rs.WebApplicationException;
 import javax.ws.rs.core.Context;
 import javax.ws.rs.core.MediaType;
 import javax.ws.rs.core.Response;
 import javax.ws.rs.core.Response.Status;
 
-import org.olat.core.id.Roles;
+import org.olat.core.CoreSpringFactory;
+import org.olat.course.assessment.AssessmentMode;
+import org.olat.course.assessment.AssessmentModeManager;
 import org.olat.modules.lecture.LectureBlock;
+import org.olat.modules.lecture.LectureBlockAuditLog;
 import org.olat.modules.lecture.LectureBlockStatus;
 import org.olat.modules.lecture.LectureRollCallStatus;
 import org.olat.modules.lecture.LectureService;
 import org.olat.modules.lecture.RepositoryEntryLectureConfiguration;
+import org.olat.modules.lecture.manager.LectureServiceImpl;
+import org.olat.modules.lecture.model.LectureBlockImpl;
 import org.olat.modules.lecture.model.LectureBlockRefImpl;
 import org.olat.repository.RepositoryEntry;
+import org.olat.repository.RepositoryService;
 import org.springframework.beans.factory.annotation.Autowired;
 
 /**
@@ -57,12 +64,18 @@ import org.springframework.beans.factory.annotation.Autowired;
 public class LectureBlocksWebService {
 	
 	private final RepositoryEntry entry;
+	private final boolean administrator;
 	
 	@Autowired
 	private LectureService lectureService;
+	@Autowired
+	private RepositoryService repositoryService;
+	@Autowired
+	private AssessmentModeManager assessmentModeMgr;
 	
-	public LectureBlocksWebService(RepositoryEntry entry) {
+	public LectureBlocksWebService(RepositoryEntry entry, boolean administrator) {
 		this.entry = entry;
+		this.administrator = administrator;
 	}
 	
 	/**
@@ -79,8 +92,7 @@ public class LectureBlocksWebService {
 	@GET
 	@Produces({MediaType.APPLICATION_JSON, MediaType.APPLICATION_XML})
 	public Response getLectureBlocks(@Context HttpServletRequest httpRequest) {
-		Roles roles = getRoles(httpRequest);
-		if(!roles.isOLATAdmin()) {
+		if(!administrator) {
 			return Response.serverError().status(Status.UNAUTHORIZED).build();
 		}
 		
@@ -102,15 +114,13 @@ public class LectureBlocksWebService {
 	 * @response.representation.401.doc The roles of the authenticated user are not sufficient
 	 * @response.representation.404.doc The course not found
 	 * @param block The lecture block
-	 * @param request The HTTP request
 	 * @return It returns the updated / created lecture block.
 	 */
 	@PUT
 	@Produces({MediaType.APPLICATION_XML, MediaType.APPLICATION_JSON})
 	@Consumes({MediaType.APPLICATION_XML, MediaType.APPLICATION_JSON})
-	public Response putLectureBlocks(LectureBlockVO block, @Context HttpServletRequest httpRequest) {
-		Roles roles = getRoles(httpRequest);
-		if(!roles.isOLATAdmin()) {
+	public Response putLectureBlocks(LectureBlockVO block) {
+		if(!administrator) {
 			return Response.serverError().status(Status.UNAUTHORIZED).build();
 		}
 		LectureBlock updatedBlock = saveLectureBlock(block);
@@ -129,15 +139,13 @@ public class LectureBlocksWebService {
 	 * @response.representation.401.doc The roles of the authenticated user are not sufficient
 	 * @response.representation.404.doc The course not found
 	 * @param block The lecture block
-	 * @param request The HTTP request
 	 * @return It returns the updated / created lecture block.
 	 */
 	@POST
 	@Produces({MediaType.APPLICATION_JSON, MediaType.APPLICATION_XML})
 	@Consumes({MediaType.APPLICATION_FORM_URLENCODED, MediaType.APPLICATION_XML, MediaType.APPLICATION_JSON})
-	public Response postLectureBlocks(LectureBlockVO block, @Context HttpServletRequest httpRequest) {
-		Roles roles = getRoles(httpRequest);
-		if(!roles.isOLATAdmin()) {
+	public Response postLectureBlocks(LectureBlockVO block) {
+		if(!administrator) {
 			return Response.serverError().status(Status.UNAUTHORIZED).build();
 		}
 		LectureBlock updatedBlock = saveLectureBlock(block);
@@ -147,17 +155,18 @@ public class LectureBlocksWebService {
 	private LectureBlock saveLectureBlock(LectureBlockVO blockVo) {
 		LectureBlock block;
 		int currentPlannedLectures;
-		boolean syncParticipants = false;
+		boolean autoclose = false;
 		if(blockVo.getKey() != null && blockVo.getKey() > 0) {
 			block = lectureService.getLectureBlock(blockVo);
 			currentPlannedLectures = block.getPlannedLecturesNumber();
+			if("autoclosed".equals(blockVo.getRollCallStatus()) && block.getRollCallStatus() != LectureRollCallStatus.autoclosed) {
+				autoclose = true;
+			}
 		} else {
 			block = lectureService.createLectureBlock(entry);
 			currentPlannedLectures = -1;
 			if("autoclosed".equals(blockVo.getRollCallStatus())) {
-				block.setStatus(LectureBlockStatus.done);
-				block.setRollCallStatus(LectureRollCallStatus.autoclosed);
-				syncParticipants = true;
+				autoclose = true;
 			}
 		}
 		
@@ -192,12 +201,30 @@ public class LectureBlocksWebService {
 			block.setManagedFlagsString(blockVo.getManagedFlagsString());
 		}
 		block.setPlannedLecturesNumber(blockVo.getPlannedLectures());
+		
+		if(autoclose) {
+			block.setStatus(LectureBlockStatus.done);
+			block.setRollCallStatus(LectureRollCallStatus.autoclosed);
+			if(block.getAutoClosedDate() != null) {
+				((LectureBlockImpl)block).setAutoClosedDate(new Date());
+			}
+			if(block.getEffectiveLecturesNumber() <= 0) {
+				block.setEffectiveLecturesNumber(block.getPlannedLecturesNumber());
+			}
+		}
+		
 		LectureBlock savedLectureBlock = lectureService.save(block, null);
 		if(currentPlannedLectures > 0 && currentPlannedLectures != savedLectureBlock.getPlannedLecturesNumber()) {
 			lectureService.adaptRollCalls(savedLectureBlock);
 		}
-		if(syncParticipants) {
-			lectureService.syncParticipantSummaries(savedLectureBlock);
+		if(autoclose) {
+			lectureService.syncParticipantSummariesAndRollCalls(savedLectureBlock, LectureBlockAuditLog.Action.autoclose);
+		}
+		
+		AssessmentMode assessmentMode = assessmentModeMgr.getAssessmentMode(savedLectureBlock);
+		if(assessmentMode != null) {
+			assessmentModeMgr.syncAssessmentModeToLectureBlock(assessmentMode);
+			assessmentModeMgr.merge(assessmentMode, false);
 		}
 		return savedLectureBlock;
 	}
@@ -217,8 +244,7 @@ public class LectureBlocksWebService {
 	@Path("configuration")
 	@Produces({MediaType.APPLICATION_JSON, MediaType.APPLICATION_XML})
 	public Response getConfiguration(@Context HttpServletRequest httpRequest) {
-		Roles roles = getRoles(httpRequest);
-		if(!roles.isOLATAdmin()) {
+		if(!administrator) {
 			return Response.serverError().status(Status.UNAUTHORIZED).build();
 		}
 		
@@ -242,16 +268,14 @@ public class LectureBlocksWebService {
 	 * @response.representation.401.doc The roles of the authenticated user are not sufficient
 	 * @response.representation.404.doc The course not found
 	 * @param configuration The configuration
-	 * @param request The HTTP request
 	 * @return It returns the updated configuration.
 	 */
 	@POST
 	@Path("configuration")
 	@Produces({MediaType.APPLICATION_JSON, MediaType.APPLICATION_XML})
 	@Consumes({MediaType.APPLICATION_FORM_URLENCODED, MediaType.APPLICATION_XML, MediaType.APPLICATION_JSON})
-	public Response updateConfiguration(RepositoryEntryLectureConfigurationVO configuration, @Context HttpServletRequest httpRequest) {
-		Roles roles = getRoles(httpRequest);
-		if(!roles.isOLATAdmin()) {
+	public Response updateConfiguration(RepositoryEntryLectureConfigurationVO configuration) {
+		if(!administrator) {
 			return Response.serverError().status(Status.UNAUTHORIZED).build();
 		}
 		RepositoryEntryLectureConfiguration config = lectureService.getRepositoryEntryLectureConfiguration(entry);
@@ -287,16 +311,36 @@ public class LectureBlocksWebService {
 	 * @return The web service for a single lecture block.
 	 */
 	@Path("{lectureBlockKey}")
-	public LectureBlockWebService getLectureBlockWebService(@PathParam("lectureBlockKey") Long lectureBlockKey, @Context HttpServletRequest httpRequest) {
-		Roles roles = getRoles(httpRequest);
-		if(!roles.isOLATAdmin()) {
-			return null;
+	public LectureBlockWebService getLectureBlockWebService(@PathParam("lectureBlockKey") Long lectureBlockKey, @Context HttpServletRequest httpRequest)
+	throws WebApplicationException {
+		if(!administrator) {
+			throw new WebApplicationException(Status.UNAUTHORIZED);
 		}
 		LectureBlock lectureBlock = lectureService.getLectureBlock(new LectureBlockRefImpl(lectureBlockKey));
 		if(lectureBlock == null || !lectureBlock.getEntry().equals(entry)) {
-			return null;
+			throw new WebApplicationException(Status.NOT_FOUND);
 		}
-		return new LectureBlockWebService(lectureBlock, entry, lectureService);
+		LectureBlockWebService ws = new LectureBlockWebService(lectureBlock, entry);
+		CoreSpringFactory.autowireObject(ws);
+		return ws;
+	}
+
+	@POST
+	@Path("healmoved/{originEntryKey}")
+	public Response healMoved(@PathParam("originEntryKey") Long originEntryKey) {
+		//check the lecture summary
+		
+		RepositoryEntry originEntry = repositoryService.loadByKey(originEntryKey);
+		if(originEntry == null) {
+			return Response.serverError().status(Status.NOT_FOUND).build();
+		}
+
+		int rows = ((LectureServiceImpl)lectureService).healMovedLectureBlocks(entry, originEntry);
+		
+		if(rows == 0) {
+			return Response.ok().status(Status.NOT_MODIFIED).build();
+		}
+		return Response.ok().build();
 	}
 	
 	/**
@@ -320,8 +364,7 @@ public class LectureBlocksWebService {
 	@GET
 	@Path("adaptation")
 	public Response adapatation(@Context HttpServletRequest httpRequest) {
-		Roles roles = getRoles(httpRequest);
-		if(!roles.isOLATAdmin()) {
+		if(!administrator) {
 			return Response.serverError().status(Status.UNAUTHORIZED).build();
 		}
 		

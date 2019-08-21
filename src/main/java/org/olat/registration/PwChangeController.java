@@ -56,6 +56,7 @@ import org.olat.core.util.i18n.I18nModule;
 import org.olat.core.util.mail.MailBundle;
 import org.olat.core.util.mail.MailManager;
 import org.olat.core.util.mail.MailerResult;
+import org.olat.login.LoginModule;
 import org.olat.user.UserManager;
 import org.olat.user.UserModule;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -89,6 +90,8 @@ public class PwChangeController extends BasicController {
 	private UserModule userModule;
 	@Autowired
 	private RegistrationManager rm;
+	@Autowired
+	private LoginModule loginModule;
 	@Autowired
 	private MailManager mailManager;
 	@Autowired
@@ -265,7 +268,8 @@ public class PwChangeController extends BasicController {
 		// mailer configuration
 		String serverpath = Settings.getServerContextPathURI();
 		
-		TemporaryKey tk = rm.createAndDeleteOldTemporaryKey(identity.getKey(), emailAdress, ip, RegistrationManager.PW_CHANGE);
+		TemporaryKey tk = rm.createAndDeleteOldTemporaryKey(identity.getKey(), emailAdress, ip,
+				RegistrationManager.PW_CHANGE, loginModule.getValidUntilHoursGui());
 
 		myContent.contextPut("pwKey", tk.getRegistrationKey());
 		StringBuilder body = new StringBuilder();
@@ -280,7 +284,7 @@ public class PwChangeController extends BasicController {
 		    .append(userTrans.translate("pwchange.body.alt", new String[] { serverpath, tk.getRegistrationKey(), i18nModule.getLocaleKey(ureq.getLocale()) }))
 		    .append("</div>")
 		    .append("<div class='o_footer'>")
-		    .append(userTrans.translate("reg.wherefrom", new String[] { serverpath, today, ip }))
+		    .append(userTrans.translate("reg.wherefrom", new String[] { serverpath, today }))
 		    .append("</div>");
 
 		MailBundle bundle = new MailBundle();
@@ -322,7 +326,6 @@ public class PwChangeController extends BasicController {
 		wic.setCurStep(3);
 		pwf = new PwChangeForm(ureq, getWindowControl(), temporaryKey);
 		listenTo(pwf);
-		myContent.contextPut("pwdhelp", translate("pwdhelp"));
 		myContent.contextPut("text", translate("step3.pw.text"));
 		passwordPanel.setContent(pwf.getInitialComponent());
 	}
@@ -331,7 +334,6 @@ public class PwChangeController extends BasicController {
 		wic.setCurStep(3);
 		pwf = new PwChangeForm(ureq, getWindowControl(), identityToChange, tempKey);
 		listenTo(pwf);
-		myContent.contextPut("pwdhelp", translate("pwdhelp"));
 		myContent.contextPut("text", translate("step3.pw.text"));
 		passwordPanel.setContent(pwf.getInitialComponent());
 	}
@@ -344,7 +346,6 @@ public class PwChangeController extends BasicController {
 	private void showChangePasswordEnd() {
 		// validation was ok
 		wic.setCurStep(4);
-		myContent.contextPut("pwdhelp", "");
 		myContent.contextPut("text", translate("step4.pw.text"));
 		pwchangeHomelink = LinkFactory.createLink("pwchange.homelink", myContent, this);
 		pwchangeHomelink.setCustomEnabledLinkCSS("btn btn-primary");

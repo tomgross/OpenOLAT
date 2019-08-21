@@ -40,14 +40,14 @@ import org.apache.openmeetings.axis.services.UserService;
 import org.apache.openmeetings.axis.services.UserServicePortType;
 import org.apache.openmeetings.axis.services.xsd.RoomReturn;
 import org.apache.openmeetings.axis.services.xsd.RoomUser;
-import org.apache.openmeetings.persistence.beans.basic.xsd.Sessiondata;
-import org.apache.openmeetings.persistence.beans.flvrecord.xsd.FlvRecording;
-import org.apache.openmeetings.persistence.beans.room.xsd.Room;
+import org.apache.openmeetings.db.dto.record.xsd.RecordingDTO;
+import org.apache.openmeetings.db.dto.room.xsd.RoomDTO;
+import org.apache.openmeetings.db.entity.server.xsd.Sessiondata;
 import org.olat.core.helpers.Settings;
 import org.olat.core.id.Identity;
 import org.olat.core.id.OLATResourceable;
 import org.olat.core.id.UserConstants;
-import org.olat.core.logging.OLog;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.StringHelper;
 import org.olat.core.util.WebappHelper;
@@ -61,8 +61,8 @@ import org.olat.modules.openmeetings.model.OpenMeetingsRoom;
 import org.olat.modules.openmeetings.model.OpenMeetingsRoomReference;
 import org.olat.modules.openmeetings.model.OpenMeetingsUser;
 import org.olat.modules.openmeetings.model.RoomReturnInfo;
-import org.olat.repository.RepositoryManager;
-import org.olat.repository.model.RepositoryEntryShortImpl;
+import org.olat.repository.RepositoryEntry;
+import org.olat.repository.manager.RepositoryEntryDAO;
 import org.olat.user.DisplayPortraitManager;
 import org.olat.user.UserDataDeletable;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -76,7 +76,7 @@ import org.springframework.stereotype.Service;
 @Service
 public class OpenMeetingsManagerImpl implements OpenMeetingsManager, UserDataDeletable, DeletableGroupData {
 	
-	private final static OLog log = Tracing.createLoggerFor(OpenMeetingsManagerImpl.class);
+	private static final Logger log = Tracing.createLoggerFor(OpenMeetingsManagerImpl.class);
 	
 	@Autowired
 	private OpenMeetingsDAO openMeetingsDao;
@@ -85,7 +85,7 @@ public class OpenMeetingsManagerImpl implements OpenMeetingsManager, UserDataDel
 	@Autowired
 	private CoordinatorManager coordinator;
 	@Autowired
-	private RepositoryManager repositoryManager;
+	private RepositoryEntryDAO repositoryEntryDao;
 	@Autowired
 	private DisplayPortraitManager portraitManager;
 
@@ -141,7 +141,7 @@ public class OpenMeetingsManagerImpl implements OpenMeetingsManager, UserDataDel
 						}
 					}
 					info.setNumOfUsers(numOfUsers);
-					realRooms.put(new Long(roomRet.getRoomId()), info);
+					realRooms.put(Long.valueOf(roomRet.getRoomId()), info);
 				}
 			}
 
@@ -151,7 +151,7 @@ public class OpenMeetingsManagerImpl implements OpenMeetingsManager, UserDataDel
 
 			List<OpenMeetingsRoom> rooms = new ArrayList<>();
 			for(OpenMeetingsRoomReference prop:props) {
-				Long roomId = new Long(prop.getRoomId());
+				Long roomId = Long.valueOf(prop.getRoomId());
 				RoomReturnInfo infos = realRooms.get(roomId);
 				if(infos != null) {
 					OpenMeetingsRoom room = openMeetingsDao.deserializeRoom(prop.getConfig());
@@ -188,8 +188,8 @@ public class OpenMeetingsManagerImpl implements OpenMeetingsManager, UserDataDel
 		}
 		
 		if(!resourceIdToRoomIds.isEmpty()) {
-			List<RepositoryEntryShortImpl> shortRepos = repositoryManager.loadRepositoryEntryShortsByResource(resourceIdToRoomIds.keySet(), "CourseModule");
-			for(RepositoryEntryShortImpl repoEntry : shortRepos) {
+			List<RepositoryEntry> shortRepos = repositoryEntryDao.loadByResourceIds("CourseModule", resourceIdToRoomIds.keySet());
+			for(RepositoryEntry repoEntry : shortRepos) {
 				List<Long> roomIds = resourceIdToRoomIds.get(repoEntry.getOlatResource().getResourceableId());
 				for(Long roomId:roomIds) {
 					roomIdToResourceName.put(roomId, repoEntry.getDisplayname());
@@ -232,8 +232,8 @@ public class OpenMeetingsManagerImpl implements OpenMeetingsManager, UserDataDel
 			String username = identity.getName();
 			
 			String hashedUrl = userWs.setUserObjectAndGenerateRoomHashByURLAndRecFlag(sid,
-	        username, firstname, lastname, profilePictureUrl, email, externalUserId, externalUserType,
-	        roomId, becomeModeratorAsInt, 0, 1);
+					username, firstname, lastname, profilePictureUrl, email, externalUserId, externalUserType,
+					roomId, becomeModeratorAsInt, 0, 1);
 			if(hashedUrl.startsWith("-") && hashedUrl.length() < 5) {
 				throw new OpenMeetingsException(parseErrorCode(hashedUrl));
 			}
@@ -345,24 +345,24 @@ public class OpenMeetingsManagerImpl implements OpenMeetingsManager, UserDataDel
 	throws OpenMeetingsException {
 		try {
 			RoomServicePortType roomWs = getRoomWebService();
-			Room omRoom = roomWs.getRoomById(sid, roomId);
+			RoomDTO omRoom = roomWs.getRoomById(sid, roomId);
 			if(omRoom != null) {
 				room.setComment(omRoom.getComment());
-				if(omRoom.isIsModeratedRoom() != null) {
-					room.setModerated(omRoom.isIsModeratedRoom());
+				if(omRoom.isModerated() != null) {
+					room.setModerated(omRoom.isModerated());
 				}
-				if(omRoom.isIsAudioOnly() != null) {
-					room.setAudioOnly(omRoom.isIsAudioOnly());
+				if(omRoom.isAudioOnly() != null) {
+					room.setAudioOnly(omRoom.isAudioOnly());
 				}
 				room.setName(omRoom.getName());
-				if(omRoom.getRoomsId() != null) {
-					room.setRoomId(omRoom.getRoomsId());
+				if(omRoom.getId() != null) {
+					room.setRoomId(omRoom.getId());
 				} else {
 					room.setRoomId(roomId);
 				}
 				room.setSize(omRoom.getNumberOfPartizipants());
 				room.setType(omRoom.getRoomtype().getRoomtypesId());
-				room.setClosed(omRoom.isIsClosed());
+				room.setClosed(omRoom.isClosed());
 				return room;
 			} else {
 				return null;
@@ -409,7 +409,7 @@ public class OpenMeetingsManagerImpl implements OpenMeetingsManager, UserDataDel
 
 			RoomServicePortType roomWs = getRoomWebService();
 			//OpenMeetings doc: false = close, true = open
-			log.audit("Room state changed (true = close, false = open): " + status);
+			log.info(Tracing.M_AUDIT, "Room state changed (true = close, false = open): " + status);
 			responseCode = roomWs.closeRoom(adminSID, room.getRoomId(), status);
 			if(responseCode < 0) {
 				throw new OpenMeetingsException(responseCode);
@@ -431,21 +431,21 @@ public class OpenMeetingsManagerImpl implements OpenMeetingsManager, UserDataDel
 		try {
 			String adminSID = adminLogin();
 			RoomServicePortType roomWs = getRoomWebService();
-			List<FlvRecording> recordings = roomWs.getFlvRecordingByRoomId(adminSID, roomId);
+			List<RecordingDTO> recordings = roomWs.getFlvRecordingByRoomId(adminSID, roomId);
 
 			List<OpenMeetingsRecording> recList = new ArrayList<>();
 			if(recordings != null) {
-				for(FlvRecording recording:recordings) {
+				for(RecordingDTO recording:recordings) {
 					if(recording != null) {
 						OpenMeetingsRecording rec = new OpenMeetingsRecording();
 						rec.setRoomId(recording.getRoomId());
-						rec.setRecordingId(recording.getFlvRecordingId());
-						rec.setFilename(recording.getFileName());
-						rec.setDownloadName(recording.getFileHash());
-						rec.setDownloadNameAlt(recording.getAlternateDownload());
-						rec.setPreviewImage(recording.getPreviewImage());
-						rec.setWidth(recording.getFlvWidth());
-						rec.setHeight(recording.getFlvHeight());
+						rec.setRecordingId(recording.getId());
+						rec.setFilename(recording.getName());
+						rec.setDownloadName(recording.getFlvName());
+						rec.setDownloadNameAlt(recording.getAviName());
+						// preview image?
+						rec.setWidth(recording.getWidth());
+						rec.setHeight(recording.getHeight());
 						recList.add(rec);
 					}
 				}
@@ -490,7 +490,7 @@ public class OpenMeetingsManagerImpl implements OpenMeetingsManager, UserDataDel
 					room.isAudioOnly(), false, true);
 			if(returned >= 0) {
 				room.setRoomId(returned);
-				log.audit("Room created");
+				log.info(Tracing.M_AUDIT, "Room created");
 				OpenMeetingsRoomReference ref = openMeetingsDao.createReference(group, ores, subIdentifier, room);
 				room.setReference(ref);
 				return room;
@@ -524,7 +524,7 @@ public class OpenMeetingsManagerImpl implements OpenMeetingsManager, UserDataDel
 					room.getName(), room.getType(), room.getComment(), room.getSize(), false, false, false, 0, room.isModerated(), 
 					false, room.isAudioOnly(), false, false, false, false, false, false, false);
 			if(returned >= 0) {
-				log.audit("Room updated");
+				log.info(Tracing.M_AUDIT, "Room updated");
 				openMeetingsDao.updateReference(group, ores, subIdentifier, room);
 				return room;
 			}
@@ -683,7 +683,7 @@ public class OpenMeetingsManagerImpl implements OpenMeetingsManager, UserDataDel
 			UserService ss = new UserService();
 			UserServicePortType port = ss.getUserServiceHttpSoap11Endpoint();
 			String endPoint = cleanUrl(url) + "/services/UserService?wsdl";
-	    ((BindingProvider)port).getRequestContext().put(BindingProvider.ENDPOINT_ADDRESS_PROPERTY, endPoint);
+			((BindingProvider)port).getRequestContext().put(BindingProvider.ENDPOINT_ADDRESS_PROPERTY, endPoint);
 			
 			Sessiondata sessiondata = port.getSession();
 			String sid = sessiondata.getSessionId();

@@ -22,7 +22,6 @@ package org.olat.test.rest;
 import static org.junit.Assert.assertTrue;
 
 import java.io.IOException;
-import java.io.InputStream;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.URL;
@@ -149,10 +148,9 @@ public class UserRestClient {
 		HttpResponse response = restConnection.execute(method);
 		int responseCode = response.getStatusLine().getStatusCode();
 		assertTrue(responseCode == 200 || responseCode == 201);
-		InputStream body = response.getEntity().getContent();
-		UserVO current = restConnection.parse(body, UserVO.class);
+
+		UserVO current = restConnection.parse(response.getEntity(), UserVO.class);
 		Assert.assertNotNull(current);
-		
 		current.setPassword(vo.getPassword());
 		return current;
 	}

@@ -22,16 +22,17 @@ package org.olat.repository.ui;
 import javax.servlet.http.HttpServletRequest;
 
 import org.olat.core.CoreSpringFactory;
-import org.olat.core.commons.modules.bc.meta.MetaInfo;
-import org.olat.core.commons.modules.bc.meta.tagged.MetaTagged;
+import org.olat.core.commons.services.vfs.VFSRepositoryService;
 import org.olat.core.dispatcher.mapper.Mapper;
 import org.olat.core.gui.media.MediaResource;
 import org.olat.core.gui.media.NotFoundMediaResource;
+import org.olat.core.util.vfs.VFSConstants;
 import org.olat.core.util.vfs.VFSContainer;
 import org.olat.core.util.vfs.VFSItem;
 import org.olat.core.util.vfs.VFSLeaf;
 import org.olat.core.util.vfs.VFSMediaResource;
 import org.olat.repository.manager.CatalogManager;
+import org.springframework.beans.factory.annotation.Autowired;
 
 
 /**
@@ -42,10 +43,13 @@ import org.olat.repository.manager.CatalogManager;
  */
 public class CatalogEntryImageMapper implements Mapper {
 	
+	@Autowired
 	private CatalogManager catalogManager;
+	@Autowired
+	private VFSRepositoryService vfsRepositoryService;
 	
 	public CatalogEntryImageMapper() {
-		catalogManager = CoreSpringFactory.getImpl(CatalogManager.class);
+		CoreSpringFactory.autowireObject(this);
 	}
 
 	@Override
@@ -59,14 +63,11 @@ public class CatalogEntryImageMapper implements Mapper {
 
 		MediaResource resource = null;
 		if(image instanceof  VFSLeaf) {
-			if(image instanceof MetaTagged) {
-				MetaInfo info = ((MetaTagged) image).getMetaInfo();
-				if(info != null) {
-					VFSLeaf thumbnail = info.getThumbnail(180, 180, true);
-					if(thumbnail != null) {
-						resource = new VFSMediaResource(thumbnail);
-					}
-				}	
+			if(image.canMeta() == VFSConstants.YES) {
+				VFSLeaf thumbnail = vfsRepositoryService.getThumbnail((VFSLeaf)image, 180, 180, true);
+				if(thumbnail != null) {
+					resource = new VFSMediaResource(thumbnail);
+				}
 			}
 			
 			if(resource == null) {

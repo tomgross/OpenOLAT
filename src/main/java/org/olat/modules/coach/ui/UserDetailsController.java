@@ -44,7 +44,6 @@ import org.olat.core.id.context.StateEntry;
 import org.olat.core.util.StringHelper;
 import org.olat.course.CorruptedCourseException;
 import org.olat.course.assessment.EfficiencyStatement;
-import org.olat.course.assessment.UserEfficiencyStatement;
 import org.olat.course.assessment.manager.EfficiencyStatementManager;
 import org.olat.course.assessment.ui.tool.AssessmentIdentityCourseController;
 import org.olat.course.certificate.ui.CertificateAndEfficiencyStatementController;
@@ -159,10 +158,8 @@ public class UserDetailsController extends BasicController implements Activateab
 		RepositoryEntrySecurity reSecurity = repositoryManager.isAllowed(ureq, entry);
 		return new UserCourseEnvironmentImpl(ureq.getUserSession().getIdentityEnvironment(), null, getWindowControl(),
 				null, null, null,
-				reSecurity.isCourseCoach() || reSecurity.isGroupCoach(),
-				reSecurity.isEntryAdmin(),
-				reSecurity.isCourseParticipant() || reSecurity.isGroupParticipant(),
-				reSecurity.isReadOnly());
+				reSecurity.isCoach(), reSecurity.isEntryAdmin() || reSecurity.isPrincipal() || reSecurity.isMasterCoach(), reSecurity.isParticipant(),
+				reSecurity.isReadOnly() || reSecurity.isOnlyPrincipal() || reSecurity.isOnlyMasterCoach());
 	}
 
 	@Override
@@ -244,9 +241,12 @@ public class UserDetailsController extends BasicController implements Activateab
 			removeAsListenerAndDispose(statementCtrl);
 
 			RepositoryEntry entry = statementEntry.getCourse();
-			UserEfficiencyStatement statement = statementEntry.getUserEfficencyStatement();
+			Long statementKey = statementEntry.getUserEfficiencyStatementKey();
 			EfficiencyStatement efficiencyStatement = null;
-			if(statement != null) {
+			if(statementKey != null) {
+				efficiencyStatement = efficiencyStatementManager.getUserEfficiencyStatementByKey(statementKey);
+			}
+			if(efficiencyStatement == null) {
 				RepositoryEntry re = statementEntry.getCourse();
 				efficiencyStatement = efficiencyStatementManager.getUserEfficiencyStatementByCourseRepositoryEntry(re, assessedIdentity);
 			}
@@ -270,7 +270,7 @@ public class UserDetailsController extends BasicController implements Activateab
 		if(assessmentCtrl == null) {
 			RepositoryEntry entry = statementEntry.getCourse();
 			UserCourseEnvironment coachCourseEnv = loadUserCourseEnvironment(ureq, entry);
-			assessmentCtrl = new AssessmentIdentityCourseController(ureq, getWindowControl(), stackPanel, entry, coachCourseEnv, assessedIdentity);
+			assessmentCtrl = new AssessmentIdentityCourseController(ureq, getWindowControl(), stackPanel, entry, coachCourseEnv, assessedIdentity, true);
 			listenTo(assessmentCtrl);
 		}
 		mainVC.put("segmentCmp", assessmentCtrl.getInitialComponent());

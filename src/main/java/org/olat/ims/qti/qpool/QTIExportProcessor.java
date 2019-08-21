@@ -31,7 +31,7 @@ import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
 import org.apache.commons.io.IOUtils;
-import org.cyberneko.html.parsers.SAXParser;
+import org.apache.logging.log4j.Logger;
 import org.dom4j.Attribute;
 import org.dom4j.CDATA;
 import org.dom4j.Document;
@@ -41,7 +41,6 @@ import org.dom4j.Element;
 import org.dom4j.Node;
 import org.dom4j.io.OutputFormat;
 import org.dom4j.io.XMLWriter;
-import org.olat.core.logging.OLog;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.CodeHelper;
 import org.olat.core.util.FileUtils;
@@ -58,6 +57,9 @@ import org.olat.modules.qpool.QuestionItemFull;
 import org.olat.modules.qpool.manager.QPoolFileStorage;
 import org.xml.sax.InputSource;
 
+import nu.validator.htmlparser.common.XmlViolationPolicy;
+import nu.validator.htmlparser.sax.HtmlParser;
+
 /**
  * 
  * Initial date: 11.03.2013<br>
@@ -66,7 +68,7 @@ import org.xml.sax.InputSource;
  */
 public class QTIExportProcessor {
 	
-	private static final OLog log = Tracing.createLoggerFor(QTIExportProcessor.class);
+	private static final Logger log = Tracing.createLoggerFor(QTIExportProcessor.class);
 
 	private final QPoolFileStorage qpoolFileStorage;
 	
@@ -161,7 +163,7 @@ public class QTIExportProcessor {
 		for(ItemMaterial material:itemAndMaterials.getMaterials()) {
 			String exportPath = material.getExportUri();
 			VFSLeaf leaf = editorContainer.createChildLeaf(exportPath);
-			VFSManager.copyContent(material.getLeaf(), leaf);
+			VFSManager.copyContent(material.getLeaf(), leaf, false);
 		}
 		return itemEl;
 	}
@@ -203,14 +205,12 @@ public class QTIExportProcessor {
 	 */
 	private void collectResourcesInMatText(Element el, VFSContainer container, ItemsAndMaterials materials) {
 		//mattext
-		@SuppressWarnings("unchecked")
-		List<Element> mattextList = el.selectNodes(".//mattext");
-		for(Element mat:mattextList) {
+		List<Node> mattextList = el.selectNodes(".//mattext");
+		for(Node matNode:mattextList) {
+			Element mat = (Element)matNode;
 			Attribute texttypeAttr = mat.attribute("texttype");
-			String texttype = texttypeAttr.getValue();
-			if("text/html".equals(texttype)) {
-				@SuppressWarnings("unchecked")
-				List<Node> childElList = new ArrayList<Node>(mat.content());
+			if(texttypeAttr != null && "text/html".equals(texttypeAttr.getValue())) {
+				List<Node> childElList = new ArrayList<>(mat.content());
 				for(Node childEl:childElList) {
 					mat.remove(childEl);
 				}
@@ -243,15 +243,15 @@ public class QTIExportProcessor {
 		}
 	}
 	
-	@SuppressWarnings("unchecked")
 	private void collectResourcesInMatMedias(Element el, VFSContainer container, ItemsAndMaterials materials) {
 		//matimage uri
-		List<Element> matList = new ArrayList<Element>();
+		List<Node> matList = new ArrayList<>();
 		matList.addAll(el.selectNodes(".//matimage"));
 		matList.addAll(el.selectNodes(".//mataudio"));
 		matList.addAll(el.selectNodes(".//matvideo"));
 		
-		for(Element mat:matList) {
+		for(Node matNode:matList) {
+			Element mat = (Element)matNode;
 			Attribute uriAttr = mat.attribute("uri");
 			String uri = uriAttr.getValue();
 			
@@ -281,7 +281,7 @@ public class QTIExportProcessor {
 	 */
 	private List<String> findMaterialInMatText(String content) {
 		try {
-			SAXParser parser = new SAXParser();
+			HtmlParser parser = new HtmlParser(XmlViolationPolicy.ALTER_INFOSET);
 			QTI12HtmlHandler contentHandler = new QTI12HtmlHandler();
 			parser.setContentHandler(contentHandler);
 			parser.parse(new InputSource(new StringReader(content)));
@@ -368,8 +368,7 @@ public class QTIExportProcessor {
 	 * @param item
 	 */
 	protected void enrichScoreDontUseIt(Element item) {
-		@SuppressWarnings("unchecked")
-		List<Element> sv = item.selectNodes("./resprocessing/outcomes/decvar[@varname='SCORE']");
+		List<Node> sv = item.selectNodes("./resprocessing/outcomes/decvar[@varname='SCORE']");
 		// the QTIv1.2 system relies on the SCORE variable of items
 		if (sv.isEmpty()) {
 			//create resprocessing if needed

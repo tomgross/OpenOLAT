@@ -46,34 +46,45 @@ import org.apache.http.Header;
 import org.apache.http.HttpResponse;
 import org.apache.http.client.methods.HttpGet;
 import org.apache.http.util.EntityUtils;
+import org.apache.logging.log4j.Logger;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
-import org.olat.basesecurity.BaseSecurityManager;
+import org.olat.basesecurity.BaseSecurity;
 import org.olat.core.commons.persistence.DBFactory;
 import org.olat.core.id.Identity;
-import org.olat.core.util.FileUtils;
+import org.olat.core.logging.Tracing;
 import org.olat.core.util.vfs.VFSContainer;
 import org.olat.core.util.vfs.VFSLeaf;
+import org.olat.course.CourseFactory;
 import org.olat.course.ICourse;
-import org.olat.restapi.repository.course.CoursesWebService;
+import org.olat.repository.RepositoryEntry;
+import org.olat.repository.RepositoryEntryStatusEnum;
 import org.olat.restapi.support.vo.LinkVO;
-import org.olat.test.OlatJerseyTestCase;
+import org.olat.test.JunitTestHelper;
+import org.olat.test.OlatRestTestCase;
+import org.springframework.beans.factory.annotation.Autowired;
 
-public class CoursesResourcesFoldersTest extends OlatJerseyTestCase {
+public class CoursesResourcesFoldersTest extends OlatRestTestCase {
+	
+	private static final Logger log = Tracing.createLoggerFor(CoursesResourcesFoldersTest.class);
 
 	private static ICourse course1;
 	private static Identity admin;
 	
 	private RestConnection conn;
 	
+	@Autowired
+	private BaseSecurity securityManager;
+	
 	@Before
 	public void setUp() throws Exception {
-		super.setUp();
 		conn = new RestConnection();
 		
-		admin = BaseSecurityManager.getInstance().findIdentityByName("administrator");
-		course1 = CoursesWebService.createEmptyCourse(admin, "course1", "course1 long name", null);
+		admin = securityManager.findIdentityByName("administrator");
+		RepositoryEntry courseEntry = JunitTestHelper.deployEmptyCourse(admin, "Empty course",
+				RepositoryEntryStatusEnum.preparation, false, false);
+		course1 = CourseFactory.loadCourse(courseEntry);
 		
 		//copy a couple of files in the resource folder
 		VFSContainer container = course1.getCourseFolderContainer();
@@ -99,13 +110,15 @@ public class CoursesResourcesFoldersTest extends OlatJerseyTestCase {
 		}
 	}
 	
-	private void copyFileInResourceFolder(VFSContainer container, String filename, String prefix) throws IOException {
-		InputStream pageStream = CoursesElementsTest.class.getResourceAsStream(filename);
-		VFSLeaf item = container.createChildLeaf(prefix + filename);
-		OutputStream outStream = item.getOutputStream(false);
-		IOUtils.copy(pageStream, outStream);
-		FileUtils.closeSafely(pageStream);
-		FileUtils.closeSafely(outStream);
+	private void copyFileInResourceFolder(VFSContainer container, String filename, String prefix)
+	throws IOException {
+		VFSLeaf item = container.createChildLeaf(prefix + filename);	
+		try(InputStream pageStream = CoursesElementsTest.class.getResourceAsStream(filename);
+				OutputStream outStream = item.getOutputStream(false);) {
+			IOUtils.copy(pageStream, outStream);
+		} catch (Exception e) {
+			log.error("", e);
+		}
 	}
 	
 	@Test
@@ -116,8 +129,7 @@ public class CoursesResourcesFoldersTest extends OlatJerseyTestCase {
 		HttpResponse response = conn.execute(method);
 		assertEquals(200, response.getStatusLine().getStatusCode());
 		
-		InputStream body = response.getEntity().getContent();
-		List<LinkVO> links = parseLinkArray(body);
+		List<LinkVO> links = parseLinkArray(response.getEntity());
 		assertNotNull(links);
 		assertEquals(3, links.size());
 	}
@@ -130,8 +142,7 @@ public class CoursesResourcesFoldersTest extends OlatJerseyTestCase {
 		HttpResponse response = conn.execute(method);
 		assertEquals(200, response.getStatusLine().getStatusCode());
 		
-		InputStream body = response.getEntity().getContent();
-		List<LinkVO> links = parseLinkArray(body);
+		List<LinkVO> links = parseLinkArray(response.getEntity());
 		assertNotNull(links);
 		assertEquals(1, links.size());
 		assertEquals("3_singlepage.html", links.get(0).getTitle());

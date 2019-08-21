@@ -26,10 +26,12 @@ package org.olat.modules.webFeed.manager;
  */
 public class ValidatedURL {
 	private final String url;
+	private final String title;
 	private final State state;
 	
-	public ValidatedURL(String url, State state) {
+	public ValidatedURL(String url, String title, State state) {
 		this.url = url;
+		this.title = title;
 		this.state = state;
 	}
 	
@@ -39,6 +41,10 @@ public class ValidatedURL {
 
 	public State getState() {
 		return state;
+	}
+	
+	public String getTitle() {
+		return title;
 	}
 
 	public enum State {

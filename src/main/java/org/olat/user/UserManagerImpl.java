@@ -39,12 +39,12 @@ import javax.persistence.EntityManager;
 import javax.persistence.TypedQuery;
 
 import org.olat.basesecurity.BaseSecurity;
-import org.olat.basesecurity.Constants;
 import org.olat.basesecurity.GroupRoles;
 import org.olat.basesecurity.IdentityImpl;
 import org.olat.basesecurity.IdentityNames;
 import org.olat.basesecurity.IdentityRef;
 import org.olat.basesecurity.IdentityShort;
+import org.olat.basesecurity.OrganisationRoles;
 import org.olat.core.commons.persistence.DB;
 import org.olat.core.gui.translator.Translator;
 import org.olat.core.helpers.Settings;
@@ -53,6 +53,8 @@ import org.olat.core.id.Preferences;
 import org.olat.core.id.User;
 import org.olat.core.id.UserConstants;
 import org.olat.core.logging.AssertException;
+import org.apache.logging.log4j.Logger;
+import org.olat.core.logging.Tracing;
 import org.olat.core.util.StringHelper;
 import org.olat.core.util.Util;
 import org.olat.core.util.WebappHelper;
@@ -82,6 +84,9 @@ import org.springframework.beans.factory.annotation.Autowired;
  * @author Florian Gnaegi, frentix GmbH, http://www.frentix.com
  */
 public class UserManagerImpl extends UserManager implements UserDataDeletable, UserDataExportable {
+	
+	private static final Logger log = Tracing.createLoggerFor(UserManagerImpl.class);
+	
   // used to save user data in the properties table 
   private static final String CHARSET = "charset";
   private static final String HIDDEN_FILES = "hiddenfiles";
@@ -165,13 +170,9 @@ public class UserManagerImpl extends UserManager implements UserDataDeletable, U
 			.append(" inner join fetch identity.user user ")
 			.append(" where user.").append(propName).append("=:propValue");
 
-		List<Identity> userKeys = dbInstance.getCurrentEntityManager()
+		return dbInstance.getCurrentEntityManager()
 				.createQuery(sb.toString(), Identity.class)
 				.setParameter("propValue", propValue).getResultList();
-		if(userKeys.isEmpty()) {
-			return null;
-		}
-		return userKeys;
 	}
 
 	@Override
@@ -186,7 +187,7 @@ public class UserManagerImpl extends UserManager implements UserDataDeletable, U
 			String email = emails.get(i).toLowerCase();
 			if (!MailHelper.isValidEmailAddress(email)) {
 				emails.remove(i);
-				logWarn("Invalid email address: " + email, null);
+				log.warn("Invalid email address: " + email);
 			}
 			else {
 				emails.set(i, email);
@@ -291,7 +292,7 @@ public class UserManagerImpl extends UserManager implements UserDataDeletable, U
 			String fullName = getUserDisplayName(identity);
 			updateUsernameCache(identity.getKey(), identity.getName(), fullName);
 		} catch (Exception e) {
-			logWarn("Error update usernames cache", e);
+			log.warn("Error update usernames cache", e);
 		}
 		User user = updateUser(identity.getUser());
 		((IdentityImpl)identity).setUser(user);
@@ -599,10 +600,13 @@ public class UserManagerImpl extends UserManager implements UserDataDeletable, U
 		identity = securityManager.loadIdentityByKey(identity.getKey());
 		
 		String roles = ((IdentityImpl)identity).getDeletedRoles();
-		boolean isAdministrativeUser = roles != null && (roles.contains(Constants.GROUP_ADMIN) || roles.contains(Constants.GROUP_AUTHORS)
-				|| roles.contains(Constants.GROUP_GROUPMANAGERS) || roles.contains(Constants.GROUP_INST_ORES_MANAGER)
-				|| roles.contains(Constants.GROUP_OWNERS) || roles.contains(GroupRoles.owner.name())
-				|| roles.contains(Constants.GROUP_USERMANAGERS) || roles.contains(Constants.GROUP_POOL_MANAGER));
+		boolean isAdministrativeUser = roles != null && (roles.contains("admins") || roles.contains("authors")
+				|| roles.contains("groupmanagers") || roles.contains("poolsmanager") || roles.contains("usermanagers")
+				|| roles.contains("owners") || roles.contains(GroupRoles.owner.name())
+				|| roles.contains(OrganisationRoles.administrator.name()) || roles.contains(OrganisationRoles.author.name())
+				|| roles.contains(OrganisationRoles.curriculummanager.name()) || roles.contains(OrganisationRoles.groupmanager.name())
+				|| roles.contains(OrganisationRoles.learnresourcemanager.name()) || roles.contains(OrganisationRoles.poolmanager.name())
+				|| roles.contains(OrganisationRoles.sysadmin.name()) || roles.contains(OrganisationRoles.usermanager.name()));
 
 		User persistedUser = identity.getUser();
 		List<UserPropertyHandler> userPropertyHandlers = getAllUserPropertyHandlers();
@@ -614,11 +618,11 @@ public class UserManagerImpl extends UserManager implements UserDataDeletable, U
 				// Skip first name and last name of user with administrative functions
 			} else {
 				persistedUser.setProperty(actualProperty, null);
-				logDebug("Deleted user-property::" + actualProperty + " for identity::+" + identity.getKey());
+				log.debug("Deleted user-property::" + actualProperty + " for identity::+" + identity.getKey());
 			}
 		}
 		updateUserFromIdentity(identity);
-		logInfo("deleteUserProperties user::" + persistedUser.getKey() + " from identity::" + identity.getKey());
+		log.info("deleteUserProperties user::" + persistedUser.getKey() + " from identity::" + identity.getKey());
 		dbInstance.commit();
 	}
 
@@ -669,7 +673,7 @@ public class UserManagerImpl extends UserManager implements UserDataDeletable, U
 			exportKeyValue("Notification", preferences.getNotificationInterval(), sheet);
 			exportKeyValue("Real mail", preferences.getReceiveRealMail(), sheet);
 		} catch (IOException e) {
-			logError("Unable to export xlsx", e);
+			log.error("Unable to export xlsx", e);
 		}
 		manifest.appendFile(profileArchive.getName());
 	}
@@ -692,11 +696,11 @@ public class UserManagerImpl extends UserManager implements UserDataDeletable, U
 				// Skip, user name will be anonymised by BaseSecurityManager
 			} else {
 				persistedUser.setProperty(actualProperty, null);
-				logDebug("Deleted user-property::" + actualProperty + " for identity::+" + identity.getKey());
+				log.debug("Deleted user-property::" + actualProperty + " for identity::+" + identity.getKey());
 			}
 		}
 		updateUserFromIdentity(identity);
-		logInfo("clearUserProperties user::" + persistedUser.getKey() + " from identity::" + identity.getKey());
+		log.info("clearUserProperties user::" + persistedUser.getKey() + " from identity::" + identity.getKey());
 		dbInstance.commit();
 	}
 }

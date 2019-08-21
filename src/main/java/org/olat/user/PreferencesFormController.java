@@ -20,14 +20,13 @@
 package org.olat.user;
 
 import java.nio.charset.Charset;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import org.olat.admin.user.SystemRolesAndRightsController;
 import org.olat.basesecurity.BaseSecurity;
-import org.olat.basesecurity.BaseSecurityManager;
-import org.olat.basesecurity.Constants;
-import org.olat.core.CoreSpringFactory;
 import org.olat.core.commons.services.notifications.NotificationsManager;
 import org.olat.core.gui.UserRequest;
 import org.olat.core.gui.WindowManager;
@@ -74,6 +73,16 @@ public class PreferencesFormController extends FormBasicController {
 	
 	@Autowired
 	private I18nModule i18nModule;
+	@Autowired
+	private MailModule mailModule;
+	@Autowired
+	private I18nManager i18nManager;
+	@Autowired
+	private UserManager userManager;
+	@Autowired
+	private BaseSecurity securityManager;
+	@Autowired
+	private NotificationsManager notificiationMgr;
 
 	/**
 	 * Constructor for the user preferences form
@@ -89,14 +98,10 @@ public class PreferencesFormController extends FormBasicController {
 		initForm(ureq);
 	}
 
-	/**
-	 * @see org.olat.core.gui.components.form.flexible.impl.FormBasicController#formOK(org.olat.core.gui.UserRequest)
-	 */
+	@Override
 	protected void formOK(UserRequest ureq) {
-		UserManager um = UserManager.getInstance();
-		BaseSecurity secMgr = BaseSecurityManager.getInstance();
 		// Refresh user from DB to prevent stale object issues
-		tobeChangedIdentity = secMgr.loadIdentityByKey(tobeChangedIdentity.getKey());
+		tobeChangedIdentity = securityManager.loadIdentityByKey(tobeChangedIdentity.getKey());
 		Preferences prefs = tobeChangedIdentity.getUser().getPreferences();
 		prefs.setLanguage(language.getSelectedKey());
 		prefs.setFontsize(fontsize.getSelectedKey());
@@ -119,27 +124,23 @@ public class PreferencesFormController extends FormBasicController {
 			prefs.setReceiveRealMail(val);
 		}
 
-		if (um.updateUserFromIdentity(tobeChangedIdentity)) {
+		if (userManager.updateUserFromIdentity(tobeChangedIdentity)) {
 			// Language change needs logout / login
 			showInfo("preferences.successful");
 		} else {
 			showInfo("preferences.unsuccessful");
 		}
 
+		userManager.setUserCharset(tobeChangedIdentity, charset.getSelectedKey());
 		fireEvent(ureq, Event.DONE_EVENT);
 	}
 
-	/**
-	 * @see org.olat.core.gui.components.form.flexible.impl.FormBasicController#formCancelled(org.olat.core.gui.UserRequest)
-	 */
+	@Override
 	protected void formCancelled(UserRequest ureq) {
 		fireEvent(ureq, Event.CANCELLED_EVENT);
 	}
 
-	/**
-	 * @see org.olat.core.gui.components.form.flexible.impl.FormBasicController#initForm(org.olat.core.gui.components.form.flexible.FormItemContainer,
-	 *      org.olat.core.gui.control.Controller, org.olat.core.gui.UserRequest)
-	 */
+	@Override
 	protected void initForm(FormItemContainer formLayout, Controller listener, UserRequest ureq) {
 		setFormTitle("title.prefs");
 		setFormContextHelp("Configuration#_einstellungen");
@@ -147,47 +148,30 @@ public class PreferencesFormController extends FormBasicController {
 		// load preferences
 		Preferences prefs = tobeChangedIdentity.getUser().getPreferences();
 
-
 		// Username
 		StaticTextElement username = uifactory.addStaticTextElement("form.username", tobeChangedIdentity.getName(), formLayout);
 		username.setElementCssClass("o_sel_home_settings_username");
 		username.setEnabled(false);
-
-		// Roles
-		final String[] roleKeys = new String[] {
-			Constants.GROUP_USERMANAGERS, Constants.GROUP_GROUPMANAGERS, Constants.GROUP_POOL_MANAGER,
-			Constants.GROUP_AUTHORS, Constants.GROUP_INST_ORES_MANAGER, Constants.GROUP_ADMIN
-		};
-		String iname = getIdentity().getUser().getProperty("institutionalName", null);
-		String ilabel = iname != null
-				? translate("rightsForm.isInstitutionalResourceManager.institution",iname)
-				: translate("rightsForm.isInstitutionalResourceManager");
 		
-		final String[] roleValues = new String[]{
-				translate("rightsForm.isUsermanager"), translate("rightsForm.isGroupmanager"), translate("rightsForm.isPoolmanager"),
-				translate("rightsForm.isAuthor"), ilabel, translate("rightsForm.isAdmin")
-		};
-		final BaseSecurity securityManager = CoreSpringFactory.getImpl(BaseSecurity.class);
-		String userRoles = "";
-		List<String> roles = securityManager.getRolesAsString(tobeChangedIdentity);
+		StringBuilder userRolesSb = new StringBuilder();
+		Set<String> roles = new HashSet<>(securityManager.getRolesAsString(tobeChangedIdentity));
 		for(String role:roles) {
-			for(int i=0; i<roleKeys.length; i++) {
-				if(roleKeys[i].equals(role)) {
-					userRoles = userRoles + roleValues[i] + ", ";
-				}
-			}
+			if(userRolesSb.length() > 0) userRolesSb.append(", ");
+			userRolesSb.append(translate("role.".concat(role)));
 		}
-		if (userRoles.equals("")) {
-			userRoles = translate("rightsForm.isAnonymous.false");
+		
+		String userRoles;
+		if (userRolesSb.length() == 0) {
+			userRoles = translate("role.guest.false");
 		} else {
-			userRoles = userRoles.substring(0, userRoles.lastIndexOf(","));
+			userRoles = userRolesSb.toString();
 		}
 		uifactory.addStaticTextElement("rightsForm.roles", userRoles, formLayout);
 		username.setElementCssClass("o_sel_home_settings_username");
 		username.setEnabled(false);
 
 		// Language
-		Map<String, String> languages = I18nManager.getInstance().getEnabledLanguagesTranslated();
+		Map<String, String> languages = i18nManager.getEnabledLanguagesTranslated();
 		String[] langKeys = StringHelper.getMapKeysAsStringArray(languages);
 		String[] langValues = StringHelper.getMapValuesAsStringArray(languages);
 		ArrayHelper.sort(langKeys, langValues, false, true, false);
@@ -217,9 +201,8 @@ public class PreferencesFormController extends FormBasicController {
 		fontsize.addActionListener(FormEvent.ONCHANGE);
 		
 		// Email notification interval
-		NotificationsManager nMgr = NotificationsManager.getInstance();
-		List<String> intervals = nMgr.getEnabledNotificationIntervals();
-		if (intervals.size() > 0) {
+		List<String> intervals = notificiationMgr.getEnabledNotificationIntervals();
+		if (!intervals.isEmpty()) {
 			String[] intervalKeys = new String[intervals.size()];
 			intervals.toArray(intervalKeys);
 			String[] intervalValues = new String[intervalKeys.length];
@@ -231,10 +214,9 @@ public class PreferencesFormController extends FormBasicController {
 			notificationInterval.setElementCssClass("o_sel_home_settings_notification_interval");
 			notificationInterval.select(prefs.getNotificationInterval(), true);			
 		}
-		//fxdiff VCRP-16: intern mail system
-		MailModule mailModule = (MailModule)CoreSpringFactory.getBean("mailModule");
+		
 		if(mailModule.isInternSystem()) {
-			String userEmail = UserManager.getInstance().getUserDisplayEmail(tobeChangedIdentity, ureq.getLocale());
+			String userEmail = userManager.getUserDisplayEmail(tobeChangedIdentity, ureq.getLocale());
 			String[] mailInternLabels = new String[] { translate("mail." + mailIntern[0], userEmail), translate("mail." + mailIntern[1], userEmail) };
 			mailSystem = uifactory.addRadiosVertical("mail-system", "mail.system", formLayout, mailIntern, mailInternLabels);
 			mailSystem.setElementCssClass("o_sel_home_settings_mail");
@@ -251,6 +233,23 @@ public class PreferencesFormController extends FormBasicController {
 			} else {
 				mailSystem.select(mailIntern[0], true);
 			}
+		}
+
+		// Text encoding
+		Map<String, Charset> charsets = Charset.availableCharsets();
+		String currentCharset = userManager.getUserCharset(tobeChangedIdentity);
+		String[] csKeys = StringHelper.getMapKeysAsStringArray(charsets);
+		charset = uifactory.addDropdownSingleselect("form.charset", formLayout, csKeys, csKeys, null);
+		charset.setElementCssClass("o_sel_home_settings_charset");
+		if(currentCharset != null) {
+			for(String csKey:csKeys) {
+				if(csKey.equals(currentCharset)) {
+					charset.select(currentCharset, true);
+				}
+			}
+		}
+		if(!charset.isOneSelected() && charsets.containsKey("UTF-8")) {
+			charset.select("UTF-8", true);
 		}
 
 		// Submit and cancel buttons
@@ -271,12 +270,9 @@ public class PreferencesFormController extends FormBasicController {
 			}
 		}
 	}
-	
-	/**
-	 * @see org.olat.core.gui.control.DefaultController#doDispose()
-	 */
-	protected void doDispose() {
-	// nothing to do
-	}
 
+	@Override
+	protected void doDispose() {
+		// nothing to do
+	}
 }

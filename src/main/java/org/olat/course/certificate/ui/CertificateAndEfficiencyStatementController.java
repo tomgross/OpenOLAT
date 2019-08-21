@@ -31,6 +31,7 @@ import java.util.List;
 import java.util.Map;
 
 import org.olat.NewControllerFactory;
+import org.olat.basesecurity.BaseSecurityModule;
 import org.olat.core.CoreSpringFactory;
 import org.olat.core.gui.UserRequest;
 import org.olat.core.gui.components.Component;
@@ -114,6 +115,10 @@ public class CertificateAndEfficiencyStatementController extends BasicController
 	private IdentityAssessmentOverviewController courseDetailsCtrl;
 	
 	@Autowired
+	private UserManager userManager;
+	@Autowired
+	private BaseSecurityModule securityModule;
+	@Autowired
 	private EfficiencyStatementMediaHandler mediaHandler;
 	@Autowired
 	private PortfolioV2Module portfolioV2Module;
@@ -158,7 +163,7 @@ public class CertificateAndEfficiencyStatementController extends BasicController
 			BusinessGroup businessGroup, Long resourceKey, RepositoryEntry courseRepo, EfficiencyStatement efficiencyStatement, boolean links) {
 		super(ureq, wControl);
 		setTranslator(Util.createPackageTranslator(AssessmentModule.class, getLocale(), getTranslator()));
-		setTranslator(UserManager.getInstance().getPropertyHandlerTranslator(getTranslator()));
+		setTranslator(userManager.getPropertyHandlerTranslator(getTranslator()));
 		
 		this.courseRepoEntry = courseRepo;
 		this.businessGroup = businessGroup;
@@ -166,7 +171,7 @@ public class CertificateAndEfficiencyStatementController extends BasicController
 		if(businessGroup == null && courseRepo != null) {
 			SearchBusinessGroupParams params = new SearchBusinessGroupParams(statementOwner, false, true);
 			List<BusinessGroup> groups = businessGroupService.findBusinessGroups(params, courseRepo, 0, -1);
-			if(groups.size() > 0) {
+			if(!groups.isEmpty()) {
 				businessGroup = groups.get(0);
 			}
 		}
@@ -210,12 +215,6 @@ public class CertificateAndEfficiencyStatementController extends BasicController
 		}
 
 		putInitialPanel(mainVC);
-		//message, that no data is available. This may happen in the case the "open efficiency" link is available, while in the meantime an author
-		//disabled the efficiency statement.
-		//String text = translate("efficiencystatement.nodata");
-		//Controller messageCtr = MessageUIFactory.createSimpleMessage(ureq, getWindowControl(), text);
-		//listenTo(messageCtr);//gets disposed as this controller gets disposed.
-		//mainVC.put("assessmentOverviewTable",  messageCtr.getInitialComponent());
 	}
 
 	@Override
@@ -255,8 +254,8 @@ public class CertificateAndEfficiencyStatementController extends BasicController
 		mainVC.contextPut("username", statementOwner.getName());
 		
 		Roles roles = ureq.getUserSession().getRoles();
-		boolean isAdministrativeUser = (roles.isAuthor() || roles.isGroupManager() || roles.isUserManager() || roles.isOLATAdmin());	
-		List<UserPropertyHandler> userPropertyHandlers = UserManager.getInstance().getUserPropertyHandlersFor(usageIdentifyer, isAdministrativeUser);
+		boolean isAdministrativeUser = securityModule.isUserAllowedAdminProps(roles);
+		List<UserPropertyHandler> userPropertyHandlers = userManager.getUserPropertyHandlersFor(usageIdentifyer, isAdministrativeUser);
 		mainVC.contextPut("userPropertyHandlers", userPropertyHandlers);
 
 		if(!getIdentity().equals(statementOwner) && links) {
@@ -346,7 +345,7 @@ public class CertificateAndEfficiencyStatementController extends BasicController
 		ContactList contactList = new ContactList("to");
 		contactList.add(statementOwner);
 		cmsg.addEmailTo(contactList);
-		contactCtrl = new ContactFormController(ureq, getWindowControl(), true, false, false, cmsg);
+		contactCtrl = new ContactFormController(ureq, getWindowControl(), true, false, false, cmsg, null);
 		listenTo(contactCtrl);
 		cmc = new CloseableModalController(getWindowControl(), translate("close"), contactCtrl.getInitialComponent());
 		cmc.activate();
@@ -355,7 +354,7 @@ public class CertificateAndEfficiencyStatementController extends BasicController
 	
 	private void doOpenGroup(UserRequest ureq) {
 		if(businessGroup != null) {
-			List<ContextEntry> ces = new ArrayList<ContextEntry>(1);
+			List<ContextEntry> ces = new ArrayList<>(1);
 			OLATResourceable ores = OresHelper.createOLATResourceableInstance("BusinessGroup", businessGroup.getKey());
 			ces.add(BusinessControlFactory.getInstance().createContextEntry(ores));
 	
@@ -367,7 +366,7 @@ public class CertificateAndEfficiencyStatementController extends BasicController
 	
 	private void doOpenCourse(UserRequest ureq) {
 		if(courseRepoEntry != null) {
-			List<ContextEntry> ces = new ArrayList<ContextEntry>(1);
+			List<ContextEntry> ces = new ArrayList<>(1);
 			OLATResourceable ores = OresHelper.createOLATResourceableInstance("RepositoryEntry", courseRepoEntry.getKey());
 			ces.add(BusinessControlFactory.getInstance().createContextEntry(ores));
 	
@@ -378,7 +377,7 @@ public class CertificateAndEfficiencyStatementController extends BasicController
 	}
 	
 	private void doOpenHome(UserRequest ureq) {
-		List<ContextEntry> ces = new ArrayList<ContextEntry>(1);
+		List<ContextEntry> ces = new ArrayList<>(1);
 		ces.add(BusinessControlFactory.getInstance().createContextEntry(statementOwner));
 
 		BusinessControl bc = BusinessControlFactory.getInstance().createFromContextEntries(ces);

@@ -39,22 +39,23 @@ import javax.ws.rs.core.UriBuilder;
 
 import org.apache.http.HttpResponse;
 import org.apache.http.client.methods.HttpPut;
+import org.apache.logging.log4j.Logger;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 import org.olat.admin.securitygroup.gui.IdentitiesAddEvent;
-import org.olat.basesecurity.BaseSecurityManager;
-import org.olat.core.commons.persistence.DBFactory;
+import org.olat.basesecurity.BaseSecurity;
+import org.olat.core.commons.persistence.DB;
 import org.olat.core.id.Identity;
-import org.olat.core.logging.OLog;
 import org.olat.core.logging.Tracing;
+import org.olat.course.CourseFactory;
 import org.olat.course.ICourse;
 import org.olat.repository.RepositoryEntry;
 import org.olat.repository.RepositoryManager;
-import org.olat.restapi.repository.course.CoursesWebService;
 import org.olat.test.JunitTestHelper;
-import org.olat.test.OlatJerseyTestCase;
+import org.olat.test.OlatRestTestCase;
+import org.springframework.beans.factory.annotation.Autowired;
 
 /**
  * 
@@ -65,24 +66,30 @@ import org.olat.test.OlatJerseyTestCase;
  * Initial Date:  6 mai 2010 <br>
  * @author srosse, stephane.rosse@frentix.com
  */
-public class CourseSecurityTest extends OlatJerseyTestCase {
+public class CourseSecurityTest extends OlatRestTestCase {
 
-	private static final OLog log = Tracing.createLoggerFor(CourseTest.class);
+	private static final Logger log = Tracing.createLoggerFor(CourseTest.class);
 	
 	private Identity admin, id1, auth1, auth2;
 	private ICourse course;
 	private RestConnection conn;
+	
+	@Autowired
+	private DB dbInstance;
+	@Autowired
+	private BaseSecurity securityManager;
+	@Autowired
+	private RepositoryManager repositoryManager;
 	
 	/**
 	 * SetUp is called before each test.
 	 */
 	@Before
 	public void setUp() throws Exception {
-		super.setUp();
 		conn = new RestConnection();
 		try {
 			// create course and persist as OLATResourceImpl
-			admin = BaseSecurityManager.getInstance().findIdentityByName("administrator");
+			admin = securityManager.findIdentityByName("administrator");
 			id1 = JunitTestHelper.createAndPersistIdentityAsUser("id-c-s-0");
 			Assert.assertNotNull(id1);
 			auth1 = JunitTestHelper.createAndPersistIdentityAsAuthor("id-c-s-1");
@@ -90,20 +97,21 @@ public class CourseSecurityTest extends OlatJerseyTestCase {
 			auth2 = JunitTestHelper.createAndPersistIdentityAsAuthor("id-c-s-2");
 			Assert.assertNotNull(auth2);
 			
-			course = CoursesWebService.createEmptyCourse(admin, "course-security-2", "Test course for the security test", null);
-			DBFactory.getInstance().intermediateCommit();
+			RepositoryEntry courseEntry = JunitTestHelper.deployBasicCourse(admin);
+			course = CourseFactory.loadCourse(courseEntry);
+			dbInstance.intermediateCommit();
 
-			RepositoryManager rm = RepositoryManager.getInstance();
-			RepositoryEntry re = rm.lookupRepositoryEntry(course, false);
+			RepositoryEntry re = repositoryManager.lookupRepositoryEntry(course, false);
 			IdentitiesAddEvent identitiesAddEvent = new IdentitiesAddEvent(Collections.singletonList(auth2));
-			rm.addOwners(admin, identitiesAddEvent, re, null);
+			repositoryManager.addOwners(admin, identitiesAddEvent, re, null);
 			
-			DBFactory.getInstance().closeSession();
+			dbInstance.closeSession();
 		} catch (Exception e) {
 			log.error("Exception in setUp(): " + e);
 		}
 	}
-  @After
+	
+	@After
 	public void tearDown() throws Exception {
 		try {
 			if(conn != null) {
@@ -111,8 +119,8 @@ public class CourseSecurityTest extends OlatJerseyTestCase {
 			}
 		} catch (Exception e) {
 			log.error("Exception in tearDown(): " + e);
-      e.printStackTrace();
-      throw e;
+			e.printStackTrace();
+			throw e;
 		}
 	}
 	

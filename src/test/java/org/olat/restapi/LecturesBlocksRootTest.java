@@ -32,22 +32,22 @@ import javax.ws.rs.core.UriBuilder;
 
 import org.apache.http.HttpResponse;
 import org.apache.http.client.methods.HttpGet;
-import org.codehaus.jackson.map.ObjectMapper;
-import org.codehaus.jackson.type.TypeReference;
+import org.apache.http.util.EntityUtils;
 import org.junit.Assert;
 import org.junit.Test;
 import org.olat.core.commons.persistence.DB;
 import org.olat.core.id.Identity;
-import org.olat.course.ICourse;
 import org.olat.modules.lecture.LectureBlock;
 import org.olat.modules.lecture.LectureService;
+import org.olat.modules.lecture.RepositoryEntryLectureConfiguration;
 import org.olat.modules.lecture.restapi.LectureBlockVO;
 import org.olat.repository.RepositoryEntry;
-import org.olat.restapi.repository.course.CoursesWebService;
-import org.olat.restapi.support.vo.CourseConfigVO;
 import org.olat.test.JunitTestHelper;
-import org.olat.test.OlatJerseyTestCase;
+import org.olat.test.OlatRestTestCase;
 import org.springframework.beans.factory.annotation.Autowired;
+
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 /**
  * 
@@ -55,19 +55,25 @@ import org.springframework.beans.factory.annotation.Autowired;
  * @author srosse, stephane.rosse@frentix.com, http://www.frentix.com
  *
  */
-public class LecturesBlocksRootTest extends OlatJerseyTestCase {
+public class LecturesBlocksRootTest extends OlatRestTestCase {
 	
 	@Autowired
 	private DB dbInstance;
 	@Autowired
 	private LectureService lectureService;
 	
+	/**
+	 * Only administrator and lecture managers have access to this REST API
+	 * 
+	 * @throws IOException
+	 * @throws URISyntaxException
+	 */
 	@Test
-	public void getLecturesBlock()
+	public void getLecturesBlock_administrator()
 	throws IOException, URISyntaxException {
-		Identity author = JunitTestHelper.createAndPersistIdentityAsAuthor("lect-root-all");
-		ICourse course = CoursesWebService.createEmptyCourse(author, "Course with absence", "Course with absence", new CourseConfigVO());
-		RepositoryEntry entry = course.getCourseEnvironment().getCourseGroupManager().getCourseEntry();
+		Identity author = JunitTestHelper.createAndPersistIdentityAsRndAuthor("lect-root-all");
+		
+		RepositoryEntry entry = deployCourseWithLecturesEnabled(author);
 		LectureBlock block = createLectureBlock(entry);
 		dbInstance.commit();
 		lectureService.addTeacher(block, author);
@@ -97,12 +103,39 @@ public class LecturesBlocksRootTest extends OlatJerseyTestCase {
 		Assert.assertEquals(entry.getKey(), lectureBlockVo.getRepoEntryKey());
 	}
 	
+	/**
+	 * Only administrator and lecture managers have access to this REST API
+	 * 
+	 * @throws IOException
+	 * @throws URISyntaxException
+	 */
+	@Test
+	public void getLecturesBlock_permissionDenied()
+	throws IOException, URISyntaxException {
+		Identity author = JunitTestHelper.createAndPersistIdentityAsRndAuthor("lect-root-all");
+		Identity user = JunitTestHelper.createAndPersistIdentityAsRndAuthor("lect-root-hacker");
+		
+		RepositoryEntry entry = deployCourseWithLecturesEnabled(author);
+		LectureBlock block = createLectureBlock(entry);
+		dbInstance.commit();
+		lectureService.addTeacher(block, author);
+		dbInstance.commit();
+
+		RestConnection conn = new RestConnection();
+		Assert.assertTrue(conn.login(user.getName(), JunitTestHelper.PWD));
+
+		URI uri = UriBuilder.fromUri(getContextURI()).path("repo").path("lectures").build();
+		HttpGet method = conn.createGet(uri, MediaType.APPLICATION_JSON, true);
+		HttpResponse response = conn.execute(method);
+		Assert.assertEquals(401, response.getStatusLine().getStatusCode());
+		EntityUtils.consumeQuietly(response.getEntity());
+	}
+	
 	@Test
 	public void getLecturesBlock_date()
 	throws IOException, URISyntaxException {
-		Identity author = JunitTestHelper.createAndPersistIdentityAsAuthor("lect-root-1");
-		ICourse course = CoursesWebService.createEmptyCourse(author, "Course with absence", "Course with absence", new CourseConfigVO());
-		RepositoryEntry entry = course.getCourseEnvironment().getCourseGroupManager().getCourseEntry();
+		Identity author = JunitTestHelper.createAndPersistIdentityAsRndAuthor("lect-root-1");
+		RepositoryEntry entry = deployCourseWithLecturesEnabled(author);
 		LectureBlock block = createLectureBlock(entry);
 		dbInstance.commit();
 		lectureService.addTeacher(block, author);
@@ -131,6 +164,15 @@ public class LecturesBlocksRootTest extends OlatJerseyTestCase {
 		Assert.assertNotNull(lectureBlockVo);
 		Assert.assertEquals(block.getKey(), lectureBlockVo.getKey());
 		Assert.assertEquals(entry.getKey(), lectureBlockVo.getRepoEntryKey());
+	}
+	
+	private RepositoryEntry deployCourseWithLecturesEnabled(Identity author) {
+		RepositoryEntry entry = JunitTestHelper.deployBasicCourse(author);
+		RepositoryEntryLectureConfiguration config = lectureService.getRepositoryEntryLectureConfiguration(entry);
+		config.setLectureEnabled(true);
+		lectureService.updateRepositoryEntryLectureConfiguration(config);
+		dbInstance.commit();
+		return entry;
 	}
 	
 	private LectureBlock createLectureBlock(RepositoryEntry entry) {

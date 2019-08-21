@@ -26,13 +26,17 @@
 package org.olat.login;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Iterator;
 import java.util.List;
+import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
+import org.apache.logging.log4j.Logger;
+import org.olat.basesecurity.OrganisationRoles;
 import org.olat.core.configuration.AbstractSpringModule;
 import org.olat.core.id.Roles;
-import org.olat.core.logging.OLog;
 import org.olat.core.logging.StartupException;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.Encoder;
@@ -54,16 +58,50 @@ import org.springframework.stereotype.Service;
 @Service("loginModule")
 public class LoginModule extends AbstractSpringModule {
 	
-	private static final OLog log = Tracing.createLoggerFor(LoginModule.class);
+	private static final Logger log = Tracing.createLoggerFor(LoginModule.class);
 	
+	private static final OrganisationRoles[] policyRoles = new OrganisationRoles[] {
+		OrganisationRoles.sysadmin, OrganisationRoles.administrator, OrganisationRoles.principal,
+		OrganisationRoles.rolesmanager, OrganisationRoles.usermanager,
+		OrganisationRoles.learnresourcemanager, OrganisationRoles.groupmanager,
+		OrganisationRoles.lecturemanager, OrganisationRoles.qualitymanager,
+		OrganisationRoles.poolmanager, OrganisationRoles.linemanager	
+	};
+	
+	public static final String DISABLED = "disabled";
+	public static final String FORBIDDEN = "forbiddden";
+	public static final String AT_LEAST_1 = "atLeast1";
+	public static final String AT_LEAST_2 = "atLeast2";
+	public static final String AT_LEAST_3 = "atLeast3";
+	public static final String VALIDATE_SEPARATELY = "validateSeparately";
+	
+	private static final String USERNAME_REGEX = "username.regex";
 	private static final String CHANGE_ONCE = "password.change.once";
+	private static final String MIN_LENGTH = "password.min.length";
+	private static final String MAX_LENGTH = "password.max.length";
+	private static final String LETTERS = "password.letters";
+	private static final String LETTERS_UPPER = "password.letters.upper";
+	private static final String LETTERS_LOWER = "password.letters.lower";
+	private static final String DIGITS_SPECIALS = "password.digits.specials";
+	private static final String DIGITS = "password.digits";
+	private static final String SPECIALS = "password.specials";
+	private static final String FORBIDDEN_USERNAME = "password.forbidden.username";
+	private static final String FORBIDDEN_FIRSTNAME = "password.forbidden.firstname";
+	private static final String FORBIDDEN_LASTNAME = "password.forbidden.lastname";
 	private static final String MAX_AGE = "password.max.age";
 	private static final String MAX_AGE_AUTHOR = "password.max.age.author";
 	private static final String MAX_AGE_GROUPMANAGER = "password.max.age.groupmanager";
-	private static final String MAX_AGE_POOLMANAGER = "password.max.age.poolmanager";
 	private static final String MAX_AGE_USERMANAGER = "password.max.age.usermanager";
+	private static final String MAX_AGE_ROLESMANAGER = "password.max.age.rolesmanager";
 	private static final String MAX_AGE_LEARNRESOURCEMANAGER = "password.max.age.learnresourcemanager";
+	private static final String MAX_AGE_POOLMANAGER = "password.max.age.poolmanager";
+	private static final String MAX_AGE_CURRICULUMMANAGER = "password.max.age.curriculummanager";
+	private static final String MAX_AGE_LINEMANAGER = "password.max.age.linemanager";
+	private static final String MAX_AGE_QUALITYMANAGER = "password.max.age.qualitymanager";
+	private static final String MAX_AGE_LECTUREMANAGER = "password.max.age.lecturemanager";
+	private static final String MAX_AGE_PRINCIPAL = "password.max.age.principal";
 	private static final String MAX_AGE_ADMINISTRATOR = "password.max.age.administrator";
+	private static final String MAX_AGE_SYSADMIN = "password.max.age.sysadmin";
 	private static final String HISTORY = "password.history";
 
 	@Autowired
@@ -76,8 +114,40 @@ public class LoginModule extends AbstractSpringModule {
 	@Value("${login.AttackPreventionTimeoutmin:5}")
 	private int attackPreventionTimeout;
 	
+	@Value("${username.regex}")
+	private String usernameRegex;
+	private Pattern usernamePattern;
+
+	@Value("${password.change.valid.hours.gui}")
+	private Integer validUntilHoursGui;
+	@Value("${password.change.valid.hours.rest}")
+	private Integer validUntilHoursRest;
+	
 	@Value("${password.change.once:false}")
 	private boolean passwordChangeOnce;
+	
+	@Value("${password.min.length}")
+	private int passwordMinLength;
+	@Value("${password.max.length}")
+	private int passwordMaxLength;
+	@Value("${password.letters}")
+	private String passwordLetters;
+	@Value("${password.letters.uppercase}")
+	private String passwordLettersUppercase;
+	@Value("${password.letters.lowercase}")
+	private String passwordLettersLowercase;
+	@Value("${password.digits.special.signs}")
+	private String passwordDigitsAndSpecialSigns;
+	@Value("${password.digits}")
+	private String passwordDigits;
+	@Value("${password.special.signs}")
+	private String passwordSpecialSigns;
+	@Value("${password.forbidden.username}")
+	private boolean passwordUsernameForbidden;
+	@Value("${password.forbidden.firstname}")
+	private boolean passwordFirstnameForbidden;
+	@Value("${password.forbidden.lastname}")
+	private boolean passwordLastnameForbidden;
 	
 	@Value("${password.max.age}")
 	private int passwordMaxAge;
@@ -89,10 +159,24 @@ public class LoginModule extends AbstractSpringModule {
 	private int passwordMaxAgePoolManager;
 	@Value("${password.max.age.usermanager}")
 	private int passwordMaxAgeUserManager;
+	@Value("${password.max.age.rolesmanager}")
+	private int passwordMaxAgeRolesManager;
 	@Value("${password.max.age.learnresourcemanager}")
 	private int passwordMaxAgeLearnResourceManager;
+	@Value("${password.max.age.curriculummanager}")
+	private int passwordMaxAgeCurriculumManager;
+	@Value("${password.max.age.linemanager}")
+	private int passwordMaxAgeLineManager;
+	@Value("${password.max.age.qualitymanager}")
+	private int passwordMaxAgeQualityManager;
+	@Value("${password.max.age.lecturemanager}")
+	private int passwordMaxAgeLectureManager;
+	@Value("${password.max.age.principal}")
+	private int passwordMaxAgePrincipal;
 	@Value("${password.max.age.administrator}")
 	private int passwordMaxAgeAdministrator;
+	@Value("${password.max.age.sysadmin}")
+	private int passwordMaxAgeSysAdmin;
 	
 	@Value("${password.history:0}")
 	private int passwordHistory;
@@ -126,6 +210,7 @@ public class LoginModule extends AbstractSpringModule {
 		failedLoginCache = coordinatorManager.getCoordinator().getCacher().getCache(LoginModule.class.getSimpleName(), "blockafterfailedattempts");
 				
 		updateProperties();
+		validateProperties();
 		
 		boolean defaultProviderFound = false;
 		for (Iterator<AuthenticationProvider> iterator = authenticationProviders.iterator(); iterator.hasNext();) {
@@ -140,6 +225,32 @@ public class LoginModule extends AbstractSpringModule {
 		if (!defaultProviderFound) {
 			throw new StartupException("Defined DefaultAuthProvider::" + defaultProviderName + " not existent or not enabled. Please fix.");
 		}
+	}
+
+	private void validateProperties() {
+		validateValidationConfig("password.letters", passwordLetters,
+				Arrays.asList(DISABLED, FORBIDDEN, AT_LEAST_1, AT_LEAST_2, AT_LEAST_3, VALIDATE_SEPARATELY));
+		validateValidationConfig("password.letters.uppercase", passwordLettersUppercase,
+				Arrays.asList(DISABLED, FORBIDDEN, AT_LEAST_1, AT_LEAST_2, AT_LEAST_3));
+		validateValidationConfig("password.letters.lowercase", passwordLettersLowercase,
+				Arrays.asList(DISABLED, FORBIDDEN, AT_LEAST_1, AT_LEAST_2, AT_LEAST_3));
+		validateValidationConfig("password.digits.special.signs", passwordDigitsAndSpecialSigns,
+				Arrays.asList(DISABLED, FORBIDDEN, AT_LEAST_1, AT_LEAST_2, AT_LEAST_3, VALIDATE_SEPARATELY));
+		validateValidationConfig("password.digits", passwordDigits,
+				Arrays.asList(DISABLED, FORBIDDEN, AT_LEAST_1, AT_LEAST_2, AT_LEAST_3));
+		validateValidationConfig("password.special.signs", passwordSpecialSigns,
+				Arrays.asList(DISABLED, FORBIDDEN, AT_LEAST_1, AT_LEAST_2, AT_LEAST_3));
+	}
+	
+	private void validateValidationConfig(String configName, String configValue, List<String> validValues) {
+		if (!validValues.contains(configValue)) {
+			logInvalidValidationConfig(configName, configValue, validValues);
+		}
+	}
+	
+	private void logInvalidValidationConfig(String configName, String configValue, List<String> validValues) {
+		log.error("Invalid configuration for " + configName + " (value = " + configValue + "). Valid values are: " 
+				+ validValues.stream().collect(Collectors.joining(", ")));
 	}
 
 	@Override
@@ -207,43 +318,108 @@ public class LoginModule extends AbstractSpringModule {
 			allowLoginUsingEmail = "true".equals(usernameOrEmailLogin);
 		}
 		
+		String usernameRegexObj = getStringPropertyValue(USERNAME_REGEX, true);
+		if(StringHelper.containsNonWhitespace(usernameRegexObj)) {
+			usernameRegex = usernameRegexObj;
+		}
+		
 		String changeOnce = getStringPropertyValue(CHANGE_ONCE, true);
 		if(StringHelper.containsNonWhitespace(changeOnce)) {
 			passwordChangeOnce = "true".equals(changeOnce);
 		}
 		
-		String maxAge = getStringPropertyValue(MAX_AGE, true);
-		if(StringHelper.containsNonWhitespace(maxAge)) {
-			passwordMaxAge = Integer.parseInt(maxAge);
+		String passwordMinLengthObj = getStringPropertyValue(MIN_LENGTH, true);
+		if(StringHelper.containsNonWhitespace(passwordMinLengthObj)) {
+			passwordMinLength = Integer.parseInt(passwordMinLengthObj);
 		}
-		String maxAgeAuthor = getStringPropertyValue(MAX_AGE_AUTHOR, true);
-		if(StringHelper.containsNonWhitespace(maxAgeAuthor)) {
-			passwordMaxAgeAuthor = Integer.parseInt(maxAgeAuthor);
+		
+		String passwordMaxLengthObj = getStringPropertyValue(MAX_LENGTH, true);
+		if(StringHelper.containsNonWhitespace(passwordMaxLengthObj)) {
+			passwordMaxLength = Integer.parseInt(passwordMaxLengthObj);
 		}
-		String maxAgeGroupManager = getStringPropertyValue(MAX_AGE_GROUPMANAGER, true);
-		if(StringHelper.containsNonWhitespace(maxAgeGroupManager)) {
-			passwordMaxAgeGroupManager = Integer.parseInt(maxAgeGroupManager);
+		
+		String passwordLettersObj = getStringPropertyValue(LETTERS, true);
+		if(StringHelper.containsNonWhitespace(passwordLettersObj)) {
+			passwordLetters = passwordLettersObj;
 		}
-		String maxAgePoolManager = getStringPropertyValue(MAX_AGE_POOLMANAGER, true);
-		if(StringHelper.containsNonWhitespace(maxAgePoolManager)) {
-			passwordMaxAgePoolManager = Integer.parseInt(maxAgePoolManager);
+		
+		String passwordLettersUppercaseObj = getStringPropertyValue(LETTERS_UPPER, true);
+		if(StringHelper.containsNonWhitespace(passwordLettersUppercaseObj)) {
+			passwordLettersUppercase = passwordLettersUppercaseObj;
 		}
-		String maxAgeUserManager = getStringPropertyValue(MAX_AGE_USERMANAGER, true);
-		if(StringHelper.containsNonWhitespace(maxAgeUserManager)) {
-			passwordMaxAgeUserManager = Integer.parseInt(maxAgeUserManager);
+		
+		String passwordLettersLowercaseObj = getStringPropertyValue(LETTERS_LOWER, true);
+		if(StringHelper.containsNonWhitespace(passwordLettersLowercaseObj)) {
+			passwordLettersLowercase = passwordLettersLowercaseObj;
 		}
-		String maxAgeLearnResourceManager = getStringPropertyValue(MAX_AGE_LEARNRESOURCEMANAGER, true);
-		if(StringHelper.containsNonWhitespace(maxAgeLearnResourceManager)) {
-			passwordMaxAgeLearnResourceManager = Integer.parseInt(maxAgeLearnResourceManager);
+		
+		String passwordDigitsAndSpecialSignsObj = getStringPropertyValue(DIGITS_SPECIALS, true);
+		if(StringHelper.containsNonWhitespace(passwordDigitsAndSpecialSignsObj)) {
+			passwordDigitsAndSpecialSigns = passwordDigitsAndSpecialSignsObj;
 		}
-		String maxAgeAdministrator = getStringPropertyValue(MAX_AGE_ADMINISTRATOR, true);
-		if(StringHelper.containsNonWhitespace(maxAgeAdministrator)) {
-			passwordMaxAgeAdministrator = Integer.parseInt(maxAgeAdministrator);
+		
+		String passwordDigitsObj = getStringPropertyValue(DIGITS, true);
+		if(StringHelper.containsNonWhitespace(passwordDigitsObj)) {
+			passwordDigits = passwordDigitsObj;
 		}
+		
+		String passwordSpecialSignsObj = getStringPropertyValue(SPECIALS, true);
+		if(StringHelper.containsNonWhitespace(passwordSpecialSignsObj)) {
+			passwordSpecialSigns = passwordSpecialSignsObj;
+		}
+		
+		String passwordUsernameForbiddenObj = getStringPropertyValue(FORBIDDEN_USERNAME, true);
+		if(StringHelper.containsNonWhitespace(passwordUsernameForbiddenObj)) {
+			passwordUsernameForbidden = "true".equals(passwordUsernameForbiddenObj);
+		}
+		
+		String passwordFirstnameForbiddenObj = getStringPropertyValue(FORBIDDEN_FIRSTNAME, true);
+		if(StringHelper.containsNonWhitespace(passwordFirstnameForbiddenObj)) {
+			passwordFirstnameForbidden = "true".equals(passwordFirstnameForbiddenObj);
+		}
+		
+		String passwordLastnameForbiddenObj = getStringPropertyValue(FORBIDDEN_LASTNAME, true);
+		if(StringHelper.containsNonWhitespace(passwordLastnameForbiddenObj)) {
+			passwordLastnameForbidden = "true".equals(passwordLastnameForbiddenObj);
+		}
+		
+		int validUntilHoursGuiInt = getIntPropertyValue("password.change.valid.hours.gui");
+		if (validUntilHoursGuiInt > 0) {
+			validUntilHoursGui = validUntilHoursGuiInt;
+		}
+		
+		int validUntilHoursRestInt = getIntPropertyValue("password.change.valid.hours.rest");
+		if (validUntilHoursRestInt > 0) {
+			validUntilHoursRest = validUntilHoursRestInt;
+		}
+		
+		passwordMaxAge = getAgeValue(MAX_AGE, passwordMaxAge);
+		passwordMaxAgeAuthor = getAgeValue(MAX_AGE_AUTHOR, passwordMaxAgeAuthor);
+		passwordMaxAgeGroupManager = getAgeValue(MAX_AGE_GROUPMANAGER, passwordMaxAgeGroupManager);
+		passwordMaxAgePoolManager = getAgeValue(MAX_AGE_POOLMANAGER, passwordMaxAgePoolManager);
+		passwordMaxAgeUserManager = getAgeValue(MAX_AGE_USERMANAGER, passwordMaxAgeUserManager);
+		passwordMaxAgeRolesManager = getAgeValue(MAX_AGE_ROLESMANAGER, passwordMaxAgeRolesManager);
+		passwordMaxAgeLearnResourceManager = getAgeValue(MAX_AGE_LEARNRESOURCEMANAGER, passwordMaxAgeLearnResourceManager);
+		passwordMaxAgeCurriculumManager = getAgeValue(MAX_AGE_CURRICULUMMANAGER, passwordMaxAgeCurriculumManager);
+		passwordMaxAgeLectureManager = getAgeValue(MAX_AGE_LECTUREMANAGER, passwordMaxAgeLectureManager);
+		passwordMaxAgeQualityManager = getAgeValue(MAX_AGE_QUALITYMANAGER, passwordMaxAgeQualityManager);
+		passwordMaxAgeLineManager = getAgeValue(MAX_AGE_LINEMANAGER, passwordMaxAgeLineManager);
+		passwordMaxAgePrincipal = getAgeValue(MAX_AGE_PRINCIPAL, passwordMaxAgePrincipal);
+		passwordMaxAgeAdministrator = getAgeValue(MAX_AGE_ADMINISTRATOR, passwordMaxAgeAdministrator);
+		passwordMaxAgeSysAdmin = getAgeValue(MAX_AGE_SYSADMIN, passwordMaxAgeSysAdmin);
+		
 		String history = getStringPropertyValue(HISTORY, true);
 		if(StringHelper.containsNonWhitespace(history)) {
 			passwordHistory = Integer.parseInt(history);
 		}
+	}
+
+	private int getAgeValue(String propertyName, int defaultValue) {
+		String value = getStringPropertyValue(propertyName, Integer.toString(defaultValue));
+		if(StringHelper.containsNonWhitespace(value)) {
+			return Integer.parseInt(value);
+		}
+		return defaultValue;
 	}
 
 	/**
@@ -264,9 +440,7 @@ public class LoginModule extends AbstractSpringModule {
 	public AuthenticationProvider getAuthenticationProvider(String provider) {
 		AuthenticationProvider authenticationProvider = null;
 		for(AuthenticationProvider authProvider:authenticationProviders) {
-			if(authProvider.getName().equalsIgnoreCase(provider)) {
-				authenticationProvider = authProvider;
-			} else if(authProvider.accept(provider)) {
+			if(authProvider.getName().equalsIgnoreCase(provider) || authProvider.accept(provider)) {
 				authenticationProvider = authProvider;
 			}
 		}
@@ -408,6 +582,41 @@ public class LoginModule extends AbstractSpringModule {
 		allowLoginUsingEmail = allow;
 		setStringProperty("login.using.username.or.email.enabled", Boolean.toString(allow), true);
 	}
+	
+	public String getUsernameRegex() {
+		return usernameRegex;
+	}
+
+	public void setUsernameRegex(String usernameRegex) {
+		this.usernameRegex = usernameRegex;
+		this.usernamePattern = null;
+		setStringProperty(USERNAME_REGEX, usernameRegex, true);
+	}
+
+	public Pattern getUsernamePattern() {
+		if (usernamePattern == null) {
+			usernamePattern = Pattern.compile(usernameRegex);
+		}
+		return usernamePattern;
+	}
+
+	public Integer getValidUntilHoursGui() {
+		return validUntilHoursGui;
+	}
+
+	public void setValidUntilHoursGui(Integer validUntilHoursGui) {
+		this.validUntilHoursGui = validUntilHoursGui;
+		setIntProperty("password.change.valid.hours.gui", validUntilHoursGui, true);
+	}
+
+	public Integer getValidUntilHoursRest() {
+		return validUntilHoursRest;
+	}
+
+	public void setValidUntilHoursRest(Integer validUntilHoursRest) {
+		this.validUntilHoursRest = validUntilHoursRest;
+		setIntProperty("password.change.valid.hours.rest", validUntilHoursRest, true);
+	}
 
 	public boolean isPasswordChangeOnce() {
 		return passwordChangeOnce;
@@ -418,37 +627,128 @@ public class LoginModule extends AbstractSpringModule {
 		setStringProperty(CHANGE_ONCE, passwordChangeOnce ? "true" : "false", true);
 	}
 	
+	public int getPasswordMinLength() {
+		return passwordMinLength;
+	}
+
+	public void setPasswordMinLength(int passwordMinLength) {
+		this.passwordMinLength = passwordMinLength;
+		setStringProperty(MIN_LENGTH, String.valueOf(passwordMinLength), true);
+	}
+
+	public int getPasswordMaxLength() {
+		return passwordMaxLength;
+	}
+
+	public void setPasswordMaxLength(int passwordMaxLength) {
+		this.passwordMaxLength = passwordMaxLength;
+		setStringProperty(MAX_LENGTH, String.valueOf(passwordMaxLength), true);
+	}
+
+	public String getPasswordLetters() {
+		return passwordLetters;
+	}
+
+	public void setPasswordLetters(String passwordLetters) {
+		this.passwordLetters = passwordLetters;
+		setStringProperty(LETTERS, String.valueOf(passwordLetters), true);
+	}
+
+	public String getPasswordLettersUppercase() {
+		return passwordLettersUppercase;
+	}
+
+	public void setPasswordLettersUppercase(String passwordLettersUppercase) {
+		this.passwordLettersUppercase = passwordLettersUppercase;
+		setStringProperty(LETTERS_UPPER, String.valueOf(passwordLettersUppercase), true);
+	}
+
+	public String getPasswordLettersLowercase() {
+		return passwordLettersLowercase;
+	}
+
+	public void setPasswordLettersLowercase(String passwordLettersLowercase) {
+		this.passwordLettersLowercase = passwordLettersLowercase;
+		setStringProperty(LETTERS_LOWER, String.valueOf(passwordLettersLowercase), true);
+	}
+
+	public String getPasswordDigitsAndSpecialSigns() {
+		return passwordDigitsAndSpecialSigns;
+	}
+
+	public void setPasswordDigitsAndSpecialSigns(String passwordDigitsAndSpecialSigns) {
+		this.passwordDigitsAndSpecialSigns = passwordDigitsAndSpecialSigns;
+		setStringProperty(DIGITS_SPECIALS, String.valueOf(passwordDigitsAndSpecialSigns), true);
+	}
+
+	public String getPasswordDigits() {
+		return passwordDigits;
+	}
+
+	public void setPasswordDigits(String passwordDigits) {
+		this.passwordDigits = passwordDigits;
+		setStringProperty(DIGITS, String.valueOf(passwordDigits), true);
+	}
+
+	public String getPasswordSpecialSigns() {
+		return passwordSpecialSigns;
+	}
+
+	public void setPasswordSpecialSigns(String passwordSpecialSigns) {
+		this.passwordSpecialSigns = passwordSpecialSigns;
+		setStringProperty(SPECIALS, String.valueOf(passwordSpecialSigns), true);
+	}
+
+	public boolean isPasswordUsernameForbidden() {
+		return passwordUsernameForbidden;
+	}
+
+	public void setPasswordUsernameForbidden(boolean passwordUsernameForbidden) {
+		this.passwordUsernameForbidden = passwordUsernameForbidden;
+		setStringProperty(FORBIDDEN_USERNAME, Boolean.toString(passwordUsernameForbidden), true);
+	}
+
+	public boolean isPasswordFirstnameForbidden() {
+		return passwordFirstnameForbidden;
+	}
+
+	public void setPasswordFirstnameForbidden(boolean passwordFirstnameForbidden) {
+		this.passwordFirstnameForbidden = passwordFirstnameForbidden;
+		setStringProperty(FORBIDDEN_FIRSTNAME, Boolean.toString(passwordFirstnameForbidden), true);
+	}
+
+	public boolean isPasswordLastnameForbidden() {
+		return passwordLastnameForbidden;
+	}
+
+	public void setPasswordLastnameForbidden(boolean passwordLastnameForbidden) {
+		this.passwordLastnameForbidden = passwordLastnameForbidden;
+		setStringProperty(FORBIDDEN_LASTNAME, Boolean.toString(passwordLastnameForbidden), true);
+	}
+
 	public boolean isPasswordAgePolicyConfigured() {
 		return passwordMaxAge > 0 || passwordMaxAgeAuthor > 0
 				|| passwordMaxAgeGroupManager > 0 || passwordMaxAgePoolManager > 0
-				|| passwordMaxAgeUserManager > 0 || passwordMaxAgeLearnResourceManager > 0
-				|| passwordMaxAgeAdministrator > 0;
+				|| passwordMaxAgeUserManager > 0  || passwordMaxAgeRolesManager > 0 
+				|| passwordMaxAgeLearnResourceManager > 0 || passwordMaxAgeLectureManager > 0
+				|| passwordMaxAgeQualityManager > 0 || passwordMaxAgeLineManager > 0
+				|| passwordMaxAgeCurriculumManager > 0 || passwordMaxAgePrincipal > 0
+				|| passwordMaxAgeAdministrator > 0 || passwordMaxAgeSysAdmin > 0;
 	}
+	
+
 	
 	/**
 	 * 
 	 * @param roles The roles
-	 * @return A number of seconds
+	 * @return A number of hours
 	 */
 	public int getPasswordAgePolicy(Roles roles) {
 		int age = passwordMaxAge;
-		if(roles.isOLATAdmin()) {
-			age = getMaxAgeOrDefault(age, passwordMaxAgeAdministrator);
-		}
-		if(roles.isUserManager()) {
-			age = getMaxAgeOrDefault(age, passwordMaxAgeUserManager);
-		}
-		if(roles.isInstitutionalResourceManager()) {
-			age = getMaxAgeOrDefault(age, passwordMaxAgeLearnResourceManager);
-		}
-		if(roles.isPoolAdmin()) {
-			age = getMaxAgeOrDefault(age, passwordMaxAgePoolManager);
-		}
-		if(roles.isGroupManager()) {
-			age = getMaxAgeOrDefault(age, passwordMaxAgeGroupManager);
-		}
-		if(roles.isAuthor()) {
-			age = getMaxAgeOrDefault(age, passwordMaxAgeAuthor);
+		for(OrganisationRoles policyRole:policyRoles) {
+			if(roles.hasRole(policyRole)) {
+				age = getMaxAgeOrDefault(age, getPasswordMaxAgeFor(policyRole));
+			}
 		}
 		return age;
 	}
@@ -456,7 +756,7 @@ public class LoginModule extends AbstractSpringModule {
 	/**
 	 * 
 	 * @param roleMaxAge The max. age
-	 * @return A number of seconds
+	 * @return A number of hours
 	 */
 	private int getMaxAgeOrDefault(int currentAge, int roleMaxAge) {
 		if(currentAge <= 0 || (roleMaxAge > 0 && roleMaxAge < currentAge)) {
@@ -466,76 +766,95 @@ public class LoginModule extends AbstractSpringModule {
 	}
 
 	/**
-	 * The default max. age for a password in seconds.
+	 * The default max. age for a password in hours.
 	 * 
-	 * @return A number of seconds
+	 * @return A number of hours
 	 */
 	public int getPasswordMaxAge() {
 		return passwordMaxAge;
 	}
 
 	/**
-	 * The default max. age in seconds.
+	 * The default max. age in hours.
 	 * 
-	 * @param maxAge The age in seconds
+	 * @param maxAge The age in hours
 	 */
 	public void setPasswordMaxAge(int maxAge) {
 		this.passwordMaxAge = maxAge;
 		setStringProperty(MAX_AGE, Integer.toString(maxAge), true);
 	}
-
-	public int getPasswordMaxAgeAuthor() {
-		return passwordMaxAgeAuthor;
+	
+	public int getPasswordMaxAgeFor(OrganisationRoles role) {
+		switch(role) {
+			case user: return passwordMaxAge;
+			case author: return passwordMaxAgeAuthor;
+			case usermanager: return passwordMaxAgeUserManager;
+			case rolesmanager: return passwordMaxAgeRolesManager;
+			case groupmanager: return passwordMaxAgeGroupManager;
+			case learnresourcemanager: return passwordMaxAgeLearnResourceManager;
+			case poolmanager: return passwordMaxAgePoolManager;
+			case curriculummanager: return passwordMaxAgeCurriculumManager;
+			case lecturemanager: return passwordMaxAgeLectureManager;
+			case qualitymanager: return passwordMaxAgeQualityManager;
+			case linemanager: return passwordMaxAgeLineManager;
+			case principal: return passwordMaxAgePrincipal;
+			case administrator: return passwordMaxAgeAdministrator;
+			case sysadmin: return passwordMaxAgeSysAdmin;
+			default: return passwordMaxAge;
+		}
 	}
-
-	public void setPasswordMaxAgeAuthor(int maxAge) {
-		passwordMaxAgeAuthor = maxAge;
-		setStringProperty(MAX_AGE_AUTHOR, Integer.toString(maxAge), true);
+	
+	public void setPasswordMaxAgeFor(OrganisationRoles role, int maxAge) {
+		switch(role) {
+			case user:
+				passwordMaxAge = setPasswordMaxAge(MAX_AGE, maxAge);
+				break;
+			case author:
+				passwordMaxAgeAuthor = setPasswordMaxAge(MAX_AGE_AUTHOR, maxAge);
+				break;
+			case usermanager:
+				passwordMaxAgeUserManager = setPasswordMaxAge(MAX_AGE_USERMANAGER, maxAge);
+				break;
+			case rolesmanager:
+				passwordMaxAgeRolesManager = setPasswordMaxAge(MAX_AGE_ROLESMANAGER, maxAge);
+				break;
+			case groupmanager:
+				passwordMaxAgeGroupManager = setPasswordMaxAge(MAX_AGE_GROUPMANAGER, maxAge);
+				break;
+			case learnresourcemanager:
+				passwordMaxAgeLearnResourceManager = setPasswordMaxAge(MAX_AGE_LEARNRESOURCEMANAGER, maxAge);
+				break;
+			case poolmanager:
+				passwordMaxAgePoolManager = setPasswordMaxAge(MAX_AGE_POOLMANAGER, maxAge);
+				break;
+			case curriculummanager:
+				passwordMaxAgeCurriculumManager = setPasswordMaxAge(MAX_AGE_CURRICULUMMANAGER, maxAge);
+				break;
+			case lecturemanager:
+				passwordMaxAgeLectureManager = setPasswordMaxAge(MAX_AGE_LECTUREMANAGER, maxAge);
+				break;
+			case qualitymanager:
+				passwordMaxAgeQualityManager = setPasswordMaxAge(MAX_AGE_QUALITYMANAGER, maxAge);
+				break;
+			case linemanager:
+				passwordMaxAgeLineManager = setPasswordMaxAge(MAX_AGE_LINEMANAGER, maxAge);
+				break;
+			case principal:
+				passwordMaxAgePrincipal = setPasswordMaxAge(MAX_AGE_PRINCIPAL, maxAge);
+				break;
+			case administrator:
+				passwordMaxAgeAdministrator = setPasswordMaxAge(MAX_AGE_ADMINISTRATOR, maxAge);
+				break;
+			case sysadmin:
+				passwordMaxAgeSysAdmin = setPasswordMaxAge(MAX_AGE_SYSADMIN, maxAge);
+				break;
+			default: /* Ignore the other roles */
+		}
 	}
-
-	public int getPasswordMaxAgeGroupManager() {
-		return passwordMaxAgeGroupManager;
-	}
-
-	public void setPasswordMaxAgeGroupManager(int maxAge) {
-		passwordMaxAgeGroupManager = maxAge;
-		setStringProperty(MAX_AGE_GROUPMANAGER, Integer.toString(maxAge), true);
-	}
-
-	public int getPasswordMaxAgePoolManager() {
-		return passwordMaxAgePoolManager;
-	}
-
-	public void setPasswordMaxAgePoolManager(int maxAge) {
-		this.passwordMaxAgePoolManager = maxAge;
-		setStringProperty(MAX_AGE_POOLMANAGER, Integer.toString(maxAge), true);
-	}
-
-	public int getPasswordMaxAgeUserManager() {
-		return passwordMaxAgeUserManager;
-	}
-
-	public void setPasswordMaxAgeUserManager(int maxAge) {
-		passwordMaxAgeUserManager = maxAge;
-		setStringProperty(MAX_AGE_USERMANAGER, Integer.toString(maxAge), true);
-	}
-
-	public int getPasswordMaxAgeLearnResourceManager() {
-		return passwordMaxAgeLearnResourceManager;
-	}
-
-	public void setPasswordMaxAgeLearnResourceManager(int maxAge) {
-		passwordMaxAgeLearnResourceManager = maxAge;
-		setStringProperty(MAX_AGE_LEARNRESOURCEMANAGER, Integer.toString(maxAge), true);
-	}
-
-	public int getPasswordMaxAgeAdministrator() {
-		return passwordMaxAgeAdministrator;
-	}
-
-	public void setPasswordMaxAgeAdministrator(int maxAge) {
-		passwordMaxAgeAdministrator = maxAge;
-		setStringProperty(MAX_AGE_ADMINISTRATOR, Integer.toString(maxAge), true);
+	
+	public int setPasswordMaxAge(String propertyName, int maxAge) {
+		setStringProperty(propertyName, Integer.toString(maxAge), true);
+		return maxAge;
 	}
 
 	public int getPasswordHistory() {
@@ -546,6 +865,4 @@ public class LoginModule extends AbstractSpringModule {
 		passwordHistory = history;
 		setStringProperty(HISTORY, Integer.toString(history), true);
 	}
-	
-	
 }

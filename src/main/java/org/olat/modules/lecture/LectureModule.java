@@ -38,12 +38,20 @@ public class LectureModule extends AbstractSpringModule implements ConfigOnOff {
 	
 	private static final String LECTURE_ENABLED = "lecture.enabled";
 	private static final String LECTURE_MANAGED = "lecture.managed";
+	
+	private static final String ASSESSMENT_MODE_ENABLED = "lecture.assessment.mode.enabled";
+	private static final String ASSESSMENT_MODE_LEAD_TIME = "lecture.assessment.mode.lead.time";
+	private static final String ASSESSMENT_MODE_FOLLOWUP_TIME = "lecture.assessment.mode.followup.time";
+	private static final String ASSESSMENT_MODE_ADMISSIBLE_IPS = "lecture.assessment.mode.admissible.ips";
+	private static final String ASSESSMENT_MODE_SEB_KEYS = "lecture.assessment.mode.seb.keys";
+
 	private static final String CAN_OVERRIDE_STANDARD_CONFIGURATION = "lecture.can.override.standard.configuration";
 	private static final String STATUS_PARTIALLY_DONE_ENABLED = "lecture.status.partially.done.enabled";
 	private static final String STATUS_CANCELLED_ENABLED = "lecture.status.cancelled.enabled";
 	private static final String AUTHORIZED_ABSENCE_ENABLED = "lecture.authorized.absence.enabled";
 	private static final String AUTHORIZED_ABSENCE_ATTENDANT_ENABLED = "lecture.authorized.absence.as.attendant";
 	private static final String TEACHER_CAN_AUTHORIZED_ABSENCE = "teacher.can.authorized.absence";
+	private static final String OWNER_CAN_VIEW_ALL_COURSES_IN_CURRICULUM = "lecture.owner.can.view.all.courses.curriculum";
 	private static final String ROLLCALL_REMINDER_ENABLED = "lecture.rollcall.reminder.enabled";
 	private static final String ROLLCALL_REMINDER_PERIOD = "lecture.rollcall.reminder.period";
 	private static final String ROLLCALL_AUTOCLOSE_PERIOD = "lecture.rollcall.autoclose.period";
@@ -56,6 +64,7 @@ public class LectureModule extends AbstractSpringModule implements ConfigOnOff {
 	private static final String PARTICIPANT_CALENDAR_SYNC_DEFAULT_ENABLED = "lecture.participant.calendar.sync.default.enabed";
 	private static final String COURSE_CALENDAR_SYNC_DEFAULT_ENABLED = "lecture.course.calendar.sync.default.enabed";
 	private static final String ABSENCE_DEFAULT_AUTHORIZED = "lecture.absence.default.authorized";
+	private static final String COURSE_SHOW_ALL_TEACHERS = "lecture.course.show.all.teachers";
 	
 	@Value("${lecture.enabled:false}")
 	private boolean enabled;
@@ -77,6 +86,20 @@ public class LectureModule extends AbstractSpringModule implements ConfigOnOff {
 	private boolean absenceDefaultAuthorized;
 	@Value("${lecture.teacher.can.authorized.absence:true}")
 	private boolean teacherCanAuthorizedAbsence;
+	
+	@Value("${lecture.assessment.mode.enabled:true}")
+	private boolean assessmentModeEnabled;
+	@Value("${lecture.assessment.mode.lead.time:5}")
+	private int assessmentModeLeadTime;
+	@Value("${lecture.assessment.mode.followup.time:5}")
+	private int assessmentModeFollowupTime;
+	@Value("${lecture.assessment.mode.admissible.ips}")
+	private String assessmentModeAdmissibleIps;
+	@Value("${lecture.assessment.mode.seb.keys}")
+	private String assessmentModeSebKeys;
+	
+	@Value("${lecture.owner.can.view.all.courses.curriculum:true}")
+	private boolean ownerCanViewAllCoursesInCurriculum;
 
 	@Value("${lecture.rollcall.reminder.enabled:true}")
 	private boolean rollCallReminderEnabled;
@@ -103,6 +126,9 @@ public class LectureModule extends AbstractSpringModule implements ConfigOnOff {
 	private boolean participantCalendarSyncEnabledDefault;
 	@Value("${lecture.course.calendar.sync.default.enabled:true}")
 	private boolean courseCalendarSyncEnabledDefault;
+
+	@Value("${lecture.course.show.all.teachers:false}")
+	private boolean showLectureBlocksAllTeachersDefault;
 	
 	@Autowired
 	public LectureModule(CoordinatorManager coordinatorManager) {
@@ -154,6 +180,11 @@ public class LectureModule extends AbstractSpringModule implements ConfigOnOff {
 		String teacherCanAuthorizedAbsenceObj = getStringPropertyValue(TEACHER_CAN_AUTHORIZED_ABSENCE, true);
 		if(StringHelper.containsNonWhitespace(teacherCanAuthorizedAbsenceObj)) {
 			teacherCanAuthorizedAbsence = "true".equals(teacherCanAuthorizedAbsenceObj);
+		}
+		
+		String ownerCanViewAllCoursesInCurriculumObj = getStringPropertyValue(OWNER_CAN_VIEW_ALL_COURSES_IN_CURRICULUM, true);
+		if(StringHelper.containsNonWhitespace(ownerCanViewAllCoursesInCurriculumObj)) {
+			ownerCanViewAllCoursesInCurriculum = "true".equals(ownerCanViewAllCoursesInCurriculumObj);
 		}
 		
 		String rollCallReminderEnabledObj = getStringPropertyValue(ROLLCALL_REMINDER_ENABLED, true);
@@ -210,6 +241,29 @@ public class LectureModule extends AbstractSpringModule implements ConfigOnOff {
 		if(StringHelper.containsNonWhitespace(courseCalendarSyncDefaultEnabledObj)) {
 			courseCalendarSyncEnabledDefault = "true".equals(courseCalendarSyncDefaultEnabledObj);
 		}
+		
+		String showAllTeachersEnabledObj = getStringPropertyValue(COURSE_SHOW_ALL_TEACHERS, true);
+		if(StringHelper.containsNonWhitespace(showAllTeachersEnabledObj)) {
+			showLectureBlocksAllTeachersDefault = "true".equals(showAllTeachersEnabledObj);
+		}
+		
+		String assessmentModeEnabledObj = getStringPropertyValue(ASSESSMENT_MODE_ENABLED, true);
+		if(StringHelper.containsNonWhitespace(assessmentModeEnabledObj)) {
+			assessmentModeEnabled = "true".equals(assessmentModeEnabledObj);
+		}
+		
+		String leadTimeObj = getStringPropertyValue(ASSESSMENT_MODE_LEAD_TIME, true);
+		if(StringHelper.containsNonWhitespace(leadTimeObj)) {
+			assessmentModeLeadTime = Integer.parseInt(leadTimeObj);
+		}
+		
+		String followupTimeObj = getStringPropertyValue(ASSESSMENT_MODE_FOLLOWUP_TIME, true);
+		if(StringHelper.containsNonWhitespace(followupTimeObj)) {
+			assessmentModeFollowupTime = Integer.parseInt(followupTimeObj);
+		}
+		
+		assessmentModeAdmissibleIps = getStringPropertyValue(ASSESSMENT_MODE_ADMISSIBLE_IPS, assessmentModeAdmissibleIps);
+		assessmentModeSebKeys = getStringPropertyValue(ASSESSMENT_MODE_SEB_KEYS, assessmentModeSebKeys);
 	}
 
 	@Override
@@ -297,6 +351,60 @@ public class LectureModule extends AbstractSpringModule implements ConfigOnOff {
 	public void setTeacherCanAuthorizedAbsence(boolean enable) {
 		this.teacherCanAuthorizedAbsence = enable;
 		setStringProperty(TEACHER_CAN_AUTHORIZED_ABSENCE, Boolean.toString(enable), true);
+	}
+
+	public boolean isAssessmentModeEnabledDefault() {
+		return assessmentModeEnabled;
+	}
+
+	public void setAssessmentModeEnabledDefault(boolean enable) {
+		this.assessmentModeEnabled = enable;
+		setStringProperty(ASSESSMENT_MODE_ENABLED, Boolean.toString(enable), true);
+	}
+
+	public int getAssessmentModeLeadTime() {
+		return assessmentModeLeadTime;
+	}
+
+	public void setAssessmentModeLeadTime(int assessmentModeLeadTime) {
+		this.assessmentModeLeadTime = assessmentModeLeadTime;
+		setStringProperty(ASSESSMENT_MODE_LEAD_TIME, Integer.toString(assessmentModeLeadTime), true);
+	}
+
+	public int getAssessmentModeFollowupTime() {
+		return assessmentModeFollowupTime;
+	}
+
+	public void setAssessmentModeFollowupTime(int assessmentModeFollowupTime) {
+		this.assessmentModeFollowupTime = assessmentModeFollowupTime;
+		setStringProperty(ASSESSMENT_MODE_FOLLOWUP_TIME, Integer.toString(assessmentModeFollowupTime), true);
+	}
+
+	public String getAssessmentModeAdmissibleIps() {
+		return assessmentModeAdmissibleIps;
+	}
+
+	public void setAssessmentModeAdmissibleIps(String assessmentModeAdmissibleIps) {
+		this.assessmentModeAdmissibleIps = assessmentModeAdmissibleIps;
+		setStringProperty(ASSESSMENT_MODE_ADMISSIBLE_IPS, assessmentModeAdmissibleIps, true);
+	}
+
+	public String getAssessmentModeSebKeys() {
+		return assessmentModeSebKeys;
+	}
+
+	public void setAssessmentModeSebKeys(String assessmentModeSebKeys) {
+		this.assessmentModeSebKeys = assessmentModeSebKeys;
+		setStringProperty(ASSESSMENT_MODE_SEB_KEYS, assessmentModeSebKeys, true);
+	}
+	
+	public boolean isOwnerCanViewAllCoursesInCurriculum() {
+		return ownerCanViewAllCoursesInCurriculum;
+	}
+
+	public void setOwnerCanViewAllCoursesInCurriculum(boolean enable) {
+		this.ownerCanViewAllCoursesInCurriculum = enable;
+		setStringProperty(OWNER_CAN_VIEW_ALL_COURSES_IN_CURRICULUM, Boolean.toString(enable), true);
 	}
 
 	public boolean isRollCallReminderEnabled() {
@@ -397,6 +505,13 @@ public class LectureModule extends AbstractSpringModule implements ConfigOnOff {
 		courseCalendarSyncEnabledDefault = enable;
 		setStringProperty(COURSE_CALENDAR_SYNC_DEFAULT_ENABLED, Boolean.toString(enable), true);
 	}
-	
-	
+
+	public boolean isShowLectureBlocksAllTeachersDefault() {
+		return showLectureBlocksAllTeachersDefault;
+	}
+
+	public void setShowLectureBlocksAllTeachersDefault(boolean enable) {
+		showLectureBlocksAllTeachersDefault = enable;
+		setStringProperty(COURSE_SHOW_ALL_TEACHERS, Boolean.toString(enable), true);
+	}
 }

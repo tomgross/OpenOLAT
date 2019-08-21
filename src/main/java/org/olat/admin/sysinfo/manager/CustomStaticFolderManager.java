@@ -21,13 +21,14 @@ package org.olat.admin.sysinfo.manager;
 
 import java.io.File;
 
+import org.apache.logging.log4j.Logger;
 import org.olat.core.commons.services.webdav.WebDAVProvider;
 import org.olat.core.id.IdentityEnvironment;
-import org.olat.core.logging.OLog;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.WebappHelper;
 import org.olat.core.util.vfs.LocalFolderImpl;
 import org.olat.core.util.vfs.VFSContainer;
+import org.olat.core.util.vfs.callbacks.FullAccessCallback;
 import org.springframework.beans.factory.InitializingBean;
 import org.springframework.stereotype.Service;
 
@@ -40,7 +41,7 @@ import org.springframework.stereotype.Service;
 @Service
 public class CustomStaticFolderManager implements InitializingBean, WebDAVProvider {
 
-	private static final OLog log = Tracing.createLoggerFor(CustomStaticFolderManager.class);
+	private static final Logger log = Tracing.createLoggerFor(CustomStaticFolderManager.class);
 	public static final String STATIC_FOLDER = "/customizing/static/";
 
 	private static final String MOUNT_POINT = "customizing";
@@ -48,16 +49,16 @@ public class CustomStaticFolderManager implements InitializingBean, WebDAVProvid
 	@Override
 	public void afterPropertiesSet() throws Exception {
 		File file = new File(WebappHelper.getUserDataRoot(), STATIC_FOLDER);
-		if(!file.exists()) {
-			if(!file.mkdirs()) {
-				log.error("/customizing/static/ folder cannot be created");
-			}
+		if(!file.exists() && !file.mkdirs()) {
+			log.error("/customizing/static/ folder cannot be created");
 		}
 	}
 
 	public VFSContainer getRootContainer() {
 		File file = new File(WebappHelper.getUserDataRoot(), STATIC_FOLDER);
-		return new LocalFolderImpl(file);
+		VFSContainer rootContainer = new LocalFolderImpl(file);
+		rootContainer.setLocalSecurityCallback(new FullAccessCallback());
+		return rootContainer;
 	}
 	
 	public File getRootFile() {
@@ -71,12 +72,14 @@ public class CustomStaticFolderManager implements InitializingBean, WebDAVProvid
 	
 	@Override
 	public boolean hasAccess(IdentityEnvironment identityEnv) {
-		return identityEnv != null && identityEnv.getRoles() != null && identityEnv.getRoles().isOLATAdmin();
+		return identityEnv != null && identityEnv.getRoles() != null
+				&& (identityEnv.getRoles().isAdministrator() || identityEnv.getRoles().isSystemAdmin());
 	}
 
 	@Override
 	public VFSContainer getContainer(IdentityEnvironment identityEnv) {
-		if(identityEnv != null && identityEnv.getRoles() != null && identityEnv.getRoles().isOLATAdmin()) {
+		if(identityEnv != null && identityEnv.getRoles() != null
+				&& (identityEnv.getRoles().isAdministrator() || identityEnv.getRoles().isSystemAdmin())) {
 			return getRootContainer();
 		}
 		return null;

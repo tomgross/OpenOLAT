@@ -27,6 +27,7 @@ import java.util.Collection;
 import java.util.Date;
 import java.util.List;
 
+import org.apache.logging.log4j.Logger;
 import org.olat.commons.calendar.model.KalendarEvent;
 import org.olat.commons.calendar.model.KalendarRecurEvent;
 import org.olat.core.CoreSpringFactory;
@@ -37,7 +38,6 @@ import org.olat.core.gui.components.AbstractComponent;
 import org.olat.core.gui.components.ComponentRenderer;
 import org.olat.core.gui.render.ValidationResult;
 import org.olat.core.gui.translator.Translator;
-import org.olat.core.logging.OLog;
 import org.olat.core.logging.Tracing;
 
 /**
@@ -48,20 +48,21 @@ import org.olat.core.logging.Tracing;
  */
 public class FullCalendarComponent extends AbstractComponent {
 	
-	private static final OLog log = Tracing.createLoggerFor(FullCalendarComponent.class);
+	private static final Logger log = Tracing.createLoggerFor(FullCalendarComponent.class);
 	private static final FullCalendarComponentRenderer RENDERER = new FullCalendarComponentRenderer();
 	private static final SimpleDateFormat occurenceDateFormat = new SimpleDateFormat("yyyyMMdd'T'hhmmss");
 	
 	public static final String RECURRENCE_ID_SEP = "_xRecOOceRx_";
 	public static final String OCCURRENCE_ID_SEP = "_xOccOOccOx_";
 
-	private KalendarRenderWrapper alwaysVisibleCalendar;
+	private List<KalendarRenderWrapper> alwaysVisibleCalendars;
 	private List<KalendarRenderWrapper> calendars = new ArrayList<>();
 	private Date currentDate;
 	private String viewName = "month";
 	private boolean configurationEnabled;
 	private boolean aggregatedFeedEnabled;
 	private boolean differentiateManagedEvents;
+	private boolean differentiateLiveStreams;
 	
 	private final MapperKey mapperKey;
 	private final FullCalendarElement calendarEl;
@@ -133,46 +134,58 @@ public class FullCalendarComponent extends AbstractComponent {
 		this.differentiateManagedEvents = differentiateManagedEvents;
 	}
 
-	public KalendarRenderWrapper getAlwaysVisibleCalendar() {
-		return alwaysVisibleCalendar;
+	public boolean isDifferentiateLiveStreams() {
+		return differentiateLiveStreams;
 	}
 
-	public void setAlwaysVisibleCalendar(KalendarRenderWrapper alwaysVisibleCalendar) {
-		this.alwaysVisibleCalendar = alwaysVisibleCalendar;
+	public void setDifferentiateLiveStreams(boolean differentiateLiveStreams) {
+		this.differentiateLiveStreams = differentiateLiveStreams;
+	}
+
+	public List<KalendarRenderWrapper> getAlwaysVisibleCalendars() {
+		return alwaysVisibleCalendars;
+	}
+
+	public void setAlwaysVisibleCalendars(List<KalendarRenderWrapper> alwaysVisibleCalendars) {
+		if(alwaysVisibleCalendars == null) {
+			this.alwaysVisibleCalendars = new ArrayList<>(1);
+		} else {
+			this.alwaysVisibleCalendars = new ArrayList<>(alwaysVisibleCalendars);
+		}
 	}
 	
 	public boolean isCalendarVisible(KalendarRenderWrapper calendar) {
-		return calendar.isVisible() ||
-				(alwaysVisibleCalendar != null
-					&& alwaysVisibleCalendar.getKalendar().getType().equals(calendar.getKalendar().getType())
-					&& alwaysVisibleCalendar.getKalendar().getCalendarID().equals(calendar.getKalendar().getCalendarID()));
+		boolean alwaysVisible = calendar.isVisible();
+		
+		if(!alwaysVisible && alwaysVisibleCalendars != null && !alwaysVisibleCalendars.isEmpty()) {
+			for(KalendarRenderWrapper alwaysVisibleCalendar:alwaysVisibleCalendars) {
+				if(alwaysVisibleCalendar.getKalendar().getType().equals(calendar.getKalendar().getType())
+						&& alwaysVisibleCalendar.getKalendar().getCalendarID().equals(calendar.getKalendar().getCalendarID())) {
+					alwaysVisible = true;
+				}
+			}
+		}
+		
+		return alwaysVisible;
 	}
 
-	/**
-	 * @see org.olat.core.gui.components.Component#doDispatchRequest(org.olat.core.gui.UserRequest)
-	 */
 	@Override
 	protected void doDispatchRequest(UserRequest ureq) {
 		//
 	}
 
-	/**
-	 * @see org.olat.core.gui.components.Component#getHTMLRendererSingleton()
-	 */
 	@Override
 	public ComponentRenderer getHTMLRendererSingleton() {
 		return RENDERER;
 	}
 
-	/**
-	 * @see org.olat.core.gui.components.Component#validate(org.olat.core.gui.UserRequest, org.olat.core.gui.render.ValidationResult)
-	 */
 	@Override
 	public void validate(UserRequest ureq, ValidationResult vr) {
 		super.validate(ureq, vr);
-		vr.getJsAndCSSAdder().addRequiredStaticJsFile("js/jquery/fullcalendar/fullcalendar.min.js");
+		vr.getJsAndCSSAdder().addRequiredStaticJsFile("js/jquery/fullcalendar/lib/moment.min.js");
 		vr.getJsAndCSSAdder().addRequiredStaticJsFile("js/jquery/ui/jquery-ui-1.11.4.custom.dnd.min.js");
 		vr.getJsAndCSSAdder().addRequiredStaticJsFile("js/jquery/ui/jquery-ui-1.11.4.custom.resize.min.js");
+		vr.getJsAndCSSAdder().addRequiredStaticJsFile("js/jquery/fullcalendar/fullcalendar.min.js");
 	}
 	
 	public boolean isOccurenceOfCalendarEvent(String eventId) {
@@ -253,7 +266,7 @@ public class FullCalendarComponent extends AbstractComponent {
 	}
 	
 	public List<KalendarEvent> getCalendarRenderWrapper(Date from, Date to) {
-		List<KalendarEvent> events = new ArrayList<KalendarEvent>();
+		List<KalendarEvent> events = new ArrayList<>();
 		
 		for(KalendarRenderWrapper cal:calendars) {
 			for(KalendarEvent event:cal.getKalendar().getEvents()) {
@@ -311,9 +324,8 @@ public class FullCalendarComponent extends AbstractComponent {
 	}
 	
 	protected static final String normalizeId(String id) {
-		String normalizedId = Normalizer.normalize(id, Normalizer.Form.NFD)
+		return Normalizer.normalize(id, Normalizer.Form.NFD)
 				.replaceAll("\\p{InCombiningDiacriticalMarks}+","")
 				.replaceAll("\\W+", "");
-		return normalizedId;
 	}
 }

@@ -19,6 +19,7 @@
  */
 package org.olat.core.id.context;
 
+import java.io.BufferedInputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
@@ -26,7 +27,7 @@ import java.io.IOException;
 
 import org.olat.core.commons.modules.bc.FolderConfig;
 import org.olat.core.id.Identity;
-import org.olat.core.logging.OLog;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.FileUtils;
 import org.olat.core.util.resource.Resourceable;
@@ -50,9 +51,8 @@ import com.thoughtworks.xstream.converters.ConversionException;
 @Service("historyManager")
 public class HistoryManager {
 	
-	private static final OLog log = Tracing.createLoggerFor(HistoryManager.class);
+	private static final Logger log = Tracing.createLoggerFor(HistoryManager.class);
 	
-	private static HistoryManager THIS;
 	private static XStream historyReadStream = XStreamHelper.createXStreamInstance();
 	private static XStream historyWriteStream = XStreamHelper.createXStreamInstance();
 	static {
@@ -72,6 +72,14 @@ public class HistoryManager {
 		historyReadStream.omitField(RepositoryEntry.class, "tutorGroup");
 		historyReadStream.omitField(RepositoryEntry.class, "metaDataElements");
 		historyReadStream.omitField(RepositoryEntry.class, "version");
+		historyReadStream.omitField(RepositoryEntry.class, "organisations");
+		historyReadStream.omitField(RepositoryEntry.class, "storedSnapshot");
+		historyReadStream.omitField(RepositoryEntry.class, "statistics");
+		historyReadStream.omitField(RepositoryEntry.class, "access");
+		historyReadStream.omitField(RepositoryEntry.class, "statusCode");
+		historyReadStream.omitField(RepositoryEntry.class, "canLaunch");
+		historyReadStream.omitField(RepositoryEntry.class, "membersOnly");
+		
 		historyReadStream.omitField(org.olat.core.commons.persistence.PersistentObject.class, "version");
 		
 		historyReadStream.alias("org.olat.core.util.resource.OresHelper$1", Resourceable.class);
@@ -81,14 +89,6 @@ public class HistoryManager {
 		historyReadStream.aliasAttribute(Resourceable.class, "resourceableTypeName", "val$type");
 		historyReadStream.aliasAttribute(Resourceable.class, "resourceableId", "val_-key");
 		historyReadStream.aliasAttribute(Resourceable.class, "resourceableId", "val$key");
-	}
-	
-	public HistoryManager() {
-		THIS = this;
-	}
-	
-	public static HistoryManager getInstance() {
-		return THIS;
 	}
 	
 	public void persistHistoryPoint(Identity identity, HistoryPoint historyPoint) {
@@ -107,15 +107,16 @@ public class HistoryManager {
 	}
 	
 	public HistoryPoint readHistoryPoint(Identity identity) {
+		File resumeXml = null;
 		try {
 			String pathHomePage = FolderConfig.getCanonicalRoot() + FolderConfig.getUserHomePage(identity.getName());
-			File resumeXml = new File(pathHomePage, "resume.xml");
+			resumeXml = new File(pathHomePage, "resume.xml");
 			return readHistory(resumeXml);
 		} catch(ConversionException e) {
-			log.warn("Cannot read resume file: ", e);
+			log.warn("Cannot read resume file: " + resumeXml, e);
 			return null;
 		} catch (Exception e) {
-			log.error("Cannot read resume file: ", e);
+			log.error("Cannot read resume file: " + resumeXml, e);
 			return null;
 		}
 	}
@@ -124,8 +125,8 @@ public class HistoryManager {
 		try {
 			String pathHomePage = FolderConfig.getCanonicalRoot() + FolderConfig.getUserHomePage(identity.getName());
 			File resumeXml = new File(pathHomePage, "resume.xml");
-			if(resumeXml.exists()) {
-				resumeXml.delete();
+			if(resumeXml.exists() && !resumeXml.delete()) {
+				log.error("Cannot delete this resume file: " + resumeXml);
 			}
 		} catch (Exception e) {
 			log.error("Can not delete history file", e);
@@ -134,10 +135,13 @@ public class HistoryManager {
 	
 	protected HistoryPoint readHistory(File resumeXml) throws IOException {
 		if(resumeXml.exists()) {
-			FileInputStream in = new FileInputStream(resumeXml);
-			HistoryPoint point = (HistoryPoint)historyReadStream.fromXML(in);
-			FileUtils.closeSafely(in);
-			return point;
+			try(FileInputStream in = new FileInputStream(resumeXml);
+					BufferedInputStream bis = new BufferedInputStream(in, FileUtils.BSIZE)) {
+				return (HistoryPoint)historyReadStream.fromXML(bis);
+			} catch(IOException e) {
+				log.error("Cannot read this file: " + resumeXml, e);
+				throw e;
+			}
 		}
 		return null;
 	}

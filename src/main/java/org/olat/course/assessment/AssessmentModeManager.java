@@ -30,6 +30,8 @@ import org.olat.course.assessment.model.SearchAssessmentModeParams;
 import org.olat.course.nodes.CourseNode;
 import org.olat.group.BusinessGroup;
 import org.olat.group.area.BGArea;
+import org.olat.modules.curriculum.CurriculumElement;
+import org.olat.modules.lecture.LectureBlock;
 import org.olat.repository.RepositoryEntry;
 import org.olat.repository.RepositoryEntryRef;
 
@@ -48,12 +50,37 @@ public interface AssessmentModeManager {
 	 */
 	public AssessmentMode createAssessmentMode(RepositoryEntry entry);
 	
+	public AssessmentMode createAssessmentMode(LectureBlock lectureBlock, int leadTime, int followUpTime, String ips, String sebKeys);
 
-	
+	/**
+	 * Create and persist a relation between the specified assessment mode
+	 * and a business group.
+	 * 
+	 * @param mode The assessment mode
+	 * @param group The business group
+	 * @return A relation assessment mode to business group
+	 */
 	public AssessmentModeToGroup createAssessmentModeToGroup(AssessmentMode mode, BusinessGroup group);
 	
-	
+	/**
+	 * Create and persist a relation between the specified assessment mode
+	 * and an area.
+	 * 
+	 * @param mode The assessment mode
+	 * @param area The area
+	 * @return A relation assessment mode to area
+	 */
 	public AssessmentModeToArea createAssessmentModeToArea(AssessmentMode mode, BGArea area);
+	
+	/**
+	 * Create and persist a relation between the specified assessment mode
+	 * and a curriculum element.
+	 * 
+	 * @param mode The assessment mode
+	 * @param curriculumElement The curriculum element
+	 * @return The relation assessment mode to curriculum element
+	 */
+	public AssessmentModeToCurriculumElement createAssessmentModeToCurriculumElement(AssessmentMode mode, CurriculumElement curriculumElement);
 	
 
 	public AssessmentMode persist(AssessmentMode assessmentMode);
@@ -67,13 +94,26 @@ public interface AssessmentModeManager {
 	public AssessmentMode merge(AssessmentMode assessmentMode, boolean forceStatus);
 	
 	/**
+	 * The method only sync the instance of the assessment mode. The assessment mode
+	 * will NOT be persisted and the status will NOT be changed. For that, call the 
+	 * the merge method above.
+	 * 
+	 * @param assessmentMode The assessment mode with a link to a lecture block
+	 */
+	public void syncAssessmentModeToLectureBlock(AssessmentMode assessmentMode);
+	
+	/**
 	 * Delete a specific assessment mode.
 	 * 
 	 * @param assessmentMode
 	 */
 	public void delete(AssessmentMode assessmentMode);
 	
+	public void delete(LectureBlock lectureBlock);
+	
 	public AssessmentMode getAssessmentModeById(Long key);
+	
+	public AssessmentMode getAssessmentMode(LectureBlock lectureBlock);
 	
 	/**
 	 * Search the whole assessment modes on the system.
@@ -98,7 +138,7 @@ public interface AssessmentModeManager {
 	 * @param from The date
 	 * @return A list of assessment modes
 	 */
-	public List<AssessmentMode> getPlannedAssessmentMode(RepositoryEntryRef entry, Date from);
+	public List<AssessmentMode> getPlannedAssessmentMode(RepositoryEntryRef entry, Date from, Date to);
 	
 	/**
 	 * Load the assessment mode for a specific user now.
@@ -117,11 +157,12 @@ public interface AssessmentModeManager {
 	
 	/**
 	 * Return true if the course is in assessment mode at the specified time.
-	 * @param entry
-	 * @param now
-	 * @return
+	 * @param entry The course
+	 * @param date The date
+	 * @return true if the course is in assessment mode
 	 */
-	public boolean isInAssessmentMode(RepositoryEntryRef entry, Date now);
+	public boolean isInAssessmentMode(RepositoryEntryRef entry, Date date);
+
 	
 	/**
 	 * Returns the list of current assessment modes for the specified

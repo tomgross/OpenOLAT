@@ -106,7 +106,6 @@
 /*
  * slider
  */
-
 .ui-slider.ui-slider-horizontal.ui-widget-content {
 	border-color: $o-slider-border;
 	background: $o-slider-background;
@@ -114,11 +113,20 @@
 	&.ui-state-disabled {
 		opacity: 0.65;
 	}
-	
+}
+
+.o_has_value.ui-slider.ui-slider-horizontal.ui-widget-content {
 	.ui-slider-handle {
 		border: 1px solid $o-slider-handler-border-color;
 		background-image: none;
 		background-color: $o-slider-handler-background-color;
+	}
+}
+
+.o_no_value.ui-slider.ui-slider-horizontal.ui-widget-content {
+	.ui-slider-handle {
+		border: 3px solid $o-slider-handler-border-color;
+		background-image: none;
 	}
 }
 
@@ -289,6 +297,15 @@ i.mce-ico.mce-i-help:before {
 .mce-textbox.mce-danger {
 	border-color: darken($alert-danger-bg, 25%);
 	background-color: $alert-danger-bg;
+}
+
+// Show ok / cancel button on very small devices
+@media (max-width: 470px) {
+	.mce-foot {
+		.mce-container-body.mce-abs-layout {
+			left: -337px;
+		}
+	}
 }
 
 /*

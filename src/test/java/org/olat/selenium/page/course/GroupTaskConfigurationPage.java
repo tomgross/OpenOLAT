@@ -20,9 +20,7 @@
 package org.olat.selenium.page.course;
 
 import java.io.File;
-import java.util.List;
 
-import org.junit.Assert;
 import org.olat.selenium.page.graphene.OOGraphene;
 import org.openqa.selenium.By;
 import org.openqa.selenium.WebDriver;
@@ -48,8 +46,25 @@ public class GroupTaskConfigurationPage {
 		return selectTab(configBy);
 	}
 	
+	public GroupTaskConfigurationPage optional(boolean optional) {
+		By optionalBy;
+		if(optional) {
+			optionalBy = By.cssSelector("div#o_coobligation input[type='radio'][value='optional']");
+		} else {
+			optionalBy = By.cssSelector("div#o_coobligation input[type='radio'][value='mandatory']");
+		}
+		OOGraphene.waitElement(optionalBy, browser);
+		browser.findElement(optionalBy).click();
+		OOGraphene.waitBusy(browser);
+		return this;
+	}
+	
 	public GroupTaskConfigurationPage enableAssignment(boolean enable) {
 		return enableStep("task.assignment", enable);
+	}
+	
+	public GroupTaskConfigurationPage enableSubmission(boolean enable) {
+		return enableStep("submission", enable);
 	}
 	
 	public GroupTaskConfigurationPage enableReview(boolean enable) {
@@ -65,12 +80,22 @@ public class GroupTaskConfigurationPage {
 	}
 	
 	private GroupTaskConfigurationPage enableStep(String name, boolean enable) {
-		By stepBy = By.xpath("//fieldset[contains(@class,'o_sel_course_gta_steps')]//label[input[@name='" + name + "']]");
-		WebElement labelEl = browser.findElement(stepBy);
 		By checkboxStepBy = By.xpath("//fieldset[contains(@class,'o_sel_course_gta_steps')]//label/input[@name='" + name + "']");
 		WebElement checkboxEl = browser.findElement(checkboxStepBy);
-		OOGraphene.check(labelEl, checkboxEl, Boolean.valueOf(enable));
+		OOGraphene.check(checkboxEl, Boolean.valueOf(enable));
 		OOGraphene.waitBusy(browser);
+		return this;
+	}
+	
+	public GroupTaskConfigurationPage enableSolutionForAll(boolean forAll) {
+		By optionBy;
+		if(forAll) {
+			optionBy = By.xpath("//div[@id='o_covisibleall']//label/input[@name='visibleall'][@value='all']");
+		} else {
+			optionBy = By.xpath("//div[@id='o_covisibleall']//label/input[@name='visibleall'][@value='restricted']");
+		}
+		OOGraphene.waitElement(optionBy, browser);
+		browser.findElement(optionBy).click();;
 		return this;
 	}
 	
@@ -133,6 +158,7 @@ public class GroupTaskConfigurationPage {
 		By addTaskBy = By.className("o_sel_course_gta_add_task");
 		browser.findElement(addTaskBy).click();
 		OOGraphene.waitBusy(browser);
+		OOGraphene.waitModalDialog(browser);
 		
 		By titleBy = By.cssSelector(".o_sel_course_gta_upload_task_title input[type='text']");
 		browser.findElement(titleBy).sendKeys(title);
@@ -145,6 +171,7 @@ public class GroupTaskConfigurationPage {
 		By saveBy = By.cssSelector(".o_sel_course_gta_upload_task_form button.btn-primary");
 		browser.findElement(saveBy).click();
 		OOGraphene.waitBusy(browser);
+		OOGraphene.waitModalDialogDisappears(browser);
 		return this;
 	}
 	
@@ -159,9 +186,8 @@ public class GroupTaskConfigurationPage {
 	
 	public GroupTaskConfigurationPage saveTasks() {
 		By saveBy = By.cssSelector(".o_sel_course_gta_task_config_buttons button.btn-primary");
-		List<WebElement> saveEls = browser.findElements(saveBy);
-		Assert.assertEquals(1, saveEls.size());
-		saveEls.get(0).click();
+		OOGraphene.waitElement(saveBy, browser);
+		browser.findElement(saveBy).click();
 		OOGraphene.waitBusy(browser);
 		return this;
 	}
@@ -180,10 +206,9 @@ public class GroupTaskConfigurationPage {
 		
 		//save
 		By saveBy = By.cssSelector(".o_sel_course_gta_upload_solution_form button.btn-primary");
-		List<WebElement> saveEls = browser.findElements(saveBy);
-		Assert.assertEquals(1, saveEls.size());
-		saveEls.get(0).click();
+		browser.findElement(saveBy).click();
 		OOGraphene.waitBusy(browser);
+		OOGraphene.waitModalDialogDisappears(browser);
 		return this;
 	}
 	
@@ -200,21 +225,7 @@ public class GroupTaskConfigurationPage {
 	}
 	
 	private GroupTaskConfigurationPage selectTab(By tabBy) {
-		List<WebElement> tabLinks = browser.findElements(CourseEditorPageFragment.navBarNodeConfiguration);
-
-		boolean found = false;
-		a_a:
-		for(WebElement tabLink:tabLinks) {
-			tabLink.click();
-			OOGraphene.waitBusy(browser);
-			List<WebElement> elements = browser.findElements(tabBy);
-			if(elements.size() > 0) {
-				found = true;
-				break a_a;
-			}
-		}
-
-		Assert.assertTrue("Found the tab", found);
+		OOGraphene.selectTab("o_node_config", tabBy, browser);
 		return this;
 	}
 }

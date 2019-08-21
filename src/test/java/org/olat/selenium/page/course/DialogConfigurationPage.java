@@ -41,7 +41,7 @@ public class DialogConfigurationPage {
 	
 	public DialogConfigurationPage selectConfiguration() {
 		By dialogConfigBy = By.cssSelector("fieldset.o_sel_dialog_settings_upload");
-		OOGraphene.selectTab(CourseEditorPageFragment.navBarNodeConfiguration, dialogConfigBy, browser);
+		OOGraphene.selectTab("o_node_config", dialogConfigBy, browser);
 		return this;
 	}
 	
@@ -52,6 +52,7 @@ public class DialogConfigurationPage {
 		
 		By inputBy = By.xpath("//div[contains(@class,'modal-body')]//div[@class='o_fileinput']/input[@type='file']");
 		OOGraphene.uploadFile(inputBy, file, browser);
+		OOGraphene.waitBusy(browser);
 		
 		By uploadButtonBy = By.cssSelector("div.modal-body div.o_sel_upload_buttons button.btn-primary");
 		OOGraphene.waitElement(uploadButtonBy, browser);

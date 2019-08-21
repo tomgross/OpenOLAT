@@ -27,6 +27,7 @@ import org.olat.core.gui.components.ComponentRenderer;
 import org.olat.core.gui.components.form.flexible.elements.DownloadLink;
 import org.olat.core.gui.media.FileMediaResource;
 import org.olat.core.gui.media.MediaResource;
+import org.olat.core.gui.util.CSSHelper;
 import org.olat.core.util.vfs.VFSLeaf;
 import org.olat.core.util.vfs.VFSMediaResource;
 
@@ -104,6 +105,24 @@ public class DownloadComponent extends AbstractComponent {
 		this.setDomReplacementWrapperRequired(false);
 	}
 	
+	/**
+	 * @param name The component name
+	 * @param downloadItem The resource to download
+	 * @param linkText An optional link text
+	 * @param linkToolTip An optional tool tip
+	 * @param linkCssIconClass An optional icon class
+	 */
+	public DownloadComponent(String name, MediaResource downloadItem, String linkText,
+			String linkToolTip, String linkCssIconClass) {
+		super(name);
+		setMediaResource(downloadItem);
+		setLinkText(linkText);
+		setLinkToolTip(linkToolTip);
+		setLinkCssIconClass(linkCssIconClass);
+		// renderer puts dispatch ID in a tag
+		this.setDomReplacementWrapperRequired(false);
+	}
+	
 	public DownloadLink getFormItem() {
 		return delegate;
 	}
@@ -115,7 +134,11 @@ public class DownloadComponent extends AbstractComponent {
 	public void setDownloadItem(VFSLeaf downloadItem, boolean forceDownload) {
 		if (downloadItem == null) {
 			mediaResource = null;
+			setLinkCssIconClass(null);
 		} else {
+			String css = CSSHelper.createFiletypeIconCssClassFor(downloadItem.getName());
+			setLinkCssIconClass("o_icon o_icon-fw " + css);
+			
 			VFSMediaResource mResource = new VFSMediaResource(downloadItem);
 			if(forceDownload) {
 				mResource.setDownloadable(forceDownload);
@@ -128,7 +151,11 @@ public class DownloadComponent extends AbstractComponent {
 	public void setDownloadItem(File downloadItem) {
 		if (downloadItem == null) {
 			mediaResource = null;
+			setLinkCssIconClass(null);
 		} else {
+			String css = CSSHelper.createFiletypeIconCssClassFor(downloadItem.getName());
+			setLinkCssIconClass("o_icon o_icon-fw " + css);
+			
 			mediaResource = new FileMediaResource(downloadItem);
 		}
 		setDirty(true);
@@ -197,9 +224,6 @@ public class DownloadComponent extends AbstractComponent {
 		this.setDirty(true);
 	}
 
-	/**
-	 * @see org.olat.core.gui.components.Component#doDispatchRequest(org.olat.core.gui.UserRequest)
-	 */
 	@Override
 	protected void doDispatchRequest(UserRequest ureq) {
 		doDownload(ureq);
@@ -212,9 +236,6 @@ public class DownloadComponent extends AbstractComponent {
 		}
 	}
 
-	/**
-	 * @see org.olat.core.gui.components.Component#getHTMLRendererSingleton()
-	 */
 	@Override
 	public ComponentRenderer getHTMLRendererSingleton() {
 		return RENDERER;
@@ -232,7 +253,7 @@ public class DownloadComponent extends AbstractComponent {
 		if (typePos > 0) {
 			return "o_filetype_" + fileName.substring(typePos + 1);
 		}
-		return null;
+		return CSSHelper.createFiletypeIconCssClassFor(fileName);
 	}
 
 }

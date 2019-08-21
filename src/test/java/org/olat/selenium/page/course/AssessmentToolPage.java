@@ -35,7 +35,7 @@ import org.openqa.selenium.WebElement;
  *
  */
 public class AssessmentToolPage {
-	
+
 	private final WebDriver browser;
 	
 	public AssessmentToolPage(WebDriver browser) {
@@ -171,8 +171,8 @@ public class AssessmentToolPage {
 	 * @return Itself
 	 */
 	public AssessmentToolPage assertProgress(UserVO user, int progress) {
-		By progressBy = By.xpath("//div[contains(@class,'o_table_wrapper')]/table//tr[td/a[contains(.,'" + user.getFirstName() + "')]]/td/div[@class='progress']/div[@title='" + progress + "%']");
-		OOGraphene.waitElement(progressBy, 10, browser);
+		By progressBy = By.xpath("//div[contains(@class,'o_table_wrapper')]/table//tr[td/a[contains(.,'" + user.getFirstName() + "')]]/td/div[@class='progress'][div[@title='" + progress + "%']]");
+		OOGraphene.waitElement(progressBy, 15, 1, browser);
 		return this;
 	}
 	

@@ -29,7 +29,9 @@ import java.util.UUID;
 
 import org.junit.Assert;
 import org.junit.Test;
+import org.olat.basesecurity.OrganisationService;
 import org.olat.core.id.Identity;
+import org.olat.core.id.Organisation;
 import org.olat.core.util.FileUtils;
 import org.olat.core.util.StringHelper;
 import org.olat.core.util.nodes.INode;
@@ -42,6 +44,7 @@ import org.olat.course.tree.CourseEditorTreeModel;
 import org.olat.course.tree.CourseEditorTreeNode;
 import org.olat.repository.RepositoryEntry;
 import org.olat.repository.RepositoryEntryImportExport;
+import org.olat.repository.RepositoryEntryStatusEnum;
 import org.olat.repository.RepositoryService;
 import org.olat.resource.OLATResource;
 import org.olat.resource.OLATResourceManager;
@@ -66,6 +69,8 @@ public class PublishProcessTest extends OlatTestCase {
 	private OLATResourceManager olatResourceManager;
 	@Autowired
 	private RepositoryService repositoryService;
+	@Autowired
+	private OrganisationService organisationService;
 	
 	/**
 	 * Publish process without error
@@ -73,7 +78,7 @@ public class PublishProcessTest extends OlatTestCase {
 	 */
 	@Test
 	public void testPublishProcess() throws URISyntaxException {
-		Identity author = JunitTestHelper.createAndPersistIdentityAsAdmin("publisher-" + UUID.randomUUID().toString());
+		Identity author = JunitTestHelper.createAndPersistIdentityAsRndAdmin("publisher-");
 		RepositoryEntry re = deployTestCourse("simple_course.zip");
 
 		//change node 1
@@ -107,7 +112,7 @@ public class PublishProcessTest extends OlatTestCase {
 	@Test
 	public void testPublishANotPublishedNode()
 	throws URISyntaxException {
-		Identity author = JunitTestHelper.createAndPersistIdentityAsAdmin("publisher-" + UUID.randomUUID().toString());
+		Identity author = JunitTestHelper.createAndPersistIdentityAsRndAdmin("publisher-");
 		RepositoryEntry re = deployTestCourse("simple_course.zip");
 		
 		//change node 1
@@ -130,7 +135,7 @@ public class PublishProcessTest extends OlatTestCase {
 	@Test
 	public void testPublishANotReallyNewNode()
 	throws URISyntaxException {
-		Identity author = JunitTestHelper.createAndPersistIdentityAsAdmin("publisher-" + UUID.randomUUID().toString());
+		Identity author = JunitTestHelper.createAndPersistIdentityAsRndAdmin("publisher-");
 		RepositoryEntry re = deployTestCourse("simple_course_err1_new.zip");
 		
 		//change node 1
@@ -161,7 +166,7 @@ public class PublishProcessTest extends OlatTestCase {
 	@Test
 	public void testPublishANotReallyNewNodeButDeleted()
 	throws URISyntaxException {
-		Identity author = JunitTestHelper.createAndPersistIdentityAsAdmin("publisher-" + UUID.randomUUID().toString());
+		Identity author = JunitTestHelper.createAndPersistIdentityAsRndAdmin("publisher-");
 		RepositoryEntry re = deployTestCourse("simple_course_err2_new_deleted.zip");
 		
 		//change node 1
@@ -192,7 +197,7 @@ public class PublishProcessTest extends OlatTestCase {
 	@Test
 	public void testPublishNewNodeButNotMarkedAsSuch()
 	throws URISyntaxException {
-		Identity author = JunitTestHelper.createAndPersistIdentityAsAdmin("publisher-" + UUID.randomUUID().toString());
+		Identity author = JunitTestHelper.createAndPersistIdentityAsRndAdmin("publisher-");
 		RepositoryEntry re = deployTestCourse("simple_course_err3_not_new.zip");
 		
 		//change node 1
@@ -223,7 +228,7 @@ public class PublishProcessTest extends OlatTestCase {
 	@Test
 	public void testPublishNewNodeButNotMarkedAsSuchAndDeleted()
 	throws URISyntaxException {
-		Identity author = JunitTestHelper.createAndPersistIdentityAsAdmin("publisher-" + UUID.randomUUID().toString());
+		Identity author = JunitTestHelper.createAndPersistIdentityAsRndAdmin("publisher-");
 		RepositoryEntry re = deployTestCourse("simple_course_err4_not_new_deleted.zip");
 		
 		//change node 1
@@ -255,7 +260,7 @@ public class PublishProcessTest extends OlatTestCase {
 	@Test
 	public void testPublishNewNodeNotMarkedAsSuchAndNotPublished()
 	throws URISyntaxException {
-		Identity author = JunitTestHelper.createAndPersistIdentityAsAdmin("publisher-" + UUID.randomUUID().toString());
+		Identity author = JunitTestHelper.createAndPersistIdentityAsRndAdmin("publisher-");
 		RepositoryEntry re = deployTestCourse("simple_course_err5_not_new_or_published.zip");
 		
 		//change node 1
@@ -298,7 +303,7 @@ public class PublishProcessTest extends OlatTestCase {
 		
 		//deploy a course
 		String softKey = UUID.randomUUID().toString().replace("-", "").substring(0, 30);
-		RepositoryEntry re = deployRawCourseFromZIP(courseFile, softKey, 1);
+		RepositoryEntry re = deployRawCourseFromZIP(courseFile, softKey);
 		Assert.assertNotNull(re);
 		return re;
 	}
@@ -310,7 +315,7 @@ public class PublishProcessTest extends OlatTestCase {
 	 * @param access
 	 * @return
 	 */
-	private RepositoryEntry deployRawCourseFromZIP(File exportedCourseZIPFile, String softKey, int access) {
+	private RepositoryEntry deployRawCourseFromZIP(File exportedCourseZIPFile, String softKey) {
 		// create the course instance
 		OLATResource newCourseResource = olatResourceManager.createOLATResourceInstance(CourseModule.class);
 		ICourse course = CourseFactory.importCourseFromZip(newCourseResource, exportedCourseZIPFile);
@@ -326,13 +331,16 @@ public class PublishProcessTest extends OlatTestCase {
 		if(!StringHelper.containsNonWhitespace(softKey)) {
 			softKey = importExport.getSoftkey();
 		}
-		
-		RepositoryEntry re = repositoryService.create(importExport.getInitialAuthor(), importExport.getResourceName(),
-				importExport.getDisplayName(), importExport.getDescription(), newCourseResource);
+
+		Organisation defOrganisation = organisationService.getDefaultOrganisation();
+		RepositoryEntry re = repositoryService.create(null, importExport.getInitialAuthor(), importExport.getResourceName(),
+				importExport.getDisplayName(), importExport.getDescription(), newCourseResource,
+				RepositoryEntryStatusEnum.trash, defOrganisation);
 		// ok, continue import
 		re.setSoftkey(softKey);
 		// set access configuration
-		re.setAccess(access);
+		//TODO repo was only 1
+		re.setEntryStatus(RepositoryEntryStatusEnum.preparation);
 		// save the repository entry
 		re = repositoryService.update(re);
 

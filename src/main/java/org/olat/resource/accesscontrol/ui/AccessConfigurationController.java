@@ -69,19 +69,21 @@ public class AccessConfigurationController extends FormBasicController {
 	private MultipleSelectionElement confirmationEmailEl;
 	private final List<FormLink> addMethods = new ArrayList<>();
 	
+	private int counter = 0;
 	private final String displayName;
 	private final OLATResource resource;
 
 	private CloseableModalController cmc;
 	private FormLayoutContainer confControllerContainer;
-	private AbstractConfigurationMethodController newMethodCtrl, editMethodCtrl;
+	private AbstractConfigurationMethodController newMethodCtrl;
+	private AbstractConfigurationMethodController editMethodCtrl;
 
+	private final List<Offer> deletedOfferList = new ArrayList<>();
 	private final List<AccessInfo> confControllers = new ArrayList<>();
 
-	private final boolean embbed;
-	private final boolean emptyConfigGrantsFullAccess;
-	private boolean allowPaymentMethod;
 	private final boolean editable;
+	private boolean allowPaymentMethod;
+	private final boolean emptyConfigGrantsFullAccess;
 
 	private final Formatter formatter;
 
@@ -93,21 +95,6 @@ public class AccessConfigurationController extends FormBasicController {
 	private AccessControlModule acModule;
 
 	public AccessConfigurationController(UserRequest ureq, WindowControl wControl, OLATResource resource,
-			String displayName, boolean allowPaymentMethod, boolean editable) {
-		super(ureq, wControl, "access_configuration");
-
-		this.resource = resource;
-		this.displayName = displayName;
-		this.allowPaymentMethod = allowPaymentMethod;
-		embbed = false;
-		this.editable = editable;
-		emptyConfigGrantsFullAccess = true;
-		formatter = Formatter.getInstance(getLocale());
-
-		initForm(ureq);
-	}
-
-	public AccessConfigurationController(UserRequest ureq, WindowControl wControl, OLATResource resource,
 			String displayName, boolean allowPaymentMethod, boolean editable, Form form) {
 		super(ureq, wControl, FormBasicController.LAYOUT_CUSTOM, "access_configuration", form);
 
@@ -115,7 +102,6 @@ public class AccessConfigurationController extends FormBasicController {
 		this.resource = resource;
 		this.displayName = displayName;
 		this.allowPaymentMethod = allowPaymentMethod;
-		embbed = true;
 		emptyConfigGrantsFullAccess = false;
 		formatter = Formatter.getInstance(getLocale());
 
@@ -124,6 +110,22 @@ public class AccessConfigurationController extends FormBasicController {
 
 	public int getNumOfBookingConfigurations() {
 		return confControllers.size();
+	}
+	
+	public boolean isSendConfirmationEmail() {
+		return confirmationEmailEl.isAtLeastSelected(1);
+	}
+	
+	public List<Offer> getDeletedOffers() {
+		return new ArrayList<>(deletedOfferList);
+	}
+	
+	public List<OfferAccess> getOfferAccess() {
+		List<OfferAccess> links = new ArrayList<>(confControllers.size());
+		for(AccessInfo info:confControllers) {
+			links.add(info.getLink());
+		}
+		return links;
 	}
 
 	@Override
@@ -173,19 +175,6 @@ public class AccessConfigurationController extends FormBasicController {
 			confirmationEmailEl.select(onKeys[0], true);
 		}
 
-		if(!embbed) {
-			setFormTitle("accesscontrol.title");
-
-			if(editable) {
-				final FormLayoutContainer buttonGroupLayout = FormLayoutContainer.createButtonLayout("buttonLayout", getTranslator());
-				buttonGroupLayout.setRootForm(mainForm);
-				formLayout.add(buttonGroupLayout);
-				formLayout.add("buttonLayout", buttonGroupLayout);
-
-				uifactory.addFormSubmitButton("save", buttonGroupLayout);
-			}
-		}
-
 		confControllerContainer.contextPut("emptyConfigGrantsFullAccess", Boolean.valueOf(emptyConfigGrantsFullAccess));
 	}
 
@@ -211,8 +200,8 @@ public class AccessConfigurationController extends FormBasicController {
 		if(newMethodCtrl == source) {
 			if(event.equals(Event.DONE_EVENT)) {
 				OfferAccess newLink = newMethodCtrl.commitChanges();
-				newLink = acService.saveOfferAccess(newLink);
 				addConfiguration(newLink);
+				confControllerContainer.setDirty(true);
 				fireEvent(ureq, Event.CHANGED_EVENT);
 			}
 			cmc.deactivate();
@@ -258,8 +247,6 @@ public class AccessConfigurationController extends FormBasicController {
 				AccessInfo infos = (AccessInfo)source.getUserObject();
 				editMethod(ureq, infos);
 			}
-		} else if(confirmationEmailEl == source) {
-			setConfirmationEmail(confirmationEmailEl.isAtLeastSelected(1));
 		}
 		super.formInnerEvent(ureq, source, event);
 	}
@@ -301,15 +288,17 @@ public class AccessConfigurationController extends FormBasicController {
 		confControllers.add(infos);
 
 		if(editable) {
-			FormLink editLink = uifactory.addFormLink("edit_" + link.getKey(), "edit", "edit", null, confControllerContainer, Link.BUTTON_SMALL);
+			FormLink editLink = uifactory.addFormLink("edit_" + (++counter), "edit", "edit", null, confControllerContainer, Link.BUTTON_SMALL);
 			editLink.setUserObject(infos);
 			editLink.setIconLeftCSS("o_icon o_icon-fw o_icon_edit");
 			confControllerContainer.add(editLink.getName(), editLink);
+			infos.setEditButton(editLink);
 
-			FormLink delLink = uifactory.addFormLink("del_" + link.getKey(), "delete", "delete", null, confControllerContainer, Link.BUTTON_SMALL);
+			FormLink delLink = uifactory.addFormLink("del_" + (++counter), "delete", "delete", null, confControllerContainer, Link.BUTTON_SMALL);
 			delLink.setUserObject(infos);
 			delLink.setIconLeftCSS("o_icon o_icon-fw o_icon_delete_item");
 			confControllerContainer.add(delLink.getName(), delLink);
+			infos.setDeleteButton(delLink);
 		}
 		
 		updateConfirmationEmail();
@@ -329,15 +318,14 @@ public class AccessConfigurationController extends FormBasicController {
 		AccessMethodHandler handler = acModule.getAccessMethodHandler(link.getMethod().getType());
 		if (handler != null) {
 			editMethodCtrl = handler.editConfigurationController(ureq, getWindowControl(), link);
-		}
-
-		if(editMethodCtrl != null) {
-			listenTo(editMethodCtrl);
-
-			String title = handler.getMethodName(getLocale());
-			cmc = new CloseableModalController(getWindowControl(), translate("close"), editMethodCtrl.getInitialComponent(), true, title);
-			cmc.activate();
-			listenTo(cmc);
+			if(editMethodCtrl != null) {
+				listenTo(editMethodCtrl);
+	
+				String title = handler.getMethodName(getLocale());
+				cmc = new CloseableModalController(getWindowControl(), translate("close"), editMethodCtrl.getInitialComponent(), true, title);
+				cmc.activate();
+				listenTo(cmc);
+			}
 		}
 	}
 
@@ -352,7 +340,7 @@ public class AccessConfigurationController extends FormBasicController {
 		if (handler != null) {
 			newMethodCtrl = handler.createConfigurationController(ureq, getWindowControl(), link);
 		}
-		if(newMethodCtrl != null) {
+		if(newMethodCtrl != null && handler != null) {
 			listenTo(newMethodCtrl);
 
 			String title = handler.getMethodName(getLocale());
@@ -360,25 +348,51 @@ public class AccessConfigurationController extends FormBasicController {
 			cmc.activate();
 			listenTo(cmc);
 		} else {
-			OfferAccess newLink = acService.saveOfferAccess(link);
-			addConfiguration(newLink);
+			addConfiguration(link);
 		}
 	}
 	
 	private void removeMethod(AccessInfo infos) {
-		acService.deleteOffer(infos.getLink().getOffer());
+		Offer offer = infos.getLink().getOffer();
+		if (offer.getKey() != null) {
+			deletedOfferList.add(offer);
+		}
 		confControllers.remove(infos);
 		updateConfirmationEmail();
 	}
 	
-	private void setConfirmationEmail(boolean confirmationEmail) {
+	public void invalidateBookings() {
 		for(AccessInfo info:confControllers) {
 			Offer offer = info.getLink().getOffer();
-			offer.setConfirmationEmail(confirmationEmail);
-			offer = acService.save(offer);
+			acService.deleteOffer(offer);
 		}
-		dbInstance.commit();//make sure all is on the dabatase
 		confControllers.clear();
+		
+		for(Offer offerToDelete:deletedOfferList) {
+			acService.deleteOffer(offerToDelete);
+		}
+		deletedOfferList.clear();
+		
+		dbInstance.commit();
+		loadConfigurations();
+	}
+
+	public void commitChanges() {
+		boolean confirmationEmail = isSendConfirmationEmail();
+		for(AccessInfo info:confControllers) {
+			OfferAccess link = info.getLink();
+			Offer offer = link.getOffer();
+			offer.setConfirmationEmail(confirmationEmail);
+			acService.saveOfferAccess(link);
+		}
+		confControllers.clear();
+		
+		for(Offer offerToDelete:deletedOfferList) {
+			acService.deleteOffer(offerToDelete);
+		}
+		deletedOfferList.clear();
+		
+		dbInstance.commit();
 		loadConfigurations();
 	}
 
@@ -388,6 +402,9 @@ public class AccessConfigurationController extends FormBasicController {
 		private String dates;
 		private OfferAccess link;
 		private final boolean paymentMethod;
+		
+		private FormLink editButton;
+		private FormLink deleteButton;
 
 		public AccessInfo(String name, boolean paymentMethod, String infos, OfferAccess link) {
 			this.name = name;
@@ -458,6 +475,22 @@ public class AccessConfigurationController extends FormBasicController {
 		public void setLink(OfferAccess link) {
 			this.link = link;
 			this.dates = null;
+		}
+
+		public FormLink getEditButton() {
+			return editButton;
+		}
+
+		public void setEditButton(FormLink editButton) {
+			this.editButton = editButton;
+		}
+
+		public FormLink getDeleteButton() {
+			return deleteButton;
+		}
+
+		public void setDeleteButton(FormLink deleteButton) {
+			this.deleteButton = deleteButton;
 		}
 	}
 }

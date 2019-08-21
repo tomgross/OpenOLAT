@@ -25,7 +25,9 @@ import java.util.List;
 import org.olat.core.CoreSpringFactory;
 import org.olat.core.gui.components.form.flexible.impl.elements.table.DefaultFlexiTableDataSourceModel;
 import org.olat.core.gui.components.form.flexible.impl.elements.table.FlexiTableColumnModel;
-import org.olat.repository.RepositoryEntryStatus;
+import org.olat.core.id.Identity;
+import org.olat.core.id.Roles;
+import org.olat.repository.RepositoryEntryStatusEnum;
 import org.olat.repository.handlers.EditionSupport;
 import org.olat.repository.handlers.RepositoryHandler;
 import org.olat.repository.handlers.RepositoryHandlerFactory;
@@ -39,15 +41,20 @@ import org.olat.repository.handlers.RepositoryHandlerFactory;
 class AuthoringEntryDataModel extends DefaultFlexiTableDataSourceModel<AuthoringEntryRow> {
 
 	private final RepositoryHandlerFactory handlerFactory;
+	private Identity identity;
+	private Roles roles;
 	
-	public AuthoringEntryDataModel(AuthoringEntryDataSource source, FlexiTableColumnModel columnModel) {
+	public AuthoringEntryDataModel(AuthoringEntryDataSource source, FlexiTableColumnModel columnModel,
+			Identity identity, Roles roles) {
 		super(source, columnModel);
+		this.identity = identity;
+		this.roles = roles;
 		handlerFactory = CoreSpringFactory.getImpl(RepositoryHandlerFactory.class);
 	}
 
 	@Override
 	public DefaultFlexiTableDataSourceModel<AuthoringEntryRow> createCopyWithEmptyList() {
-		return new AuthoringEntryDataModel(getSourceDelegate(), getTableColumnModel());
+		return new AuthoringEntryDataModel(getSourceDelegate(), getTableColumnModel(), identity, roles);
 	}
 	
 	public boolean isAuthoringEntryRowLoaded(List<Long> repoEntryKeys) {
@@ -104,6 +111,7 @@ class AuthoringEntryDataModel extends DefaultFlexiTableDataSourceModel<Authoring
 			case license: return item.getLicense();
 			case location: return item.getLocation();
 			case access: return item;
+			case guests: return item.isGuests();
 			case creationDate: return item.getCreationDate();
 			case lastUsage: return item.getLastUsage();
 			case deletedBy: return item.getDeletedByFullName();
@@ -125,14 +133,17 @@ class AuthoringEntryDataModel extends DefaultFlexiTableDataSourceModel<Authoring
 				if(handler == null) {
 					return Boolean.FALSE;
 				}
-				if(handler.supportsEdit(item.getOLATResourceable()) == EditionSupport.no) {
+				if(handler.supportsEdit(item.getOLATResourceable(), identity, roles) == EditionSupport.no) {
 					return Boolean.FALSE;
 				}
-				RepositoryEntryStatus status = new RepositoryEntryStatus(item.getStatusCode());
-				if(status.isClosed() || status.isUnpublished()) {
+				RepositoryEntryStatusEnum status = item.getEntryStatus();
+				if(status.decommissioned()) {
 					return Boolean.FALSE;
 				}
 				return Boolean.TRUE;
+			}
+			case lectureInfos: {
+				return item.isLectureEnabled();
 			}
 		}
 		return null;
@@ -162,7 +173,9 @@ class AuthoringEntryDataModel extends DefaultFlexiTableDataSourceModel<Authoring
 		mark("table.header.mark"),
 		detailsSupported("table.header.details"),
 		tools("table.header.actions"),
-		editionSupported("table.header.edit");
+		editionSupported("table.header.edit"),
+		lectureInfos("table.header.lecture.infos"),
+		guests("table.header.guests");
 		
 		private final String i18nKey;
 		

@@ -31,7 +31,7 @@ import org.olat.core.gui.components.form.flexible.impl.elements.table.Filterable
 import org.olat.core.gui.components.form.flexible.impl.elements.table.FlexiSortableColumnDef;
 import org.olat.core.gui.components.form.flexible.impl.elements.table.FlexiTableColumnModel;
 import org.olat.core.gui.components.form.flexible.impl.elements.table.SortableFlexiTableDataModel;
-import org.olat.core.logging.OLog;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.StringHelper;
 import org.olat.course.certificate.CertificateLight;
@@ -49,7 +49,7 @@ import org.olat.modules.assessment.ui.AssessedIdentityElementRow;
 public class IdentityListCourseNodeTableModel extends DefaultFlexiTableDataModel<AssessedIdentityElementRow>
 	implements SortableFlexiTableDataModel<AssessedIdentityElementRow>, FilterableFlexiTableModel {
 	
-	private static final OLog log = Tracing.createLoggerFor(IdentityListCourseNodeTableModel.class);
+	private static final Logger log = Tracing.createLoggerFor(IdentityListCourseNodeTableModel.class);
 
 	private final Locale locale;
 	
@@ -79,7 +79,7 @@ public class IdentityListCourseNodeTableModel extends DefaultFlexiTableDataModel
 	}
 
 	@Override
-	public void filter(List<FlexiTableFilter> filters) {
+	public void filter(String searchString, List<FlexiTableFilter> filters) {
 		String key = filters == null || filters.isEmpty() || filters.get(0) == null ? null : filters.get(0).getFilter();
 		if(StringHelper.containsNonWhitespace(key)) {
 			List<AssessedIdentityElementRow> filteredRows = new ArrayList<>();
@@ -179,7 +179,7 @@ public class IdentityListCourseNodeTableModel extends DefaultFlexiTableDataModel
 	public enum IdentityCourseElementCols implements FlexiSortableColumnDef {
 		username("table.header.name"),
 		attempts("table.header.attempts"),
-		userVisibility("table.header.userVisibility"),
+		userVisibility("table.header.userVisibility", "o_icon o_icon-fw o_icon_results_hidden"),
 		score("table.header.score"),
 		min("table.header.min"),
 		max("table.header.max"),
@@ -199,14 +199,25 @@ public class IdentityListCourseNodeTableModel extends DefaultFlexiTableDataModel
 		cut("table.header.cut");
 		
 		private final String i18nKey;
-		
+		private final String icon;
+
 		private IdentityCourseElementCols(String i18nKey) {
+			this(i18nKey, null);
+		}
+		
+		private IdentityCourseElementCols(String i18nKey, String icon) {
 			this.i18nKey = i18nKey;
+			this.icon = icon;
 		}
 		
 		@Override
 		public String i18nHeaderKey() {
 			return i18nKey;
+		}
+
+		@Override
+		public String iconHeader() {
+			return icon;
 		}
 
 		@Override

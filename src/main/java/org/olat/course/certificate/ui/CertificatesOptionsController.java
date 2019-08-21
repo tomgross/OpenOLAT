@@ -29,6 +29,7 @@ import java.util.List;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 
+import org.apache.logging.log4j.Logger;
 import org.olat.core.dispatcher.mapper.Mapper;
 import org.olat.core.gui.UserRequest;
 import org.olat.core.gui.components.Component;
@@ -38,6 +39,7 @@ import org.olat.core.gui.components.form.flexible.elements.FormLink;
 import org.olat.core.gui.components.form.flexible.elements.IntegerElement;
 import org.olat.core.gui.components.form.flexible.elements.MultipleSelectionElement;
 import org.olat.core.gui.components.form.flexible.elements.SingleSelection;
+import org.olat.core.gui.components.form.flexible.elements.TextElement;
 import org.olat.core.gui.components.form.flexible.impl.FormBasicController;
 import org.olat.core.gui.components.form.flexible.impl.FormEvent;
 import org.olat.core.gui.components.form.flexible.impl.FormLayoutContainer;
@@ -51,9 +53,9 @@ import org.olat.core.gui.control.generic.modal.DialogBoxController;
 import org.olat.core.gui.control.generic.modal.DialogBoxUIFactory;
 import org.olat.core.gui.media.MediaResource;
 import org.olat.core.gui.media.StreamedMediaResource;
+import org.olat.core.gui.media.ZippedDirectoryMediaResource;
 import org.olat.core.id.Identity;
 import org.olat.core.id.OLATResourceable;
-import org.olat.core.logging.OLog;
 import org.olat.core.logging.Tracing;
 import org.olat.core.logging.activity.ILoggingAction;
 import org.olat.core.logging.activity.LearningResourceLoggingAction;
@@ -78,7 +80,6 @@ import org.olat.course.config.CourseConfigEvent;
 import org.olat.course.config.CourseConfigEvent.CourseConfigType;
 import org.olat.course.config.ui.CourseOptionsController;
 import org.olat.course.run.RunMainController;
-import org.olat.fileresource.ZippedDirectoryMediaResource;
 import org.olat.repository.RepositoryEntry;
 import org.olat.repository.RepositoryEntryManagedFlag;
 import org.olat.repository.RepositoryManager;
@@ -95,6 +96,9 @@ public class CertificatesOptionsController extends FormBasicController {
 
 	private MultipleSelectionElement pdfCertificatesEl;
 	private MultipleSelectionElement efficencyEl;
+	private TextElement certificationCustom1El;
+	private TextElement certificationCustom2El;
+	private TextElement certificationCustom3El;
 	private MultipleSelectionElement reCertificationEl;
 	private IntegerElement reCertificationTimelapseEl;
 	private SingleSelection reCertificationTimelapseUnitEl;
@@ -220,6 +224,10 @@ public class CertificatesOptionsController extends FormBasicController {
 		previewTemplateLink = LinkFactory.createButton("preview", templateCont.getFormItemComponent(), this);
 		previewTemplateLink.setTarget("preview");
 		
+		certificationCustom1El = uifactory.addTextElement("certificate.custom1", 1000, courseConfig.getCertificateCustom1(), formLayout);
+		certificationCustom2El = uifactory.addTextElement("certificate.custom2", 2000, courseConfig.getCertificateCustom2(), formLayout);
+		certificationCustom3El = uifactory.addTextElement("certificate.custom3", 3000, courseConfig.getCertificateCustom3(), formLayout);
+		
 		boolean reCertificationEnabled = courseConfig.isRecertificationEnabled();
 		reCertificationEl = uifactory.addCheckboxesHorizontal("recertification", formLayout, new String[]{ "xx" }, new String[]{ "" });
 		reCertificationEl.addActionListener(FormEvent.ONCHANGE);
@@ -336,7 +344,10 @@ public class CertificatesOptionsController extends FormBasicController {
 	
 	private void doPreviewTemplate(UserRequest ureq) {
 		selectedTemplate = certificatesManager.getTemplateById(selectedTemplate.getKey());
-		File preview = certificatesManager.previewCertificate(selectedTemplate, entry, getLocale());
+		String custom1 = certificationCustom1El.getValue();
+		String custom2 = certificationCustom2El.getValue();
+		String custom3 = certificationCustom3El.getValue();
+		File preview = certificatesManager.previewCertificate(selectedTemplate, entry, getLocale(), custom1, custom2, custom3);
 		MediaResource resource = new PreviewMediaResource(preview);
 		ureq.getDispatchResult().setResultingMediaResource(resource);
 	}
@@ -403,6 +414,10 @@ public class CertificatesOptionsController extends FormBasicController {
 		} else {
 			courseConfig.setCertificateTemplate(null);
 		}
+		
+		courseConfig.setCertificateCustom1(certificationCustom1El.getValue());
+		courseConfig.setCertificateCustom2(certificationCustom2El.getValue());
+		courseConfig.setCertificateCustom3(certificationCustom3El.getValue());
 
 		boolean recertificationEnabled = reCertificationEl.isEnabled() && reCertificationEl.isAtLeastSelected(1);
 		courseConfig.setRecertificationEnabled(recertificationEnabled);
@@ -474,7 +489,7 @@ public class CertificatesOptionsController extends FormBasicController {
 	}
 	
 	private static class PreviewMediaResource implements MediaResource {
-		private static final OLog log = Tracing.createLoggerFor(PreviewMediaResource.class);
+		private static final Logger log = Tracing.createLoggerFor(PreviewMediaResource.class);
 		private File preview;
 		
 		public PreviewMediaResource(File preview) {

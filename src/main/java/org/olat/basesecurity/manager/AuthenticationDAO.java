@@ -30,6 +30,7 @@ import org.olat.basesecurity.AuthenticationImpl;
 import org.olat.basesecurity.BaseSecurityModule;
 import org.olat.basesecurity.IdentityRef;
 import org.olat.core.commons.persistence.DB;
+import org.olat.core.id.Identity;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
@@ -44,6 +45,22 @@ public class AuthenticationDAO {
 	
 	@Autowired
 	private DB dbInstance;
+	
+	/**
+	 * 
+	 * @param provider The authentication provider
+	 * @return A list of identities (the user is not fetched)
+	 */
+	public List<Identity> getIdentitiesWithAuthentication(String provider) {
+		StringBuilder sb = new StringBuilder();
+		sb.append("select ident from ").append(AuthenticationImpl.class.getName()).append(" as auth")
+		  .append(" inner join auth.identity as ident")
+		  .append(" where auth.provider=:provider");
+		return dbInstance.getCurrentEntityManager()
+				.createQuery(sb.toString(), Identity.class)
+				.setParameter("provider", provider)
+				.getResultList();
+	}
 	
 	public boolean hasAuthentication(IdentityRef identity, String provider) {
 		StringBuilder sb = new StringBuilder();

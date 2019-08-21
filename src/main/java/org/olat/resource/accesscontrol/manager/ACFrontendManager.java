@@ -36,6 +36,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 
+import org.apache.logging.log4j.Logger;
 import org.olat.basesecurity.GroupRoles;
 import org.olat.basesecurity.IdentityRef;
 import org.olat.commons.calendar.CalendarUtils;
@@ -43,7 +44,6 @@ import org.olat.core.commons.persistence.DB;
 import org.olat.core.commons.persistence.SortKey;
 import org.olat.core.id.Identity;
 import org.olat.core.id.Roles;
-import org.olat.core.logging.OLog;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.StringHelper;
 import org.olat.core.util.mail.MailPackage;
@@ -57,12 +57,11 @@ import org.olat.group.manager.BusinessGroupRelationDAO;
 import org.olat.group.model.EnrollState;
 import org.olat.repository.RepositoryEntry;
 import org.olat.repository.RepositoryEntryRef;
-import org.olat.repository.RepositoryEntryShort;
 import org.olat.repository.RepositoryMailing;
 import org.olat.repository.RepositoryManager;
 import org.olat.repository.RepositoryService;
+import org.olat.repository.manager.RepositoryEntryDAO;
 import org.olat.repository.manager.RepositoryEntryRelationDAO;
-import org.olat.repository.model.RepositoryEntryShortImpl;
 import org.olat.resource.OLATResource;
 import org.olat.resource.OLATResourceManager;
 import org.olat.resource.accesscontrol.ACService;
@@ -104,10 +103,12 @@ import org.springframework.stereotype.Service;
 @Service("acService")
 public class ACFrontendManager implements ACService, UserDataExportable {
 
-	private static final OLog log = Tracing.createLoggerFor(ACFrontendManager.class);
+	private static final Logger log = Tracing.createLoggerFor(ACFrontendManager.class);
 
 	@Autowired
 	private DB dbInstance;
+	@Autowired
+	private RepositoryEntryDAO repositoryEntryDao;
 	@Autowired
 	private RepositoryManager repositoryManager;
 	@Autowired
@@ -368,13 +369,13 @@ public class ACFrontendManager implements ACService, UserDataExportable {
 	@Override
 	public AccessResult accessResource(Identity identity, OfferAccess link, Object argument) {
 		if(link == null || link.getOffer() == null || link.getMethod() == null) {
-			log.audit("Access refused (no offer) to: " + link + " for " + identity);
+			log.info(Tracing.M_AUDIT, "Access refused (no offer) to: " + link + " for " + identity);
 			return new AccessResult(false);
 		}
 
 		AccessMethodHandler handler = accessModule.getAccessMethodHandler(link.getMethod().getType());
 		if(handler == null) {
-			log.audit("Access refused (no handler method) to: " + link + " for " + identity);
+			log.info(Tracing.M_AUDIT, "Access refused (no handler method) to: " + link + " for " + identity);
 			return new AccessResult(false);
 		}
 
@@ -384,13 +385,13 @@ public class ACFrontendManager implements ACService, UserDataExportable {
 				AccessTransaction transaction = transactionManager.createTransaction(order, order.getParts().get(0), link.getMethod());
 				transactionManager.save(transaction);
 				dbInstance.commit();
-				log.audit("Access granted to: " + link + " for " + identity);
+				log.info(Tracing.M_AUDIT, "Access granted to: " + link + " for " + identity);
 				return new AccessResult(true);
 			} else {
-				log.audit("Access error to: " + link + " for " + identity);
+				log.info(Tracing.M_AUDIT, "Access error to: " + link + " for " + identity);
 			}
 		} else {
-			log.audit("Access refused to: " + link + " for " + identity);
+			log.info(Tracing.M_AUDIT, "Access refused to: " + link + " for " + identity);
 		}
 		return new AccessResult(false);
 	}
@@ -471,7 +472,7 @@ public class ACFrontendManager implements ACService, UserDataExportable {
 		Date oneHourTimeout = cal.getTime();
 		List<ResourceReservation> oldReservations = reservationDao.loadExpiredReservation(oneHourTimeout);
 		for(ResourceReservation reservation:oldReservations) {
-			log.audit("Remove reservation:" + reservation);
+			log.info(Tracing.M_AUDIT, "Remove reservation:" + reservation);
 			reservationDao.deleteReservation(reservation);
 		}
 	}
@@ -498,7 +499,7 @@ public class ACFrontendManager implements ACService, UserDataExportable {
 				return !result.isFailed();
 			}
 		} else {
-			RepositoryEntry entry = repositoryManager.lookupRepositoryEntry(resource, false);
+			RepositoryEntry entry = repositoryEntryDao.loadByResource(resource);
 			if(entry != null) {
 				if(!repositoryEntryRelationDao.hasRole(identity, entry, GroupRoles.participant.name())) {
 					repositoryEntryRelationDao.addRole(identity, entry, GroupRoles.participant.name());
@@ -536,7 +537,7 @@ public class ACFrontendManager implements ACService, UserDataExportable {
 				return true;
 			}
 		} else {
-			RepositoryEntryRef entry = repositoryManager.lookupRepositoryEntry(resource, false);
+			RepositoryEntryRef entry = repositoryEntryDao.loadByResource(resource);
 			if(entry != null) {
 				if(repositoryEntryRelationDao.hasRole(identity, entry, GroupRoles.participant.name())) {
 					repositoryEntryRelationDao.removeRole(identity, entry, GroupRoles.participant.name());
@@ -556,7 +557,7 @@ public class ACFrontendManager implements ACService, UserDataExportable {
 				return group.getName();
 			}
 		} else {
-			RepositoryEntry entry = repositoryManager.lookupRepositoryEntry(resource, false);
+			RepositoryEntry entry = repositoryEntryDao.loadByResource(resource);
 			if(entry != null) {
 				return entry.getDisplayname();
 			}
@@ -599,12 +600,12 @@ public class ACFrontendManager implements ACService, UserDataExportable {
 			}
 		}
 		if(!repositoryResources.isEmpty()) {
-			List<RepositoryEntryShort> repoEntries = repositoryManager.loadRepositoryEntryShorts(repositoryResources);
-			for(RepositoryEntryShort repoEntry:repoEntries) {
+			List<RepositoryEntry> repoEntries = repositoryEntryDao.loadByResources(repositoryResources);
+			for(RepositoryEntry repoEntry:repoEntries) {
 				ACResourceInfoImpl info = new ACResourceInfoImpl();
 				info.setName(repoEntry.getDisplayname());
-				info.setDescription(((RepositoryEntryShortImpl)repoEntry).getDescription());
-				info.setResource(((RepositoryEntryShortImpl)repoEntry).getOlatResource());
+				info.setDescription(repoEntry.getDescription());
+				info.setResource(repoEntry.getOlatResource());
 				resourceInfos.add(info);
 			}
 		}

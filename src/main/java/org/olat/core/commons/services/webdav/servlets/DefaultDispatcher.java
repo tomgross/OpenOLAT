@@ -38,7 +38,7 @@ import javax.servlet.ServletResponseWrapper;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 
-import org.olat.core.logging.OLog;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.servlets.URLEncoder;
 
@@ -90,7 +90,7 @@ import org.olat.core.util.servlets.URLEncoder;
 public abstract class DefaultDispatcher implements Serializable {
 
     private static final long serialVersionUID = 1L;
-    private static final OLog log = Tracing.createLoggerFor(DefaultDispatcher.class);
+    private static final Logger log = Tracing.createLoggerFor(DefaultDispatcher.class);
 
     // ----------------------------------------------------- Instance Variables
 
@@ -286,7 +286,7 @@ public abstract class DefaultDispatcher implements Serializable {
         throws IOException, ServletException {
 
         boolean serveContent = content;
-        boolean debug = log.isDebug();
+        boolean debug = log.isDebugEnabled();
 
         // Identify the requested resource path
         String path = getRelativePath(request);
@@ -316,7 +316,7 @@ public abstract class DefaultDispatcher implements Serializable {
                         "defaultServlet.missingResource");
             }
 
-            response.sendError(HttpServletResponse.SC_NOT_FOUND,
+            response.setStatus(HttpServletResponse.SC_NOT_FOUND,
                                requestUri);
             return;
         }
@@ -331,7 +331,7 @@ public abstract class DefaultDispatcher implements Serializable {
             if (requestUri == null) {
                 requestUri = request.getRequestURI();
             }
-            response.sendError(HttpServletResponse.SC_NOT_FOUND, requestUri);
+            response.setStatus(HttpServletResponse.SC_NOT_FOUND, requestUri);
             return;
         }
 
@@ -609,7 +609,7 @@ public abstract class DefaultDispatcher implements Serializable {
 
         // bytes is the only range unit supported
         if (!rangeHeader.startsWith("bytes")) {
-            response.sendError(HttpServletResponse.SC_BAD_REQUEST);
+            response.setStatus(HttpServletResponse.SC_BAD_REQUEST);
             return null;
         }
 
@@ -619,12 +619,12 @@ public abstract class DefaultDispatcher implements Serializable {
         int slashPos = rangeHeader.indexOf('/');
 
         if (dashPos == -1) {
-            response.sendError(HttpServletResponse.SC_BAD_REQUEST);
+            response.setStatus(HttpServletResponse.SC_BAD_REQUEST);
             return null;
         }
 
         if (slashPos == -1) {
-            response.sendError(HttpServletResponse.SC_BAD_REQUEST);
+            response.setStatus(HttpServletResponse.SC_BAD_REQUEST);
             return null;
         }
 
@@ -637,12 +637,12 @@ public abstract class DefaultDispatcher implements Serializable {
             range.length = Long.parseLong
                 (rangeHeader.substring(slashPos + 1, rangeHeader.length()));
         } catch (NumberFormatException e) {
-            response.sendError(HttpServletResponse.SC_BAD_REQUEST);
+            response.setStatus(HttpServletResponse.SC_BAD_REQUEST);
             return null;
         }
 
         if (!range.validate()) {
-            response.sendError(HttpServletResponse.SC_BAD_REQUEST);
+            response.setStatus(HttpServletResponse.SC_BAD_REQUEST);
             return null;
         }
 
@@ -711,8 +711,7 @@ public abstract class DefaultDispatcher implements Serializable {
         // of adding new ones).
         if (!rangeHeader.startsWith("bytes")) {
             response.addHeader("Content-Range", "bytes */" + fileLength);
-            response.sendError
-                (HttpServletResponse.SC_REQUESTED_RANGE_NOT_SATISFIABLE);
+            response.setStatus(HttpServletResponse.SC_REQUESTED_RANGE_NOT_SATISFIABLE);
             return null;
         }
 
@@ -734,8 +733,7 @@ public abstract class DefaultDispatcher implements Serializable {
 
             if (dashPos == -1) {
                 response.addHeader("Content-Range", "bytes */" + fileLength);
-                response.sendError
-                    (HttpServletResponse.SC_REQUESTED_RANGE_NOT_SATISFIABLE);
+                response.setStatus(HttpServletResponse.SC_REQUESTED_RANGE_NOT_SATISFIABLE);
                 return null;
             }
 
@@ -748,9 +746,7 @@ public abstract class DefaultDispatcher implements Serializable {
                 } catch (NumberFormatException e) {
                     response.addHeader("Content-Range",
                                        "bytes */" + fileLength);
-                    response.sendError
-                        (HttpServletResponse
-                         .SC_REQUESTED_RANGE_NOT_SATISFIABLE);
+                    response.setStatus(HttpServletResponse.SC_REQUESTED_RANGE_NOT_SATISFIABLE);
                     return null;
                 }
 
@@ -768,9 +764,7 @@ public abstract class DefaultDispatcher implements Serializable {
                 } catch (NumberFormatException e) {
                     response.addHeader("Content-Range",
                                        "bytes */" + fileLength);
-                    response.sendError
-                        (HttpServletResponse
-                         .SC_REQUESTED_RANGE_NOT_SATISFIABLE);
+                    response.setStatus(HttpServletResponse.SC_REQUESTED_RANGE_NOT_SATISFIABLE);
                     return null;
                 }
 
@@ -778,8 +772,7 @@ public abstract class DefaultDispatcher implements Serializable {
 
             if (!currentRange.validate()) {
                 response.addHeader("Content-Range", "bytes */" + fileLength);
-                response.sendError
-                    (HttpServletResponse.SC_REQUESTED_RANGE_NOT_SATISFIABLE);
+                response.setStatus(HttpServletResponse.SC_REQUESTED_RANGE_NOT_SATISFIABLE);
                 return null;
             }
 
@@ -824,8 +817,7 @@ public abstract class DefaultDispatcher implements Serializable {
                 // If none of the given ETags match, 412 Precodition failed is
                 // sent back
                 if (!conditionSatisfied) {
-                    response.sendError
-                        (HttpServletResponse.SC_PRECONDITION_FAILED);
+                    response.setStatus(HttpServletResponse.SC_PRECONDITION_FAILED);
                     return false;
                 }
 
@@ -919,7 +911,7 @@ public abstract class DefaultDispatcher implements Serializable {
 
                     return false;
                 }
-                response.sendError(HttpServletResponse.SC_PRECONDITION_FAILED);
+                response.setStatus(HttpServletResponse.SC_PRECONDITION_FAILED);
                 return false;
             }
         }
@@ -965,7 +957,7 @@ public abstract class DefaultDispatcher implements Serializable {
                 if ( lastModified >= (headerValue + 1000)) {
                     // The entity has not been modified since the date
                     // specified by the client. This is not an error case.
-                    response.sendError(HttpServletResponse.SC_PRECONDITION_FAILED);
+                    response.setStatus(HttpServletResponse.SC_PRECONDITION_FAILED);
                     return false;
                 }
             }
@@ -1210,7 +1202,7 @@ public abstract class DefaultDispatcher implements Serializable {
                                   ServletOutputStream ostream,
                                   long start, long end) {
 
-        if (log.isDebug()) {
+        if (log.isDebugEnabled()) {
             log.debug("Serving bytes:" + start + "-" + end);
         }
 

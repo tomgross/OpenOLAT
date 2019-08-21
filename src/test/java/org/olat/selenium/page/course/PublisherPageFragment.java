@@ -23,7 +23,7 @@ import java.util.List;
 
 import org.junit.Assert;
 import org.olat.selenium.page.graphene.OOGraphene;
-import org.olat.selenium.page.repository.RepositoryAccessPage.UserAccess;
+import org.olat.selenium.page.repository.UserAccess;
 import org.openqa.selenium.By;
 import org.openqa.selenium.WebDriver;
 import org.openqa.selenium.WebElement;
@@ -74,7 +74,7 @@ public class PublisherPageFragment {
 	
 	public PublisherPageFragment nextSelectNodes() {
 		OOGraphene.nextStep(browser);
-		OOGraphene.waitElement(By.cssSelector("fieldset.o_sel_repositoryentry_access"), 5, browser);
+		OOGraphene.waitElement(By.cssSelector("fieldset.o_sel_repo_access_configuration"), 5, browser);
 		return this;
 	}
 	
@@ -101,29 +101,35 @@ public class PublisherPageFragment {
 	}
 	
 	public PublisherPageFragment selectAccess(UserAccess access) {
-		if(access == UserAccess.none) {
-			By labelSwitchBy = By.xpath("//div[@id='o_cousersSwitch']//label[input[@name='usersSwitch'][@type='radio'][@value='n']]");
-			browser.findElement(labelSwitchBy).click();
+		By publishStatusBy = By.id("o_fiopublishedStatus_SELBOX");
+		OOGraphene.scrollTo(publishStatusBy, browser);
+		WebElement publishStatusEl = browser.findElement(publishStatusBy);
+		Select publishStatusSelect = new Select(publishStatusEl);
+		publishStatusSelect.selectByValue("published");
+
+		if(access == UserAccess.registred || access == UserAccess.guest) {
+			By allUsersBy = By.xpath("//div[@id='o_coentry_access_type']/div/label/input[@name='entry.access.type' and @value='shared']");
+			browser.findElement(allUsersBy).click();
 			OOGraphene.waitBusy(browser);
-		} else {
-			By labelSwitchBy = By.xpath("//div[@id='o_cousersSwitch']//label[input[@name='usersSwitch'][@type='radio'][@value='y']]");
-			browser.findElement(labelSwitchBy).click();
+			
+			By guestsBy = By.xpath("//div[contains(@class,'o_sel_repositoryentry_access_guest')]//label[input[@name='entry.access.guest' and @value='on']]");
+			OOGraphene.waitElement(guestsBy, browser);
+			
+			if(access == UserAccess.guest) {
+				WebElement guestsEl = browser.findElement(guestsBy);
+				OOGraphene.check(guestsEl, Boolean.TRUE);
+			}
+		} else if(access == UserAccess.membersOnly) {
+			By allUsersBy = By.xpath("//div[@id='o_coentry_access_type']/div/label/input[@name='entry.access.type' and @value='private']");
+			browser.findElement(allUsersBy).click();
+			OOGraphene.waitBusy(browser);
+		} else if(access == UserAccess.booking) {
+			By allUsersBy = By.xpath("//div[@id='o_coentry_access_type']/div/label/input[@name='entry.access.type' and @value='private']");
+			browser.findElement(allUsersBy).click();
 			OOGraphene.waitBusy(browser);
 			
 			By accessConfigurationBy = By.cssSelector("fieldset.o_ac_configuration");
-			OOGraphene.waitElement(accessConfigurationBy, 5, browser);
-			
-			By publishForUserBy = By.id("o_fiopublishedForUsers_SELBOX");
-			OOGraphene.scrollTo(publishForUserBy, browser);
-			WebElement publishForUserEl = browser.findElement(publishForUserBy);
-			Select publishForUserSelect = new Select(publishForUserEl);
-			switch(access) {
-				case registred: publishForUserSelect.selectByValue("u"); break;
-				case guest: publishForUserSelect.selectByValue("g"); break;
-				case membersOnly: publishForUserSelect.selectByValue("m"); break;
-				default: {}
-			}
-			OOGraphene.waitBusy(browser);
+			OOGraphene.waitElement(accessConfigurationBy, browser);
 		}
 		return this;
 	}
@@ -132,6 +138,7 @@ public class PublisherPageFragment {
 		OOGraphene.waitElement(selectCatalogYesNoBy, 5, browser);
 		WebElement select = browser.findElement(selectCatalogYesNoBy);
 		new Select(select).selectByValue(access ? "yes" : "no");
+		OOGraphene.waitBusy(browser);
 		return this;
 	}
 	

@@ -34,6 +34,7 @@ package de.tuchemnitz.wizard.workflows.coursecreation.model;
 
 import java.io.IOException;
 
+import org.apache.logging.log4j.Logger;
 import org.apache.velocity.context.Context;
 import org.olat.core.commons.editor.htmleditor.WysiwygFactory;
 import org.olat.core.gui.DefaultGlobalSettings;
@@ -45,7 +46,6 @@ import org.olat.core.gui.render.StringOutput;
 import org.olat.core.gui.render.velocity.VelocityHelper;
 import org.olat.core.gui.render.velocity.VelocityRenderDecorator;
 import org.olat.core.gui.translator.Translator;
-import org.olat.core.logging.OLog;
 import org.olat.core.logging.Tracing;
 import org.olat.course.editor.CourseAccessAndProperties;
 import org.olat.repository.CatalogEntry;
@@ -66,7 +66,7 @@ import de.tuchemnitz.wizard.workflows.coursecreation.CourseCreationHelper;
  */
 public class CourseCreationConfiguration {
 	
-	private static final OLog log = Tracing.createLoggerFor(CourseCreationConfiguration.class);
+	private static final Logger log = Tracing.createLoggerFor(CourseCreationConfiguration.class);
 
 	public static final String ACL_GUEST = "acl_guest";
 	public static final String ACL_OLAT = "acl_olat";
@@ -369,16 +369,17 @@ public class CourseCreationConfiguration {
 		
 		Context context = vc.getContext();
 		Renderer fr = Renderer.getInstance(vc, translator, null, new RenderResult(), globalSettings);
-		StringOutput wOut = new StringOutput(10000);
-		try(VelocityRenderDecorator vrdec = new VelocityRenderDecorator(fr, vc, wOut)) {
+		try(StringOutput wOut = new StringOutput(10000);
+			VelocityRenderDecorator vrdec = new VelocityRenderDecorator(fr, vc, wOut)) {			
 			context.put("r", vrdec);
 			VelocityHelper.getInstance().mergeContent(vc.getPage(), context, wOut, null);
 			//free the decorator
 			context.remove("r");
+			return WysiwygFactory.createXHtmlFileContent(wOut.toString(), courseTitle);
 		} catch(IOException e) {
 			log.error("", e);
+			return null;
 		}
-		return WysiwygFactory.createXHtmlFileContent(wOut.toString(), courseTitle);
 	}
 
 	/**

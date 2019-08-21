@@ -70,6 +70,7 @@ import org.olat.core.gui.control.generic.wizard.StepsMainRunController;
 import org.olat.core.gui.control.generic.wizard.StepsRunContext;
 import org.olat.core.gui.media.MediaResource;
 import org.olat.core.helpers.Settings;
+import org.olat.core.id.Roles;
 import org.olat.core.id.context.BusinessControlFactory;
 import org.olat.core.id.context.ContextEntry;
 import org.olat.core.logging.AssertException;
@@ -346,7 +347,8 @@ public class AssessmentTestComposerController extends MainLayoutBasicController 
 		changeItemTools.setVisible(!restrictedEdit);
 		changeItemTools.setElementCssClass("o_sel_qti_change_node");
 		
-		if(ureq.getUserSession().getRoles().isOLATAdmin()) {
+		Roles roles = ureq.getUserSession().getRoles();
+		if(roles.isAdministrator() || roles.isSystemAdmin()) {
 			reloadInCacheLink = LinkFactory.createToolLink("replace.in.cache.pool", translate("tools.reload.from.files"), this, "o_icon_refresh");
 			reloadInCacheLink.setTooltip(translate("tools.reload.from.files.tooltip"));
 			reloadInCacheLink.setDomReplacementWrapperRequired(false);
@@ -1485,7 +1487,7 @@ public class AssessmentTestComposerController extends MainLayoutBasicController 
 			assessmentChanged(ureq);
 		}
 		
-		logAudit(removed + " " + deleted + " removed item ref", null);
+		logAudit(removed + " " + deleted + " removed item ref");
 	}
 	
 	private void doDeleteAssessmentSection(UserRequest ureq, AssessmentSection assessmentSection) {

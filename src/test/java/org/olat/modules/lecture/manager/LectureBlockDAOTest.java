@@ -29,12 +29,16 @@ import org.junit.Assert;
 import org.junit.Test;
 import org.olat.basesecurity.Group;
 import org.olat.basesecurity.GroupRoles;
+import org.olat.basesecurity.OrganisationRoles;
 import org.olat.core.commons.persistence.DB;
 import org.olat.core.id.Identity;
+import org.olat.course.assessment.AssessmentMode;
+import org.olat.course.assessment.AssessmentModeManager;
 import org.olat.group.BusinessGroup;
 import org.olat.group.BusinessGroupService;
 import org.olat.group.manager.BusinessGroupRelationDAO;
 import org.olat.modules.lecture.LectureBlock;
+import org.olat.modules.lecture.LectureBlockRef;
 import org.olat.modules.lecture.LectureBlockStatus;
 import org.olat.modules.lecture.LectureBlockToGroup;
 import org.olat.modules.lecture.LectureRollCallStatus;
@@ -42,6 +46,7 @@ import org.olat.modules.lecture.LectureService;
 import org.olat.modules.lecture.RepositoryEntryLectureConfiguration;
 import org.olat.modules.lecture.model.LectureBlockImpl;
 import org.olat.modules.lecture.model.LectureBlockToGroupImpl;
+import org.olat.modules.lecture.model.LectureReportRow;
 import org.olat.modules.lecture.model.LecturesBlockSearchParameters;
 import org.olat.repository.RepositoryEntry;
 import org.olat.repository.RepositoryService;
@@ -66,6 +71,8 @@ public class LectureBlockDAOTest extends OlatTestCase {
 	private LectureBlockDAO lectureBlockDao;
 	@Autowired
 	private RepositoryService repositoryService;
+	@Autowired
+	private AssessmentModeManager assessmentModeManager;
 	@Autowired
 	private RepositoryEntryRelationDAO repositoryEntryRelationDao;
 	@Autowired
@@ -148,6 +155,50 @@ public class LectureBlockDAOTest extends OlatTestCase {
 	}
 	
 	@Test
+	public void searchLectureBlocks() {
+		Identity teacher = JunitTestHelper.createAndPersistIdentityAsRndUser("lec-teacher-1");
+		Identity lectureManager = JunitTestHelper.createAndPersistIdentityAsRndUser("lec-manager-1");
+		RepositoryEntry entry = createResourceWithLecturesEnabled();
+		repositoryEntryRelationDao.addRole(lectureManager, entry, OrganisationRoles.lecturemanager.name());
+		LectureBlock lectureBlock = lectureBlockDao.createLectureBlock(entry);
+		lectureBlock.setStartDate(new Date());
+		lectureBlock.setEndDate(new Date());
+		lectureBlock.setTitle("Hello lecture manager");
+		lectureBlock = lectureBlockDao.update(lectureBlock);
+		lectureService.addTeacher(lectureBlock, teacher);
+		dbInstance.commitAndCloseSession();
+
+		LecturesBlockSearchParameters searchParams = new LecturesBlockSearchParameters();
+		searchParams.setManager(lectureManager);
+		List<LectureBlock> blocks = lectureBlockDao.searchLectureBlocks(searchParams);
+		Assert.assertNotNull(blocks);
+		Assert.assertEquals(1, blocks.size());
+		LectureBlock loadedBlock = blocks.get(0);
+		Assert.assertEquals(lectureBlock, loadedBlock);
+	}
+	
+	@Test
+	public void searchLectureBlocks_lectureDisabled() {
+		Identity teacher = JunitTestHelper.createAndPersistIdentityAsRndUser("lec-teacher-1");
+		Identity lectureManager = JunitTestHelper.createAndPersistIdentityAsRndUser("lec-manager-1");
+		RepositoryEntry entry = JunitTestHelper.createAndPersistRepositoryEntry();
+		repositoryEntryRelationDao.addRole(lectureManager, entry, OrganisationRoles.lecturemanager.name());
+		LectureBlock lectureBlock = lectureBlockDao.createLectureBlock(entry);
+		lectureBlock.setStartDate(new Date());
+		lectureBlock.setEndDate(new Date());
+		lectureBlock.setTitle("Hello lecture manager");
+		lectureBlock = lectureBlockDao.update(lectureBlock);
+		lectureService.addTeacher(lectureBlock, teacher);
+		dbInstance.commitAndCloseSession();
+
+		LecturesBlockSearchParameters searchParams = new LecturesBlockSearchParameters();
+		searchParams.setManager(lectureManager);
+		List<LectureBlock> blocks = lectureBlockDao.searchLectureBlocks(searchParams);
+		Assert.assertNotNull(blocks);
+		Assert.assertTrue(blocks.isEmpty());
+	}
+	
+	@Test
 	public void getLectureBlocks_all() {
 		RepositoryEntry entry = JunitTestHelper.createAndPersistRepositoryEntry();
 		LectureBlock lectureBlock = lectureBlockDao.createLectureBlock(entry);
@@ -166,10 +217,9 @@ public class LectureBlockDAOTest extends OlatTestCase {
 	@Test
 	public void loadByTeachers() {
 		Identity teacher = JunitTestHelper.createAndPersistIdentityAsRndUser("teacher-1");
-		RepositoryEntry entry = JunitTestHelper.createAndPersistRepositoryEntry();
+		RepositoryEntry entry = createResourceWithLecturesEnabled();
 		LectureBlock lectureBlock = createMinimalLectureBlock(entry);
 		dbInstance.commitAndCloseSession();
-
 		lectureService.addTeacher(lectureBlock, teacher);
 		dbInstance.commitAndCloseSession();
 		
@@ -182,9 +232,25 @@ public class LectureBlockDAOTest extends OlatTestCase {
 	}
 	
 	@Test
-	public void loadByTeachers_searchString() {
+	public void loadByTeachers_lectureDisabled() {
 		Identity teacher = JunitTestHelper.createAndPersistIdentityAsRndUser("teacher-1");
 		RepositoryEntry entry = JunitTestHelper.createAndPersistRepositoryEntry();
+		LectureBlock lectureBlock = createMinimalLectureBlock(entry);
+		dbInstance.commitAndCloseSession();
+		lectureService.addTeacher(lectureBlock, teacher);
+		dbInstance.commitAndCloseSession();
+		
+		//search all
+		LecturesBlockSearchParameters searchParams = new LecturesBlockSearchParameters();
+		List<LectureBlock> blocks = lectureBlockDao.loadByTeacher(teacher, searchParams);
+		Assert.assertNotNull(blocks);
+		Assert.assertTrue(blocks.isEmpty());
+	}
+	
+	@Test
+	public void loadByTeachers_searchString() {
+		Identity teacher = JunitTestHelper.createAndPersistIdentityAsRndUser("teacher-1");
+		RepositoryEntry entry = createResourceWithLecturesEnabled();
 		LectureBlock lectureBlock = createMinimalLectureBlock(entry);
 		dbInstance.commitAndCloseSession();
 
@@ -210,7 +276,7 @@ public class LectureBlockDAOTest extends OlatTestCase {
 	@Test
 	public void loadByTeachers_startEndDates() {
 		Identity teacher = JunitTestHelper.createAndPersistIdentityAsRndUser("teacher-1");
-		RepositoryEntry entry = JunitTestHelper.createAndPersistRepositoryEntry();
+		RepositoryEntry entry = createResourceWithLecturesEnabled();
 		LectureBlock lectureBlock = createMinimalLectureBlock(entry);
 		dbInstance.commitAndCloseSession();
 
@@ -243,7 +309,7 @@ public class LectureBlockDAOTest extends OlatTestCase {
 	@Test
 	public void loadByTeachers_startDate() {
 		Identity teacher = JunitTestHelper.createAndPersistIdentityAsRndUser("teacher-3");
-		RepositoryEntry entry = JunitTestHelper.createAndPersistRepositoryEntry();
+		RepositoryEntry entry = createResourceWithLecturesEnabled();
 		LectureBlock lectureBlock = createMinimalLectureBlock(entry);
 		dbInstance.commitAndCloseSession();
 
@@ -272,7 +338,7 @@ public class LectureBlockDAOTest extends OlatTestCase {
 	@Test
 	public void loadByTeachers_endDate() {
 		Identity teacher = JunitTestHelper.createAndPersistIdentityAsRndUser("teacher-3");
-		RepositoryEntry entry = JunitTestHelper.createAndPersistRepositoryEntry();
+		RepositoryEntry entry = createResourceWithLecturesEnabled();
 		LectureBlock lectureBlock = createMinimalLectureBlock(entry);
 		dbInstance.commitAndCloseSession();
 
@@ -296,6 +362,32 @@ public class LectureBlockDAOTest extends OlatTestCase {
 		Assert.assertNotNull(futureBlocks);
 		Assert.assertEquals(1, futureBlocks.size());
 		Assert.assertEquals(lectureBlock, futureBlocks.get(0));
+	}
+	
+	@Test
+	public void loadAssessedByTeacher() {
+		Identity teacher = JunitTestHelper.createAndPersistIdentityAsRndUser("teacher-23");
+		RepositoryEntry entry = createResourceWithLecturesEnabled();
+		LectureBlock lectureBlock = createMinimalLectureBlock(entry);
+		dbInstance.commitAndCloseSession();
+
+		lectureService.addTeacher(lectureBlock, teacher);
+		dbInstance.commitAndCloseSession();
+
+		// the lecture is not assessed -> return empty
+		LecturesBlockSearchParameters searchParams = new LecturesBlockSearchParameters();
+		List<LectureBlockRef> blockRefs = lectureBlockDao.loadAssessedByTeacher(teacher, searchParams);
+		Assert.assertTrue(blockRefs.isEmpty());
+		
+		// add an assessment mode
+		AssessmentMode assessmentMode = assessmentModeManager.createAssessmentMode(lectureBlock, 5, 5, "", null);
+		assessmentMode = assessmentModeManager.persist(assessmentMode);
+		dbInstance.commitAndCloseSession();
+		
+		List<LectureBlockRef> assessedBlockRefs = lectureBlockDao.loadAssessedByTeacher(teacher, searchParams);
+		Assert.assertEquals(1, assessedBlockRefs.size());
+		Assert.assertEquals(lectureBlock.getKey(), assessedBlockRefs.get(0).getKey());
+		Assert.assertEquals(lectureBlock, assessmentMode.getLectureBlock());
 	}
 	
 	@Test
@@ -517,7 +609,61 @@ public class LectureBlockDAOTest extends OlatTestCase {
 		Assert.assertEquals(1, rollcalls.size());
 		Assert.assertEquals(lectureBlock, rollcalls.get(0));
 	}
-
+	
+	@Test
+	public void getLecturesBlocksReport() {
+		RepositoryEntry entry = createResourceWithLecturesEnabled();
+		LectureBlock lectureBlock = createMinimalLectureBlock(entry);
+		dbInstance.commitAndCloseSession();
+		
+		List<LectureReportRow> allRows = lectureBlockDao.getLecturesBlocksReport(null, null, null);
+		Assert.assertNotNull(allRows);
+		Assert.assertFalse(allRows.isEmpty());
+		
+		boolean found = false;
+		for(LectureReportRow row:allRows) {
+			if(row.getKey().equals(lectureBlock.getKey())) {
+				found = true;
+			}
+		}
+		Assert.assertTrue(found);
+	}
+	
+	@Test
+	public void getLecturesBlocksReport_withParams() {
+		RepositoryEntry entry = createResourceWithLecturesEnabled();
+		LectureBlock lectureBlock = createMinimalLectureBlock(entry);
+		dbInstance.commitAndCloseSession();
+		
+		Calendar calendar = Calendar.getInstance();
+		calendar.add(Calendar.DATE, -2);
+		Date start = calendar.getTime();
+		calendar.add(Calendar.DATE, 4);
+		Date end = calendar.getTime();
+		
+		List<LectureRollCallStatus> openStatus = Collections.singletonList(LectureRollCallStatus.open);
+		List<LectureReportRow> openRows = lectureBlockDao.getLecturesBlocksReport(start, end, openStatus);
+		Assert.assertNotNull(openRows);
+		Assert.assertFalse(openRows.isEmpty());
+		boolean foundOpen = false;
+		for(LectureReportRow row:openRows) {
+			if(row.getKey().equals(lectureBlock.getKey())) {
+				foundOpen = true;
+			}
+		}
+		Assert.assertTrue(foundOpen);
+		
+		List<LectureRollCallStatus> closedStatus = Collections.singletonList(LectureRollCallStatus.closed);
+		List<LectureReportRow> closedRows = lectureBlockDao.getLecturesBlocksReport(start, end, closedStatus);
+		Assert.assertNotNull(closedRows);
+		boolean foundClosed = false;
+		for(LectureReportRow row:closedRows) {
+			if(row.getKey().equals(lectureBlock.getKey())) {
+				foundClosed = true;
+			}
+		}
+		Assert.assertFalse(foundClosed);
+	}
 	
 	@Test
 	public void deleteLectureBlock() {
@@ -533,6 +679,16 @@ public class LectureBlockDAOTest extends OlatTestCase {
 		// try to relaod the block
 		LectureBlock deletedBlock = lectureBlockDao.loadByKey(blockKey);
 		Assert.assertNull(deletedBlock);
+	}
+	
+	private RepositoryEntry createResourceWithLecturesEnabled() {
+		RepositoryEntry entry = JunitTestHelper.createAndPersistRepositoryEntry();
+		dbInstance.commit();
+		RepositoryEntryLectureConfiguration config = lectureService.getRepositoryEntryLectureConfiguration(entry);
+		config.setLectureEnabled(true);
+		lectureService.updateRepositoryEntryLectureConfiguration(config);
+		dbInstance.commit();
+		return entry;
 	}
 	
 	private LectureBlock createMinimalLectureBlock(RepositoryEntry entry) {

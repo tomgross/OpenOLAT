@@ -3,7 +3,7 @@
 		<div class="clearfix">
 			<div class="o_portrait">
 				#if($member.isPortraitAvailable())
-					<img src="$r.staticLink("images/transparent.gif")" class="$member.getPortraitCssClass()" style="background-image: url('$avatarBaseURL/${member.getKey()}/portrait.jpg')" alt="$r.escapeHtml("$member.getFullName()")" />
+					<img src="$r.staticLink("images/transparent.gif")" class="$member.getPortraitCssClass()" style="background-image: url('$avatarBaseURL/${member.getKey()}/portrait.jpg') !important;" alt="$r.escapeHtml("$member.getFullName()")" />
 				#else
 					<img src="$r.staticLink("images/transparent.gif")" class="$member.getPortraitCssClass()" alt="$r.escapeHtml("$member.getFullName()")" />
 				#end
@@ -25,6 +25,15 @@
 							<div class="o_prop o_${userPropertyHandler.name}">$prop</div>
 						#end
 					#end					
+				#end
+				
+				#if($r.isNotNull($member.curriculumElementInfos))
+					<div class="o_prop o_curriculum_displayname">$member.curriculumDisplayName</div>
+					#if($r.isNotEmpty($member.curriculumRootElementIdentifier))
+						<div class="o_prop o_curriculum_root_el_identifier">$member.curriculumRootElementIdentifier</div>
+					#else if($r.isNotEmpty($member.curriculumRootElementDisplayName))
+						<div class="o_prop o_curriculum_root_el_displayname">$member.curriculumRootElementDisplayName</div>
+					#end
 				#end
 			</div>
 		</div>

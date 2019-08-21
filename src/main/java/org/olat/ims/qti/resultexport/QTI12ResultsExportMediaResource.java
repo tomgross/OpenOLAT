@@ -49,7 +49,7 @@ import org.olat.core.gui.render.velocity.VelocityHelper;
 import org.olat.core.gui.translator.Translator;
 import org.olat.core.id.Identity;
 import org.olat.core.id.UserConstants;
-import org.olat.core.logging.OLog;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.FileUtils;
 import org.olat.core.util.StringHelper;
@@ -67,7 +67,7 @@ import org.olat.user.UserManager;
 
 public class QTI12ResultsExportMediaResource implements MediaResource {
 
-	private static final OLog log = Tracing.createLoggerFor(QTI12ResultsExportMediaResource.class);
+	private static final Logger log = Tracing.createLoggerFor(QTI12ResultsExportMediaResource.class);
 	
 	private static final String DATA = "userdata/";
 	private static final String SEP = File.separator;
@@ -87,8 +87,8 @@ public class QTI12ResultsExportMediaResource implements MediaResource {
 	private String title, exportFolderName;
 	private Translator translator;
 
-	public QTI12ResultsExportMediaResource(CourseEnvironment courseEnv, Locale locale, List<Identity> identities,
-			QTICourseNode courseNode) {
+	public QTI12ResultsExportMediaResource(CourseEnvironment courseEnv, List<Identity> identities,
+			QTICourseNode courseNode, String archivePath, Locale locale) {
 		this.courseNode = courseNode;
 		this.courseEnv = courseEnv;
 		this.locale = locale;
@@ -97,7 +97,7 @@ public class QTI12ResultsExportMediaResource implements MediaResource {
 		velocityHelper = VelocityHelper.getInstance();
 		
 		translator = Util.createPackageTranslator(QTI12ResultsExportMediaResource.class, locale);
-		exportFolderName = translator.translate("export.folder.name");
+		exportFolderName = ZipUtil.concat(archivePath, translator.translate("export.folder.name"));
 		
 		qtiResultManager = QTIResultManager.getInstance();
 	}
@@ -257,9 +257,8 @@ public class QTI12ResultsExportMediaResource implements MediaResource {
 	
 	
 	private String createPassedIcons(boolean passed) {
-		String icon = passed ? "<i class='o_icon o_passed o_icon_passed text-success'></i>"
+		return passed ? "<i class='o_icon o_passed o_icon_passed text-success'></i>"
 				: "<i class='o_icon o_failed o_icon_failed text-danger'></i>";
-		return icon;
 	}
 	
 	private String createResultHTML (String results){

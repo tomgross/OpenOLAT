@@ -21,8 +21,10 @@ package org.olat.course.editor;
 
 import java.util.List;
 
+import org.olat.core.id.Organisation;
 import org.olat.repository.RepositoryEntry;
 import org.olat.repository.RepositoryEntryAllowToLeaveOptions;
+import org.olat.repository.RepositoryEntryStatusEnum;
 import org.olat.resource.accesscontrol.Offer;
 import org.olat.resource.accesscontrol.OfferAccess;
 /**
@@ -31,14 +33,17 @@ import org.olat.resource.accesscontrol.OfferAccess;
  *
  */
 public class CourseAccessAndProperties {
-	private RepositoryEntry repoEntry;
+	private final RepositoryEntry repoEntry;
 	private RepositoryEntryAllowToLeaveOptions setting;
-	private int access;
-	private boolean membersOnly;
+	private RepositoryEntryStatusEnum status;
+	private boolean allUsers;
+	private boolean guests;
+	private boolean bookable;
 	private boolean canCopy;
 	private boolean canReference;
 	private boolean canDownload;	
 	private Boolean confirmationEmail;
+	private List<Organisation> organisations;
 	
 	private List<OfferAccess> offerAccess;
 	private List<Offer> deletedOffer;
@@ -47,15 +52,16 @@ public class CourseAccessAndProperties {
 		this.repoEntry = re;
 	}
 	
-	public CourseAccessAndProperties(RepositoryEntry re, RepositoryEntryAllowToLeaveOptions setting, int access,
-			boolean membersOnly, boolean canCopy, boolean canReference, boolean canDownload) {
+	public CourseAccessAndProperties(RepositoryEntry re, RepositoryEntryAllowToLeaveOptions setting,
+			RepositoryEntryStatusEnum status, boolean bookable, boolean allUsers, boolean guests,
+			List<Organisation> organisations) {
 		this.repoEntry = re;
 		this.setting = setting;
-		this.access = access;
-		this.membersOnly = membersOnly;
-		this.canCopy = canCopy;
-		this.canReference = canReference;
-		this.canDownload = canDownload;
+		this.status = status;
+		this.allUsers = allUsers;
+		this.guests = guests;
+		this.bookable = bookable;
+		this.organisations = organisations;
 	}	
 	
 	public List<OfferAccess> getOfferAccess() {
@@ -78,10 +84,6 @@ public class CourseAccessAndProperties {
 		return repoEntry;
 	}
 
-	public void setRepositoryEntry(RepositoryEntry re) {
-		this.repoEntry = re;
-	}
-
 	public RepositoryEntryAllowToLeaveOptions getSetting() {
 		return setting;
 	}
@@ -90,20 +92,36 @@ public class CourseAccessAndProperties {
 		this.setting = setting;
 	}
 
-	public int getAccess() {
-		return access;
+	public RepositoryEntryStatusEnum getStatus() {
+		return status;
 	}
 
-	public void setAccess(int access) {
-		this.access = access;
+	public void setStatus(RepositoryEntryStatusEnum status) {
+		this.status = status;
 	}
 
-	public boolean isMembersOnly() {
-		return membersOnly;
+	public boolean isBookable() {
+		return bookable;
 	}
 
-	public void setMembersOnly(boolean membersOnly) {
-		this.membersOnly = membersOnly;
+	public void setBookable(boolean bookable) {
+		this.bookable = bookable;
+	}
+
+	public boolean isAllUsers() {
+		return allUsers;
+	}
+
+	public void setAllUsers(boolean allUsers) {
+		this.allUsers = allUsers;
+	}
+
+	public boolean isGuests() {
+		return guests;
+	}
+
+	public void setGuests(boolean guests) {
+		this.guests = guests;
 	}
 
 	public boolean isCanCopy() {
@@ -136,5 +154,9 @@ public class CourseAccessAndProperties {
 
 	public void setConfirmationEmail(Boolean confirmationEmail) {
 		this.confirmationEmail = confirmationEmail;
+	}
+	
+	public List<Organisation> getOrganisations() {
+		return organisations;
 	}
 }

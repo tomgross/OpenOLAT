@@ -23,10 +23,10 @@ import java.util.Date;
 import java.util.List;
 import java.util.Locale;
 
+import org.apache.logging.log4j.Logger;
 import org.olat.basesecurity.BaseSecurity;
 import org.olat.core.commons.modules.bc.FileInfo;
 import org.olat.core.commons.modules.bc.FolderManager;
-import org.olat.core.commons.modules.bc.meta.MetaInfo;
 import org.olat.core.commons.services.notifications.NotificationHelper;
 import org.olat.core.commons.services.notifications.NotificationsHandler;
 import org.olat.core.commons.services.notifications.NotificationsManager;
@@ -37,18 +37,17 @@ import org.olat.core.commons.services.notifications.SubscriptionContext;
 import org.olat.core.commons.services.notifications.SubscriptionInfo;
 import org.olat.core.commons.services.notifications.model.SubscriptionListItem;
 import org.olat.core.commons.services.notifications.model.TitleItem;
+import org.olat.core.commons.services.vfs.VFSMetadata;
 import org.olat.core.gui.components.tree.TreeModel;
 import org.olat.core.gui.translator.Translator;
 import org.olat.core.id.Identity;
 import org.olat.core.id.Roles;
 import org.olat.core.id.context.BusinessControlFactory;
-import org.olat.core.logging.OLog;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.FileUtils;
 import org.olat.core.util.StringHelper;
 import org.olat.core.util.Util;
 import org.olat.core.util.tree.TreeVisitor;
-import org.olat.core.util.vfs.OlatRelPathImpl;
 import org.olat.core.util.vfs.VFSContainer;
 import org.olat.modules.docpool.DocumentPoolModule;
 import org.olat.modules.docpool.ui.DocumentPoolMainController;
@@ -70,7 +69,7 @@ import org.springframework.stereotype.Service;
 @Service
 public class DocumentPoolNotificationsHandler implements NotificationsHandler {
 	
-	private static final OLog log = Tracing.createLoggerFor(DocumentPoolNotificationsHandler.class);
+	private static final Logger log = Tracing.createLoggerFor(DocumentPoolNotificationsHandler.class);
 	public static final String TYPE_NAME = "DocumentPool";
 	
 	@Autowired
@@ -105,14 +104,14 @@ public class DocumentPoolNotificationsHandler implements NotificationsHandler {
 			SubscriptionInfo si;
 			String taxonomyKey = documentPoolModule.getTaxonomyTreeKey();
 			if (notificationsManager.isPublisherValid(p) && compareDate.before(latestNews) && StringHelper.isLong(taxonomyKey)) {
-				Taxonomy taxonomy = taxonomyService.getTaxonomy(new TaxonomyRefImpl(new Long(taxonomyKey)));
+				Taxonomy taxonomy = taxonomyService.getTaxonomy(new TaxonomyRefImpl(Long.valueOf(taxonomyKey)));
 				if(taxonomy == null) {
 					return notificationsManager.getNoSubscriptionInfo();
 				}
 				
 				Identity identity = subscriber.getIdentity();
 				Roles roles = securityManager.getRoles(identity);
-				boolean isTaxonomyAdmin = roles.isOLATAdmin();
+				boolean isTaxonomyAdmin =  roles.isAdministrator() || roles.isSystemAdmin();
 				
 				Translator translator = Util.createPackageTranslator(DocumentPoolMainController.class, locale);
 				String templates = translator.translate("document.pool.templates");
@@ -144,7 +143,7 @@ public class DocumentPoolNotificationsHandler implements NotificationsHandler {
 	}
 	
 	private void createSubscriptionInfo(VFSContainer container, String prefixBusinessPath, Date compareDate, SubscriptionInfo si, Publisher p, Translator translator) {
-		List<FileInfo> fInfos = FolderManager.getFileInfos(((OlatRelPathImpl)container).getRelPath(), compareDate);
+		List<FileInfo> fInfos = FolderManager.getFileInfos(container.getRelPath(), compareDate);
 		for (FileInfo infos:fInfos) {
 			String title = infos.getRelPath();
 			
@@ -155,7 +154,7 @@ public class DocumentPoolNotificationsHandler implements NotificationsHandler {
 				// skip this file, continue with next item in folder
 				continue;
 			}						
-			MetaInfo metaInfo = infos.getMetaInfo();
+			VFSMetadata metaInfo = infos.getMetaInfo();
 			String iconCssClass =  null;
 			if (metaInfo != null) {
 				if (metaInfo.getTitle() != null) {
@@ -163,10 +162,10 @@ public class DocumentPoolNotificationsHandler implements NotificationsHandler {
 				}
 				iconCssClass = metaInfo.getIconCssClass();
 			}
-			Identity ident = infos.getAuthor();
+			Long identityKey = infos.getAuthorIdentityKey();
 			Date modDate = infos.getLastModified();
 
-			String desc = translator.translate("notifications.document.entry", new String[] { title, NotificationHelper.getFormatedName(ident) });
+			String desc = translator.translate("notifications.document.entry", new String[] { title, NotificationHelper.getFormatedName(identityKey) });
 			String urlToSend = null;
 			String businessPath = null;
 			if(p.getBusinessPath() != null) {
@@ -194,7 +193,7 @@ public class DocumentPoolNotificationsHandler implements NotificationsHandler {
 	private TitleItem getTitleItemForPublisher() {
 		String taxonomyKey = documentPoolModule.getTaxonomyTreeKey();
 		if(StringHelper.isLong(taxonomyKey)) {
-			Taxonomy taxonomy = taxonomyService.getTaxonomy(new TaxonomyRefImpl(new Long(taxonomyKey)));
+			Taxonomy taxonomy = taxonomyService.getTaxonomy(new TaxonomyRefImpl(Long.valueOf(taxonomyKey)));
 			if(taxonomy != null) {
 				return getTitleItemForTaxonomy(taxonomy);
 			}

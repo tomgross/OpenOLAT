@@ -32,7 +32,7 @@ import java.util.Map;
 import java.util.Set;
 
 import org.apache.commons.lang.ArrayUtils;
-import org.apache.log4j.Level;
+import org.apache.logging.log4j.Level;
 import org.olat.core.gui.UserRequest;
 import org.olat.core.gui.components.form.flexible.FormItem;
 import org.olat.core.gui.components.form.flexible.FormItemContainer;
@@ -394,7 +394,7 @@ public class AttributeEasyRowAdderController extends FormBasicController {
 		attribute.addActionListener(FormEvent.ONCHANGE);
 		columnAttribute.add(rowPos, attribute.getName());
 
-		// 2b) Operator selector
+		// 2b) LimitCheck selector
 		final String[] values = OperatorManager.getRegisteredAndAlreadyTranslatedOperatorLabels(getLocale(), operatorKeys);
 		final FormItem operator = uifactory.addDropdownSingleselect(PRE_OPERATOR + rowCreationCounter, null, flc, operatorKeys, values, null);
 		operator.setUserObject(Integer.valueOf(rowPos));

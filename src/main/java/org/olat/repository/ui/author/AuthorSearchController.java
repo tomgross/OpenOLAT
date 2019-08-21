@@ -26,6 +26,7 @@ import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import org.olat.core.commons.persistence.DB;
 import org.olat.core.commons.services.license.LicenseModule;
 import org.olat.core.commons.services.license.LicenseService;
 import org.olat.core.commons.services.license.LicenseType;
@@ -83,6 +84,8 @@ public class AuthorSearchController extends FormBasicController implements Exten
 	private boolean cancelAllowed;
 	private boolean enabled = true;
 	
+	@Autowired
+	private DB dbInstance;
 	@Autowired
 	private RepositoryHandlerFactory repositoryHandlerFactory;
 	@Autowired
@@ -175,11 +178,11 @@ public class AuthorSearchController extends FormBasicController implements Exten
 		
 		FormLayoutContainer buttonLayout = FormLayoutContainer.createButtonLayout("button_layout", getTranslator());
 		formLayout.add(buttonLayout);
-		searchButton = uifactory.addFormLink("search", buttonLayout, Link.BUTTON);
-		searchButton.setCustomEnabledLinkCSS("btn btn-primary");
 		if(cancelAllowed) {
 			uifactory.addFormCancelButton("quick.search", buttonLayout, ureq, getWindowControl());
 		}
+		searchButton = uifactory.addFormLink("search", buttonLayout, Link.BUTTON);
+		searchButton.setCustomEnabledLinkCSS("btn btn-primary");
 	}
 	
 	public void update(SearchEvent se) {
@@ -257,8 +260,7 @@ public class AuthorSearchController extends FormBasicController implements Exten
 	 */
 	public Set<String> getRestrictedTypes() {
 		if(types.isAtLeastSelected(1)) {
-			Set<String> selectedTypes = new HashSet<>(types.getSelectedKeys());
-			return selectedTypes;
+			return new HashSet<>(types.getSelectedKeys());
 		}
 		return null;
 	}
@@ -296,10 +298,18 @@ public class AuthorSearchController extends FormBasicController implements Exten
 	protected boolean validateFormLogic(UserRequest ureq) {
 		if(!enabled) return true;
 		
+		author.clearError();
 		if (displayName.isEmpty() && author.isEmpty() && description.isEmpty() && (id != null && id.isEmpty()))	{
 			showWarning("cif.error.allempty");
-			return false;
+			//return false;
 		}
+		
+		int maxSize = dbInstance.isMySQL() ? 5 : 3;
+		if(StringHelper.containsNonWhitespace(author.getValue()) && author.getValue().length() < maxSize) {
+			author.setErrorKey("form.error.tooshort", new String[] { Integer.toString(maxSize) });
+			//return false;
+		}
+		
 		return true;
 	}
 
@@ -317,10 +327,8 @@ public class AuthorSearchController extends FormBasicController implements Exten
 	
 	@Override
 	protected void formInnerEvent (UserRequest ureq, FormItem source, FormEvent event) {
-		if(enabled) {
-			if (source == searchButton) {
-				fireSearchEvent(ureq);
-			}
+		if(enabled && source == searchButton) {
+			fireSearchEvent(ureq);
 		}
 	}
 	
@@ -335,8 +343,8 @@ public class AuthorSearchController extends FormBasicController implements Exten
 		e.setResourceUsage(getResourceUsage());
 		e.setClosed(getClosed());
 		if (licenseModule.isEnabled(licenseHandler)) {
-			Set<Long> keys = licenseEl.getSelectedKeys().stream().map(Long::valueOf).collect(Collectors.toSet());
-			e.setLicenseTypeKeys(keys);
+			Set<Long> licenceKeys = licenseEl.getSelectedKeys().stream().map(Long::valueOf).collect(Collectors.toSet());
+			e.setLicenseTypeKeys(licenceKeys);
 		}
 		fireEvent(ureq, e);
 	}

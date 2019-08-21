@@ -92,9 +92,9 @@ import org.olat.core.gui.components.tree.MenuTreeItem;
 import org.olat.core.gui.components.tree.TreeModel;
 import org.olat.core.gui.control.WindowBackOffice;
 import org.olat.core.gui.control.WindowControl;
+import org.olat.core.gui.media.MediaResource;
 import org.olat.core.gui.themes.Theme;
 import org.olat.core.gui.translator.Translator;
-import org.olat.core.gui.util.CSSHelper;
 import org.olat.core.util.StringHelper;
 import org.olat.core.util.UserSession;
 import org.olat.core.util.ValidationStatus;
@@ -404,9 +404,13 @@ public class FormUIFactory {
 		formLayout.add(ss);
 		return ss;
 	}
-
+	
 	public SingleSelection addDropdownSingleselect(final String name, FormItemContainer formLayout, final String[] theKeys, final String[] theValues) {
 		return addDropdownSingleselect(name, name, name, formLayout, theKeys, theValues, null);
+	}
+
+	public SingleSelection addDropdownSingleselect(final String name, final String i18nLabel, FormItemContainer formLayout, final String[] theKeys, final String[] theValues) {
+		return addDropdownSingleselect(name, name, i18nLabel, formLayout, theKeys, theValues, null);
 	}
 
 	/**
@@ -572,15 +576,6 @@ public class FormUIFactory {
 		return addTextElement(i18nLabel, i18nLabel, maxLen, initialValue, formLayout);
 	}
 	
-	/**
-	 * 
-	 * @param name
-	 * @param maxLen
-	 * @param initialValue
-	 * @param i18nLabel
-	 * @param formLayout
-	 * @return
-	 */
 	public TextElement addTextElement(String name, final String i18nLabel, final int maxLen, String initialValue,
 			FormItemContainer formLayout) {
 		String val = initialValue == null ? "" : initialValue;
@@ -662,7 +657,7 @@ public class FormUIFactory {
 	/**
 	 * Add a multi line text element, using the provided name as i18n key for the label, no max length check set, and fits content hight at maximium (100lnes).
 	 * 
-	 * @see FormUIFactory#addTextAreaElement(String, String, int, int, int, boolean, String, FormItemContainer)
+	 * @see FormUIFactory#addTextAreaElement(String, String, int, int, int, boolean, boolean, String, FormItemContainer)
 	 * @param name
 	 * @param rows
 	 * @param cols
@@ -671,7 +666,7 @@ public class FormUIFactory {
 	 * @return
 	 */
 	public TextAreaElement addTextAreaElement(String name, final int rows, final int cols, String initialValue,	FormItemContainer formLayout) {
-		return addTextAreaElement(name, name, -1, rows, cols, true, initialValue, formLayout);
+		return addTextAreaElement(name, name, -1, rows, cols, true, false, initialValue, formLayout);
 	}
 	
 	/**
@@ -684,13 +679,14 @@ public class FormUIFactory {
 	 *          available space
 	 * @param isAutoHeightEnabled true: element expands to fit content height,
 	 *          (max 100 lines); false: specified rows used
+	 * @param fixedFontWidth 
 	 * @param initialValue Initial value
 	 * @param formLayout
 	 * @return
 	 */
-	public TextAreaElement addTextAreaElement(String name, final String i18nLabel, final int maxLen, final int rows, final int cols, boolean isAutoHeightEnabled, String initialValue,
-		FormItemContainer formLayout) {
-		TextAreaElement te = new TextAreaElementImpl(name, initialValue, rows, cols, isAutoHeightEnabled) {
+	public TextAreaElement addTextAreaElement(String name, final String i18nLabel, final int maxLen, final int rows, final int cols, boolean isAutoHeightEnabled, boolean fixedFontWidth,
+		String initialValue, FormItemContainer formLayout) {
+		TextAreaElement te = new TextAreaElementImpl(name, initialValue, rows, cols, isAutoHeightEnabled, fixedFontWidth) {
 			{
 				setNotLongerThanCheck(maxLen, "text.element.error.notlongerthan");
 				// the text.element.error.notlongerthan uses a variable {0} that
@@ -806,6 +802,19 @@ public class FormUIFactory {
 		// Now configure editor
 		Theme theme = wControl.getWindowBackOffice().getWindow().getGuiTheme();
 		rte.getEditorConfiguration().setConfigProfileFormCompactEditor(usess, theme, baseContainer);			
+		// Add to form and finish
+		formLayout.add(rte);
+		return rte;
+	}
+	
+	public RichTextElement addRichTextElementForParagraphEditor(String name, String i18nLabel, String initialHTMLValue, int rows,
+			int cols, FormItemContainer formLayout, WindowControl wControl) {
+		// Create rich text element with bare bone configuration
+		RichTextElement rte = new RichTextElementImpl(name, initialHTMLValue, rows, cols, formLayout.getRootForm(), formLayout.getTranslator().getLocale());
+		setLabelIfNotNull(i18nLabel, rte);
+		// Now configure editor
+		rte.getEditorConfiguration().setConfigProfileFormParagraphEditor(wControl.getWindowBackOffice().getWindow().getGuiTheme());		
+		rte.getEditorConfiguration().setPathInStatusBar(false);
 		// Add to form and finish
 		formLayout.add(rte);
 		return rte;
@@ -1088,8 +1097,6 @@ public class FormUIFactory {
 		DownloadLinkImpl fte = new DownloadLinkImpl(name);
 		fte.setLinkText(linkTitle);
 		fte.setDownloadItem(file);
-		String css = CSSHelper.createFiletypeIconCssClassFor(file.getName());
-		fte.setIconLeftCSS("o_icon o_icon-fw " + css);
 		setLabelIfNotNull(i18nLabel, fte);
 		if(formLayout != null) {
 			formLayout.add(fte);
@@ -1110,8 +1117,6 @@ public class FormUIFactory {
 		DownloadLinkImpl fte = new DownloadLinkImpl(name);
 		fte.setLinkText(linkTitle);
 		fte.setDownloadItem(file);
-		String css = CSSHelper.createFiletypeIconCssClassFor(file.getName());
-		fte.setIconLeftCSS("o_icon o_icon-fw " + css);
 		setLabelIfNotNull(i18nLabel, fte);
 		if(formLayout != null) {
 			((FlexiTableElementImpl)formLayout).addFormItem(fte);
@@ -1123,8 +1128,17 @@ public class FormUIFactory {
 		DownloadLinkImpl fte = new DownloadLinkImpl(name);
 		fte.setLinkText(linkTitle);
 		fte.setDownloadItem(file);
-		String css = CSSHelper.createFiletypeIconCssClassFor(file.getName());
-		fte.setIconLeftCSS("o_icon o_icon-fw " + css);
+		setLabelIfNotNull(i18nLabel, fte);
+		if(formLayout != null) {
+			((FlexiTableElementImpl)formLayout).addFormItem(fte);
+		}
+		return fte;
+	}
+	
+	public DownloadLink addDownloadLink(String name,  String linkTitle, String i18nLabel, MediaResource resource, FlexiTableElement formLayout) {
+		DownloadLinkImpl fte = new DownloadLinkImpl(name);
+		fte.setLinkText(linkTitle);
+		fte.setDownloadMedia(resource);
 		setLabelIfNotNull(i18nLabel, fte);
 		if(formLayout != null) {
 			((FlexiTableElementImpl)formLayout).addFormItem(fte);
@@ -1293,4 +1307,5 @@ public class FormUIFactory {
 		}
 		return ratingCmp;
 	}
+	
 }

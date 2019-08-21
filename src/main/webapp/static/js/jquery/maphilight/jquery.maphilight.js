@@ -173,7 +173,7 @@
 
 			map = $('map[name="'+usemap.substr(1)+'"]');
 
-			if(!(img.is('img,input[type="image"]') && map.size() > 0)) {
+			if(!(img.is('img,input[type="image"]') && usemap && map.length > 0)) {
 				return;
 			}
 
@@ -191,13 +191,23 @@
 
 			wrap = $('<div></div>').css({
 				display:'block',
-				background:'url("'+this.src+'")',
+				"background-image":'url("'+this.src+'")',
 				"background-size": imgWidth + 'px ' + imgHeight + 'px',
 				position:'relative',
 				padding:0,
-				width:imgWidth,
-				height:imgHeight
+				width:this.width,
+				height:this.height
 			});
+			
+			try {// try again
+				var imageSrc = this.src;
+				wrap.each(function(index, el) {
+					el.style.setProperty("background-image", "url('" + imageSrc + "')", "important");
+				});
+			} catch(e) {
+				if(window.console) console.log(e);
+			}
+
 			if(options.wrapClass) {
 				if(options.wrapClass === true) {
 					wrap.addClass($(this).attr('class'));

@@ -19,7 +19,7 @@
  */
 package org.olat.modules.qpool.restapi;
 
-import static org.olat.restapi.security.RestSecurityHelper.isQuestionPoolManager;
+import static org.olat.restapi.security.RestSecurityHelper.getRoles;
 
 import java.io.File;
 import java.util.Collections;
@@ -43,7 +43,8 @@ import javax.ws.rs.core.Response.Status;
 import org.olat.basesecurity.BaseSecurity;
 import org.olat.core.CoreSpringFactory;
 import org.olat.core.id.Identity;
-import org.olat.core.logging.OLog;
+import org.olat.core.id.Roles;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.i18n.I18nManager;
 import org.olat.modules.qpool.QPoolService;
@@ -55,6 +56,7 @@ import org.olat.restapi.security.RestSecurityHelper;
 import org.olat.restapi.support.MultipartReader;
 import org.olat.user.restapi.UserVO;
 import org.olat.user.restapi.UserVOFactory;
+import org.springframework.stereotype.Component;
 
 /**
  * 
@@ -62,10 +64,11 @@ import org.olat.user.restapi.UserVOFactory;
  * @author srosse, stephane.rosse@frentix.com, http://www.frentix.com
  *
  */
+@Component
 @Path("qpool/items")
 public class QuestionPoolWebService {
 	
-	private static final OLog log = Tracing.createLoggerFor(QuestionPoolWebService.class);
+	private static final Logger log = Tracing.createLoggerFor(QuestionPoolWebService.class);
 	
 	@PUT
 	@Produces({MediaType.APPLICATION_XML, MediaType.APPLICATION_JSON})
@@ -307,5 +310,14 @@ public class QuestionPoolWebService {
 		List<QuestionItemShort> items = Collections.singletonList(item);
 		poolService.removeAuthors(authors, items);
 		return Response.ok().build();
-	}	
+	}
+	
+	private boolean isQuestionPoolManager(HttpServletRequest request) {
+		try {
+			Roles roles = getRoles(request);
+			return (roles.isPoolManager() || roles.isAdministrator());
+		} catch (Exception e) {
+			return false;
+		}
+	}
 }

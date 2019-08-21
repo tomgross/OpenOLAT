@@ -29,9 +29,7 @@ package org.olat.restapi;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
-import java.io.File;
 import java.io.IOException;
-import java.io.InputStream;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.URL;
@@ -62,7 +60,7 @@ import org.olat.course.run.userview.VisibleTreeFilter;
 import org.olat.repository.RepositoryEntry;
 import org.olat.restapi.support.vo.FolderVOes;
 import org.olat.test.JunitTestHelper;
-import org.olat.test.OlatJerseyTestCase;
+import org.olat.test.OlatRestTestCase;
 import org.springframework.beans.factory.annotation.Autowired;
 
 /**
@@ -70,7 +68,7 @@ import org.springframework.beans.factory.annotation.Autowired;
  * @author srosse, stephane.rosse@frentix.com, http://www.frentix.com
  *
  */
-public class UserFoldersTest extends OlatJerseyTestCase {
+public class UserFoldersTest extends OlatRestTestCase {
 
 	private static boolean setup;
 	private static ICourse myCourse;
@@ -81,14 +79,10 @@ public class UserFoldersTest extends OlatJerseyTestCase {
 	
 	@Before
 	public void setUp() throws Exception {
-		super.setUp();
-		
 		if(setup) return;
 		
-		URL courseWithForumsUrl = UserFoldersTest.class.getResource("myCourseWS.zip");
-		Assert.assertNotNull(courseWithForumsUrl);
-		File courseWithForums = new File(courseWithForumsUrl.toURI());
-		myCourseRe = CourseFactory.deployCourseFromZIP(courseWithForums, UUID.randomUUID().toString(), 4);
+		URL courseUrl = UserFoldersTest.class.getResource("myCourseWS.zip");
+		myCourseRe = JunitTestHelper.deployCourse(null, "My course", courseUrl);// 4);
 		Assert.assertNotNull(myCourseRe);
 		myCourse = CourseFactory.loadCourse(myCourseRe);
 
@@ -114,14 +108,13 @@ public class UserFoldersTest extends OlatJerseyTestCase {
 		HttpGet method = conn.createGet(uri, MediaType.APPLICATION_JSON, true);
 		HttpResponse response = conn.execute(method);
 		assertEquals(200, response.getStatusLine().getStatusCode());
-		InputStream body = response.getEntity().getContent();
-		FolderVOes folders = conn.parse(body, FolderVOes.class);
+		FolderVOes folders = conn.parse(response.getEntity(), FolderVOes.class);
 		Assert.assertNotNull(folders);
 		Assert.assertNotNull(folders.getFolders());
 		Assert.assertEquals(0, folders.getFolders().length);
 		
 		//subscribe to the forum
-		IdentityEnvironment ienv = new IdentityEnvironment(id, new Roles(false, false, false, false, false, false, false));
+		IdentityEnvironment ienv = new IdentityEnvironment(id, Roles.userRoles());
 		new CourseTreeVisitor(myCourse, ienv).visit(new Visitor() {
 			@Override
 			public void visit(INode node) {
@@ -141,8 +134,7 @@ public class UserFoldersTest extends OlatJerseyTestCase {
 		HttpGet method2 = conn.createGet(uri, MediaType.APPLICATION_JSON, true);
 		HttpResponse response2 = conn.execute(method2);
 		assertEquals(200, response2.getStatusLine().getStatusCode());
-		InputStream body2 = response2.getEntity().getContent();
-		FolderVOes folders2 = conn.parse(body2, FolderVOes.class);
+		FolderVOes folders2 = conn.parse(response2.getEntity(), FolderVOes.class);
 		Assert.assertNotNull(folders2);
 		Assert.assertNotNull(folders2.getFolders());
 		Assert.assertEquals(1, folders2.getFolders().length);

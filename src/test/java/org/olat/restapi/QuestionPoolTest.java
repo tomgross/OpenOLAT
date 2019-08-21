@@ -44,8 +44,6 @@ import org.apache.http.entity.ContentType;
 import org.apache.http.entity.mime.HttpMultipartMode;
 import org.apache.http.entity.mime.MultipartEntityBuilder;
 import org.apache.http.util.EntityUtils;
-import org.codehaus.jackson.map.ObjectMapper;
-import org.codehaus.jackson.type.TypeReference;
 import org.junit.Assert;
 import org.junit.Test;
 import org.olat.core.commons.persistence.DB;
@@ -60,9 +58,12 @@ import org.olat.modules.qpool.model.QItemType;
 import org.olat.modules.qpool.restapi.QuestionItemVO;
 import org.olat.modules.qpool.restapi.QuestionItemVOes;
 import org.olat.test.JunitTestHelper;
-import org.olat.test.OlatJerseyTestCase;
+import org.olat.test.OlatRestTestCase;
 import org.olat.user.restapi.UserVO;
 import org.springframework.beans.factory.annotation.Autowired;
+
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 /**
  * 
@@ -70,7 +71,7 @@ import org.springframework.beans.factory.annotation.Autowired;
  * @author srosse, stephane.rosse@frentix.com, http://www.frentix.com
  *
  */
-public class QuestionPoolTest extends OlatJerseyTestCase {
+public class QuestionPoolTest extends OlatRestTestCase {
 	
 	@Autowired
 	private DB dbInstance;
@@ -149,7 +150,7 @@ public class QuestionPoolTest extends OlatJerseyTestCase {
 		HttpGet method = conn.createGet(request, MediaType.APPLICATION_JSON, true);
 		HttpResponse response = conn.execute(method);
 		Assert.assertEquals(200, response.getStatusLine().getStatusCode());
-		UserVO user = conn.parse(response.getEntity().getContent(), UserVO.class);
+		UserVO user = conn.parse(response.getEntity(), UserVO.class);
 		//check
 		Assert.assertNotNull(user);
 		Assert.assertTrue(author.getKey().equals(user.getKey()));

@@ -15,6 +15,8 @@ o_info.linkbusy = false;
 o_info.scrolling = false;
 //debug flag for this file, to enable debugging to the olat.log set JavaScriptTracingController to level debug
 o_info.debug = true;
+// o_info.drake is supervised and linked to .o_drake DOM element
+o_info.drakes = new Array();
 
 /**
  * The BLoader object can be used to :
@@ -35,7 +37,7 @@ var BLoader = {
 		jQuery('head script[src]').each(function(s,t) {
 			if (jQuery(t).attr('src').indexOf(jsURL) != -1) {
 				notLoaded = false;
-			};
+			}
 		});
 		// second check for script loaded via ajax call
 		if (jQuery.inArray(jsURL, this._ajaxLoadedJS) != -1) notLoaded = false;
@@ -119,13 +121,12 @@ var BLoader = {
 					pos = sheets.length;
 				}
 				// H: stylesheet not yet inserted -> insert				
-				var mystyle = doc.createStyleSheet(cssURL, pos);
+				doc.createStyleSheet(cssURL, pos);
 			} else { // mozilla
 				// double check: first try to remove the <link rel="stylesheet"...> tag, using the id.
 				var el = jQuery('#' +linkid);
-				if (el && el.size() > 0) {
+				if (el && el.length > 0) {
 					if (o_info.debug) o_logwarn("BLoader::loadCSS: stylesheet already found in doc when trying to add:"+cssURL+", with id "+linkid);
-					return;
 				} else {
 					// create the new stylesheet and convince the browser to load the url using @import with protocol 'data'
 					//var styles = '@import url("'+cssURL+'");';
@@ -505,7 +506,7 @@ function o_ainvoke(r) {
 	o_info.inainvoke = true;
 	var cmdcnt = r["cmdcnt"];
 	if (cmdcnt > 0) {
-		// let everybody know dom replacement has finished
+		// let everybody know dom replacement has started
 		jQuery(document).trigger("oo.dom.replacement.before");
 
 		b_changedDomEl = new Array();
@@ -539,7 +540,6 @@ function o_ainvoke(r) {
 							if (o_info.debug) o_log("c2: redraw: "+c1["cname"]+ " ("+ciid+") "+c1["hfragsize"]+" bytes, listener(s): "+c1["clisteners"]);
 							//var con = jQuery(hfrag).find('script').remove(); //Strip scripts
 							var hdrco = hdr+"\n\n"+hfrag;
-							var inscripts = '';//jQuery(hfrag).find('script');//hfrag.extractScripts();
 							
 							var replaceElement = false;
 							var newcId = "o_c"+ciid;
@@ -558,6 +558,24 @@ function o_ainvoke(r) {
 										if(typeof top.tinymce != undefined) {
 											top.tinymce.remove('#' + edId);
 										}
+									} catch(e) {
+										if(window.console) console.log(e);
+									}
+								}
+								
+								var bTooltips = jQuery('body>div.tooltip.in');
+								for(var u=0; u<bTooltips.length; u++) {
+									try {
+										jQuery(bTooltips.get(u)).remove();
+									} catch(e) {
+										if(window.console) console.log(e);
+									}
+								}
+								
+								var jTooltips = jQuery('body>div.ui-tooltip');
+								for(var v=0; v<jTooltips.length; v++) {
+									try {
+										jQuery(jTooltips.get(v)).remove();
 									} catch(e) {
 										if(window.console) console.log(e);
 									}
@@ -586,13 +604,9 @@ function o_ainvoke(r) {
 									b_changedDomEl.push(newcId);
 								}
 								newc = null;
+
+								checkDrakes();
 								
-								// execute inline scripts
-								if (inscripts != "") {
-									inscripts.each( function(val){
-										BLoader.executeGlobalJS(val, 'o_ainvoker::inscripts');}
-									);
-								}
 								if (jsol != "") {
 									BLoader.executeGlobalJS(jsol, 'o_ainvoker::jsol');
 								}
@@ -795,6 +809,14 @@ function o_openPopUp(url, windowname, width, height, menubar) {
 	}
 }
 
+function o_openTab(url) {
+	var win = window.open(url, '_blank');
+	win.focus();
+	if (o_info.linkbusy) {
+		o_afterserver();
+	}
+}
+
 function b_handleFileUploadFormChange(fileInputElement, fakeInputElement, saveButton) {
 
 	fileInputElement.setCustomValidity('');
@@ -953,31 +975,45 @@ OPOL.getMainColumnsMaxHeight =  function(){
 };
 
 OPOL.adjustHeight = function() {
-	// Adjust the height of col1 2 and 3 based on the max column height. 
-	// This is necessary to implement layouts where the three columns have different
-	// backgounds and to enlarge the menu and content area to always show the whole 
-	// content. It is also required by the left menu offcanvas feature.
+	// Adjust the height of col1 and 3 based on the max column height. 
+	// This is necessary to implement layouts where the two columns have different
+	// backgrounds and to enlarge the menu and content area to always show the whole 
+	// content. It is also required by the left menu off-canvas feature.
 	try {
-		var contentHeight = 0;
-		col1 = jQuery('#o_main_left_content').outerHeight(true);
-		col2 = jQuery('#o_main_right_content').outerHeight(true);
-		col3 = jQuery('#o_main_center_content').outerHeight(true);
+		var col1El = jQuery('#o_main_left_content');
+		var col1 = col1El.length == 0 ? 0 : col1El.outerHeight(true);
+		var col2El = jQuery('#o_main_right_content');
+		var col2 = col2El.length == 0 ? 0 : col2El.outerHeight(true);
+		var col3El = jQuery('#o_main_center_content');
+		var col3 = col3El.length == 0 ? 0 : col3El.outerHeight(true);
 
-		contentHeight = Math.max(col1, col2, col3);
-		// Assign new col height
-		if (col1 != null){
+		var contentHeight = Math.max(col1, col2, col3);
+		// Assign new column height
+		if (col1El.length > 0) {
 			jQuery('#o_main_left').css({'min-height' : contentHeight + "px"});
 		}
-		if (col2 != null){
+		if (col2El.length > 0) {
 			jQuery('#o_main_right').css({'min-height' : contentHeight + "px"});
 		}
-		if (col3 != null){
+		if (col3El.length > 0) {
 			jQuery('#o_main_center').css({'min-height' : contentHeight + "px"});
 		}
 	} catch (e) {
-		if(window.console)	console.log(e);			
+		if(window.console)	console.log(e);
 	}
 };
+
+/* Set the container page width to full width of the window or use standard page width */
+OPOL.setContainerFullWidth = function(full) {
+	if (full) {
+		jQuery('body').addClass('o_width_full');				
+	} else {
+		jQuery('body').removeClass('o_width_full');		
+	}
+	// Update navbar calculations of sites and tabs
+	jQuery.proxy(OPOL.navbar.onPageWidthChangeCallback,OPOL.navbar)();
+}
+
 /* Register to resize event and fire an event when the resize is finished */
 jQuery(window).resize(function() {
 	clearTimeout(o_info.resizeId);
@@ -1027,23 +1063,25 @@ function o_popover(id, contentId, loc) {
 
 function o_popoverWithTitle(id, contentId, title, loc) {
 	if(typeof(loc)==='undefined') loc = 'bottom';
-
-	return jQuery('#' + id).popover({
+	
+	var popover = jQuery('#' + id).popover({
     	placement : loc,
     	html: true,
     	title: title,
     	trigger: 'click',
     	container: 'body',
     	content: function() { return jQuery('#' + contentId).clone().html(); }
-	}).on('shown.bs.popover', function () {
+	});
+	popover.on('shown.bs.popover', function () {
 		var clickListener = function (e) {
-			jQuery('#' + id).popover('destroy');
+			jQuery('#' + id).popover('hide');
 			jQuery('body').unbind('click', clickListener);
 		};
 		setTimeout(function() {
 			jQuery('body').on('click', clickListener);
 		},5);
 	});
+	return popover;
 }
 
 function o_shareLinkPopup(id, text, loc) {
@@ -1117,8 +1155,6 @@ function b_resizeIframeToMainMaxHeight(iframeId) {
 		var colsHeight = OPOL.getMainColumnsMaxHeight() - 110;
 		var potentialHeight = o_viewportHeight() - 100;// remove some padding etc.
 		potentialHeight = potentialHeight - theIframe.offset().top;
-		var elem = jQuery('#b_footer');
-		if (elem != 'undefined' && elem != null) potentialHeight = potentialHeight - elem.outerHeight(true);
 		// resize now
 		var height = (potentialHeight > colsHeight ? potentialHeight : colsHeight);
 		theIframe.height(height);
@@ -1590,6 +1626,40 @@ function o_toggleMark(el) {
 	}
 }
 
+/**
+ * Register a dragula object, the object will be associated
+ * with a DOM element with the .o_drake class. If the class
+ * is absent of the DOM, all drakes will be desstroyed.
+ * 
+ * @param drake
+ * @returns drake
+ */
+function registerDrake(drake) {
+	o_info.drakes.push(drake);
+	return drake;
+}
+
+function destroyDrakes() {
+	if(o_info.drakes !== "undefined" && o_info.drakes != null && o_info.drakes.length > 0) {
+		for(var i=o_info.drakes.length; i-->0; ) {
+			try {
+				o_info.drakes[i].destroy();
+			} catch(e) {
+				if(window.console) console.log(e);
+			}
+			o_info.drakes.pop();
+		}
+	}
+}
+
+function checkDrakes() {
+	if(o_info.drakes !== "undefined" && o_info.drakes != null && o_info.drakes.length > 0) {
+		if(jQuery(".o_drake").length == 0) {
+			destroyDrakes();
+		}
+	}
+}
+
 //try to mimic the FileUtils.normalizeFilename method
 function o_normalizeFilename(filename) {
 	filename = filename.replace(/\s/g, "_")
@@ -2050,4 +2120,157 @@ var BDebugger = {
 		}
 	}
 }
- 
+
+var OOEdusharing = {
+		
+	start: function() {
+		if (o_info.edusharing_enabled) {
+			OOEdusharing.render();
+			jQuery(document).on("oo.dom.replacement.after", OOEdusharing.render);
+			OOEdusharing.enableMetadataToggler();
+		}
+	},
+		
+	replaceWithSpinner: function(node, width, height) {
+		var spinnerHtml = "<div style='";
+		if (width > 0) {
+			spinnerHtml += "width:" + width + "px;";
+		}
+		if (height > 0) {
+			spinnerHtml += "height:" + height + "px;";
+		}
+		spinnerHtml += "'>";
+		spinnerHtml += "<div class='edusharing_spinner_inner'><div class='edusharing_spinner1'></div></div>";
+		spinnerHtml += "<div class='edusharing_spinner_inner'><div class='edusharing_spinner2'></div></div>";
+		spinnerHtml += "<div class='edusharing_spinner_inner'><div class='edusharing_spinner3'></div></div>";
+		spinnerHtml += "</div>";
+		
+		var spinner = jQuery(spinnerHtml);
+		node.before(spinner);
+		node.remove();
+		return spinner;
+	},
+	
+	replaceGoTo: function(html, identifier) {
+		var url = o_info.uriprefix.replace("auth", "edusharing") + "goto?identifier=" + identifier;
+		html = html.replace("{{{LMS_INLINE_HELPER_SCRIPT}}}", url)
+		return html;
+	},
+	
+	replaceWithRendered: function(node, identifier, width, height, esClass, showLicense, showInfos, isIFrame) {
+		var url = o_info.uriprefix.replace("auth", "edusharing") + "render?identifier=" + identifier;
+		if (width > 0) {
+			url = url + "&width=" + width;
+		}
+		if (height) {
+			url = url + "&height=" + height;
+		}
+		
+		var containerHtml = "<div class='o_edusharing_container";
+		if (typeof esClass != 'undefined') {
+			containerHtml += " " + esClass;
+		}
+		if (isIFrame) {
+			containerHtml += " o_in_iframe";
+		}
+		if ('hide' === showLicense) {
+			containerHtml += " o_hide_license";
+		}
+		if ('hide' === showInfos) {
+			containerHtml += " o_hide_infos";
+		}
+		containerHtml += "'>";
+		containerHtml += "</div>";
+		
+		var container = jQuery(containerHtml);
+		
+		jQuery.ajax({
+			type: "GET",
+			url: url,
+			dataType : 'html',
+			success : function(data){
+				var goToData = OOEdusharing.replaceGoTo(data, identifier);
+				var esNode = container.append(goToData);
+				node.replaceWith(esNode);
+			},
+			error : function(XMLHttpRequest, textStatus, errorThrown) {
+				node.replaceWith("<div class='o_warning'>edu-sharing not available</div>");
+			}
+		})
+	},
+		
+	replace: function(node, isIFrame) {
+		var identifier = node.data("es_identifier");
+		var width = node.attr("width");
+		var height = node.attr("height");
+		var esClass = node.attr('class');
+		var showLicense = node.data("es_show_license");
+		var showInfos = node.data("es_show_infos");
+		
+		var spinner = OOEdusharing.replaceWithSpinner(node, width, height);
+		OOEdusharing.replaceWithRendered(spinner, identifier, width, height, esClass, showLicense, showInfos, isIFrame);
+	},
+	
+	/**
+	 * Replace the edu-sharing nodes with the real resources from the edu-sharing rendering service.
+	 */
+	render: function() {
+		var esNodes = jQuery("[data-es_identifier]");
+		if (esNodes.length > 0) {
+			esNodes.each(function() {
+				var node = jQuery( this );
+				OOEdusharing.replace(node, false);
+			});
+		}
+		// Handle inside internal iFrames as well
+		var iFrames = jQuery(".o_iframe_rel");
+		if (iFrames.length > 0) {
+			iFrames.each(function() {
+				var iFrame = jQuery( this );
+				iFrame.on('load', function(){
+					iFrame.contents().on('click', OOEdusharing.toggleMetadata);
+					var iFrameEsNodes = iFrame.contents().find("[data-es_identifier]");
+					if (iFrameEsNodes.length > 0) {
+						iFrameEsNodes.each(function() {
+							var iFrameEsNode = jQuery( this );
+							OOEdusharing.replace(iFrameEsNode, true);
+						});
+					}
+				});
+			});
+		}
+	},
+	
+	/**
+	 * Toggle edu-sharing metadata.
+	 * see https://github.com/edu-sharing/plugin-moodle/blob/master/filter/edusharing/amd/src/edu.js
+	 */
+	toggleMetadata: function (e) {
+		if (jQuery(e.target).closest(".edusharing_metadata").length) {
+			//clicked inside ".edusharing_metadata" - do nothing
+		} else if (jQuery(e.target).closest(".edusharing_metadata_toggle_button").length) {
+			jQuery(".edusharing_metadata").hide();
+			toggle_button = jQuery(e.target);
+			metadata = toggle_button.parent().find(".edusharing_metadata");
+			if (metadata.hasClass('open')) {
+				metadata.toggleClass('open');
+				metadata.hide();
+			} else {
+				jQuery(".edusharing_metadata").removeClass('open');
+				metadata.toggleClass('open');
+				metadata.show();
+			}
+		} else {
+			jQuery(".edusharing_metadata").hide();
+			jQuery(".edusharing_metadata").removeClass('open');
+		}
+	},
+	enableMetadataToggler: function() {
+		jQuery(document).click(OOEdusharing.toggleMetadata);
+	}
+}
+
+jQuery( document ).ready(function() {
+	OOEdusharing.start();
+});
+

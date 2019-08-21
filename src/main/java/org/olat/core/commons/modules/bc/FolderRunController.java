@@ -31,14 +31,15 @@ import java.util.Enumeration;
 import java.util.Iterator;
 import java.util.List;
 
+import org.apache.logging.log4j.Logger;
 import org.olat.core.CoreSpringFactory;
 import org.olat.core.commons.controllers.linkchooser.CustomLinkTreeModel;
 import org.olat.core.commons.modules.bc.commands.CmdCreateFile;
 import org.olat.core.commons.modules.bc.commands.CmdCreateFolder;
 import org.olat.core.commons.modules.bc.commands.CmdDelete;
-import org.olat.core.commons.modules.bc.commands.CmdEditContent;
 import org.olat.core.commons.modules.bc.commands.CmdEditQuota;
 import org.olat.core.commons.modules.bc.commands.CmdMoveCopy;
+import org.olat.core.commons.modules.bc.commands.CmdOpenContent;
 import org.olat.core.commons.modules.bc.commands.FolderCommand;
 import org.olat.core.commons.modules.bc.commands.FolderCommandFactory;
 import org.olat.core.commons.modules.bc.commands.FolderCommandStatus;
@@ -65,7 +66,6 @@ import org.olat.core.id.context.BusinessControl;
 import org.olat.core.id.context.BusinessControlFactory;
 import org.olat.core.id.context.ContextEntry;
 import org.olat.core.id.context.StateEntry;
-import org.olat.core.logging.OLog;
 import org.olat.core.logging.Tracing;
 import org.olat.core.logging.activity.CoreLoggingResourceable;
 import org.olat.core.logging.activity.ILoggingAction;
@@ -73,8 +73,8 @@ import org.olat.core.logging.activity.ThreadLocalUserActivityLogger;
 import org.olat.core.util.StringHelper;
 import org.olat.core.util.UserSession;
 import org.olat.core.util.resource.OresHelper;
-import org.olat.core.util.vfs.OlatRelPathImpl;
 import org.olat.core.util.vfs.Quota;
+import org.olat.core.util.vfs.QuotaManager;
 import org.olat.core.util.vfs.VFSContainer;
 import org.olat.core.util.vfs.VFSItem;
 import org.olat.core.util.vfs.VFSLeaf;
@@ -99,7 +99,7 @@ import org.springframework.beans.factory.annotation.Autowired;
  */
 public class FolderRunController extends BasicController implements Activateable2 {
 
-	private OLog log = Tracing.createLoggerFor(this.getClass());
+	private static final Logger log = Tracing.createLoggerFor(FolderRunController.class);
 	
 	public static final String ACTION_PRE = ".action";
 	public static final String FORM_ACTION = "action";
@@ -118,6 +118,8 @@ public class FolderRunController extends BasicController implements Activateable
 	
 	@Autowired
 	private SearchModule searchModule;
+	@Autowired
+	private QuotaManager quotaManager;
 
 	/**
 	 * Default Constructor, results in showing users personal folder, used by Spring
@@ -126,7 +128,7 @@ public class FolderRunController extends BasicController implements Activateable
 	 * @param wControl
 	 */
 	public FolderRunController(UserRequest ureq, WindowControl wControl) {
-		this(new BriefcaseWebDAVMergeSource(ureq.getIdentity(), UserManager.getInstance().getUserDisplayName(ureq.getIdentity())),
+		this(new BriefcaseWebDAVMergeSource(ureq.getIdentity(), ureq.getUserSession().getRoles(), UserManager.getInstance().getUserDisplayName(ureq.getIdentity())),
 				true, true, true, ureq, wControl);
 		//set the resource URL to match the indexer ones
 		setResourceURL("[Identity:" + ureq.getIdentity().getKey() + "][userfolder:0]");
@@ -268,7 +270,7 @@ public class FolderRunController extends BasicController implements Activateable
 			CustomLinkTreeModel customLinkTreeModel, VFSContainer externContainerForCopy) {
 
 		super(ureq, wControl);
-
+	
 		folderContainer = createVelocityContainer("run");
 		editQuotaButton = LinkFactory.createButtonSmall("editQuota", folderContainer, this);
 
@@ -279,9 +281,9 @@ public class FolderRunController extends BasicController implements Activateable
 		if (secCallback != null) {
 			subsContext = secCallback.getSubscriptionContext();
 			// if null, then no subscription is desired
-			if (subsContext != null && (rootContainer instanceof OlatRelPathImpl)) {
+			String data = rootContainer.getRelPath();
+			if (subsContext != null && data != null) {
 				String businessPath = wControl.getBusinessControl().getAsString();
-				String data = ((OlatRelPathImpl)rootContainer).getRelPath();
 				PublisherData pdata = new PublisherData(OresHelper.calculateTypeName(FolderModule.class), data, businessPath);
 				csController = new ContextualSubscriptionController(ureq, getWindowControl(), subsContext, pdata);
 				folderContainer.put("subscription", csController.getInitialComponent());
@@ -313,9 +315,9 @@ public class FolderRunController extends BasicController implements Activateable
 		// jump to either the forum or the folder if the business-launch-path says so.
 		ContextEntry ce = bc.popLauncherContextEntry();
 		if ( ce != null ) { // a context path is left for me						
-			if (log.isDebug()) log.debug("businesscontrol (for further jumps) would be:"+bc);
+			if (log.isDebugEnabled()) log.debug("businesscontrol (for further jumps) would be:"+bc);
 			OLATResourceable ores = ce.getOLATResourceable();			
-			if (log.isDebug()) log.debug("OLATResourceable=" + ores);
+			if (log.isDebugEnabled()) log.debug("OLATResourceable=" + ores);
 			String typeName = ores.getResourceableTypeName();
 			// typeName format: 'path=/test1/test2/readme.txt'
 			// First remove prefix 'path='
@@ -374,7 +376,7 @@ public class FolderRunController extends BasicController implements Activateable
 											.getCurrentContainerPath()
 											+ ((folderComponent.getCurrentContainerPath().length() > 1) ? File.separator:"")
 											+ ((CmdCreateFolder) source).getFolderName()));
-				} else if (source instanceof CmdEditContent) {
+				} else if (source instanceof CmdOpenContent) {
 					ThreadLocalUserActivityLogger
 					.log(
 							FolderLoggingAction.FILE_EDIT,
@@ -383,7 +385,7 @@ public class FolderRunController extends BasicController implements Activateable
 									.wrapBCFile(folderComponent
 											.getCurrentContainerPath()
 											+ ((folderComponent.getCurrentContainerPath().length() > 1) ? File.separator:"")
-											+ ((CmdEditContent) source).getFileName()));
+											+ ((CmdOpenContent) source).getFileName()));
 				} else if (source instanceof CmdDelete) {
 					Iterator<String> it = ((CmdDelete) source).getFileSelection().getFiles().iterator();
 					while(it.hasNext()) {
@@ -503,10 +505,12 @@ public class FolderRunController extends BasicController implements Activateable
 		} 
 		
 		Boolean newEditQuota = Boolean.FALSE;
-		if (usess.getRoles().isOLATAdmin() || usess.getRoles().isInstitutionalResourceManager()) {
+		if (quotaManager.hasMinimalRolesToEditquota(usess.getRoles())) {
 			// Only sys admins or institutonal resource managers can have the quota button
 			Quota q = VFSManager.isTopLevelQuotaContainer(folderComponent.getCurrentContainer());
-			newEditQuota = (q == null)? Boolean.FALSE : Boolean.TRUE;
+			if(q != null) {
+				newEditQuota = quotaManager.hasQuotaEditRights(ureq.getIdentity(), usess.getRoles(), q);
+			}
 		}
 
 		Boolean currentEditQuota = (Boolean) folderContainer.contextGet("editQuota");
@@ -547,17 +551,26 @@ public class FolderRunController extends BasicController implements Activateable
 	public void activate(UserRequest ureq, List<ContextEntry> entries, StateEntry state) {
 		if(entries == null || entries.isEmpty()) return;
 		
-		String path = BusinessControlFactory.getInstance().getPath(entries.get(0));
-		VFSItem vfsItem = folderComponent.getRootContainer().resolve(path);
-		if (vfsItem instanceof VFSContainer) {
-			folderComponent.setCurrentContainerPath(path);
-			updatePathResource(ureq);
+		if("DocEditor".equals(entries.get(entries.size() - 1).getOLATResourceable().getResourceableTypeName())
+				&& folderCommandController != null) {
+			// do nothing
 		} else {
-			activatePath(ureq, path);
+			String path = BusinessControlFactory.getInstance().getPath(entries.get(0));
+			VFSItem vfsItem = folderComponent.getRootContainer().resolve(path);
+			if (vfsItem instanceof VFSContainer) {
+				folderComponent.setCurrentContainerPath(path);
+				updatePathResource(ureq);
+			} else {
+				activatePath(ureq, path);
+			}
 		}
 	}
 
 	public void activatePath(UserRequest ureq, String path) {
+		if(folderCommandController != null) {
+			removeAsListenerAndDispose(folderCommandController);
+			folderCommandController = null;
+		}
 		if (path != null && path.length() > 0) {
 			VFSItem vfsItem = folderComponent.getRootContainer().resolve(path.endsWith("/") ? path.substring(0, path.length()-1) : path);
 			if (vfsItem instanceof VFSLeaf) {

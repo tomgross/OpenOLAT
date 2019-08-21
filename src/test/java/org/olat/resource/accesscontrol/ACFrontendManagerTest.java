@@ -33,15 +33,18 @@ import org.junit.Assert;
 import org.junit.Test;
 import org.olat.basesecurity.BaseSecurity;
 import org.olat.basesecurity.GroupRoles;
+import org.olat.basesecurity.OrganisationService;
 import org.olat.core.commons.persistence.DB;
 import org.olat.core.id.Identity;
 import org.olat.core.id.OLATResourceable;
+import org.olat.core.id.Organisation;
 import org.olat.core.id.Roles;
 import org.olat.core.util.CodeHelper;
 import org.olat.group.BusinessGroup;
 import org.olat.group.BusinessGroupService;
 import org.olat.group.manager.BusinessGroupRelationDAO;
 import org.olat.repository.RepositoryEntry;
+import org.olat.repository.RepositoryEntryStatusEnum;
 import org.olat.repository.RepositoryManager;
 import org.olat.repository.RepositoryService;
 import org.olat.resource.OLATResource;
@@ -83,6 +86,8 @@ public class ACFrontendManagerTest extends OlatTestCase {
 	private BaseSecurity securityManager;
 	@Autowired
 	private BusinessGroupService businessGroupService;
+	@Autowired
+	private OrganisationService organisationService;
 	@Autowired
 	private BusinessGroupRelationDAO businessGroupRelationDao;
 	@Autowired
@@ -161,8 +166,8 @@ public class ACFrontendManagerTest extends OlatTestCase {
 	@Test
 	public void testFreeAccesToBusinessGroup_full() {
 		//create a group with a free offer, fill 2 places on 2
-		Identity id1 = JunitTestHelper.createAndPersistIdentityAsUser("agp-" + UUID.randomUUID().toString());
-		Identity id2 = JunitTestHelper.createAndPersistIdentityAsUser("agp-" + UUID.randomUUID().toString());
+		Identity id1 = JunitTestHelper.createAndPersistIdentityAsRndUser("agp-" + UUID.randomUUID().toString());
+		Identity id2 = JunitTestHelper.createAndPersistIdentityAsRndUser("agp-" + UUID.randomUUID().toString());
 		Identity id3 = JunitTestHelper.createAndPersistIdentityAsUser("agp-" + UUID.randomUUID().toString());
 		BusinessGroup group = businessGroupService.createBusinessGroup(null, "Free group", "But you must wait", new Integer(0), new Integer(2), false, false, null);
 		businessGroupRelationDao.addRole(id1, group, GroupRoles.participant.name());
@@ -362,14 +367,14 @@ public class ACFrontendManagerTest extends OlatTestCase {
 		Assert.assertNotNull(acResult);
 		Assert.assertTrue(acResult.isAccessible());
 		dbInstance.commit();
-		CodeHelper.printNanoTime(start, "One click");
+		CodeHelper.printMilliSecondTime(start, "One click");
 	}
 	
 	@Test
 	public void testStandardMethods() {
 		Identity ident = JunitTestHelper.createAndPersistIdentityAsRndUser("ac-method-mgr");
 		
-		Roles roles = new Roles(false, false, false, true, false, false, false);
+		Roles roles = Roles.authorRoles();
 		List<AccessMethod> methods = acService.getAvailableMethods(ident, roles);
 		assertNotNull(methods);
 		assertTrue(methods.size() >= 2);
@@ -400,9 +405,10 @@ public class ACFrontendManagerTest extends OlatTestCase {
 		dbInstance.getCurrentEntityManager().persist(r);
 
 		// now make a repository entry for this resource
-		RepositoryEntry re = repositoryService.create("Florian Gnägi", "Access controlled by OLAT ",
-				"JunitRE" + UUID.randomUUID().toString().replace("-", ""), "Description", r);
-		re.setAccess(RepositoryEntry.ACC_OWNERS_AUTHORS);
+		Organisation defOrganisation = organisationService.getDefaultOrganisation();
+		RepositoryEntry re = repositoryService.create(null, "Florian Gnägi", "Access controlled by OLAT ",
+				"JunitRE" + UUID.randomUUID().toString().replace("-", ""), "Description",
+				r, RepositoryEntryStatusEnum.review, defOrganisation);
 		re = repositoryService.update(re);
 		dbInstance.commitAndCloseSession();
 		return re;

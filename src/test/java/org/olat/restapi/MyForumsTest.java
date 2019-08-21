@@ -29,9 +29,7 @@ package org.olat.restapi;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
-import java.io.File;
 import java.io.IOException;
-import java.io.InputStream;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.URL;
@@ -63,7 +61,7 @@ import org.olat.modules.fo.Forum;
 import org.olat.modules.fo.restapi.ForumVOes;
 import org.olat.repository.RepositoryEntry;
 import org.olat.test.JunitTestHelper;
-import org.olat.test.OlatJerseyTestCase;
+import org.olat.test.OlatRestTestCase;
 import org.springframework.beans.factory.annotation.Autowired;
 
 /**
@@ -71,7 +69,7 @@ import org.springframework.beans.factory.annotation.Autowired;
  * @author srosse, stephane.rosse@frentix.com, http://www.frentix.com
  *
  */
-public class MyForumsTest extends OlatJerseyTestCase {
+public class MyForumsTest extends OlatRestTestCase {
 
 
 	@Autowired
@@ -85,11 +83,8 @@ public class MyForumsTest extends OlatJerseyTestCase {
 	 */
 	@Test
 	public void myForums() throws IOException, URISyntaxException {
-		URL courseWithForumsUrl = MyForumsTest.class.getResource("myCourseWS.zip");
-		Assert.assertNotNull(courseWithForumsUrl);
-		File courseWithForums = new File(courseWithForumsUrl.toURI());
-		String softKey = UUID.randomUUID().toString().replace("_", "");
-		RepositoryEntry myCourseRe = CourseFactory.deployCourseFromZIP(courseWithForums, softKey, 4);	
+		URL courseUrl = MyForumsTest.class.getResource("myCourseWS.zip");
+		RepositoryEntry myCourseRe = JunitTestHelper.deployCourse(null, "My course", courseUrl);// 4);	
 		Assert.assertNotNull(myCourseRe);
 		ICourse myCourse = CourseFactory.loadCourse(myCourseRe);
 		
@@ -105,14 +100,13 @@ public class MyForumsTest extends OlatJerseyTestCase {
 		HttpGet method = conn.createGet(uri, MediaType.APPLICATION_JSON, true);
 		HttpResponse response = conn.execute(method);
 		assertEquals(200, response.getStatusLine().getStatusCode());
-		InputStream body = response.getEntity().getContent();
-		ForumVOes forums = conn.parse(body, ForumVOes.class);
+		ForumVOes forums = conn.parse(response.getEntity(), ForumVOes.class);
 		Assert.assertNotNull(forums);
 		Assert.assertNotNull(forums.getForums());
 		Assert.assertEquals(0, forums.getForums().length);
 		
 		//subscribe to the forum
-		IdentityEnvironment ienv = new IdentityEnvironment(id, new Roles(false, false, false, false, false, false, false));
+		IdentityEnvironment ienv = new IdentityEnvironment(id, Roles.userRoles());
 		new CourseTreeVisitor(myCourse, ienv).visit(new Visitor() {
 			@Override
 			public void visit(INode node) {
@@ -132,8 +126,7 @@ public class MyForumsTest extends OlatJerseyTestCase {
 		HttpGet method2 = conn.createGet(uri, MediaType.APPLICATION_JSON, true);
 		HttpResponse response2 = conn.execute(method2);
 		assertEquals(200, response2.getStatusLine().getStatusCode());
-		InputStream body2 = response2.getEntity().getContent();
-		ForumVOes forums2 = conn.parse(body2, ForumVOes.class);
+		ForumVOes forums2 = conn.parse(response2.getEntity(), ForumVOes.class);
 		Assert.assertNotNull(forums2);
 		Assert.assertNotNull(forums2.getForums());
 		Assert.assertEquals(1, forums2.getForums().length);

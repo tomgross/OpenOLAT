@@ -37,16 +37,15 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 import org.olat.basesecurity.GroupRoles;
-import org.olat.core.commons.modules.bc.components.FolderComponent;
-import org.olat.core.commons.modules.bc.vfs.OlatRootFolderImpl;
 import org.olat.core.commons.services.notifications.SubscriptionContext;
 import org.olat.core.gui.translator.Translator;
 import org.olat.core.id.Identity;
-import org.olat.core.logging.OLog;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.Util;
 import org.olat.core.util.i18n.I18nManager;
 import org.olat.core.util.i18n.I18nModule;
+import org.olat.core.util.vfs.LocalFolderImpl;
 import org.olat.core.util.vfs.NamedContainerImpl;
 import org.olat.core.util.vfs.VFSContainer;
 import org.olat.core.util.vfs.VFSItem;
@@ -54,21 +53,20 @@ import org.olat.core.util.vfs.VFSLeaf;
 import org.olat.core.util.vfs.VFSManager;
 import org.olat.core.util.vfs.VirtualContainer;
 import org.olat.core.util.vfs.callbacks.VFSSecurityCallback;
-import org.olat.core.util.vfs.filters.VFSItemExcludePrefixFilter;
 import org.olat.core.util.vfs.filters.VFSItemFilter;
+import org.olat.core.util.vfs.filters.VFSSystemItemFilter;
 import org.olat.course.CourseModule;
 import org.olat.course.nodes.PFCourseNode;
 import org.olat.course.nodes.pf.ui.DropBoxRow;
 import org.olat.course.nodes.pf.ui.PFRunController;
 import org.olat.course.run.environment.CourseEnvironment;
 import org.olat.course.run.userview.UserCourseEnvironment;
-import org.olat.group.BusinessGroup;
 import org.olat.group.BusinessGroupRef;
-import org.olat.group.BusinessGroupService;
 import org.olat.group.manager.BusinessGroupRelationDAO;
+import org.olat.modules.curriculum.CurriculumElementRef;
+import org.olat.modules.curriculum.manager.CurriculumElementDAO;
 import org.olat.repository.RepositoryEntry;
 import org.olat.repository.RepositoryEntryRelationType;
-import org.olat.repository.RepositoryService;
 import org.olat.repository.manager.RepositoryEntryRelationDAO;
 import org.olat.user.UserManager;
 import org.olat.user.UserPropertiesRow;
@@ -86,23 +84,21 @@ import org.springframework.stereotype.Service;
 @Service
 public class PFManager {
 	
-	private static final OLog log = Tracing.createLoggerFor(PFManager.class);
-	private static final VFSItemFilter attachmentExcludeFilter = new VFSItemExcludePrefixFilter(FolderComponent.ATTACHMENT_EXCLUDE_PREFIXES);
+	private static final Logger log = Tracing.createLoggerFor(PFManager.class);
+	private static final VFSItemFilter attachmentExcludeFilter = new VFSSystemItemFilter();
 
 	public static final String FILENAME_PARTICIPANTFOLDER = "participantfolder";
 	public static final String FILENAME_RETURNBOX = "returnbox";
 	public static final String FILENAME_DROPBOX = "dropbox";
 
 	@Autowired
-	private	BusinessGroupService groupService;
+	private UserManager userManager;
 	@Autowired
-	private RepositoryService repositoryService;
+	private CurriculumElementDAO curriculumElementDao;
 	@Autowired
 	private BusinessGroupRelationDAO businessGroupRelationDao;
 	@Autowired
 	private RepositoryEntryRelationDAO repositoryEntryRelationDao;
-	@Autowired
-	private UserManager userManager;
 	
 	/**
 	 * Resolve an existing drop folder or return null
@@ -114,7 +110,7 @@ public class PFManager {
 	 */
 	public VFSContainer resolveDropFolder(CourseEnvironment courseEnv, PFCourseNode pfNode, Identity identity) {
 		Path relPath = Paths.get(FILENAME_PARTICIPANTFOLDER, pfNode.getIdent(), getIdFolderName(identity), FILENAME_DROPBOX); 
-		OlatRootFolderImpl baseContainer = courseEnv.getCourseBaseContainer();
+		VFSContainer baseContainer = courseEnv.getCourseBaseContainer();
 		VFSItem dropboxContainer = baseContainer.resolve(relPath.toString());
 		return dropboxContainer instanceof VFSContainer ? (VFSContainer)dropboxContainer : null;
 	}
@@ -129,9 +125,8 @@ public class PFManager {
 	 */
 	private VFSContainer resolveOrCreateDropFolder(CourseEnvironment courseEnv, PFCourseNode pfNode, Identity identity) {
 		Path relPath = Paths.get(FILENAME_PARTICIPANTFOLDER, pfNode.getIdent(), getIdFolderName(identity), FILENAME_DROPBOX); 
-		OlatRootFolderImpl baseContainer = courseEnv.getCourseBaseContainer();
-		VFSContainer dropboxContainer = VFSManager.resolveOrCreateContainerFromPath(baseContainer, relPath.toString());
-		return dropboxContainer;
+		VFSContainer baseContainer = courseEnv.getCourseBaseContainer();
+		return VFSManager.resolveOrCreateContainerFromPath(baseContainer, relPath.toString());
 	}
 
 	/**
@@ -144,9 +139,8 @@ public class PFManager {
 	 */
 	private VFSContainer resolveOrCreateReturnFolder(CourseEnvironment courseEnv, PFCourseNode pfNode, Identity identity) {
 		Path relPath = Paths.get(FILENAME_PARTICIPANTFOLDER, pfNode.getIdent(), getIdFolderName(identity), FILENAME_RETURNBOX); 
-		OlatRootFolderImpl baseContainer = courseEnv.getCourseBaseContainer();
-		VFSContainer returnboxContainer = VFSManager.resolveOrCreateContainerFromPath(baseContainer, relPath.toString());
-		return returnboxContainer;
+		VFSContainer baseContainer = courseEnv.getCourseBaseContainer();
+		return VFSManager.resolveOrCreateContainerFromPath(baseContainer, relPath.toString());
 	}
 
 	/**
@@ -182,7 +176,7 @@ public class PFManager {
 	private Date getLastUpdated(CourseEnvironment courseEnv, PFCourseNode pfNode, Identity identity, String fileName) {
 		Date latest = null;
 		List<Long> lastUpdated = new ArrayList<>();
-		OlatRootFolderImpl baseContainer = courseEnv.getCourseBaseContainer();
+		LocalFolderImpl baseContainer = courseEnv.getCourseBaseContainer();
 		Path path = Paths.get(baseContainer.getBasefile().toPath().toString(), FILENAME_PARTICIPANTFOLDER,
 				pfNode.getIdent(), getIdFolderName(identity), fileName);
 		try {
@@ -197,7 +191,7 @@ public class PFManager {
 			log.error("Unknown IOE",e);
 		}
 		Collections.sort(lastUpdated);
-		if (lastUpdated.size() > 0) {
+		if (!lastUpdated.isEmpty()) {
 			latest = new Date(lastUpdated.get(lastUpdated.size() - 1));
 		}
 		return latest;
@@ -326,7 +320,7 @@ public class PFManager {
 		SubscriptionContext subsContext = CourseModule.createSubscriptionContext(courseEnv, pfNode);
 		String path = courseEnv.getCourseBaseContainer().getRelPath() + "/" + FILENAME_PARTICIPANTFOLDER;
 		String quotaPath = path + "/" + pfNode.getIdent();
-		VFSContainer courseElementBaseContainer = new OlatRootFolderImpl(path, null);
+		VFSContainer courseElementBaseContainer = VFSManager.olatRootContainer(path, null);
 		VirtualContainer namedCourseFolder = new VirtualContainer(identity.getName());
 		Path relPath = Paths.get(pfNode.getIdent(), getIdFolderName(identity));
 		VFSContainer userBaseContainer = VFSManager.resolveOrCreateContainerFromPath(courseElementBaseContainer, relPath.toString());		
@@ -367,7 +361,7 @@ public class PFManager {
 		String courseContainerRelPath = courseEnv.getCourseBaseContainer().getRelPath();
 		String path = courseContainerRelPath + "/" + FILENAME_PARTICIPANTFOLDER;
 		String quotaPath = path + "/" + pfNode.getIdent();
-		VFSContainer courseElementBaseContainer = new OlatRootFolderImpl(path, null);
+		VFSContainer courseElementBaseContainer = VFSManager.olatRootContainer(path, null);
 		VirtualContainer namedCourseFolder = new VirtualContainer(translator.translate("participant.folder"));
 		for (Identity participant : participants) {
 			Path relPath = Paths.get(pfNode.getIdent(), getIdFolderName(participant));
@@ -413,12 +407,12 @@ public class PFManager {
 		SubscriptionContext nodefolderSubContext = CourseModule.createSubscriptionContext(courseEnv, pfNode);
 		RepositoryEntry re = courseEnv.getCourseGroupManager().getCourseEntry();
 		List<Identity> participants =  repositoryEntryRelationDao.getMembers(re, 
-				RepositoryEntryRelationType.both, GroupRoles.participant.name());
+				RepositoryEntryRelationType.all, GroupRoles.participant.name());
 		participants = new ArrayList<>(new HashSet<>(participants));
 		
 		String path = courseEnv.getCourseBaseContainer().getRelPath() + "/" + FILENAME_PARTICIPANTFOLDER;
 		String quotaPath = path + "/" + pfNode.getIdent();
-		VFSContainer courseElementBaseContainer = new OlatRootFolderImpl(path, null);
+		VFSContainer courseElementBaseContainer = VFSManager.olatRootContainer(path, null);
 		VirtualContainer namedCourseFolder = new VirtualContainer(translator.translate("participant.folder"));
 		for (Identity participant : participants) {
 			Path relPath = Paths.get(pfNode.getIdent(), getIdFolderName(participant));
@@ -463,7 +457,7 @@ public class PFManager {
 		
 		String path = courseEnv.getCourseBaseContainer().getRelPath() + "/" + FILENAME_PARTICIPANTFOLDER;
 		String quotaPath = path + "/" + pfNode.getIdent();
-		VFSContainer courseElementBaseContainer = new OlatRootFolderImpl(path, null);
+		VFSContainer courseElementBaseContainer = VFSManager.olatRootContainer(path, null);
 
 		Path relPath = Paths.get(pfNode.getIdent(), getIdFolderName(identity));
 		
@@ -528,36 +522,24 @@ public class PFManager {
 	/**
 	 * Gets the participants for different group or course coaches.
 	 *
-	 * @param id the identity
-	 * @param pfNode 
-	 * @param locale 
-	 * @param courseEnv
-	 * @param admin
+	 * @param id The identity
+	 * @param courseEnv The course environment
+	 * @param admin The user is allowed to see all participants
 	 * @return the participants
 	 */
 	public List<Identity> getParticipants(Identity id, CourseEnvironment courseEnv, boolean admin) {
 		Set<Identity> identitySet = new HashSet<>();
 		RepositoryEntry re = courseEnv.getCourseGroupManager().getCourseEntry();
 		if(admin) {
-			List<Identity> participants = repositoryEntryRelationDao.getMembers(re, RepositoryEntryRelationType.both, GroupRoles.participant.name());
-			// deduplicate list (participants from groups and direct course membership)
+			List<Identity> participants = repositoryEntryRelationDao.getMembers(re, RepositoryEntryRelationType.all, GroupRoles.participant.name());
 			identitySet.addAll(participants);
 		} else {
-			if(repositoryService.hasRole(id, re, GroupRoles.coach.name())) {
-				List<Identity> identities = repositoryService.getMembers(re, GroupRoles.participant.name());
-				identitySet.addAll(identities);
-			}
-			
-			List<BusinessGroup> bgroups = courseEnv.getCourseGroupManager().getOwnedBusinessGroups(id);
-			if (bgroups != null) {
-				for (BusinessGroup bgroup : bgroups) {
-					List<Identity> identities = groupService.getMembers(bgroup, GroupRoles.participant.name());
-					identitySet.addAll(identities);
-				}
-			}
+			List<Identity> participants = repositoryEntryRelationDao.getCoachedParticipants(id, re);
+			identitySet.addAll(participants);
 		}
-		List<Identity> participants = identitySet.stream().collect(Collectors.toList());
-		return participants;
+		
+		// deduplicate list (participants from groups and direct course membership)
+		return identitySet.stream().collect(Collectors.toList());
 	}
 	
 	/**
@@ -577,10 +559,15 @@ public class PFManager {
 		return getParticipants(pfNode, userPropertyHandlers, locale, identityList, courseEnv);
 	}
 	
-	public List<DropBoxRow> getParticipants(List<BusinessGroupRef> businessGroupRefs, PFCourseNode pfNode, List<UserPropertyHandler> userPropertyHandlers, 
+	public List<DropBoxRow> getParticipants(List<BusinessGroupRef> businessGroupRefs, List<CurriculumElementRef> curriculumElements,
+			PFCourseNode pfNode, List<UserPropertyHandler> userPropertyHandlers, 
 			Locale locale, CourseEnvironment courseEnv) {
+		List<Identity> allIdentities = new ArrayList<>(32);
 		List<Identity> identityList = businessGroupRelationDao.getMembers(businessGroupRefs, GroupRoles.participant.name());
-		return getParticipants(pfNode, userPropertyHandlers, locale, identityList, courseEnv);
+		allIdentities.addAll(identityList);
+		List<Identity> identityElementList = curriculumElementDao.getMembers(curriculumElements, GroupRoles.participant.name());
+		allIdentities.addAll(identityElementList);
+		return getParticipants(pfNode, userPropertyHandlers, locale, allIdentities, courseEnv);
 	}
 	
 	private List<DropBoxRow> getParticipants(PFCourseNode pfNode, List<UserPropertyHandler> userPropertyHandlers, 
@@ -613,7 +600,7 @@ public class PFManager {
 	 * @param pfNode 
 	 * @return the PF view
 	 */
-	public PFView providePFView (PFCourseNode pfNode) {
+	public PFView providePFView(PFCourseNode pfNode) {
 		boolean hasParticipantBox = pfNode.hasParticipantBoxConfigured();
 		boolean hasCoachBox = pfNode.hasCoachBoxConfigured();
 		PFView pfView = PFView.dropAndReturn;

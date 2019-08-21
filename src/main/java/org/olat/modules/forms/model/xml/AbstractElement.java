@@ -21,7 +21,7 @@ package org.olat.modules.forms.model.xml;
 
 import java.io.Serializable;
 
-import org.olat.modules.portfolio.ui.editor.PageElement;
+import org.olat.modules.ceditor.PageElement;
 
 /**
  * 
@@ -34,6 +34,7 @@ public abstract class AbstractElement implements PageElement, Serializable {
 	private static final long serialVersionUID = 3008833598017875672L;
 	private String id;
 
+	@Override
 	public String getId() {
 		return id;
 	}

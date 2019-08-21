@@ -218,7 +218,7 @@ public class IQRunController extends BasicController implements GenericEventList
 
 		//re could be null, but if we are here it should not be null!
 		Roles userRoles = ureq.getUserSession().getRoles();
-		boolean showAll = userRoles.isAuthor() || userRoles.isOLATAdmin();
+		boolean showAll = userRoles.isAuthor() || userRoles.isAdministrator() || userRoles.isLearnResourceManager();
 		//get changelog
 		Formatter formatter = Formatter.getInstance(ureq.getLocale());
 		ImsRepositoryResolver resolver = new ImsRepositoryResolver(referenceTestEntry);
@@ -378,7 +378,7 @@ public class IQRunController extends BasicController implements GenericEventList
 					myContent.put("disc", iFrameCtr.getInitialComponent());
 					iFrameCtr.setCurrentURI(sDisclaimer);
 					myContent.contextPut("hasDisc", Boolean.TRUE);
-					myContent.contextPut("in-disclaimer", isPanelOpen(ureq, "disclaimer", true));
+					myContent.contextPut("indisclaimer", isPanelOpen(ureq, "disclaimer", true));
 				}
 			}
 		}
@@ -667,7 +667,7 @@ public class IQRunController extends BasicController implements GenericEventList
 	    			if(acn.hasCommentConfigured()) {
 	    				StringBuilder comment = Formatter.stripTabsAndReturns(assessmentEntry.getComment());
 	    				myContent.contextPut("comment", StringHelper.xssScan(comment));
-						myContent.contextPut("in-comment", isPanelOpen(ureq, "comment", true));
+						myContent.contextPut("incomment", isPanelOpen(ureq, "comment", true));
 	    			}
 
 	    			if(acn.hasIndividualAsssessmentDocuments()) {
@@ -675,7 +675,7 @@ public class IQRunController extends BasicController implements GenericEventList
 						String mapperUri = registerCacheableMapper(ureq, null, new DocumentsMapper(docs));
 						myContent.contextPut("docsMapperUri", mapperUri);
 						myContent.contextPut("docs", docs);
-						myContent.contextPut("in-assessmentDocuments", isPanelOpen(ureq, "assessmentDocuments", true));
+						myContent.contextPut("inassessmentDocuments", isPanelOpen(ureq, "assessmentDocuments", true));
 	    			}
 	    		}
 	    		myContent.contextPut("attempts", assessmentEntry.getAttempts() == null ? 0 : assessmentEntry.getAttempts());

@@ -80,6 +80,8 @@ import org.olat.core.util.StringHelper;
  */
 public class DialogBoxController extends BasicController {
 	
+	private static final String LINK_PREFIX = "link_";
+	
 	private VelocityContainer dialogBoxVC;
 	private Link closeLink;
 	private Object userObject = null;
@@ -102,7 +104,7 @@ public class DialogBoxController extends BasicController {
 		if (buttonLabels != null) {
 			for (int i = 0; i < buttonLabels.size(); i++) {
 				String buttonText = buttonLabels.get(i);
-				String linkName = "link_" + i;
+				String linkName = LINK_PREFIX + i;
 				Link link = LinkFactory.createButton(linkName, dialogBoxVC, this);
 				link.setCustomDisplayText(buttonText);
 				// Within a dialog all 'you will loose form data' messages should be
@@ -156,6 +158,19 @@ public class DialogBoxController extends BasicController {
 	}
 	
 	/**
+	 * Format the button with the index as a primary button.
+	 *
+	 * @param index
+	 */
+	public void setPrimary(int index) {
+		Component component = dialogBoxVC.getComponent(LINK_PREFIX + index);
+		if (component instanceof Link) {
+			Link link = (Link) component;
+			link.setPrimary(true);
+		}
+	}
+	
+	/**
 	 * attach a object to the dialog which you later retrieve.
 	 * TODO:pb:example for this
 	 * @param userObject
@@ -187,6 +202,7 @@ public class DialogBoxController extends BasicController {
 	/**
 	 * @see org.olat.core.gui.control.DefaultController#doDispose()
 	 */
+	@Override
 	protected void doDispose() {
 	// nothing to dispose
 	}
@@ -196,6 +212,7 @@ public class DialogBoxController extends BasicController {
 	 *      org.olat.core.gui.components.Component,
 	 *      org.olat.core.gui.control.Event)
 	 */
+	@Override
 	protected void event(UserRequest ureq, Component source, Event event) {
 		// in any case pop dialog from modal stack
 		deactivate();

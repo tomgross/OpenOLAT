@@ -31,11 +31,13 @@ import org.olat.core.gui.control.navigation.AbstractSiteDefinition;
 import org.olat.core.gui.control.navigation.SiteConfiguration;
 import org.olat.core.gui.control.navigation.SiteDefinition;
 import org.olat.core.gui.control.navigation.SiteInstance;
+import org.olat.core.id.Roles;
 import org.olat.core.util.StringHelper;
+import org.olat.core.util.UserSession;
 
 /**
  * Description:<br>
- * Site fot the learn ressources
+ * Site for the learn resources
  * 
  * <P>
  * Initial Date:  12.07.2005 <br>
@@ -44,18 +46,22 @@ import org.olat.core.util.StringHelper;
  */
 public class RepositorySiteDef extends AbstractSiteDefinition implements SiteDefinition {
 
-	public RepositorySiteDef() {
-		// for classloader
-	}
-
 	/**
 	 * Site is normally only open to authors. Configured via security callback
 	 */
 	@Override
 	public SiteInstance createSite(UserRequest ureq, WindowControl wControl, SiteConfiguration config) {
+		UserSession usess = ureq.getUserSession();
+		if(usess == null || usess.getRoles() == null || usess.getRoles().isInvitee() || usess.getRoles().isGuestOnly()) {
+			return null;
+		}
+		
 		if(StringHelper.containsNonWhitespace(config.getSecurityCallbackBeanId())) {
 			return new RepositorySite(this, ureq.getLocale());
-		} else if(ureq.getUserSession().getRoles().isAuthor() || ureq.getUserSession().getRoles().isInstitutionalResourceManager()) {
+		} 
+		
+		Roles roles = usess.getRoles();
+		if(roles.isAdministrator() || roles.isAuthor() || roles.isLearnResourceManager() || roles.isPrincipal()) {
 			// only for authors and institutional resource managers
 			return new RepositorySite(this, ureq.getLocale());
 		}

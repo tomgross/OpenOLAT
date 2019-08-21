@@ -49,11 +49,12 @@ import org.olat.core.util.vfs.VFSLeaf;
 import org.olat.course.certificate.Certificate;
 import org.olat.course.certificate.CertificateStatus;
 import org.olat.course.certificate.CertificatesManager;
+import org.olat.course.certificate.model.CertificateConfig;
 import org.olat.course.certificate.model.CertificateInfos;
 import org.olat.repository.RepositoryEntry;
 import org.olat.restapi.support.ObjectFactory;
 import org.olat.test.JunitTestHelper;
-import org.olat.test.OlatJerseyTestCase;
+import org.olat.test.OlatRestTestCase;
 import org.springframework.beans.factory.annotation.Autowired;
 
 /**
@@ -62,7 +63,7 @@ import org.springframework.beans.factory.annotation.Autowired;
  * @author srosse, stephane.rosse@frentix.com, http://www.frentix.com
  *
  */
-public class CertificationTest extends OlatJerseyTestCase {
+public class CertificationTest extends OlatRestTestCase {
 
 	@Autowired
 	private DB dbInstance;
@@ -81,7 +82,8 @@ public class CertificationTest extends OlatJerseyTestCase {
 		dbInstance.commitAndCloseSession();
 
 		CertificateInfos certificateInfos = new CertificateInfos(assessedIdentity, 2.0f, true);
-		Certificate certificate = certificatesManager.generateCertificate(certificateInfos, entry, null, false);
+		CertificateConfig config = CertificateConfig.builder().withSendEmailBcc(false).build();
+		Certificate certificate = certificatesManager.generateCertificate(certificateInfos, entry, null, config);
 		dbInstance.commitAndCloseSession();
 		Assert.assertNotNull(certificate);
 		sleep(1000);
@@ -120,7 +122,8 @@ public class CertificationTest extends OlatJerseyTestCase {
 		dbInstance.commitAndCloseSession();
 
 		CertificateInfos certificateInfos = new CertificateInfos(assessedIdentity, 2.0f, true);
-		Certificate certificate = certificatesManager.generateCertificate(certificateInfos, entry, null, false);
+		CertificateConfig config = CertificateConfig.builder().build();
+		Certificate certificate = certificatesManager.generateCertificate(certificateInfos, entry, null, config);
 		dbInstance.commitAndCloseSession();
 		Assert.assertNotNull(certificate);
 		sleep(1000);
@@ -214,6 +217,7 @@ public class CertificationTest extends OlatJerseyTestCase {
 		EntityUtils.consume(response.getEntity());
 
 		//check certificate
+		System.out.println("Test: " + Thread.currentThread().getName());
 		Certificate certificate = certificatesManager.getLastCertificate(assessedIdentity, entry.getOlatResource().getKey());
 		Assert.assertNotNull(certificate);
 		Assert.assertEquals(creationDate, certificate.getCreationDate());
@@ -274,7 +278,8 @@ public class CertificationTest extends OlatJerseyTestCase {
 		dbInstance.commitAndCloseSession();
 
 		CertificateInfos certificateInfos = new CertificateInfos(assessedIdentity, 2.0f, true);
-		Certificate certificate = certificatesManager.generateCertificate(certificateInfos, entry, null, false);
+		CertificateConfig config = CertificateConfig.builder().build();
+		Certificate certificate = certificatesManager.generateCertificate(certificateInfos, entry, null, config);
 		dbInstance.commitAndCloseSession();
 		Assert.assertNotNull(certificate);
 		sleep(1000);

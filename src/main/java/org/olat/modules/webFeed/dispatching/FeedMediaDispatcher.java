@@ -41,7 +41,7 @@ import org.olat.core.id.Identity;
 import org.olat.core.id.IdentityEnvironment;
 import org.olat.core.id.OLATResourceable;
 import org.olat.core.id.Roles;
-import org.olat.core.logging.OLog;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.StringHelper;
 import org.olat.core.util.WebappHelper;
@@ -84,7 +84,7 @@ import org.olat.resource.OLATResourceManager;
  */
 public class FeedMediaDispatcher implements Dispatcher, GenericEventListener {
 	
-	private static final OLog log = Tracing.createLoggerFor(FeedMediaDispatcher.class);
+	private static final Logger log = Tracing.createLoggerFor(FeedMediaDispatcher.class);
 
 	public static final String TOKEN_PROVIDER = "feed";
 	
@@ -480,7 +480,7 @@ public class FeedMediaDispatcher implements Dispatcher, GenericEventListener {
 	 */
 	private boolean allowsGuestAccess(final RepositoryEntry repoEntry) {
 		boolean guestsAllowed = false;
-		if (repoEntry != null && repoEntry.getAccess() == RepositoryEntry.ACC_USERS_GUESTS) {
+		if (repoEntry != null && repoEntry.isGuests()) {
 			guestsAllowed = true;
 		}
 		return guestsAllowed;

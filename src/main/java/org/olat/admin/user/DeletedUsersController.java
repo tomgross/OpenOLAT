@@ -43,7 +43,9 @@ import org.olat.core.gui.control.generic.modal.DialogBoxUIFactory;
 import org.olat.core.id.Identity;
 import org.olat.core.id.Roles;
 import org.olat.core.util.StringHelper;
+import org.olat.core.util.Util;
 import org.olat.user.UserManager;
+import org.olat.user.ui.organisation.OrganisationUserManagementController;
 import org.springframework.beans.factory.annotation.Autowired;
 
 /**
@@ -70,6 +72,7 @@ public class DeletedUsersController extends FormBasicController {
 	
 	public DeletedUsersController(UserRequest ureq, WindowControl wControl) {
 		super(ureq, wControl, "deleted_users");
+		setTranslator(Util.createPackageTranslator(OrganisationUserManagementController.class, getLocale(), getTranslator()));
 
 		Roles roles = ureq.getUserSession().getRoles();
 		isAdministrativeUser = securityModule.isUserAllowedAdminProps(roles);

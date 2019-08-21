@@ -28,17 +28,17 @@ package org.olat.fileresource;
 import java.io.File;
 
 import org.olat.core.commons.modules.bc.FolderConfig;
-import org.olat.core.commons.modules.bc.vfs.OlatRootFolderImpl;
 import org.olat.core.gui.media.MediaResource;
 import org.olat.core.id.OLATResourceable;
 import org.olat.core.logging.OLATRuntimeException;
-import org.olat.core.manager.BasicManager;
 import org.olat.core.util.FileUtils;
 import org.olat.core.util.ZipUtil;
 import org.olat.core.util.coordinate.CoordinatorManager;
 import org.olat.core.util.coordinate.SyncerCallback;
+import org.olat.core.util.vfs.LocalFolderImpl;
 import org.olat.core.util.vfs.VFSContainer;
 import org.olat.core.util.vfs.VFSItem;
+import org.olat.core.util.vfs.VFSManager;
 import org.olat.fileresource.types.FileResource;
 
 /**
@@ -46,7 +46,7 @@ import org.olat.fileresource.types.FileResource;
  * 
  * @author Mike Stock
  */
-public class FileResourceManager extends BasicManager {
+public class FileResourceManager {
 
 	public static final String ZIPDIR = "_unzipped_";
 	private static FileResourceManager INSTANCE;
@@ -70,8 +70,8 @@ public class FileResourceManager extends BasicManager {
 	 */
 	public void deleteFileResource(OLATResourceable res) {
 		// delete resources
-		File fResourceFileroot = getFileResourceRoot(res);
-		FileUtils.deleteDirsAndFiles(fResourceFileroot, true, true);
+		VFSContainer rootContainer = getFileResourceRootImpl(res);
+		rootContainer.deleteSilently();// will delete versions and metadata
 	}
 
 	/**
@@ -86,8 +86,8 @@ public class FileResourceManager extends BasicManager {
 	 * @param res
 	 * @return olat root folder implementation of file resource
 	 */
-	public OlatRootFolderImpl getFileResourceRootImpl(OLATResourceable res) {
-		return new OlatRootFolderImpl(FolderConfig.getRepositoryHome() + "/" + res.getResourceableId(), null);
+	public LocalFolderImpl getFileResourceRootImpl(OLATResourceable res) {
+		return VFSManager.olatRootContainer(FolderConfig.getRepositoryHome() + "/" + res.getResourceableId(), null);
 	}
 	
 	public VFSContainer getFileResourceMedia(OLATResourceable res) {
@@ -202,14 +202,14 @@ public class FileResourceManager extends BasicManager {
 		return unzipFileResource(res, dir);
 	}
 	
-	public OlatRootFolderImpl unzipContainerResource(final OLATResourceable res) {
-		OlatRootFolderImpl container = getFileResourceRootImpl(res);
+	public LocalFolderImpl unzipContainerResource(final OLATResourceable res) {
+		LocalFolderImpl container = getFileResourceRootImpl(res);
 		File dir = container.getBasefile();
 		File unzipDir = unzipFileResource(res, dir);
 		if(unzipDir == null) {
 			return null;
 		}
-		return (OlatRootFolderImpl)container.resolve(unzipDir.getName());
+		return (LocalFolderImpl)container.resolve(unzipDir.getName());
 	}
 	
 	private final File unzipFileResource(final OLATResourceable res, final File dir) {

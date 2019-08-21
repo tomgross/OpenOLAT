@@ -37,13 +37,11 @@ import org.apache.http.client.methods.HttpDelete;
 import org.apache.http.client.methods.HttpGet;
 import org.apache.http.client.methods.HttpPut;
 import org.apache.http.util.EntityUtils;
-import org.codehaus.jackson.map.ObjectMapper;
-import org.codehaus.jackson.type.TypeReference;
 import org.junit.Assert;
 import org.junit.Test;
 import org.olat.core.commons.persistence.DB;
 import org.olat.core.id.Identity;
-import org.olat.core.logging.OLog;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
 import org.olat.modules.taxonomy.Taxonomy;
 import org.olat.modules.taxonomy.TaxonomyCompetence;
@@ -58,8 +56,11 @@ import org.olat.modules.taxonomy.restapi.TaxonomyLevelTypeVO;
 import org.olat.modules.taxonomy.restapi.TaxonomyLevelVO;
 import org.olat.modules.taxonomy.restapi.TaxonomyVO;
 import org.olat.test.JunitTestHelper;
-import org.olat.test.OlatJerseyTestCase;
+import org.olat.test.OlatRestTestCase;
 import org.springframework.beans.factory.annotation.Autowired;
+
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 /**
  * 
@@ -67,9 +68,9 @@ import org.springframework.beans.factory.annotation.Autowired;
  * @author srosse, stephane.rosse@frentix.com, http://www.frentix.com
  *
  */
-public class TaxonomyWebServiceTest extends OlatJerseyTestCase {
+public class TaxonomyWebServiceTest extends OlatRestTestCase {
 	
-	private static final OLog log = Tracing.createLoggerFor(TaxonomyWebServiceTest.class);
+	private static final Logger log = Tracing.createLoggerFor(TaxonomyWebServiceTest.class);
 	
 	@Autowired
 	private DB dbInstance;

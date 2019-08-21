@@ -35,14 +35,34 @@ import static org.jcodec.common.Assert.assertNotNull;
  * Initial code contributed and copyrighted by<br>
  * frentix GmbH, http://www.frentix.com
  * <p>
+<<<<<<< HEAD
+=======
+ */
+package org.olat.group.ui.main;
+
+import java.util.List;
+
+import org.olat.core.gui.components.form.flexible.impl.elements.table.FlexiCellRenderer;
+import org.olat.core.gui.components.form.flexible.impl.elements.table.FlexiTableComponent;
+import org.olat.core.gui.render.Renderer;
+import org.olat.core.gui.render.StringOutput;
+import org.olat.core.gui.render.URLBuilder;
+import org.olat.core.gui.translator.Translator;
+import org.olat.core.util.StringHelper;
+import org.olat.group.BusinessGroupShort;
+import org.olat.modules.curriculum.CurriculumElementShort;
+
+/**
+>>>>>>> OpenOLAT_14.0.2
  * 
  * @author srosse, stephane.rosse@frentix.com, http://www.frentix.com
  */
-public class GroupCellRenderer implements CustomCellRenderer, FlexiCellRenderer {
+public class GroupCellRenderer implements FlexiCellRenderer {
 
 	@Override
 	public void render(Renderer renderer, StringOutput target, Object cellValue, int row,
 			FlexiTableComponent source, URLBuilder ubu, Translator translator) {
+<<<<<<< HEAD
 		if (cellValue instanceof MemberView) {
 			render(target, (MemberView) cellValue, translator.getLocale());
 		}
@@ -84,5 +104,42 @@ public class GroupCellRenderer implements CustomCellRenderer, FlexiCellRenderer 
 
 		// Remove last ", "
 		sb.setLength(sb.length() - 2);
+=======
+		if (cellValue instanceof MemberRow) {
+			render(target, (MemberRow) cellValue);
+		}
+	}
+	
+	private void render(StringOutput sb, MemberRow member) {
+		boolean and = false;
+		List<BusinessGroupShort> groups = member.getGroups();
+		if(groups != null && !groups.isEmpty()) {
+			for(BusinessGroupShort group:groups) {
+				and = and(sb, and);
+				if(group.getName() == null && group.getKey() != null) {
+					sb.append(group.getKey());
+				} else {
+					sb.append(StringHelper.escapeHtml(group.getName()));
+				}
+			}
+		}
+
+		List<CurriculumElementShort> curriculumElements = member.getCurriculumElements();
+		if(curriculumElements != null && !curriculumElements.isEmpty()) {
+			for(CurriculumElementShort curriculumElement:curriculumElements) {
+				and = and(sb, and);
+				if(curriculumElement.getDisplayName() == null && curriculumElement.getKey() != null) {
+					sb.append(curriculumElement.getKey());
+				} else {
+					sb.append(StringHelper.escapeHtml(curriculumElement.getDisplayName()));
+				}
+			}
+		}
+	}
+	
+	private final boolean and(StringOutput sb, boolean and) {
+		if(and) sb.append(", ");
+		return true;
+>>>>>>> OpenOLAT_14.0.2
 	}
 }

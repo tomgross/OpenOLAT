@@ -33,6 +33,11 @@ import org.olat.core.gui.control.controller.BasicController;
 import org.olat.core.id.Identity;
 import org.olat.core.id.OLATResourceable;
 import org.olat.core.util.resource.OresHelper;
+import org.olat.modules.ceditor.PageElement;
+import org.olat.modules.ceditor.PageElementHandler;
+import org.olat.modules.ceditor.PageElementRenderingHints;
+import org.olat.modules.ceditor.PageProvider;
+import org.olat.modules.ceditor.ui.PageController;
 import org.olat.modules.portfolio.AssessmentSection;
 import org.olat.modules.portfolio.Binder;
 import org.olat.modules.portfolio.BinderRef;
@@ -43,15 +48,13 @@ import org.olat.modules.portfolio.Page;
 import org.olat.modules.portfolio.PortfolioRoles;
 import org.olat.modules.portfolio.PortfolioService;
 import org.olat.modules.portfolio.Section;
+import org.olat.modules.portfolio.handler.ContainerHandler;
 import org.olat.modules.portfolio.handler.EvaluationFormHandler;
-import org.olat.modules.portfolio.ui.editor.PageController;
-import org.olat.modules.portfolio.ui.editor.PageElement;
-import org.olat.modules.portfolio.ui.editor.PageElementHandler;
-import org.olat.modules.portfolio.ui.editor.PageElementRenderingHints;
-import org.olat.modules.portfolio.ui.editor.PageProvider;
-import org.olat.modules.portfolio.ui.editor.handler.HTMLRawPageElementHandler;
-import org.olat.modules.portfolio.ui.editor.handler.SpacerElementHandler;
-import org.olat.modules.portfolio.ui.editor.handler.TitlePageElementHandler;
+import org.olat.modules.portfolio.handler.HTMLRawPageElementHandler;
+import org.olat.modules.portfolio.handler.ParagraphPageElementHandler;
+import org.olat.modules.portfolio.handler.SpacerElementHandler;
+import org.olat.modules.portfolio.handler.TablePageElementHandler;
+import org.olat.modules.portfolio.handler.TitlePageElementHandler;
 import org.olat.modules.portfolio.ui.model.PortfolioElementRow;
 import org.olat.modules.portfolio.ui.model.ReadOnlyCommentsSecurityCallback;
 import org.olat.user.UserManager;
@@ -149,7 +152,7 @@ public class BinderOnePageController extends BasicController {
 		components.add(id);
 		
 		BinderSecurityCallback secCallback = BinderSecurityCallbackFactory.getReadOnlyCallback();
-		PageMetadataController metadatCtrl = new PageMetadataController(ureq, getWindowControl(), secCallback, page);
+		PageMetadataController metadatCtrl = new PageMetadataController(ureq, getWindowControl(), secCallback, page, false);
 		listenTo(metadatCtrl);
 		
 		Component pageMetaCmp = metadatCtrl.getInitialComponent();
@@ -193,15 +196,24 @@ public class BinderOnePageController extends BasicController {
 			//handler for title
 			TitlePageElementHandler titleRawHandler = new TitlePageElementHandler();
 			handlers.add(titleRawHandler);
-			//handler for HTML code
-			HTMLRawPageElementHandler htlmRawHandler = new HTMLRawPageElementHandler();
-			handlers.add(htlmRawHandler);
+			//handler simple HTML
+			ParagraphPageElementHandler paragraphHandler = new ParagraphPageElementHandler();
+			handlers.add(paragraphHandler);
 			//handler for HTML code
 			SpacerElementHandler hrHandler = new SpacerElementHandler();
 			handlers.add(hrHandler);
+			//handler for container
+			ContainerHandler containerHandler = new ContainerHandler();
+			handlers.add(containerHandler);
 			//handler for form
 			EvaluationFormHandler formHandler = new EvaluationFormHandler();
 			handlers.add(formHandler);
+			//handler for HTML code
+			HTMLRawPageElementHandler htlmRawHandler = new HTMLRawPageElementHandler();
+			handlers.add(htlmRawHandler);
+			// handler for table
+			TablePageElementHandler tableHandler = new TablePageElementHandler();
+			handlers.add(tableHandler);
 			
 			
 			List<MediaHandler> mediaHandlers = portfolioService.getMediaHandlers();

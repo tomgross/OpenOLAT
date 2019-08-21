@@ -27,8 +27,6 @@ package org.olat.upgrade;
 
 import javax.sql.DataSource;
 
-import org.olat.core.logging.OLog;
-import org.olat.core.logging.Tracing;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 
@@ -45,23 +43,11 @@ public abstract class OLATUpgrade {
 	
 	static final String TASK_DP_UPGRADE = "Database update";
 	private String alterDbFilename;
-	OLog log = Tracing.createLoggerFor(this.getClass());
 
 	/**
 	 * @return String representing the unique version identifyer of this upgrade
 	 */
 	public abstract String getVersion();
-
-	/**
-	 * Method is executed after initializing the OLATContext but prior to any 
-	 * other modules and prior to the OLAT extensions. This means that the database
-	 * is not yet initialized, however you could do some native JDBC queries 
-	 * @param upgradeManager
-	 * @return true if anything has been upgraded, false if nothing has been 
-	 * upgraded (e.g. since the upgrade is already installed). false does not indicate
-	 * a failure! In case of failure, throw an exception!
-	 */
-	public abstract boolean doPreSystemInitUpgrade(UpgradeManager upgradeManager);
 	
 	/**
 	 * Method is executed after every module and every extension is initialized but 
@@ -73,6 +59,15 @@ public abstract class OLATUpgrade {
 	 * a failure! In case of failure, throw an exception!
 	 */
 	public abstract boolean doPostSystemInitUpgrade(UpgradeManager upgradeManager);
+	
+	/**
+	 * Call the upgrader in the case of a brand new instance.
+	 * 
+	 * @return true if all ok
+	 */
+	public boolean doNewSystemInit() {
+		return true;
+	}
 	
 	/**
 	 * [used by spring] to inject alter db sql statements if available.

@@ -30,11 +30,14 @@ import org.olat.group.BusinessGroupManagedFlag;
 import org.olat.group.ui.main.AbstractMemberListController;
 import org.olat.group.ui.main.CourseMembership;
 import org.olat.group.ui.main.MemberView;
+import org.olat.group.ui.main.MemberListSecurityCallbackFactory;
+import org.olat.group.ui.main.MemberRow;
 import org.olat.group.ui.main.SearchMembersParams;
 
 import java.util.List;
 
 /**
+ * The list of members specific to the business groups.
  * 
  * @author srosse, stephane.rosse@frentix.com, http://www.frentix.com
  */
@@ -44,7 +47,7 @@ public class MemberListController extends AbstractMemberListController {
 	
 	public MemberListController(UserRequest ureq, WindowControl wControl, TooledStackedPanel stackPanel,
 			BusinessGroup group, SearchMembersParams searchParams) {
-		super(ureq, wControl, group, "all_member_list", false, stackPanel);
+		super(ureq, wControl, group, "all_member_list", MemberListSecurityCallbackFactory.adminRights(), stackPanel);
 		this.searchParams = searchParams;
 	}
 
@@ -86,7 +89,7 @@ public class MemberListController extends AbstractMemberListController {
 	}
 
 	@Override
-	protected void doOpenAssessmentTool(UserRequest ureq, MemberView member) {
+	protected void doOpenAssessmentTool(UserRequest ureq, MemberRow member) {
 		//
 	}
 

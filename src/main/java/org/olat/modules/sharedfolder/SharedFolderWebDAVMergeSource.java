@@ -22,7 +22,6 @@ package org.olat.modules.sharedfolder;
 import static org.olat.modules.sharedfolder.SharedFolderWebDAVProvider.readOnlyCallback;
 
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -30,12 +29,14 @@ import java.util.Set;
 import org.olat.core.commons.services.webdav.manager.WebDAVMergeSource;
 import org.olat.core.id.Identity;
 import org.olat.core.id.Roles;
-import org.olat.core.logging.OLog;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.vfs.VFSContainer;
 import org.olat.fileresource.types.SharedFolderFileResource;
 import org.olat.repository.RepositoryEntry;
+import org.olat.repository.RepositoryEntryStatusEnum;
 import org.olat.repository.RepositoryManager;
+import org.olat.repository.model.SearchRepositoryEntryParameters;
 
 
 /**
@@ -45,7 +46,7 @@ import org.olat.repository.RepositoryManager;
  */
 public class SharedFolderWebDAVMergeSource extends WebDAVMergeSource {
 	
-	private static final OLog log = Tracing.createLoggerFor(SharedFolderWebDAVMergeSource.class);
+	private static final Logger log = Tracing.createLoggerFor(SharedFolderWebDAVMergeSource.class);
 
 	private final List<String> publiclyReadableFolders;
 	
@@ -83,9 +84,9 @@ public class SharedFolderWebDAVMergeSource extends WebDAVMergeSource {
 			// If the first value in the list is '*', list all resource folders.
 			if (firstItem != null && firstItem.equals("*")) {
 				// fake role that represents normally logged in user
-				Roles registeredUserRole = new Roles(false, false, false, false, false, false, false);
-				List<String> types = Collections.singletonList(SharedFolderFileResource.TYPE_NAME);
-				List<RepositoryEntry> allEntries = repoManager.queryByTypeLimitAccess(getIdentity(), types, registeredUserRole);
+				SearchRepositoryEntryParameters params = new SearchRepositoryEntryParameters(getIdentity(), Roles.userRoles(), SharedFolderFileResource.TYPE_NAME);
+				List<RepositoryEntry> allEntries = repoManager
+						.genericANDQueryWithRolesRestriction(params, 0, -1, false);
 				for (RepositoryEntry entry : allEntries) {
 					addReadonlyFolder(entry, sfm, addedEntries, containers);
 				}
@@ -94,11 +95,12 @@ public class SharedFolderWebDAVMergeSource extends WebDAVMergeSource {
 				List<Long> publiclyReadableFoldersKeys = getSharedKeys();	
 				List<RepositoryEntry> entries = repoManager.lookupRepositoryEntries(publiclyReadableFoldersKeys);
 				for (RepositoryEntry entry:entries) {
-					if (entry.getAccess() >= RepositoryEntry.ACC_USERS || (entry.getAccess() == RepositoryEntry.ACC_OWNERS && entry.isMembersOnly())) {
+					if (entry.getEntryStatus() == RepositoryEntryStatusEnum.published
+							|| entry.getEntryStatus() == RepositoryEntryStatusEnum.closed) {
 						// add folder (which is a repo entry) to root container if not present
 						addReadonlyFolder(entry, sfm, addedEntries, containers);
 					} else {
-						log.warn("Access denied on entry::" + entry.getKey(), null);
+						log.warn("Access denied on entry::" + entry.getKey());
 					}
 				}
 			}

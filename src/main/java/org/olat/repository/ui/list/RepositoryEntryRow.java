@@ -31,7 +31,7 @@ import org.olat.core.util.resource.OresHelper;
 import org.olat.course.assessment.AssessmentHelper;
 import org.olat.repository.RepositoryEntryMyView;
 import org.olat.repository.RepositoryEntryRef;
-import org.olat.repository.RepositoryEntryStatus;
+import org.olat.repository.RepositoryEntryStatusEnum;
 import org.olat.repository.model.RepositoryEntryLifecycle;
 import org.olat.repository.ui.PriceMethod;
 
@@ -56,13 +56,18 @@ public class RepositoryEntryRow implements RepositoryEntryRef {
 	private String location;
 	private String expenditureOfWork;
 	private String thumbnailRelPath;
-	private String shortenedDescription;
 	private int access;
 	private int statusCode;
 	
-	private String score;
-	private Boolean passed;
 	private boolean isMembersOnly = false;
+	private final String shortenedDescription;
+	private final RepositoryEntryStatusEnum status;
+	private final boolean allUsers;
+	private final boolean guests;
+	private final boolean bookable;
+	
+	private final String score;
+	private final Boolean passed;
 	
 	private boolean member;
 	
@@ -100,13 +105,19 @@ public class RepositoryEntryRow implements RepositoryEntryRef {
 		setDisplayName(entry.getDisplayname());
 		setShortenedDescription(entry.getDescription());
 		setOLATResourceable(OresHelper.clone(entry.getOlatResource()));
-		setAuthors(entry.getAuthors());
-		setLocation(entry.getLocation());
-		setExpenditureOfWork(entry.getExpenditureOfWork());
-		setLaunchCounter(entry.getLaunchCounter());
+
 		setIsMembersOnly(entry.isMembersOnly());
 		setAccess(entry.getAccess());
 		setStatusCode(entry.getStatusCode());
+
+		authors = entry.getAuthors();
+		location = entry.getLocation();
+		expenditureOfWork = entry.getExpenditureOfWork();
+		launchCounter = entry.getLaunchCounter();
+		status = entry.getEntryStatus();
+		allUsers = entry.isAllUsers();
+		guests = entry.isGuests();
+		bookable = entry.isBookable();
 		
 		//bookmark
 		setMarked(entry.isMarked());
@@ -141,6 +152,7 @@ public class RepositoryEntryRow implements RepositoryEntryRef {
 		return isMembersOnly;
 	}
 	
+	@Override
 	public Long getKey() {
 		return key;
 	}
@@ -158,11 +170,11 @@ public class RepositoryEntryRow implements RepositoryEntryRef {
 	}
 
 	public boolean isClosed() {
-		return new RepositoryEntryStatus(statusCode).isClosed();
+		return status.decommissioned();
 	}
 
-	public int getAccess() {
-		return access;
+	public RepositoryEntryStatusEnum getStatus() {
+		return status;
 	}
 
 	public void setAccess(int access) {
@@ -171,6 +183,17 @@ public class RepositoryEntryRow implements RepositoryEntryRef {
 
 	public int getStatusCode() {
 		return statusCode;
+	
+	public boolean isAllUsers() {
+		return allUsers;
+	}
+	
+	public boolean isGuests() {
+		return guests;
+	}
+	
+	public boolean isBookable() {
+		return bookable;
 	}
 
 	public void setStatusCode(int statusCode) {

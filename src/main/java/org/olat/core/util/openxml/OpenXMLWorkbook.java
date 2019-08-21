@@ -32,7 +32,7 @@ import javax.xml.stream.XMLStreamException;
 import javax.xml.stream.XMLStreamWriter;
 
 import org.apache.commons.io.IOUtils;
-import org.olat.core.logging.OLog;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.StringHelper;
 import org.olat.core.util.filter.Filter;
@@ -50,7 +50,7 @@ import org.olat.core.util.openxml.workbookstyle.Font;
  */
 public class OpenXMLWorkbook implements Closeable {
 	
-	private static final OLog log = Tracing.createLoggerFor(OpenXMLWorkbook.class);
+	private static final Logger log = Tracing.createLoggerFor(OpenXMLWorkbook.class);
 	
 
 	public static final String SCHEMA_RELATIONSHIPS = "http://schemas.openxmlformats.org/package/2006/relationships";
@@ -702,10 +702,24 @@ public class OpenXMLWorkbook implements Closeable {
 		if(style.getFill().getIndex() > 0) {
 			writer.writeAttribute("applyFill", "1");
 		}
-		
 		if(StringHelper.containsNonWhitespace(style.getApplyNumberFormat())) {
 			writer.writeAttribute("applyNumberFormat", style.getApplyNumberFormat());
-		}	
+		}
+		if(StringHelper.containsNonWhitespace(style.getApplyAlignment())) {
+			writer.writeAttribute("applyAlignment", style.getApplyAlignment());
+		}
+		
+		if(style.getAlignment() != null) {
+			writer.writeStartElement("alignment");
+			if(StringHelper.containsNonWhitespace(style.getAlignment().getVertical())) {
+				writer.writeAttribute("vertical", style.getAlignment().getVertical());
+			}
+			if(StringHelper.containsNonWhitespace(style.getAlignment().getWrapText())) {
+				writer.writeAttribute("wrapText", style.getAlignment().getWrapText());
+			}
+			writer.writeEndElement();
+		}
+		
 		writer.writeEndElement();
 	}
 		

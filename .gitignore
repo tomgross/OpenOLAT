@@ -2,6 +2,7 @@
 /target/
 /cargo/
 /.settings/
+/.externalToolBuilders/
 
 # deprecated scripting files
 *.pl
@@ -31,4 +32,7 @@ src/test/java/org/olat/selenium/SeleniumTest.java
 */target
 *.sw?
 */.classpath
+
 */.project
+.idea
+

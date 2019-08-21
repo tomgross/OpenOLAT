@@ -22,9 +22,7 @@ package org.olat.modules.lecture.ui;
 import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.Date;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 
 import org.olat.NewControllerFactory;
 import org.olat.basesecurity.GroupRoles;
@@ -57,13 +55,14 @@ import org.olat.core.gui.control.WindowControl;
 import org.olat.core.gui.control.creator.ControllerCreator;
 import org.olat.core.gui.control.generic.closablewrapper.CloseableModalController;
 import org.olat.core.id.Identity;
+import org.olat.core.id.context.BusinessControlFactory;
 import org.olat.core.util.Formatter;
 import org.olat.core.util.StringHelper;
 import org.olat.core.util.mail.ContactList;
 import org.olat.core.util.mail.ContactMessage;
 import org.olat.modules.co.ContactFormController;
 import org.olat.modules.lecture.LectureBlock;
-import org.olat.modules.lecture.LectureBlockAuditLog;
+import org.olat.modules.lecture.LectureBlockAppealStatus;
 import org.olat.modules.lecture.LectureBlockAuditLog.Action;
 import org.olat.modules.lecture.LectureBlockRollCall;
 import org.olat.modules.lecture.LectureBlockStatus;
@@ -74,6 +73,7 @@ import org.olat.modules.lecture.ui.ParticipantLectureBlocksDataModel.Participant
 import org.olat.modules.lecture.ui.component.LectureBlockRollCallStatusCellRenderer;
 import org.olat.modules.lecture.ui.component.LecturesCompulsoryRenderer;
 import org.olat.repository.RepositoryEntry;
+import org.olat.repository.RepositoryEntryRelationType;
 import org.olat.repository.RepositoryService;
 import org.olat.user.UserManager;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -205,14 +205,6 @@ public class ParticipantLectureBlocksController extends FormBasicController {
 
 		String separator = translate("user.fullname.separator");
 		List<LectureBlockAndRollCall> rollCalls = lectureService.getParticipantLectureBlocks(entry, assessedIdentity, separator);
-		List<LectureBlockAuditLog> sendAppealLogs = lectureService.getAuditLog(entry, assessedIdentity, LectureBlockAuditLog.Action.sendAppeal);
-		Map<Long, Date> appealDates = new HashMap<>();
-		for(LectureBlockAuditLog sendAppealLog:sendAppealLogs) {
-			if(sendAppealLog.getRollCallKey() != null) {
-				appealDates.put(sendAppealLog.getRollCallKey(), sendAppealLog.getCreationDate());
-			}
-		}
-		
 		List<LectureBlockAndRollCallRow> rows = new ArrayList<>(rollCalls.size());
 		for(LectureBlockAndRollCall rollCall:rollCalls) {
 			LectureBlockAndRollCallRow row = new LectureBlockAndRollCallRow(rollCall);
@@ -234,17 +226,15 @@ public class ParticipantLectureBlocksController extends FormBasicController {
 					Date endAppeal = CalendarUtils.getEndOfDay(cal).getTime();
 					
 					Date sendAppealDate = null;
+					LectureBlockAppealStatus appealStatus = null;
 					if(row.getRow().getRollCallRef() != null ) {
-						sendAppealDate = appealDates.get(row.getRow().getRollCallRef().getKey());
+						sendAppealDate = rollCall.getAppealDate();
+						appealStatus = rollCall.getAppealStatus();
 					}
 
 					FormLink appealLink = null;
 					if(sendAppealDate != null) {
-						String appealFrom = translate("appeal.sent", new String[]{ formatter.formatDate(sendAppealDate) });
-						appealLink = uifactory.addFormLink("appeal_" + count++, "appealsend", appealFrom, null, flc, Link.LINK | Link.NONTRANSLATED);
-						appealLink.setTitle(translate("appeal.sent.tooltip", new String[] { formatter.formatDate(sendAppealDate), formatter.formatDate(beginAppeal), formatter.formatDate(endAppeal) }));
-						appealLink.setEnabled(false);
-						appealLink.setDomReplacementWrapperRequired(false);
+						appealLink = getAppealedLink(beginAppeal, endAppeal, sendAppealDate, appealStatus, formatter);
 					} else if(now.compareTo(beginAppeal) >= 0 && now.compareTo(endAppeal) <= 0) {
 						appealLink = uifactory.addFormLink("appeal_" + count++, "appeal", translate("appeal"), null, flc, Link.LINK | Link.NONTRANSLATED);
 						appealLink.setTitle(translate("appeal.tooltip", new String[] { formatter.formatDate(beginAppeal), formatter.formatDate(endAppeal) }));
@@ -269,6 +259,28 @@ public class ParticipantLectureBlocksController extends FormBasicController {
 		}
 		tableModel.setObjects(rows);
 		tableEl.reset(true, true, true);
+	}
+	
+	private FormLink getAppealedLink(Date beginAppeal, Date endAppeal, Date sendAppealDate,
+			LectureBlockAppealStatus status, Formatter formatter) {
+		String i18nKey;
+		if(status == LectureBlockAppealStatus.oldWorkflow) {
+			i18nKey = "appeal.sent";
+		} else if(status == LectureBlockAppealStatus.pending) {
+			i18nKey = "appeal.pending";
+		} else if(status == LectureBlockAppealStatus.rejected) {
+			i18nKey = "appeal.rejected";
+		} else if(status == LectureBlockAppealStatus.approved) {
+			i18nKey = "appeal.approved";
+		} else {
+			i18nKey = "appeal.sent";
+		}
+		String appealFrom = translate(i18nKey, new String[]{ formatter.formatDate(sendAppealDate) });
+		FormLink appealLink = uifactory.addFormLink("appeal_" + count++, "appealsend", appealFrom, null, flc, Link.LINK | Link.NONTRANSLATED);
+		appealLink.setTitle(translate("appeal.sent.tooltip", new String[] { formatter.formatDate(sendAppealDate), formatter.formatDate(beginAppeal), formatter.formatDate(endAppeal) }));
+		appealLink.setEnabled(false);
+		appealLink.setDomReplacementWrapperRequired(false);
+		return appealLink;
 	}
 
 	@Override
@@ -340,11 +352,11 @@ public class ParticipantLectureBlocksController extends FormBasicController {
 		
 		LectureBlock block = lectureService.getLectureBlock(row.getLectureBlockRef());
 		List<Identity> teachers = lectureService.getTeachers(block);
-		List<Identity> onwers = repositoryService.getMembers(entry, GroupRoles.owner.name());
+		List<Identity> owners = repositoryService.getMembers(entry, RepositoryEntryRelationType.entryAndCurriculums, GroupRoles.owner.name());
 		
 		ContactList contactList = new ContactList(translate("appeal.contact.list"));
 		contactList.addAllIdentites(teachers);
-		contactList.addAllIdentites(onwers);
+		contactList.addAllIdentites(owners);
 		
 		StringBuilder teacherNames = new StringBuilder();
 		for(Identity teacher:teachers) {
@@ -352,17 +364,24 @@ public class ParticipantLectureBlocksController extends FormBasicController {
 			teacherNames.append(teacher.getUser().getFirstName()).append(" ").append(teacher.getUser().getLastName());
 		}
 		String date = Formatter.getInstance(getLocale()).formatDate(block.getStartDate());
+		String businessPath = "[RepositoryEntry:" + entry.getKey() + "][LectureBlock:" + block.getKey() + "]";
+		String url = BusinessControlFactory.getInstance().getURLFromBusinessPathString(businessPath);	
 		String[] args = new String[] {
 			row.getLectureBlockTitle(),
 			teacherNames.toString(),
-			date
+			date,
+			url
 		};
+		
+		StringBuilder body = new StringBuilder(1024);
+		body.append(translate("appeal.body.title", args))
+		    .append(translate("appeal.body", args));
 		
 		ContactMessage cmsg = new ContactMessage(getIdentity());
 		cmsg.addEmailTo(contactList);
 		cmsg.setSubject(translate("appeal.subject", args));
-		cmsg.setBodyText(translate("appeal.body", args));
-		appealCtrl = new ContactFormController(ureq, getWindowControl(), true, false, false, cmsg);
+		cmsg.setBodyText(body.toString());
+		appealCtrl = new ContactFormController(ureq, getWindowControl(), true, false, false, cmsg, null);
 		appealCtrl.setUserObject(row);
 		appealCtrl.setContactFormTitle(translate("new.appeal.title"));
 		listenTo(appealCtrl);
@@ -374,12 +393,17 @@ public class ParticipantLectureBlocksController extends FormBasicController {
 	}
 	
 	private void doAppealAudit(LectureBlockAndRollCall row, String message) {
-		logAudit("Appeal send for lecture block: " + row.getLectureBlockTitle() + " (" + row.getLectureBlockRef().getKey() + ")", null);
+		logAudit("Appeal send for lecture block: " + row.getLectureBlockTitle() + " (" + row.getLectureBlockRef().getKey() + ")");
 		
 		LectureBlock lectureBlock = lectureService.getLectureBlock(row.getLectureBlockRef());
 		LectureBlockRollCall rollCall = lectureService.getRollCall(row.getRollCallRef());
-		lectureService.auditLog(Action.sendAppeal, null, null, message, lectureBlock, rollCall, entry, assessedIdentity, null);
-		
+		String before = lectureService.toAuditXml(rollCall);
+		rollCall.setAppealDate(new Date());
+		rollCall.setAppealStatus(LectureBlockAppealStatus.pending);
+		rollCall.setAppealReason(message);
+		rollCall = lectureService.updateRollCall(rollCall);
+		String after = lectureService.toAuditXml(rollCall);
+		lectureService.auditLog(Action.sendAppeal, before, after, message, lectureBlock, rollCall, entry, assessedIdentity, null);
 		dbInstance.commit();
 		loadModel();
 		tableEl.reset(false, false, true);

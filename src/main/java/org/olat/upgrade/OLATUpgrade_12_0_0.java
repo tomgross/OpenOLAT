@@ -27,16 +27,16 @@ import java.io.OutputStream;
 import java.nio.file.Paths;
 import java.util.Arrays;
 import java.util.Calendar;
-import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Properties;
 import java.util.Set;
 
+import org.apache.logging.log4j.Logger;
 import org.olat.core.commons.modules.bc.FolderConfig;
 import org.olat.core.commons.persistence.DB;
 import org.olat.core.id.Identity;
-import org.olat.core.id.Roles;
+import org.olat.core.logging.Tracing;
 import org.olat.core.util.WebappHelper;
 import org.olat.course.CorruptedCourseException;
 import org.olat.course.CourseFactory;
@@ -62,8 +62,7 @@ import org.olat.modules.iq.IQManager;
 import org.olat.modules.webFeed.manager.FeedManager;
 import org.olat.repository.RepositoryEntry;
 import org.olat.repository.RepositoryEntryRef;
-import org.olat.repository.RepositoryManager;
-import org.olat.repository.model.SearchRepositoryEntryParameters;
+import org.olat.repository.RepositoryService;
 import org.olat.resource.OLATResource;
 import org.olat.resource.OLATResourceManager;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -76,7 +75,7 @@ import org.springframework.beans.factory.annotation.Autowired;
  */
 public class OLATUpgrade_12_0_0 extends OLATUpgrade {
 
-	private static final int BATCH_SIZE = 50;
+	private static final Logger log = Tracing.createLoggerFor(OLATUpgrade_12_0_0.class);
 	
 	private static final String VERSION = "OLAT_12.0.0";
 	private static final String FEED_XML_TO_DB = "FEED XML TO DB";
@@ -92,7 +91,7 @@ public class OLATUpgrade_12_0_0 extends OLATUpgrade {
 	@Autowired
 	private IQManager iqManager;
 	@Autowired
-	private RepositoryManager repositoryManager;
+	private RepositoryService repositoryService;
 	@Autowired
 	private EfficiencyStatementManager efficiencyStatementManager;
 	
@@ -103,11 +102,6 @@ public class OLATUpgrade_12_0_0 extends OLATUpgrade {
 	@Override
 	public String getVersion() {
 		return VERSION;
-	}
-
-	@Override
-	public boolean doPreSystemInitUpgrade(UpgradeManager upgradeManager) {
-		return false;
 	}
 
 	@Override
@@ -130,9 +124,9 @@ public class OLATUpgrade_12_0_0 extends OLATUpgrade {
 		uhd.setInstallationComplete(allOk);
 		upgradeManager.setUpgradesHistory(uhd, VERSION);
 		if(allOk) {
-			log.audit("Finished OLATUpgrade_12_0_0 successfully!");
+			log.info(Tracing.M_AUDIT, "Finished OLATUpgrade_12_0_0 successfully!");
 		} else {
-			log.audit("OLATUpgrade_12_0_0 not finished, try to restart OpenOLAT!");
+			log.info(Tracing.M_AUDIT, "OLATUpgrade_12_0_0 not finished, try to restart OpenOLAT!");
 		}
 		return allOk;
 	}
@@ -227,33 +221,35 @@ public class OLATUpgrade_12_0_0 extends OLATUpgrade {
 	private boolean upgradeLastModified(UpgradeManager upgradeManager, UpgradeHistoryData uhd) {
 		boolean allOk = true;
 		if (!uhd.getBooleanDataValue(LAST_USER_MODIFICATION)) {
-			
 			int counter = 0;
-			final Roles roles = new Roles(true, true, true, true, false, true, false);
-			final SearchRepositoryEntryParameters params = new SearchRepositoryEntryParameters();
-			params.setRoles(roles);
-			params.setResourceTypes(Collections.singletonList("CourseModule"));
-			
-			List<RepositoryEntry> courses;
-			do {
-				courses = repositoryManager.genericANDQueryWithRolesRestriction(params, counter, 50, true);
-				for(RepositoryEntry course:courses) {
+			List<Long> entryKeys = getRepositoryEntryKeys();
+			for(Long entryKey:entryKeys) {
+				RepositoryEntry course = repositoryService.loadByKey(entryKey);
+				if(course.getOlatResource().getResourceableTypeName().equals("CourseModule")) {
 					try {
 						allOk &= processCourseAssessmentLastModified(course);
 					} catch (CorruptedCourseException e) {
 						log.error("Corrupted course: " + course.getKey(), e);
 					}
 				}
-				counter += courses.size();
-				log.audit("Last modifications migration processed: " + courses.size() + ", total courses processed (" + counter + ")");
-				dbInstance.commitAndCloseSession();
-			} while(courses.size() == BATCH_SIZE);
-			
-			
+				
+				if(counter++ % 25 == 0) {
+					log.info(Tracing.M_AUDIT, "Last modifications migration processed: " + counter + ", total courses processed (" + counter + ")");
+					dbInstance.commitAndCloseSession();
+				}
+			} 
+
 			uhd.setBooleanDataValue(LAST_USER_MODIFICATION, allOk);
 			upgradeManager.setUpgradesHistory(uhd, VERSION);
 		}
 		return allOk;
+	}
+	
+	private List<Long> getRepositoryEntryKeys() {
+		String q = "select v.key from repositoryentry as v";
+		return dbInstance.getCurrentEntityManager()
+				.createQuery(q, Long.class)
+				.getResultList();
 	}
 	
 	

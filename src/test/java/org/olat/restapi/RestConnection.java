@@ -27,6 +27,7 @@ import java.io.UnsupportedEncodingException;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.URL;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -61,12 +62,13 @@ import org.apache.http.impl.client.BasicCredentialsProvider;
 import org.apache.http.impl.client.CloseableHttpClient;
 import org.apache.http.impl.client.HttpClientBuilder;
 import org.apache.http.util.EntityUtils;
-import org.codehaus.jackson.JsonFactory;
-import org.codehaus.jackson.map.ObjectMapper;
-import org.olat.core.logging.OLog;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.StringHelper;
 import org.olat.restapi.security.RestSecurityHelper;
+
+import com.fasterxml.jackson.core.JsonFactory;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 /**
  * 
@@ -81,7 +83,7 @@ import org.olat.restapi.security.RestSecurityHelper;
  */
 public class RestConnection {
 	
-	private static final OLog log = Tracing.createLoggerFor(RestConnection.class);
+	private static final Logger log = Tracing.createLoggerFor(RestConnection.class);
 	
 	private int PORT = 9998;
 	private String HOST = "localhost";
@@ -193,12 +195,12 @@ public class RestConnection {
 	    return code == 200;
 	}
 	
-	public <T> T get(URI uri, Class<T> cl) throws IOException, URISyntaxException {
+	public <U> U get(URI uri, Class<U> cl) throws IOException, URISyntaxException {
 		HttpGet get = createGet(uri, MediaType.APPLICATION_JSON, true);
 		HttpResponse response = execute(get);
 		if(200 == response.getStatusLine().getStatusCode()) {
 			HttpEntity entity = response.getEntity();
-			return parse(entity.getContent(), cl);
+			return parse(entity, cl);
 		} else {
 			EntityUtils.consume(response.getEntity());
 			log.error("get return: " + response.getStatusLine().getStatusCode());
@@ -220,8 +222,8 @@ public class RestConnection {
 	
 	/**
 	 * Add an object (application/json)
-	 * @param put
-	 * @param obj
+	 * @param put The request
+	 * @param obj The object which will be serialized as json in UTF-8
 	 * @throws UnsupportedEncodingException
 	 */
 	public void addJsonEntity(HttpEntityEnclosingRequestBase put, Object obj)
@@ -233,12 +235,18 @@ public class RestConnection {
 		put.setEntity(myEntity);
 	}
 	
+	/**
+	 * @param post The request
+	 * @param filename The filename (will encoded as UTF-8)
+	 * @param file The file (application/octet-stream)
+	 * @throws UnsupportedEncodingException
+	 */
 	public void addMultipart(HttpEntityEnclosingRequestBase post, String filename, File file)
 	throws UnsupportedEncodingException {
 		
 		HttpEntity entity = MultipartEntityBuilder.create()
 				.setMode(HttpMultipartMode.BROWSER_COMPATIBLE)
-				.addTextBody("filename", filename)
+				.addTextBody("filename", filename, ContentType.create("text/plain", StandardCharsets.UTF_8))
 				.addBinaryBody("file", file, ContentType.APPLICATION_OCTET_STREAM, filename).build();
 		post.setEntity(entity);
 	}
@@ -282,7 +290,7 @@ public class RestConnection {
 	private void decorateHttpMessage(HttpRequestBase msg, String accept, String langage, boolean cookie) {
 		if(cookie) {
 			RequestConfig config = RequestConfig.copy(RequestConfig.DEFAULT)
-				.setCookieSpec(CookieSpecs.BROWSER_COMPATIBILITY)
+				.setCookieSpec(CookieSpecs.DEFAULT)
 				.build();
 			msg.setConfig(config);
 		}
@@ -316,11 +324,20 @@ public class RestConnection {
 	}
 	
 	public String stringuified(Object obj) {
-		try {
-			ObjectMapper mapper = new ObjectMapper(jsonFactory); 
-			StringWriter w = new StringWriter();
+		try(StringWriter w = new StringWriter()) {
+			ObjectMapper mapper = new ObjectMapper(jsonFactory);
 			mapper.writeValue(w, obj);
 			return w.toString();
+		} catch (Exception e) {
+			log.error("", e);
+			return null;
+		}
+	}
+	
+	public <U> U parse(HttpEntity entity, Class<U> cl) {
+		try(InputStream body = entity.getContent()) {
+			ObjectMapper mapper = new ObjectMapper(jsonFactory);
+			return mapper.readValue(body, cl);
 		} catch (Exception e) {
 			log.error("", e);
 			return null;
@@ -330,19 +347,7 @@ public class RestConnection {
 	public <U> U parse(HttpResponse response, Class<U> cl) {
 		try(InputStream body = response.getEntity().getContent()) {
 			ObjectMapper mapper = new ObjectMapper(jsonFactory);
-			U obj = mapper.readValue(body, cl);
-			return obj;
-		} catch (Exception e) {
-			log.error("", e);
-			return null;
-		}
-	}
-	
-	public <U> U parse(InputStream body, Class<U> cl) {
-		try {
-			ObjectMapper mapper = new ObjectMapper(jsonFactory);
-			U obj = mapper.readValue(body, cl);
-			return obj;
+			return mapper.readValue(body, cl);
 		} catch (Exception e) {
 			log.error("", e);
 			return null;

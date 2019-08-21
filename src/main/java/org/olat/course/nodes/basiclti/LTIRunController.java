@@ -53,7 +53,6 @@ import org.olat.core.util.Encoder;
 import org.olat.core.util.SortedProperties;
 import org.olat.core.util.StringHelper;
 import org.olat.core.util.Util;
-import org.olat.course.groupsandrights.CourseGroupManager;
 import org.olat.course.highscore.ui.HighScoreRunController;
 import org.olat.course.nodes.BasicLTICourseNode;
 import org.olat.course.nodes.CourseNode;
@@ -293,7 +292,7 @@ public class LTIRunController extends BasicController {
 			hash = Encoder.md5hash(data);
 		}
 		if (isLogDebugEnabled()) {
-			logDebug("Create accept hash::" + hash + " for data::" + data, null);
+			logDebug("Create accept hash::" + hash + " for data::" + data);
 		}
 		return hash;
 	}
@@ -382,7 +381,8 @@ public class LTIRunController extends BasicController {
 			ChiefController cc = getWindowControl().getWindowBackOffice().getChiefController();
 			if (cc != null) {
 				thebaseChief = cc;
-				thebaseChief.getScreenMode().setMode(Mode.full);
+				String businessPath = getWindowControl().getBusinessControl().getAsString();
+				thebaseChief.getScreenMode().setMode(Mode.full, businessPath);
 			}
 			fullScreen = true;
 			getWindowControl().pushToMainArea(run);
@@ -394,7 +394,8 @@ public class LTIRunController extends BasicController {
 	private void closeBasicLTI() {
 		if (fullScreen && thebaseChief != null) {
 			getWindowControl().pop();
-			thebaseChief.getScreenMode().setMode(Mode.standard);
+			String businessPath = getWindowControl().getBusinessControl().getAsString();
+			thebaseChief.getScreenMode().setMode(Mode.standard, businessPath);
 		}
 		mainPanel.setContent(startPage);
 	}
@@ -478,16 +479,15 @@ public class LTIRunController extends BasicController {
 		if (roles.isGuestOnly()) {
 			return "Guest";
 		}
-		CourseGroupManager groupManager = courseEnv.getCourseGroupManager();
-		boolean admin = groupManager.isIdentityCourseAdministrator(getIdentity());
-		if(admin || roles.isOLATAdmin()) {
+		boolean admin = userCourseEnv.isAdmin();
+		if(admin) {
 			String authorRole = config.getStringValue(BasicLTICourseNode.CONFIG_KEY_AUTHORROLE);
 			if(StringHelper.containsNonWhitespace(authorRole)) {
 				return authorRole;
 			}
 			return "Instructor,Administrator";
 		}
-		boolean coach = groupManager.isIdentityCourseCoach(getIdentity());
+		boolean coach = userCourseEnv.isCoach();
 		if(coach) {
 			String coachRole = config.getStringValue(BasicLTICourseNode.CONFIG_KEY_COACHROLE);
 			if(StringHelper.containsNonWhitespace(coachRole)) {

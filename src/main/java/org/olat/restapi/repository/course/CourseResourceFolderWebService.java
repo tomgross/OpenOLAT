@@ -20,8 +20,6 @@
 
 package org.olat.restapi.repository.course;
 
-import static org.olat.restapi.security.RestSecurityHelper.isAuthor;
-
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
@@ -49,31 +47,37 @@ import javax.ws.rs.core.Response.Status;
 import javax.ws.rs.core.UriBuilder;
 import javax.ws.rs.core.UriInfo;
 
-import org.olat.core.CoreSpringFactory;
-import org.olat.core.commons.modules.bc.meta.MetaInfo;
-import org.olat.core.commons.modules.bc.meta.tagged.MetaTagged;
+import org.apache.logging.log4j.Logger;
+import org.olat.core.commons.services.vfs.VFSMetadata;
+import org.olat.core.commons.services.vfs.VFSRepositoryService;
 import org.olat.core.gui.UserRequest;
-import org.olat.core.logging.OLog;
+import org.olat.core.id.Identity;
+import org.olat.core.id.Roles;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.FileUtils;
 import org.olat.core.util.WebappHelper;
+import org.olat.core.util.vfs.VFSConstants;
 import org.olat.core.util.vfs.VFSContainer;
 import org.olat.core.util.vfs.VFSItem;
 import org.olat.core.util.vfs.VFSLeaf;
+import org.olat.core.util.vfs.VFSLockApplicationType;
 import org.olat.core.util.vfs.VFSLockManager;
 import org.olat.core.util.vfs.callbacks.ReadOnlyCallback;
-import org.olat.core.util.vfs.filters.SystemItemFilter;
-import org.olat.core.util.vfs.version.Versionable;
+import org.olat.core.util.vfs.filters.VFSSystemItemFilter;
 import org.olat.course.ICourse;
 import org.olat.course.config.CourseConfig;
 import org.olat.modules.sharedfolder.SharedFolderManager;
 import org.olat.repository.RepositoryEntry;
+import org.olat.repository.RepositoryManager;
 import org.olat.repository.RepositoryService;
+import org.olat.repository.model.RepositoryEntrySecurity;
 import org.olat.resource.OLATResource;
 import org.olat.restapi.repository.SharedFolderWebService;
 import org.olat.restapi.security.RestSecurityHelper;
 import org.olat.restapi.support.MultipartReader;
 import org.olat.restapi.support.vo.LinkVO;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Component;
 
 /**
  * 
@@ -86,18 +90,27 @@ import org.olat.restapi.support.vo.LinkVO;
  * Initial Date:  26 apr. 2010 <br>
  * @author srosse, stephane.rosse@frentix.com
  */
+@Component
 @Path("repo/courses/{courseId}/resourcefolders")
 public class CourseResourceFolderWebService {
 
-	private static final OLog log = Tracing.createLoggerFor(CourseResourceFolderWebService.class);
+	private static final Logger log = Tracing.createLoggerFor(CourseResourceFolderWebService.class);
 
 	private static final String VERSION  = "1.0";
 
-	public static CacheControl cc = new CacheControl();
-
+	private static final CacheControl cc = new CacheControl();
 	static {
 		cc.setMaxAge(-1);
 	}
+
+	@Autowired
+	private VFSLockManager vfsLockManager;
+	@Autowired
+	private RepositoryManager repositoryManager;
+	@Autowired
+	private RepositoryService repositoryService;
+	@Autowired
+	private VFSRepositoryService vfsRepositoryService;
 
 	/**
 	 * The version of the resources folders Web Service
@@ -301,13 +314,12 @@ public class CourseResourceFolderWebService {
 	}
 
 	private Response attachFileToCourseFolder(Long courseId, List<PathSegment> path, String filename, InputStream file, HttpServletRequest request) {
-		if(!isAuthor(request)) {
-			return Response.serverError().status(Status.UNAUTHORIZED).build();
-		}
-
 		ICourse course = CoursesWebService.loadCourse(courseId);
 		if(course == null) {
 			return Response.serverError().status(Status.NOT_FOUND).build();
+		}
+		if(!isAuthor(course, request)) {
+			return Response.serverError().status(Status.UNAUTHORIZED).build();
 		}
 
 		VFSContainer container = course.getCourseFolderContainer();
@@ -331,54 +343,49 @@ public class CourseResourceFolderWebService {
 			}
 
 			//check if it's locked
-			boolean locked = CoreSpringFactory.getImpl(VFSLockManager.class)
-					.isLockedForMe(existingVFSItem, ureq.getIdentity(), ureq.getUserSession().getRoles());
+			boolean locked = vfsLockManager.isLockedForMe(existingVFSItem, ureq.getIdentity(), VFSLockApplicationType.vfs, null);
 			if(locked) {
 				return Response.serverError().status(Status.UNAUTHORIZED).build();
 			}
 
-			if (existingVFSItem instanceof Versionable && ((Versionable)existingVFSItem).getVersions().isVersioned()) {
-				Versionable existingVersionableItem = (Versionable)existingVFSItem;
-				boolean ok = existingVersionableItem.getVersions().addVersion(ureq.getIdentity(), "REST upload", file);
-				if(ok) {
-					log.audit("");
-				}
-				newFile = (VFSLeaf)existingVersionableItem;
+			if (existingVFSItem instanceof VFSLeaf && existingVFSItem.canVersion() == VFSConstants.YES) {
+				VFSLeaf existingLeaf = (VFSLeaf)existingVFSItem;
+				vfsRepositoryService.addVersion(existingLeaf, ureq.getIdentity(), "REST upload", file);
+				newFile = existingLeaf;
 			} else {
 				existingVFSItem.delete();
 				newFile = container.createChildLeaf(filename);
 				OutputStream out = ((VFSLeaf)newFile).getOutputStream(false);
-				FileUtils.copy(file, out);
+				FileUtils.copy(file, out);//TODO metadata use VFSManager ?
 				FileUtils.closeSafely(out);
 				FileUtils.closeSafely(file);
 			}
 		} else if (file != null) {
 			newFile = container.createChildLeaf(filename);
 			OutputStream out = ((VFSLeaf)newFile).getOutputStream(false);
-			FileUtils.copy(file, out);
+			FileUtils.copy(file, out);//TODO metadata use VFSManager ?
 			FileUtils.closeSafely(out);
 			FileUtils.closeSafely(file);
 		} else {
 			newFile = container.createChildContainer(filename);
 		}
 
-		if(newFile instanceof MetaTagged && ((MetaTagged)newFile).getMetaInfo() != null) {
-			MetaInfo infos = ((MetaTagged)newFile).getMetaInfo();
+		if(newFile.canMeta() == VFSConstants.YES) {
+			VFSMetadata infos = newFile.getMetaInfo();
 			infos.setAuthor(ureq.getIdentity());
-			infos.write();
+			vfsRepositoryService.updateMetadata(infos);
 		}
 
 		return Response.ok().build();
 	}
 
 	public Response getFiles(Long courseId, List<PathSegment> path, FolderType type, UriInfo uriInfo, HttpServletRequest httpRequest, Request request) {
-		if(!isAuthor(httpRequest)) {
-			return Response.serverError().status(Status.UNAUTHORIZED).build();
-		}
-
 		ICourse course = CoursesWebService.loadCourse(courseId);
 		if(course == null) {
 			return Response.serverError().status(Status.NOT_FOUND).build();
+		}
+		if(!isAuthor(course, httpRequest)) {
+			return Response.serverError().status(Status.UNAUTHORIZED).build();
 		}
 
 		VFSContainer container = null;
@@ -390,9 +397,9 @@ public class CourseResourceFolderWebService {
 			case SHARED_FOLDER: {
 				container = null;
 				String sfSoftkey = course.getCourseConfig().getSharedFolderSoftkey();
-				OLATResource sharedResource = CoreSpringFactory.getImpl(RepositoryService.class).loadRepositoryEntryResourceBySoftKey(sfSoftkey);
+				OLATResource sharedResource = repositoryService.loadRepositoryEntryResourceBySoftKey(sfSoftkey);
 				if (sharedResource != null) {
-					re = CoreSpringFactory.getImpl(RepositoryService.class).loadByResourceKey(sharedResource.getKey());
+					re = repositoryService.loadByResourceKey(sharedResource.getKey());
 					container = SharedFolderManager.getInstance().getNamedSharedFolder(re, true);
 					CourseConfig courseConfig = course.getCourseConfig();
 					if(courseConfig.isSharedFolderReadOnlyMount()) {
@@ -429,7 +436,7 @@ public class CourseResourceFolderWebService {
 			return response.build();
 		} 
 
-		List<VFSItem> items = container.getItems(new SystemItemFilter());
+		List<VFSItem> items = container.getItems(new VFSSystemItemFilter());
 		int count=0;
 		LinkVO[] links = new LinkVO[items.size()];
 		for(VFSItem item:items) {
@@ -446,6 +453,15 @@ public class CourseResourceFolderWebService {
 		}
 
 		return Response.ok(links).build();
+	}
+	
+	private boolean isAuthor(ICourse course, HttpServletRequest httpRequest) {
+		UserRequest ureq = RestSecurityHelper.getUserRequest(httpRequest);
+		Identity identity = ureq.getIdentity();
+		Roles roles = ureq.getUserSession().getRoles();
+		RepositoryEntrySecurity reSecurity = repositoryManager.isAllowed(identity, roles,
+				course.getCourseEnvironment().getCourseGroupManager().getCourseEntry());
+		return reSecurity.isEntryAdmin();
 	}
 
 	public enum FolderType {

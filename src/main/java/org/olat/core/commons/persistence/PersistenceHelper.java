@@ -26,6 +26,7 @@
 
 package org.olat.core.commons.persistence;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Iterator;
@@ -33,6 +34,8 @@ import java.util.List;
 import java.util.Properties;
 
 import org.olat.core.id.Persistable;
+import org.apache.logging.log4j.Logger;
+import org.olat.core.logging.Tracing;
 import org.olat.core.util.Formatter;
 import org.olat.core.util.StringHelper;
 import org.olat.core.util.filter.FilterFactory;
@@ -46,6 +49,8 @@ import org.olat.core.util.filter.FilterFactory;
  * @author gnaegi 
  */
 public class PersistenceHelper {
+	
+	private static final Logger log = Tracing.createLoggerFor(PersistenceHelper.class);
 	private static boolean charCountNativeUTF8 = true;
 	
 	/**
@@ -126,33 +131,21 @@ public class PersistenceHelper {
 		return true;
 	}
 	
-	public static boolean appendGroupBy(StringBuilder sb, String dbRef, SortKey... orderBy) {
-		boolean appended = false;
-		if(orderBy != null && orderBy.length > 0 && orderBy[0] != null) {
-			sb.append(" order by ");
-			for(SortKey sort:orderBy) {
-				sb.append(dbRef).append(".").append(sort.getKey());
-				if(sort.isAsc()) {
-					sb.append(" asc ");
-				} else {
-					sb.append(" desc ");
-				}
-				appended = true;
+	public static final void appendFuzzyLike(Appendable sb, String var, String key, String dbVendor) {
+		try {
+			if(dbVendor.equals("mysql")) {
+				sb.append(" ").append(var).append(" like :").append(key);
+			} else {
+				sb.append(" lower(").append(var).append(") like :").append(key);
 			}
-		}
-		return appended;
-	}
-	
-	public static final void appendFuzzyLike(StringBuilder sb, String var, String key, String dbVendor) {
-		if(dbVendor.equals("mysql")) {
-			sb.append(" ").append(var).append(" like :").append(key);
-		} else {
-			sb.append(" lower(").append(var).append(") like :").append(key);
-		}
-		if(dbVendor.equals("oracle")) {
-			sb.append(" escape '\\'");
+			if(dbVendor.equals("oracle")) {
+				sb.append(" escape '\\'");
+			}
+		} catch (IOException e) {
+			log.error("", e);
 		}
 	}
+
 	
 	/**
 	 * Helper method that replaces * with % and appends and
@@ -357,7 +350,7 @@ public class PersistenceHelper {
 	 * @return
 	 */
 	public static List<Long> toKeys(Collection<? extends Persistable> list) {
-		List<Long> keys = new ArrayList<Long>();
+		List<Long> keys = new ArrayList<>();
 		for(Persistable obj:list) {
 			keys.add(obj.getKey());
 		}
@@ -379,6 +372,18 @@ public class PersistenceHelper {
 		return keys;
 	}
 	
+	public static List<String> toList(String... strings) {
+		List<String> stringList = new ArrayList<>();
+		if(strings != null && strings.length > 0) {
+			for(String string:strings) {
+				if(StringHelper.containsNonWhitespace(string)) {
+					stringList.add(string);
+				}
+			}
+		}
+		return stringList;
+	}
+	
 	public static Long extractLong(Object[] results, int pos) {
 		if(results == null || pos >= results.length) return null;
 		Object obj = results[pos];
@@ -388,13 +393,13 @@ public class PersistenceHelper {
 	public static String extractString(Object[] results, int pos) {
 		if(results == null || pos >= results.length ) return null;
 		Object obj = results[pos];
-		return obj == null ? null : (obj instanceof String ? (String)obj : obj.toString());
+		return obj == null ? null : obj.toString();
 	}
 	
 	public static boolean extractBoolean(Object[] results, int pos, boolean def) {
 		if(results == null || pos >= results.length) return def;
 		Object obj = results[pos];
-		return obj == null ? null : ((Boolean)obj).booleanValue();
+		return obj == null ? def : ((Boolean)obj).booleanValue();
 	}
 	
 	public static final String convert(String content) {

@@ -25,20 +25,40 @@
 
 package org.olat.admin.user;
 
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
+
 import org.olat.admin.user.bulkChange.UserBulkChangeManager;
 import org.olat.basesecurity.BaseSecurity;
 import org.olat.basesecurity.BaseSecurityModule;
-import org.olat.basesecurity.Constants;
-import org.olat.basesecurity.SecurityGroup;
+import org.olat.basesecurity.OrganisationRoles;
+import org.olat.basesecurity.OrganisationService;
+import org.olat.basesecurity.model.OrganisationRefImpl;
+import org.olat.core.commons.persistence.DB;
 import org.olat.core.gui.UserRequest;
-import org.olat.core.gui.components.Component;
-import org.olat.core.gui.components.velocity.VelocityContainer;
+import org.olat.core.gui.components.form.flexible.FormItem;
+import org.olat.core.gui.components.form.flexible.FormItemContainer;
+import org.olat.core.gui.components.form.flexible.elements.FormLink;
+import org.olat.core.gui.components.form.flexible.elements.MultipleSelectionElement;
+import org.olat.core.gui.components.form.flexible.elements.SingleSelection;
+import org.olat.core.gui.components.form.flexible.elements.SpacerElement;
+import org.olat.core.gui.components.form.flexible.impl.FormBasicController;
+import org.olat.core.gui.components.form.flexible.impl.FormEvent;
+import org.olat.core.gui.components.form.flexible.impl.FormLayoutContainer;
+import org.olat.core.gui.components.link.Link;
 import org.olat.core.gui.control.Controller;
 import org.olat.core.gui.control.Event;
 import org.olat.core.gui.control.WindowControl;
-import org.olat.core.gui.control.controller.BasicController;
+import org.olat.core.gui.control.generic.closablewrapper.CloseableModalController;
 import org.olat.core.id.Identity;
-import org.olat.core.util.UserSession;
+import org.olat.core.id.Organisation;
+import org.olat.core.id.OrganisationRef;
+import org.olat.core.id.Roles;
+import org.olat.core.id.RolesByOrganisation;
 import org.springframework.beans.factory.annotation.Autowired;
 
 /**
@@ -59,14 +79,40 @@ import org.springframework.beans.factory.annotation.Autowired;
  * Usually this controller is called by the UserAdminController that takes care of all this. 
  * There should be no need to use it anywhere else.
  */
-public class SystemRolesAndRightsController extends BasicController {
+public class SystemRolesAndRightsController extends FormBasicController {
 	
-	private final VelocityContainer main;
-	private SystemRolesAndRightsForm sysRightsForm;
-	private Identity identity;
+	private SpacerElement rolesSep;
+	private SingleSelection statusEl;
+	private SingleSelection anonymousEl;
+	private FormLayoutContainer rolesCont;
+	private FormLink addToOrganisationButton;
+	private MultipleSelectionElement sendLoginDeniedEmailEl;
+	private final List<MultipleSelectionElement> rolesEls = new ArrayList<>();
+
+	private int counter = 0;
+	private List<String> statusKeys;
+	private List<String> statusValues;
+	
+	/**
+	 * The roles without inheritance
+	 */
+	private Roles editedRoles;
+	private Identity editedIdentity;
+	private List<Organisation> organisations;
+	
+	private final Roles managerRoles;
+	private final List<Organisation> manageableOrganisations;
+	
+
+	private CloseableModalController cmc;
+	private SelectOrganisationController selectOrganisationCtrl;
 	
 	@Autowired
+	private DB dbInstance;
+	@Autowired
 	private BaseSecurity securityManager;
+	@Autowired
+	private OrganisationService organisationService;
 	@Autowired
 	private UserBulkChangeManager userBulkChangeManager;
 	
@@ -76,45 +122,383 @@ public class SystemRolesAndRightsController extends BasicController {
 	 * @param ureq
 	 * @param identity identity to be edited
 	 */
-	public SystemRolesAndRightsController(WindowControl wControl, UserRequest ureq, Identity identity){
-		super(ureq, wControl);
-		main = createVelocityContainer("usysRoles");
-		this.identity = identity;
-		putInitialPanel(main);
-		createForm(ureq, identity);
-		main.put("sysRightsForm", sysRightsForm.getInitialComponent());		
-	}
-	
-	/**
-	 * Initialize a new SystemRolesAndRightsForm for the given identity using the
-	 * security manager
-	 * @param ureq
-	 * @param myIdentity
-	 * @return SystemRolesAndRightsForm
-	 */
-	private void createForm(UserRequest ureq, Identity myIdentity) {
-		removeAsListenerAndDispose(sysRightsForm);
-		sysRightsForm = new SystemRolesAndRightsForm(ureq, getWindowControl(), myIdentity);
-		listenTo (sysRightsForm);
-	}
-
-	/**
-	 * @see org.olat.core.gui.control.DefaultController#event(org.olat.core.gui.UserRequest, org.olat.core.gui.components.Component, org.olat.core.gui.control.Event)
-	 */
-	public void event(UserRequest ureq, Component source, Event event) {
-		//
-	}
-	
-	public void event(UserRequest ureq, Controller source, Event event) {
+	public SystemRolesAndRightsController(WindowControl wControl, UserRequest ureq, Identity identity) {
+		super(ureq, wControl, LAYOUT_BAREBONE);
+		this.editedIdentity = identity;
 		
-		if (source == sysRightsForm) {
-			if (event == Event.DONE_EVENT) {
-				saveFormData(ureq, identity, sysRightsForm);
-			}
-			createForm(ureq, identity);
-			main.put("sysRightsForm", sysRightsForm.getInitialComponent());
+		editedRoles = securityManager.getRoles(editedIdentity, false);
+		editedRoles.getOrganisations();
+		
+		organisations = new ArrayList<>();
+		for(OrganisationRef organisation: editedRoles.getOrganisations()) {
+			organisations.add(organisationService.getOrganisation(organisation));
+		}
+
+		managerRoles = ureq.getUserSession().getRoles();
+		manageableOrganisations = organisationService.getOrganisations(getIdentity(), managerRoles,
+				OrganisationRoles.administrator, OrganisationRoles.usermanager, OrganisationRoles.rolesmanager);
+		
+		initStatusKeysAndValues();
+		initForm(ureq);
+		update();
+	}
+	
+	private void initStatusKeysAndValues() {
+		statusKeys = new ArrayList<>(4);
+		statusKeys.add(Integer.toString(Identity.STATUS_ACTIV));
+		statusKeys.add(Integer.toString(Identity.STATUS_PERMANENT));
+		statusKeys.add(Integer.toString(Identity.STATUS_PENDING));
+		statusKeys.add(Integer.toString(Identity.STATUS_LOGIN_DENIED));
+
+		statusValues = new ArrayList<>(4);
+		statusValues.add(translate("rightsForm.status.activ"));
+		statusValues.add(translate("rightsForm.status.permanent"));
+		statusValues.add(translate("rightsForm.status.pending"));
+		statusValues.add(translate("rightsForm.status.login_denied"));
+		
+		if (editedIdentity.getStatus() != null && editedIdentity.getStatus().equals(Identity.STATUS_DELETED)) {
+			statusKeys.add(Integer.toString(Identity.STATUS_DELETED));
+			statusValues.add(translate("rightsForm.status.deleted"));
 		}
 	}
+
+	@Override
+	protected void initForm(FormItemContainer formLayout, Controller listener, UserRequest ureq) {
+		boolean iAmAdmin = managerRoles.isManagerOf(OrganisationRoles.administrator, editedRoles)
+				|| managerRoles.isManagerOf(OrganisationRoles.rolesmanager, editedRoles);
+		boolean iAmUserManager = managerRoles.isManagerOf(OrganisationRoles.usermanager, editedRoles);
+	
+		// anonymous
+		FormLayoutContainer anonymousCont = FormLayoutContainer.createDefaultFormLayout("anonc", getTranslator());
+		formLayout.add(anonymousCont);
+		
+		anonymousEl = uifactory.addRadiosVertical(
+				"anonymous", "rightsForm.guest", anonymousCont, 
+				new String[]{"true", "false"},
+				new String[]{translate("role.guest.true"), translate("role.guest.false")}
+		);
+		uifactory.addSpacerElement("syssep", anonymousCont, false);
+		if (iAmAdmin) {
+			anonymousEl.addActionListener(FormEvent.ONCLICK);
+		} else {
+			anonymousCont.setVisible(false);
+		}
+		
+		// roles
+		rolesCont = FormLayoutContainer.createDefaultFormLayout("rolesc", getTranslator());
+		formLayout.add(rolesCont);
+		
+		initFormRoles();
+		
+		FormLayoutContainer statusCont = FormLayoutContainer.createDefaultFormLayout("statusc", getTranslator());
+		formLayout.add(statusCont);
+		
+		statusEl = uifactory.addRadiosVertical(
+				"status", "rightsForm.status", statusCont,
+				statusKeys.toArray(new String[statusKeys.size()]),
+				statusValues.toArray(new String[statusKeys.size()])
+		);
+		statusEl.addActionListener(FormEvent.ONCHANGE);
+		sendLoginDeniedEmailEl = uifactory.addCheckboxesHorizontal("rightsForm.sendLoginDeniedEmail", statusCont, new String[]{"y"}, new String[]{translate("rightsForm.sendLoginDeniedEmail")});
+		sendLoginDeniedEmailEl.setLabel(null, null);
+		
+		rolesSep.setVisible(iAmAdmin);
+		statusEl.setVisible(iAmAdmin || iAmUserManager);
+		sendLoginDeniedEmailEl.setVisible(false);
+		
+		FormLayoutContainer buttonGroupLayout = FormLayoutContainer.createButtonLayout("buttonGroupLayout", getTranslator());
+		statusCont.add(buttonGroupLayout);
+		uifactory.addFormCancelButton("cancel", buttonGroupLayout, ureq, getWindowControl());
+		uifactory.addFormSubmitButton("submit", buttonGroupLayout);
+	}
+
+	private void initFormRoles() {
+		for(Organisation organisation:organisations) {
+			initFormRoles(rolesCont, organisation);
+		}
+		List<Organisation> upgradeableToOrganisations = new ArrayList<>(manageableOrganisations);
+		upgradeableToOrganisations.removeAll(organisations);
+		if(!upgradeableToOrganisations.isEmpty()) {
+			addToOrganisationButton = uifactory.addFormLink("rightsForm.add.to.organisation", rolesCont, Link.BUTTON);
+		}
+
+		rolesSep = uifactory.addSpacerElement("rolesSep", rolesCont, false);
+	}
+	
+	private void initFormRoles(FormItemContainer formLayout, Organisation organisation) {
+		boolean admin = managerRoles.hasRoleInParentLine(organisation, OrganisationRoles.administrator)
+				|| managerRoles.isSystemAdmin(); 
+		boolean userManager = managerRoles.hasRoleInParentLine(organisation, OrganisationRoles.usermanager); 
+		boolean rolesManager = managerRoles.hasRoleInParentLine(organisation, OrganisationRoles.rolesmanager); 
+		
+		List<String> roleKeys = new ArrayList<>();
+		List<String> roleValues = new ArrayList<>();
+
+		roleKeys.add(OrganisationRoles.invitee.name());
+		roleValues.add(translate("role.".concat(OrganisationRoles.invitee.name())));
+
+		roleKeys.add(OrganisationRoles.user.name());
+		roleValues.add(translate("role.".concat(OrganisationRoles.user.name())));
+
+		roleKeys.add(OrganisationRoles.author.name());
+		roleValues.add(translate("role.".concat(OrganisationRoles.author.name())));
+
+		roleKeys.add(OrganisationRoles.usermanager.name());
+		roleValues.add(translate("role.".concat(OrganisationRoles.usermanager.name())));
+
+		roleKeys.add(OrganisationRoles.rolesmanager.name());
+		roleValues.add(translate("role.".concat(OrganisationRoles.rolesmanager.name())));
+
+		roleKeys.add(OrganisationRoles.groupmanager.name());
+		roleValues.add(translate("role.".concat(OrganisationRoles.groupmanager.name())));
+
+		roleKeys.add(OrganisationRoles.poolmanager.name());
+		roleValues.add(translate("role.".concat(OrganisationRoles.poolmanager.name())));
+
+		roleKeys.add(OrganisationRoles.curriculummanager.name());
+		roleValues.add(translate("role.".concat(OrganisationRoles.curriculummanager.name())));
+
+		roleKeys.add(OrganisationRoles.lecturemanager.name());
+		roleValues.add(translate("role.".concat(OrganisationRoles.lecturemanager.name())));
+
+		roleKeys.add(OrganisationRoles.qualitymanager.name());
+		roleValues.add(translate("role.".concat(OrganisationRoles.qualitymanager.name())));
+
+		roleKeys.add(OrganisationRoles.linemanager.name());
+		roleValues.add(translate("role.".concat(OrganisationRoles.linemanager.name())));
+
+		roleKeys.add(OrganisationRoles.learnresourcemanager.name());
+		roleValues.add(translate("role.".concat(OrganisationRoles.learnresourcemanager.name())));
+
+		roleKeys.add(OrganisationRoles.principal.name());
+		roleValues.add(translate("role.".concat(OrganisationRoles.principal.name())));
+
+		roleKeys.add(OrganisationRoles.administrator.name());
+		roleValues.add(translate("role.".concat(OrganisationRoles.administrator.name())));
+
+		roleKeys.add(OrganisationRoles.sysadmin.name());
+		roleValues.add(translate("role.".concat(OrganisationRoles.sysadmin.name())));
+
+		MultipleSelectionElement rolesEl = uifactory.addCheckboxesHorizontal(
+					"roles_" + (++counter), "rightsForm.roles", formLayout,
+					roleKeys.toArray(new String[roleKeys.size()]),
+					roleValues.toArray(new String[roleValues.size()]));
+		if(organisations.size() > 1 || !organisation.getIdentifier().equals(OrganisationService.DEFAULT_ORGANISATION_IDENTIFIER)) {
+			rolesEl.setLabel("rightsForm.roles.for", new String[] { organisation.getDisplayName() });
+		}
+		rolesEl.setUserObject(new RolesElement(roleKeys, organisation, rolesEl));
+		rolesEl.addActionListener(FormEvent.ONCHANGE);
+		
+		if(admin) {
+			rolesEl.setEnabled(new HashSet<>(roleKeys), true);
+		} else if(userManager) {
+			Set<String> enabled = new HashSet<>();
+			enabled.add(OrganisationRoles.invitee.name());
+			enabled.add(OrganisationRoles.user.name());
+			enabled.add(OrganisationRoles.author.name());
+			rolesEl.setEnabled(enabled, true);
+			Set<String> disabled = new HashSet<>(roleKeys);
+			disabled.removeAll(enabled);
+			rolesEl.setEnabled(disabled, false);
+		} else if(rolesManager) {
+			Set<String> enabled = new HashSet<>();
+			enabled.add(OrganisationRoles.invitee.name());
+			enabled.add(OrganisationRoles.user.name());
+			enabled.add(OrganisationRoles.author.name());
+			enabled.add(OrganisationRoles.curriculummanager.name());
+			enabled.add(OrganisationRoles.groupmanager.name());
+			enabled.add(OrganisationRoles.learnresourcemanager.name());
+			enabled.add(OrganisationRoles.lecturemanager.name());
+			enabled.add(OrganisationRoles.linemanager.name());
+			enabled.add(OrganisationRoles.poolmanager.name());
+			enabled.add(OrganisationRoles.qualitymanager.name());
+			enabled.add(OrganisationRoles.rolesmanager.name());
+			enabled.add(OrganisationRoles.usermanager.name());
+			rolesEl.setEnabled(enabled, true);
+			Set<String> disabled = new HashSet<>(roleKeys);
+			disabled.removeAll(enabled);
+			rolesEl.setEnabled(disabled, false);
+		} else {
+			rolesEl.setEnabled(new HashSet<>(), false);
+		}
+		
+		rolesEls.add(rolesEl);
+	}
+	
+	private void update() {
+		editedRoles = securityManager.getRoles(editedIdentity, false);
+		if(editedRoles.isGuestOnly()) {
+			anonymousEl.select("true", true);
+		} else {
+			anonymousEl.select("false", true);
+		}
+		
+		for(MultipleSelectionElement rolesEl:rolesEls) {
+			RolesElement wrapper = (RolesElement)rolesEl.getUserObject();
+			update(wrapper, editedRoles.getRoles(wrapper.getOrganisation()));
+		}
+	}
+	
+	private void updateRoles() {
+		if(rolesSep != null) {
+			rolesCont.remove(rolesSep);
+		}
+		if(addToOrganisationButton != null) {
+			rolesCont.remove(addToOrganisationButton);
+		}
+		for(MultipleSelectionElement roleEl:rolesEls) {
+			rolesCont.remove(roleEl);
+		}
+		rolesEls.clear();
+		initFormRoles();
+		update();
+	}
+	
+	private void update(RolesElement wrapper, RolesByOrganisation editedRolesByOrg) {
+		for(OrganisationRoles role:OrganisationRoles.values()) {
+			boolean hasRole = editedRolesByOrg != null && editedRolesByOrg.hasRole(role);
+			wrapper.setRole(role, hasRole);
+		}
+		wrapper.saveSelectedRoles();
+		
+		if(editedRolesByOrg != null && editedRolesByOrg.hasSomeRoles(OrganisationRoles.administrator, OrganisationRoles.sysadmin, OrganisationRoles.rolesmanager)) {
+			statusEl.setEnabled(false);
+		}
+
+		setStatus(editedIdentity.getStatus());
+		wrapper.getRolesEl().setVisible(!isAnonymous());
+		rolesSep.setVisible(!isAnonymous());
+	}
+	
+	private void setStatus(Integer status) {
+		String statusStr = status.toString();
+		for(String statusKey:statusKeys) {
+			if(statusStr.equals(statusKey)) {
+				statusEl.select(statusKey, true);
+			}
+		}
+		statusEl.setEnabled(!Identity.STATUS_DELETED.equals(status));
+	}
+	
+	public boolean isAnonymous() {
+		return anonymousEl.getSelectedKey().equals("true");
+	}
+
+	private Integer getStatus() {
+		return Integer.valueOf(statusEl.getSelectedKey());
+	}
+	
+	public boolean getSendLoginDeniedEmail() {
+		return sendLoginDeniedEmailEl.isSelected(0);
+	}
+	
+	@Override
+	protected void event(UserRequest ureq, Controller source, Event event) {
+		if(selectOrganisationCtrl == source) {
+			if(event == Event.DONE_EVENT) {
+				doAddIdentityToOrganisation(selectOrganisationCtrl.getSelectedOrganisation());
+			}
+			cmc.deactivate();
+			cleanUp();
+		} else if(cmc == source) {
+			cleanUp();
+		}
+		super.event(ureq, source, event);
+	}
+	
+	private void cleanUp() {
+		removeAsListenerAndDispose(selectOrganisationCtrl);
+		removeAsListenerAndDispose(cmc);
+		selectOrganisationCtrl = null;
+		cmc = null;
+	}
+
+	@Override
+	protected boolean validateFormLogic(UserRequest ureq) {
+		boolean allOk = super.validateFormLogic(ureq);
+
+		if(rolesEls.isEmpty()) {
+			allOk &= false;
+		} else {
+			rolesEls.get(0).clearError();
+			
+			int numOfRoles = 0;
+			Set<String> allSelectedRoles = new HashSet<>();
+			for(MultipleSelectionElement rolesEl:rolesEls) {
+				Collection<String> selectedRoles = rolesEl.getSelectedKeys();
+				numOfRoles += selectedRoles.size();
+				allSelectedRoles.addAll(selectedRoles);
+			}
+			
+			if(numOfRoles == 0) {
+				rolesEls.get(0).setErrorKey("error.roles.atleastone", null);
+				allOk &= false;
+			} else if(!allSelectedRoles.contains(OrganisationRoles.invitee.name()) && !allSelectedRoles.contains(OrganisationRoles.user.name())) {
+				Roles currentRoles = securityManager.getRoles(editedIdentity, false);
+				List<OrganisationRef> userOrgs = currentRoles.getOrganisationsWithRole(OrganisationRoles.user)
+						.stream().map(OrganisationRefImpl::new).collect(Collectors.toList());
+				List<OrganisationRef> inviteeOrgs = currentRoles.getOrganisationsWithRole(OrganisationRoles.invitee)
+						.stream().map(OrganisationRefImpl::new).collect(Collectors.toList());
+				Set<OrganisationRef> allOrgRefs = new HashSet<>();
+				allOrgRefs.addAll(userOrgs);
+				allOrgRefs.addAll(inviteeOrgs);
+				
+				for(MultipleSelectionElement rolesEl:rolesEls) {
+					RolesElement rolesElement = (RolesElement)rolesEl.getUserObject();
+					allOrgRefs.remove(new OrganisationRefImpl(rolesElement.getOrganisation()));
+				}
+				
+				if(allOrgRefs.isEmpty()) {
+					rolesEls.get(0).setErrorKey("error.roles.atleastone.userorinvitee", null);
+					allOk &= false;
+				}
+			}
+		}
+
+		return allOk;
+	}
+
+	@Override
+	protected void formInnerEvent(UserRequest ureq, FormItem source, FormEvent event) {
+		if(addToOrganisationButton == source) {
+			doAddToOrganisation(ureq);
+		} else if(source instanceof MultipleSelectionElement) {
+			MultipleSelectionElement el = (MultipleSelectionElement)source;
+			if(el.getUserObject() instanceof RolesElement) {
+				((RolesElement)el.getUserObject()).checkInvitee();
+			}
+		}
+		super.formInnerEvent(ureq, source, event);
+	}
+	
+	private void doAddToOrganisation(UserRequest ureq) {
+		if(selectOrganisationCtrl != null) return;
+		
+		List<Organisation> upgradeableToOrganisations = new ArrayList<>(manageableOrganisations);
+		upgradeableToOrganisations.removeAll(organisations);
+		selectOrganisationCtrl = new SelectOrganisationController(ureq, getWindowControl(), upgradeableToOrganisations);
+		listenTo(selectOrganisationCtrl);
+		
+		String title = translate("rightsForm.add.to.organisation");
+		cmc = new CloseableModalController(getWindowControl(), translate("close"), selectOrganisationCtrl.getInitialComponent(), true, title);
+		listenTo(cmc);
+		cmc.activate();	
+	}
+
+	private void doAddIdentityToOrganisation(Organisation organisation) {
+		organisationService.addMember(organisation, editedIdentity, OrganisationRoles.user);
+		dbInstance.commit();
+		organisations = organisationService.getOrganisations(editedIdentity, OrganisationRoles.values());
+		
+		updateRoles();
+	}
+
+	@Override
+	protected void formOK(UserRequest ureq) {
+		saveFormData();
+		update();
+	}
+
 	/**
 	 * Persist form data in database. User needs to logout / login to activate changes. A bit tricky here
 	 * is that only form elements should be gettet that the user is allowed to manipulate. See also the 
@@ -122,122 +506,160 @@ public class SystemRolesAndRightsController extends BasicController {
 	 * @param myIdentity
 	 * @param form
 	 */
-	private void saveFormData(UserRequest ureq, Identity myIdentity, SystemRolesAndRightsForm form) {
-		UserSession usess = ureq.getUserSession();
-		boolean iAmOlatAdmin = usess.getRoles().isOLATAdmin();
-		boolean iAmUserManager = usess.getRoles().isUserManager();
+	private void saveFormData() {
+		boolean admin = managerRoles.isAdministrator() || managerRoles.isRolesManager();
+	
+		editedRoles = securityManager.getRoles(editedIdentity, false);
 		
 		// 1) general user type - anonymous or user
 		// anonymous users
-		boolean isAnonymous = false;
-		Boolean canGuestsByConfig = BaseSecurityModule.USERMANAGER_CAN_MANAGE_GUESTS;	
-		if (canGuestsByConfig.booleanValue() || iAmOlatAdmin) {
-			SecurityGroup anonymousGroup = securityManager.findSecurityGroupByName(Constants.GROUP_ANONYMOUS);
-			boolean hasBeenAnonymous = securityManager.isIdentityInSecurityGroup(myIdentity, anonymousGroup);
-			isAnonymous = form.isAnonymous();
-			updateSecurityGroup(myIdentity, securityManager, anonymousGroup, hasBeenAnonymous, isAnonymous, Constants.GROUP_ANONYMOUS);
-			// system users - oposite of anonymous users
-			SecurityGroup usersGroup = securityManager.findSecurityGroupByName(Constants.GROUP_OLATUSERS);
-			boolean hasBeenUser = securityManager.isIdentityInSecurityGroup(myIdentity, usersGroup);
-			boolean isUser = !form.isAnonymous();
-			updateSecurityGroup(myIdentity, securityManager, usersGroup, hasBeenUser, isUser,Constants.GROUP_OLATUSERS);
+		boolean isAnonymous = editedRoles.isGuestOnly();
+		if (admin) {
+			isAnonymous = anonymousEl.getSelectedKey().equals("true");
 		}
-		// 2) system roles
-		// group manager
-		Boolean canGroupmanagerByConfig =BaseSecurityModule.USERMANAGER_CAN_MANAGE_GROUPMANAGERS;	
-		if (canGroupmanagerByConfig.booleanValue() || iAmOlatAdmin) {
-			SecurityGroup groupManagerGroup = securityManager.findSecurityGroupByName(Constants.GROUP_GROUPMANAGERS);
-			boolean hasBeenGroupManager = securityManager.isIdentityInSecurityGroup(myIdentity, groupManagerGroup);
-			boolean isGroupManager = form.isGroupmanager();
-			updateSecurityGroup(myIdentity, securityManager, groupManagerGroup, hasBeenGroupManager, isGroupManager, Constants.GROUP_GROUPMANAGERS);
-		}
-		// pool manager
-		Boolean canPoolmanagerByConfig =BaseSecurityModule.USERMANAGER_CAN_MANAGE_POOLMANAGERS;	
-		if (canPoolmanagerByConfig.booleanValue() || iAmOlatAdmin) {
-			SecurityGroup poolManagerGroup = securityManager.findSecurityGroupByName(Constants.GROUP_POOL_MANAGER);
-			boolean hasBeenPoolManager = securityManager.isIdentityInSecurityGroup(myIdentity, poolManagerGroup);
-			boolean isPoolManager = form.isPoolmanager();
-			updateSecurityGroup(myIdentity, securityManager, poolManagerGroup, hasBeenPoolManager, isPoolManager, Constants.GROUP_AUTHORS);
-		}
-		// author
-		Boolean canAuthorByConfig = BaseSecurityModule.USERMANAGER_CAN_MANAGE_AUTHORS;	
-		if (canAuthorByConfig.booleanValue() || iAmOlatAdmin) {
-			SecurityGroup authorGroup = securityManager.findSecurityGroupByName(Constants.GROUP_AUTHORS);
-			boolean hasBeenAuthor = securityManager.isIdentityInSecurityGroup(myIdentity, authorGroup);
-			boolean isAuthor = form.isAuthor() || form.isInstitutionalResourceManager();
-			updateSecurityGroup(myIdentity, securityManager, authorGroup, hasBeenAuthor, isAuthor, Constants.GROUP_AUTHORS);
-		}
-		// user manager, only allowed by admin
-		if (iAmOlatAdmin) {
-			SecurityGroup userManagerGroup = securityManager.findSecurityGroupByName(Constants.GROUP_USERMANAGERS);
-			boolean hasBeenUserManager = securityManager.isIdentityInSecurityGroup(myIdentity, userManagerGroup);
-			boolean isUserManager = form.isUsermanager();
-			updateSecurityGroup(myIdentity, securityManager, userManagerGroup, hasBeenUserManager, isUserManager, Constants.GROUP_USERMANAGERS);
-		}
-	 	// institutional resource manager, only allowed by admin
-		if (iAmUserManager || iAmOlatAdmin) {
-			SecurityGroup institutionalResourceManagerGroup = securityManager.findSecurityGroupByName(Constants.GROUP_INST_ORES_MANAGER);
-			boolean hasBeenInstitutionalResourceManager = securityManager.isIdentityInSecurityGroup(myIdentity, institutionalResourceManagerGroup);
-			boolean isInstitutionalResourceManager = form.isInstitutionalResourceManager();
-			updateSecurityGroup(myIdentity, securityManager, institutionalResourceManagerGroup, hasBeenInstitutionalResourceManager, isInstitutionalResourceManager, Constants.GROUP_INST_ORES_MANAGER);
-		}
-		// system administrator, only allowed by admin
-		if (iAmOlatAdmin) {
-			SecurityGroup adminGroup = securityManager.findSecurityGroupByName(Constants.GROUP_ADMIN);
-			boolean hasBeenAdmin = securityManager.isIdentityInSecurityGroup(myIdentity, adminGroup);
-			boolean isAdmin = form.isAdmin();
-			updateSecurityGroup(myIdentity, securityManager, adminGroup, hasBeenAdmin, isAdmin, Constants.GROUP_ADMIN);		
-		}
-		Boolean canManageStatus =BaseSecurityModule.USERMANAGER_CAN_MANAGE_STATUS;	
-		if ((iAmOlatAdmin || canManageStatus.booleanValue()) &&  !myIdentity.getStatus().equals(form.getStatus()) ) {			
-			int oldStatus = myIdentity.getStatus();
-			String oldStatusText = (oldStatus == Identity.STATUS_PERMANENT ? "permanent"
-					: (oldStatus == Identity.STATUS_ACTIV ? "active"
-							: (oldStatus == Identity.STATUS_LOGIN_DENIED ? "login_denied"
-									: (oldStatus == Identity.STATUS_DELETED ? "deleted"
-											: "unknown"))));
-			int newStatus = form.getStatus();
-			String newStatusText = (newStatus == Identity.STATUS_PERMANENT ? "permanent"
-					: (newStatus == Identity.STATUS_ACTIV ? "active"
-							: (newStatus == Identity.STATUS_LOGIN_DENIED ? "login_denied"
-									: (newStatus == Identity.STATUS_DELETED ? "deleted"
-											: "unknown"))));
-			
-			if(oldStatus != newStatus && newStatus == Identity.STATUS_LOGIN_DENIED && form.getSendLoginDeniedEmail()) {
-				userBulkChangeManager.sendLoginDeniedEmail(myIdentity);
+		
+		if(isAnonymous) {
+			saveAnonymousData();
+		} else {
+			for(MultipleSelectionElement rolesEl:rolesEls) {
+				if(rolesEl.isEnabled()) {
+					saveOrganisationRolesFormData((RolesElement)rolesEl.getUserObject());
+				}
 			}
-			
-			identity = securityManager.saveIdentityStatus(myIdentity, newStatus, getIdentity());
-			logAudit("User::" + getIdentity().getKey() + " changed accout status for user::" + myIdentity.getKey() + " from::" + oldStatusText + " to::" + newStatusText, null);
 		}
-	}
-
-	/**
-	 * Update the security group in the database
-	 * @param myIdentity
-	 * @param secMgr
-	 * @param securityGroup
-	 * @param hasBeenInGroup
-	 * @param isNowInGroup
-	 */
-	private void updateSecurityGroup(Identity myIdentity, BaseSecurity secMgr, SecurityGroup securityGroup, boolean hasBeenInGroup, boolean isNowInGroup, String role) {
-		if (!hasBeenInGroup && isNowInGroup) {
-			// user not yet in security group, add him
-			secMgr.addIdentityToSecurityGroup(myIdentity, securityGroup);
-			logAudit("User::" + getIdentity().getKey() + " added system role::" + role + " to user::" + myIdentity.getKey(), null);
-		} else if (hasBeenInGroup && !isNowInGroup) {
-			// user not anymore in security group, remove him
-			secMgr.removeIdentityFromSecurityGroup(myIdentity, securityGroup);
-			logAudit("User::" + getIdentity().getKey() + " removed system role::" + role + " from user::" + myIdentity.getKey(), null);
+		
+		if ((admin || BaseSecurityModule.USERMANAGER_CAN_MANAGE_STATUS.booleanValue()) &&  !editedIdentity.getStatus().equals(getStatus()) ) {			
+			Integer oldStatus = editedIdentity.getStatus();
+			String oldStatusText = userBulkChangeManager.getStatusText(oldStatus);
+			Integer newStatus = getStatus();
+			String newStatusText = userBulkChangeManager.getStatusText(newStatus);
+			if(!oldStatus.equals(newStatus) && Identity.STATUS_LOGIN_DENIED.equals(newStatus) && getSendLoginDeniedEmail()) {
+				userBulkChangeManager.sendLoginDeniedEmail(editedIdentity);
+			}
+			editedIdentity = securityManager.saveIdentityStatus(editedIdentity, newStatus, getIdentity());
+			logAudit("User::" + getIdentity().getKey() + " changed account status for user::" + editedIdentity.getKey() + " from::" + oldStatusText + " to::" + newStatusText);
 		}
 	}
 	
-	/**
-	 * @see org.olat.core.gui.control.DefaultController#doDispose(boolean)
-	 */
+	private void saveAnonymousData() {
+		organisationService.setAsGuest(editedIdentity);
+		dbInstance.commit();
+		organisations = organisationService.getOrganisations(editedIdentity, OrganisationRoles.values());
+		updateRoles();
+	}
+	
+	private void saveOrganisationRolesFormData(RolesElement wrapper) {
+		Organisation organisation = wrapper.getOrganisation();
+		boolean iAmUserManager = managerRoles.hasRoleInParentLine(organisation, OrganisationRoles.usermanager);
+		boolean iAmRolesManager = managerRoles.hasRoleInParentLine(organisation, OrganisationRoles.rolesmanager);
+		boolean iAmAdmin = managerRoles.hasRoleInParentLine(organisation, OrganisationRoles.administrator)
+				|| managerRoles.isSystemAdmin();
+
+		// 2) system roles
+		List<OrganisationRoles> rolesToAdd = new ArrayList<>();
+		List<OrganisationRoles> rolesToRemove = new ArrayList<>();
+		wrapper.commit(OrganisationRoles.invitee, rolesToAdd, rolesToRemove);
+		wrapper.commit(OrganisationRoles.user, rolesToAdd, rolesToRemove);
+
+		// author
+		if (iAmAdmin || iAmUserManager) {
+			wrapper.commit(OrganisationRoles.author, rolesToAdd, rolesToRemove);
+		}
+		
+		// managers
+		if (iAmAdmin || iAmRolesManager) {
+			wrapper.commit(OrganisationRoles.groupmanager, rolesToAdd, rolesToRemove);
+			wrapper.commit(OrganisationRoles.poolmanager, rolesToAdd, rolesToRemove);
+			wrapper.commit(OrganisationRoles.curriculummanager, rolesToAdd, rolesToRemove);
+			wrapper.commit(OrganisationRoles.linemanager, rolesToAdd, rolesToRemove);
+			wrapper.commit(OrganisationRoles.qualitymanager, rolesToAdd, rolesToRemove);
+			wrapper.commit(OrganisationRoles.lecturemanager, rolesToAdd, rolesToRemove);
+			wrapper.commit(OrganisationRoles.usermanager, rolesToAdd, rolesToRemove);
+			wrapper.commit(OrganisationRoles.rolesmanager, rolesToAdd, rolesToRemove);
+			wrapper.commit(OrganisationRoles.learnresourcemanager, rolesToAdd, rolesToRemove);
+		}
+
+		// administration roles, only allowed by administrator
+		if (iAmAdmin) {
+			wrapper.commit(OrganisationRoles.principal, rolesToAdd, rolesToRemove);
+			wrapper.commit(OrganisationRoles.administrator, rolesToAdd, rolesToRemove);
+			wrapper.commit(OrganisationRoles.sysadmin, rolesToAdd, rolesToRemove);
+		}
+
+		RolesByOrganisation editedOrganisationRoles = editedRoles.getRoles(wrapper.getOrganisation());
+		if(editedOrganisationRoles == null) {
+			editedOrganisationRoles = new RolesByOrganisation(wrapper.getOrganisation(), OrganisationRoles.EMPTY_ROLES);
+		}
+		RolesByOrganisation updatedRoles = RolesByOrganisation.enhance(editedOrganisationRoles, rolesToAdd, rolesToRemove);
+		securityManager.updateRoles(getIdentity(), editedIdentity, updatedRoles);
+	}
+
 	@Override
 	protected void doDispose() {
 		// nothing to do
 	}
+	
+	private class RolesElement {
+		
+		private final List<String> roleKeys;
+		private final Organisation organisation;
+		private final MultipleSelectionElement rolesEl;
+		private List<String> selectedRoles = new ArrayList<>();
+		
+		public RolesElement(List<String> roleKeys, Organisation organisation, MultipleSelectionElement rolesEl) {
+			this.roleKeys = roleKeys;
+			this.rolesEl = rolesEl;
+			this.organisation = organisation;
+		}
+		
+		public MultipleSelectionElement getRolesEl() {
+			return rolesEl;
+		}
+		
+		public Organisation getOrganisation() {
+			return organisation;
+		}
+		
+		public void commit(OrganisationRoles k, List<OrganisationRoles> rolesToAdd, List<OrganisationRoles> rolesToRemove) {
+			if(roleKeys.contains(k.name())) {
+				if(getRole(k)) {
+					rolesToAdd.add(k);
+				} else {
+					rolesToRemove.add(k);
+				}
+			}
+		}
+		
+		private boolean getRole(OrganisationRoles k) {
+			return roleKeys.contains(k.name()) && rolesEl.getSelectedKeys().contains(k.name());
+		}
+		
+		private void setRole(OrganisationRoles k, boolean enabled) {
+			if(roleKeys.contains(k.name()) && enabled) {
+				rolesEl.select(k.name(), enabled);
+			}
+		}
+		
+		public void checkInvitee() {
+			Collection<String> keys = rolesEl.getSelectedKeys();
+			if(selectedRoles.contains(OrganisationRoles.invitee.name())) {
+				if(keys.contains(OrganisationRoles.invitee.name()) && keys.size() > 1)  {
+					rolesEl.uncheckAll();
+					for(String role:keys) {
+						if(!OrganisationRoles.invitee.name().equals(role)) {
+							rolesEl.select(role, true);
+						}
+					}
+				}
+			} else if(keys.contains(OrganisationRoles.invitee.name())) {
+				rolesEl.uncheckAll();
+				rolesEl.select(OrganisationRoles.invitee.name(), true);
+			}
+			saveSelectedRoles();
+		}
 
+		public void saveSelectedRoles() {
+			selectedRoles = new ArrayList<>(rolesEl.getSelectedKeys());
+		}
+	}
 }

@@ -20,18 +20,24 @@
  */
 package org.olat.modules.lecture;
 
+import java.util.Date;
 import java.util.List;
 
 import org.olat.basesecurity.Group;
 import org.olat.basesecurity.IdentityRef;
 import org.olat.core.id.Identity;
 import org.olat.modules.lecture.model.AggregatedLectureBlocksStatistics;
+import org.olat.modules.lecture.model.IdentityRateWarning;
 import org.olat.modules.lecture.model.LectureBlockAndRollCall;
 import org.olat.modules.lecture.model.LectureBlockIdentityStatistics;
+import org.olat.modules.lecture.model.LectureBlockRollCallAndCoach;
 import org.olat.modules.lecture.model.LectureBlockStatistics;
 import org.olat.modules.lecture.model.LectureBlockWithTeachers;
+import org.olat.modules.lecture.model.LectureReportRow;
 import org.olat.modules.lecture.model.LectureStatisticsSearchParameters;
 import org.olat.modules.lecture.model.LecturesBlockSearchParameters;
+import org.olat.modules.taxonomy.TaxonomyLevel;
+import org.olat.modules.taxonomy.TaxonomyLevelRef;
 import org.olat.repository.RepositoryEntry;
 import org.olat.repository.RepositoryEntryRef;
 import org.olat.user.propertyhandlers.UserPropertyHandler;
@@ -180,6 +186,8 @@ public interface LectureService {
 	 */
 	public LectureBlock copyLectureBlock(String newTitle, LectureBlock block);
 	
+	public LectureBlock moveLectureBlock(LectureBlockRef block, RepositoryEntry newEntry);
+	
 	/**
 	 * Delete the lecture block definitively, the roll calls...
 	 * 
@@ -285,11 +293,24 @@ public interface LectureService {
 	 */
 	public List<Identity> syncParticipantSummaries(LectureBlock lectureBlock);
 	
+	/**
+	 * This will sync and update the first admission date if it is before to current one
+	 * base on the start date of the lecture block. This will sync the roll call with the
+	 * current participants.<br>
+	 * This method is meaned for REST API
+	 * 
+	 * @param lectureBlock The lecture block
+	 * @param firstAdmissionDate The admission date to set
+	 * @return The list of participant.
+	 */
+	public List<Identity> syncParticipantSummariesAndRollCalls(LectureBlock lectureBlock, LectureBlockAuditLog.Action action);
+	
 	
 	public List<LectureBlockRollCall> getRollCalls(LectureBlockRef block);
 	
-	
 	public List<LectureBlockRollCall> getRollCalls(LectureBlockRollCallSearchParameters searchParams);
+	
+	public List<LectureBlockRollCallAndCoach> getLectureBlockAndRollCalls(LectureBlockRollCallSearchParameters searchParams);
 	
 	
 	/**
@@ -384,7 +405,9 @@ public interface LectureService {
 	public List<LectureBlock> getLectureBlocks(RepositoryEntryRef entry);
 	
 	/**
-	 * Search lecture blocks.
+	 * Search lecture blocks. It returns only lecture blocks with a teacher and
+	 * if the repository entry has the lectures enabled.
+	 * 
 	 * 
 	 * @param searchParams The search parameters
 	 * @return A list of lecture blocks
@@ -409,11 +432,15 @@ public interface LectureService {
 	public List<LectureBlockWithTeachers> getLectureBlocksWithTeachers(RepositoryEntryRef entry, IdentityRef teacher, LecturesBlockSearchParameters searchParams);
 
 	/**
-	 * The list of lecture blocks of a specific teacher
+	 * The list of lecture blocks of a specific teacher. The lecture blocks come
+	 * from repository entry where the lectures are enabled.
+	 * 
 	 * @param teacher The teacher to search with.
 	 * @return A list of lecture blocks.
 	 */
 	public List<LectureBlock> getLectureBlocks(IdentityRef teacher, LecturesBlockSearchParameters searchParams);
+	
+	public List<LectureBlockRef> getAssessedLectureBlocks(IdentityRef teacher, LecturesBlockSearchParameters searchParams);
 	
 	/**
 	 * Returns the lecture block for the specified learning resource
@@ -452,6 +479,26 @@ public interface LectureService {
 	
 	public void removeTeacher(LectureBlock block, Identity teacher);
 	
+	public List<TaxonomyLevel> getTaxonomy(LectureBlockRef lectureBlock);
+	
+	/**
+	 * 
+	 * @param level The taxonomy level to search for
+	 * @return A list of lecture blocks with this level
+	 */
+	public List<LectureBlock> getLectureBlocks(TaxonomyLevelRef level);
+	
+	/**
+	 * This is an administrative tool which look at all lecture blocks
+	 * regardless of the permissions.
+	 * 
+	 * @param from
+	 * @param to
+	 * @param status
+	 * @return A list of lectures with some additional informations
+	 */
+	public List<LectureReportRow> getLectureBlocksReport(Date from, Date to, List<LectureRollCallStatus> status);
+	
 	/**
 	 * The method will not set the date of admission.
 	 * 
@@ -470,6 +517,15 @@ public interface LectureService {
 	
 	
 	public List<LectureBlockIdentityStatistics> groupByIdentity(List<LectureBlockIdentityStatistics> statistics);
+	
+	/**
+	 * The method calculate warnings on a user base. If a user as a course with a warning,
+	 * the method return the warning for it. It's a "max" grouping, not an average one.
+	 * 
+	 * @param statistics
+	 * @return
+	 */
+	public List<IdentityRateWarning> groupRateWarning(List<LectureBlockIdentityStatistics> statistics);
 	
 	/**
 	 * Returns the statistics for the specified participant.
@@ -501,7 +557,7 @@ public interface LectureService {
 	 * @return
 	 */
 	public List<LectureBlockIdentityStatistics> getLecturesStatistics(LectureStatisticsSearchParameters params,
-			List<UserPropertyHandler> userPropertyHandlers, Identity identity, boolean admin);
+			List<UserPropertyHandler> userPropertyHandlers, Identity identity);
 	
 	/**
 	 * The list of roll calls within the specified course for the specified user
@@ -529,4 +585,5 @@ public interface LectureService {
 	 * @param entry
 	 */
 	public void syncCalendars(RepositoryEntry entry);
+	
 }

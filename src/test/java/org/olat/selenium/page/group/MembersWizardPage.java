@@ -54,7 +54,7 @@ public class MembersWizardPage {
 	public MembersWizardPage nextOverview() {
 		OOGraphene.nextStep(browser);
 		OOGraphene.closeBlueMessageWindow(browser);
-		OOGraphene.waitElement(By.cssSelector("div.o_sel_edit_permissions"), 5, browser);
+		OOGraphene.waitElement(By.cssSelector("div.o_sel_edit_permissions"), browser);
 		return this;
 	}
 	
@@ -68,7 +68,7 @@ public class MembersWizardPage {
 	public MembersWizardPage finish() {
 		try {
 			By contactFormBy = By.cssSelector("fieldset.o_sel_contact_form");
-			OOGraphene.waitElement(contactFormBy, 5, browser);
+			OOGraphene.waitElement(contactFormBy, browser);
 			OOGraphene.waitBusyAndScrollTop(browser);
 			OOGraphene.finishStep(browser);
 		} catch (Exception e) {
@@ -94,16 +94,15 @@ public class MembersWizardPage {
 
 		By searchBy = By.cssSelector(".o_sel_usersearch_searchform a.btn-default");
 		OOGraphene.clickAndWait(searchBy, browser);
-		
+
 		// select all
-		By selectAll = By.xpath("//div[contains(@class,'modal')]//div[contains(@class,'o_table_checkall')]/label/a[i[contains(@class,'o_icon_check_on')]]");
+		By selectAll = By.xpath("//div[contains(@class,'modal')]//div[contains(@class,'o_table_checkall')]/a[i[contains(@class,'o_icon_check_on')]]");
 		OOGraphene.waitElement(selectAll, browser);
 		if(browser instanceof FirefoxDriver) {
 			OOGraphene.waitingALittleLonger();// link is obscured by the scroll bar
 		}
 		browser.findElement(selectAll).click();
 		OOGraphene.waitBusy(browser);
-		
 		return this;
 	}
 	
@@ -143,8 +142,9 @@ public class MembersWizardPage {
 	
 	public MembersWizardPage selectGroupAsParticipant(String groupName) {
 		By rolesBy = By.xpath("//div[contains(@class,'o_table_wrapper')]//table//tr[td[text()='" + groupName + "']]//label[contains(@class,'o_sel_role_participant')]/input");
-		OOGraphene.waitElement(rolesBy, 5, browser);
+		OOGraphene.waitElement(rolesBy, browser);
 		browser.findElement(rolesBy).click();
+		OOGraphene.waitBusy(browser);
 		return this;
 	}
 }

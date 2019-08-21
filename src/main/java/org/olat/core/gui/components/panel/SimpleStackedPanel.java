@@ -35,7 +35,7 @@ import org.olat.core.gui.components.AbstractComponent;
 import org.olat.core.gui.components.Component;
 import org.olat.core.gui.components.ComponentRenderer;
 import org.olat.core.logging.AssertException;
-import org.olat.core.logging.OLog;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
 
 /**
@@ -46,7 +46,7 @@ import org.olat.core.logging.Tracing;
  * @author Felix Jost
  */
 public class SimpleStackedPanel extends AbstractComponent implements StackedPanel {
-	private static final OLog log = Tracing.createLoggerFor(SimpleStackedPanel.class);
+	private static final Logger log = Tracing.createLoggerFor(SimpleStackedPanel.class);
 	private static final ComponentRenderer RENDERER = new PanelRenderer();
 
 	private Component curContent;
@@ -131,22 +131,20 @@ public class SimpleStackedPanel extends AbstractComponent implements StackedPane
 	}
 
 	@Override
-	public void popContent() {
+	public Component popContent() {
 		int stackHeight = stackList.size();
 		if (stackHeight < 1) throw new AssertException("stack was empty!");
 		if (curContent == null) throw new AssertException("stackHeight not zero, but curContent was null!");
-		stackList.remove(stackHeight - 1); // remove the top component
+		Component popedComponent = stackList.remove(stackHeight - 1); // remove the top component
 		if (stackHeight == 1) { // after pop, the content is null
 			curContent = null;
 		} else { // stackHeight > 1
 			curContent = stackList.get(stackHeight - 2);
 		}
 		setDirty(true);
+		return popedComponent;
 	}
 
-	/**
-	 * @see org.olat.core.gui.components.Component#getExtendedDebugInfo()
-	 */
 	@Override
 	public String getExtendedDebugInfo() {
 		StringBuilder sb = new StringBuilder();

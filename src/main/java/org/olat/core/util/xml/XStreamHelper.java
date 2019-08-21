@@ -26,6 +26,7 @@
 package org.olat.core.util.xml;
 
 import java.io.BufferedInputStream;
+import java.io.BufferedOutputStream;
 import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.FileInputStream;
@@ -177,8 +178,7 @@ public class XStreamHelper {
 	 */
 	public static Object xstreamClone(Object in) {
 		String data = unconfiguredXStream.toXML(in);
-		Object out = unconfiguredXStream.fromXML(data);
-		return out;
+		return unconfiguredXStream.fromXML(data);
 	}
 
 	/**
@@ -251,25 +251,11 @@ public class XStreamHelper {
 	 * @return
 	 */
 	public static Object readObject(XStream xStream, File file) {
-		FileInputStream fis = null;
-		BufferedInputStream bis = null;
-		try {
-			fis = new FileInputStream(file);
-			bis = new BufferedInputStream(fis);
+		try(FileInputStream fis = new FileInputStream(file);
+				BufferedInputStream bis = new BufferedInputStream(fis, FileUtils.BSIZE)) {
 			return readObject(xStream, bis);
 		} catch (IOException e) {
-			throw new OLATRuntimeException(XStreamHelper.class,
-					"could not read Object from file: "
-							+ file.getAbsolutePath(), e);
-		} finally {
-			try {
-				if (fis != null)
-					fis.close();
-				if (bis != null)
-					bis.close();
-			} catch (Exception e) {
-				// we did our best to close the inputStream
-			}
+			throw new OLATRuntimeException(XStreamHelper.class, "could not read Object from file: " + file.getAbsolutePath(), e);
 		}
 	}
 	
@@ -284,9 +270,7 @@ public class XStreamHelper {
 				InputStream bis = new BufferedInputStream(in)) {
 			return readObject(xStream, bis);
 		} catch (Exception e) {
-			throw new OLATRuntimeException(XStreamHelper.class,
-					"could not read Object from file: "
-							+ path, e);
+			throw new OLATRuntimeException(XStreamHelper.class, "could not read Object from file: " + path, e);
 		}
 	}
 	
@@ -300,25 +284,11 @@ public class XStreamHelper {
 	 * @return
 	 */
 	public static Object readObject(XStream xStream, VFSLeaf file) {
-		InputStream fis = null;
-		BufferedInputStream bis = null;
-		try {
-			fis = file.getInputStream();
-			bis = new BufferedInputStream(fis);
+		try(InputStream fis = file.getInputStream();
+				BufferedInputStream bis = new BufferedInputStream(fis)) {
 			return readObject(xStream, bis);
 		} catch (Exception e) {
-			throw new OLATRuntimeException(XStreamHelper.class,
-					"could not read Object from file: "
-							+ file.getName(), e);
-		} finally {
-			try {
-				if (fis != null)
-					fis.close();
-				if (bis != null)
-					bis.close();
-			} catch (Exception e) {
-				// we did our best to close the inputStream
-			}
+			throw new OLATRuntimeException(XStreamHelper.class, "could not read Object from file: " + file.getName(), e);
 		}
 	}
 
@@ -332,17 +302,11 @@ public class XStreamHelper {
 	 * @return
 	 */
 	public static Object readObject(XStream xStream, InputStream is) {
-		try {
-			InputStreamReader isr = new InputStreamReader(is, ENCODING);
-			Object obj = xStream.fromXML(isr);
-			isr.close();
-			is.close();
-			return obj;
+		try(InputStreamReader isr = new InputStreamReader(is, ENCODING);) {
+			return xStream.fromXML(isr);
 		} catch (Exception e) {
 			throw new OLATRuntimeException(XStreamHelper.class,
 					"could not read Object from inputstream: " + is, e);
-		} finally {
-			FileUtils.closeSafely(is);
 		}
 	}
 	
@@ -374,7 +338,11 @@ public class XStreamHelper {
 	 *            the object to be serialized
 	 */
 	public static void writeObject(XStream xStream, VFSLeaf vfsLeaf, Object obj) {
-		writeObject(xStream, vfsLeaf.getOutputStream(false), obj);
+		try(OutputStream out=vfsLeaf.getOutputStream(false)) {
+			writeObject(xStream, out, obj);
+		} catch(Exception e) {
+			throw new OLATRuntimeException(XStreamHelper.class, "Could not write object to file: " + vfsLeaf, e);
+		}
 	}
 
 	/**
@@ -389,13 +357,11 @@ public class XStreamHelper {
 	 *            the object to be serialized
 	 */
 	public static void writeObject(XStream xStream, File file, Object obj) {
-		try {
-			writeObject(xStream, new FileOutputStream(file), obj);
+		try(OutputStream out=new FileOutputStream(file);
+				BufferedOutputStream bout = new BufferedOutputStream(out, FileUtils.BSIZE)) {
+			writeObject(xStream, bout, obj);
 		} catch (Exception e) {
-			throw new OLATRuntimeException(
-					XStreamHelper.class,
-					"Could not write object to file: " + file.getAbsolutePath(),
-					e);
+			throw new OLATRuntimeException(XStreamHelper.class, "Could not write object to file: " + file.getAbsolutePath(), e);
 		}
 	}
 
@@ -411,18 +377,14 @@ public class XStreamHelper {
 	 *            the object to be serialized
 	 */
 	public static void writeObject(XStream xStream, OutputStream os, Object obj) {
-		try {
-			OutputStreamWriter osw = new OutputStreamWriter(os, ENCODING);
+		try(OutputStreamWriter osw = new OutputStreamWriter(os, ENCODING)) {
 			String data = xStream.toXML(obj);
 			data = "<?xml version=\"1.0\" encoding=\"" + ENCODING + "\"?>\n"
 					+ data; // give a decent header with the encoding used
 			osw.write(data);
-			osw.close();
+			osw.flush();
 		} catch (Exception e) {
-			throw new OLATRuntimeException(XStreamHelper.class,
-					"Could not write object to stream.", e);
-		} finally {
-			FileUtils.closeSafely(os);
+			throw new OLATRuntimeException(XStreamHelper.class, "Could not write object to stream.", e);
 		}
 	}
 }

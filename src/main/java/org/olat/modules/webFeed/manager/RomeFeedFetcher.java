@@ -26,7 +26,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
 
-import org.olat.core.logging.OLog;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.StringHelper;
 import org.olat.modules.webFeed.Enclosure;
@@ -56,7 +56,7 @@ import com.rometools.rome.io.XmlReader;
 @Service
 public class RomeFeedFetcher implements ExternalFeedFetcher {
 
-	private static final OLog log = Tracing.createLoggerFor(RomeFeedFetcher.class);
+	private static final Logger log = Tracing.createLoggerFor(RomeFeedFetcher.class);
 
 	private final SyndFeedInput syndFeedInput;
 
@@ -217,13 +217,13 @@ public class RomeFeedFetcher implements ExternalFeedFetcher {
 				if (enclosuresExpected) {
 					SyndEntry entry = feed.getEntries().get(0);
 					if (entry.getEnclosures().isEmpty()) {
-						return new ValidatedURL(url, ValidatedURL.State.NO_ENCLOSURE);
+						return new ValidatedURL(url, null, ValidatedURL.State.NO_ENCLOSURE);
 					}
 				}
-				return new ValidatedURL(url, ValidatedURL.State.VALID);
+				return new ValidatedURL(url, null, ValidatedURL.State.VALID);
 			}
 			// The feed was read successfully
-			return new ValidatedURL(url, ValidatedURL.State.VALID);
+			return new ValidatedURL(url, feed.getTitle(), ValidatedURL.State.VALID);
 		} catch (ParsingFeedException e) {
 			if (modifiedProtocol) {
 				// fallback for SWITCHcast itpc -> http -> https
@@ -232,16 +232,16 @@ public class RomeFeedFetcher implements ExternalFeedFetcher {
 			}
 			String message = String.format("Validation of the feed url %s failed. %s: %s ", url, e.getClass(), e.getMessage());
 			log.debug(message);
-			return new ValidatedURL(url, ValidatedURL.State.NOT_FOUND);
+			return new ValidatedURL(url, null, ValidatedURL.State.NOT_FOUND);
 		} catch (FileNotFoundException e) {
 			String message = String.format("Validation of the feed url %s failed. %s: %s ", url, e.getClass(), e.getMessage());
 			log.debug(message);
-			return new ValidatedURL(url, ValidatedURL.State.NOT_FOUND);
+			return new ValidatedURL(url, null, ValidatedURL.State.NOT_FOUND);
 		} catch (Exception e) {
 			String message = String.format("Validation of the feed url %s failed. %s: %s ", url, e.getClass(), e.getMessage());
 			log.debug(message);
 		}
-		return new ValidatedURL(url, ValidatedURL.State.MALFORMED);
+		return new ValidatedURL(url, null, ValidatedURL.State.MALFORMED);
 	}
 
 }

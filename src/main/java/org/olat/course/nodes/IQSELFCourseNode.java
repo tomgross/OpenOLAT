@@ -43,7 +43,8 @@ import org.olat.core.gui.control.generic.tabbable.TabbableController;
 import org.olat.core.gui.translator.PackageTranslator;
 import org.olat.core.gui.translator.Translator;
 import org.olat.core.id.Identity;
-import org.olat.core.logging.OLog;
+import org.olat.core.id.Organisation;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.Util;
 import org.olat.course.ICourse;
@@ -98,7 +99,7 @@ import org.olat.resource.OLATResource;
  */
 public class IQSELFCourseNode extends AbstractAccessableCourseNode implements SelfAssessableCourseNode, QTICourseNode {
 	private static final long serialVersionUID = -1929987728611139729L;
-	private static final OLog log = Tracing.createLoggerFor(IQSELFCourseNode.class);
+	private static final Logger log = Tracing.createLoggerFor(IQSELFCourseNode.class);
 	private static final String PACKAGE_IQ = Util.getPackageName(IQRunController.class);
 	private static final String TYPE = "iqself";
 
@@ -255,7 +256,8 @@ public class IQSELFCourseNode extends AbstractAccessableCourseNode implements Se
 	}
 
 	@Override
-	public boolean archiveNodeData(Locale locale, ICourse course, ArchiveOptions options, ZipOutputStream exportStream, String charset) {
+	public boolean archiveNodeData(Locale locale, ICourse course, ArchiveOptions options,
+			ZipOutputStream exportStream, String archivePath, String charset) {
 		String repositorySoftKey = (String) getModuleConfiguration().get(IQEditController.CONFIG_KEY_REPOSITORY_SOFTKEY);
 		RepositoryEntry re = RepositoryManager.getInstance().lookupRepositoryEntryBySoftkey(repositorySoftKey, true);
 		
@@ -264,7 +266,7 @@ public class IQSELFCourseNode extends AbstractAccessableCourseNode implements Se
 				RepositoryEntry courseEntry = course.getCourseEnvironment().getCourseGroupManager().getCourseEntry();
 				QTI21StatisticSearchParams searchParams = new QTI21StatisticSearchParams(options, re, courseEntry, getIdent());
 				QTI21ArchiveFormat qaf = new QTI21ArchiveFormat(locale, searchParams);
-				qaf.exportCourseElement(exportStream);
+				qaf.exportCourseElement(exportStream, archivePath);
 				return true;	
 			} else {
 				QTIExportManager qem = QTIExportManager.getInstance();
@@ -279,7 +281,7 @@ public class IQSELFCourseNode extends AbstractAccessableCourseNode implements Se
 					}
 					qef.setMapWithExportItemConfigs(itemConfigs);
 				}
-				return qem.selectAndExportResults(qef, course.getResourceableId(), getShortTitle(), getIdent(), re, exportStream, locale, ".xls");
+				return qem.selectAndExportResults(qef, course.getResourceableId(), getShortTitle(), getIdent(), re, exportStream, archivePath, locale, ".xls");
 			}
 		} catch (IOException e) {
 			log.error("", e);
@@ -306,7 +308,7 @@ public class IQSELFCourseNode extends AbstractAccessableCourseNode implements Se
 	}
 
 	@Override
-	public void importNode(File importDirectory, ICourse course, Identity owner, Locale locale, boolean withReferences) {
+	public void importNode(File importDirectory, ICourse course, Identity owner, Organisation organisation, Locale locale, boolean withReferences) {
 		RepositoryEntryImportExport rie = new RepositoryEntryImportExport(importDirectory, getIdent());
 		if(withReferences && rie.anyExportedPropertiesAvailable()) {
 			File file = rie.importGetExportedFile();
@@ -315,12 +317,12 @@ public class IQSELFCourseNode extends AbstractAccessableCourseNode implements Se
 			RepositoryEntry re;
 			if(handlerQTI21.acceptImport(file, "repo.zip").isValid()) {
 				re = handlerQTI21.importResource(owner, rie.getInitialAuthor(), rie.getDisplayName(),
-						rie.getDescription(), false, locale, rie.importGetExportedFile(), null);
+						rie.getDescription(), false, organisation, locale, rie.importGetExportedFile(), null);
 				getModuleConfiguration().set(IQEditController.CONFIG_KEY_TYPE_QTI, IQEditController.CONFIG_VALUE_QTI21);
 			} else {
 				RepositoryHandler handler = RepositoryHandlerFactory.getInstance().getRepositoryHandler(TestFileResource.TYPE_NAME);
 				re = handler.importResource(owner, rie.getInitialAuthor(), rie.getDisplayName(),
-					rie.getDescription(), false, locale, file, null);
+					rie.getDescription(), false, organisation, locale, file, null);
 			}
 			IQEditController.setIQReference(re, getModuleConfiguration());
 		} else {

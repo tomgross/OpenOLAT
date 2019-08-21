@@ -26,7 +26,7 @@ import java.io.InputStream;
 import java.io.Writer;
 import java.net.URI;
 import java.net.URISyntaxException;
-import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -43,8 +43,8 @@ import javax.xml.stream.FactoryConfigurationError;
 import javax.xml.stream.XMLOutputFactory;
 import javax.xml.stream.XMLStreamWriter;
 
+import org.apache.logging.log4j.Logger;
 import org.olat.core.CoreSpringFactory;
-import org.olat.core.logging.OLog;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.WebappHelper;
 import org.olat.fileresource.types.ImsQTI21Resource;
@@ -89,7 +89,7 @@ import uk.ac.ed.ph.jqtiplus.xmlutils.locators.ResourceLocator;
  */
 class CopyAndConvertVisitor extends SimpleFileVisitor<Path> {
 	
-	private static final OLog log = Tracing.createLoggerFor(CopyAndConvertVisitor.class);
+	private static final Logger log = Tracing.createLoggerFor(CopyAndConvertVisitor.class);
 	
 	private final Path source;
 	private final Path destDir;
@@ -198,7 +198,7 @@ class CopyAndConvertVisitor extends SimpleFileVisitor<Path> {
 	private boolean convertXmlFile(Path inputFile, Path outputFile, InputType type, HandlerProvider provider) {
 		File tmpFile = new File(WebappHelper.getTmpDir(), UUID.randomUUID() + ".xml");
 		try(InputStream in = Files.newInputStream(inputFile);
-				Writer out = Files.newBufferedWriter(tmpFile.toPath(), Charset.forName("UTF-8"))) {
+				Writer out = Files.newBufferedWriter(tmpFile.toPath(), StandardCharsets.UTF_8)) {
 			XMLOutputFactory xof = XMLOutputFactory.newInstance();
 	        XMLStreamWriter xtw = xof.createXMLStreamWriter(out);
 	

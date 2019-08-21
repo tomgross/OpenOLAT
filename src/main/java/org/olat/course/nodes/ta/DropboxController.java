@@ -28,7 +28,7 @@ package org.olat.course.nodes.ta;
 import java.io.BufferedOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
-import java.io.FileNotFoundException;
+import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.text.SimpleDateFormat;
@@ -40,13 +40,11 @@ import org.apache.velocity.VelocityContext;
 import org.apache.velocity.context.Context;
 import org.olat.admin.quota.QuotaConstants;
 import org.olat.core.CoreSpringFactory;
-import org.olat.core.commons.modules.bc.meta.MetaInfo;
-import org.olat.core.commons.modules.bc.meta.tagged.MetaTagged;
-import org.olat.core.commons.modules.bc.vfs.OlatNamedContainerImpl;
-import org.olat.core.commons.modules.bc.vfs.OlatRootFolderImpl;
 import org.olat.core.commons.services.notifications.NotificationsManager;
 import org.olat.core.commons.services.notifications.SubscriptionContext;
 import org.olat.core.commons.services.notifications.ui.ContextualSubscriptionController;
+import org.olat.core.commons.services.vfs.VFSMetadata;
+import org.olat.core.commons.services.vfs.VFSRepositoryService;
 import org.olat.core.gui.UserRequest;
 import org.olat.core.gui.components.Component;
 import org.olat.core.gui.components.link.Link;
@@ -70,11 +68,16 @@ import org.olat.core.util.mail.MailContextImpl;
 import org.olat.core.util.mail.MailHelper;
 import org.olat.core.util.mail.MailManager;
 import org.olat.core.util.mail.MailerResult;
+import org.olat.core.util.vfs.LocalFolderImpl;
+import org.olat.core.util.vfs.NamedContainerImpl;
 import org.olat.core.util.vfs.Quota;
 import org.olat.core.util.vfs.QuotaManager;
+import org.olat.core.util.vfs.VFSConstants;
 import org.olat.core.util.vfs.VFSContainer;
 import org.olat.core.util.vfs.VFSLeaf;
+import org.olat.core.util.vfs.VFSManager;
 import org.olat.core.util.vfs.callbacks.FullAccessWithQuotaCallback;
+import org.olat.core.util.vfs.filters.VFSSystemItemFilter;
 import org.olat.course.auditing.UserNodeAuditManager;
 import org.olat.course.nodes.AssessableCourseNode;
 import org.olat.course.nodes.CourseNode;
@@ -84,6 +87,7 @@ import org.olat.course.run.userview.UserCourseEnvironment;
 import org.olat.modules.ModuleConfiguration;
 import org.olat.modules.assessment.Role;
 import org.olat.user.UserManager;
+import org.springframework.beans.factory.annotation.Autowired;
 
 import javax.ws.rs.core.UriBuilder;
 
@@ -107,6 +111,10 @@ public class DropboxController extends BasicController {
 	private Link ulButton;
 	private CloseableModalController cmc;
 
+	@Autowired
+	private QuotaManager quotaManager;
+	@Autowired
+	private VFSRepositoryService vfsRepositoryService;
 	
 	// Constructor for ProjectBrokerDropboxController
 	protected DropboxController(UserRequest ureq, WindowControl wControl) {
@@ -129,9 +137,7 @@ public class DropboxController extends BasicController {
 		this.config = config;
 		this.node = node;
 		this.userCourseEnv = userCourseEnv;
-		boolean isCourseAdmin = userCourseEnv.getCourseEnvironment().getCourseGroupManager().isIdentityCourseAdministrator(ureq.getIdentity());
-		boolean isCourseCoach = userCourseEnv.getCourseEnvironment().getCourseGroupManager().isIdentityCourseCoach(ureq.getIdentity());
-		boolean hasNotification = (isCourseAdmin || isCourseCoach);
+		boolean hasNotification = userCourseEnv.isAdmin() || userCourseEnv.isCoach();
 		init(ureq, wControl, previewMode, hasNotification);
 	}
 	
@@ -186,7 +192,7 @@ public class DropboxController extends BasicController {
 	 * @return Dropbox of an identity
 	 */
 	protected VFSContainer getDropBox(Identity identity) {
-		OlatRootFolderImpl dropBox = new OlatRootFolderImpl(getRelativeDropBoxFilePath(identity), null);
+		LocalFolderImpl dropBox = VFSManager.olatRootContainer(getRelativeDropBoxFilePath(identity), null);
 		if (!dropBox.getBasefile().exists()) dropBox.getBasefile().mkdirs();
 		return dropBox;
 	}
@@ -220,20 +226,17 @@ public class DropboxController extends BasicController {
 	 */
 	private int getUploadLimit() {
 		String dropboxPath = getRelativeDropBoxFilePath(getIdentity());
-		Quota dropboxQuota = QuotaManager.getInstance().getCustomQuota(dropboxPath);
+		Quota dropboxQuota = quotaManager.getCustomQuota(dropboxPath);
 		if (dropboxQuota == null) {
-			dropboxQuota = QuotaManager.getInstance().getDefaultQuota(QuotaConstants.IDENTIFIER_DEFAULT_NODES);
+			dropboxQuota = quotaManager.getDefaultQuota(QuotaConstants.IDENTIFIER_DEFAULT_NODES);
 		}
-		OlatRootFolderImpl rootFolder = new OlatRootFolderImpl( getRelativeDropBoxFilePath(getIdentity()), null);
-		VFSContainer dropboxContainer = new OlatNamedContainerImpl(getIdentity().getName(), rootFolder);
+		VFSContainer rootFolder = VFSManager.olatRootContainer(getRelativeDropBoxFilePath(getIdentity()), null);
+		VFSContainer dropboxContainer = new NamedContainerImpl(getIdentity().getName(), rootFolder);
 		FullAccessWithQuotaCallback secCallback = new FullAccessWithQuotaCallback(dropboxQuota);
 		rootFolder.setLocalSecurityCallback(secCallback);
-		return QuotaManager.getInstance().getUploadLimitKB(dropboxQuota.getQuotaKB(),dropboxQuota.getUlLimitKB(),dropboxContainer);
+		return quotaManager.getUploadLimitKB(dropboxQuota.getQuotaKB(),dropboxQuota.getUlLimitKB(),dropboxContainer);
 	}
 
-	/**
-	 * @see org.olat.core.gui.control.DefaultController#event(org.olat.core.gui.UserRequest, org.olat.core.gui.control.Controller, org.olat.core.gui.control.Event)
-	 */
 	@Override
 	public void event(UserRequest ureq, Controller source, Event event) {
 		if (source == fileChooserController) {
@@ -252,27 +255,24 @@ public class DropboxController extends BasicController {
 					fOut = fDropbox.createChildLeaf(filename);
 				}
 				
-				try {
-					InputStream in = new FileInputStream(fIn);
-					OutputStream out = new BufferedOutputStream(fOut.getOutputStream(false));
+				try(InputStream in = new FileInputStream(fIn);
+					OutputStream out = new BufferedOutputStream(fOut.getOutputStream(false))) {
 					success = FileUtils.copy(in, out);
-					FileUtils.closeSafely(in);
-					FileUtils.closeSafely(out);
-				} catch (FileNotFoundException e) {
+				} catch (IOException e) {
 					logError("", e);
 					return;
 				}
 				
-				if (fOut instanceof MetaTagged) {
-					MetaInfo info = ((MetaTagged)fOut).getMetaInfo();
+				if(fOut.canMeta() == VFSConstants.YES) {
+					VFSMetadata info = fOut.getMetaInfo();
 					if(info != null) {
 						info.setAuthor(ureq.getIdentity());
-						info.write();
+						vfsRepositoryService.updateMetadata(info);
 					}
 				}
 					
 				if (success) {
-					int numFiles = fDropbox.getItems().size();
+					int numFiles = fDropbox.getItems(new VFSSystemItemFilter()).size();
 					myContent.contextPut("numfiles", new String[] {Integer.toString(numFiles)});
 					// assemble confirmation
 					String confirmation = getConfirmation(ureq, fOut.getName());
@@ -289,10 +289,10 @@ public class DropboxController extends BasicController {
 						bundle.setContent(translate("conf.mail.subject"), confirmation);
 						MailerResult result = CoreSpringFactory.getImpl(MailManager.class).sendMessage(bundle);
 						if(result.getFailedIdentites().size() > 0) {
-							List<Identity> disabledIdentities = new ArrayList<Identity>();
+							List<Identity> disabledIdentities = new ArrayList<>();
 							disabledIdentities = result.getFailedIdentites();
 							//show error that message can not be sent
-							ArrayList<String> myButtons = new ArrayList<String>();
+							ArrayList<String> myButtons = new ArrayList<>();
 							myButtons.add(translate("back"));
 							String title = MailHelper.getTitleForFailedUsersError(ureq.getLocale());
 							String message = MailHelper.getMessageForFailedUsersError(ureq.getLocale(), disabledIdentities);
@@ -304,7 +304,7 @@ public class DropboxController extends BasicController {
 							sendMailError = true;
 						} else if(result.getReturnCode() > 0) {
 							//show error that message can not be sent
-							ArrayList<String> myButtons = new ArrayList<String>();
+							ArrayList<String> myButtons = new ArrayList<>();
 							myButtons.add(translate("back"));
 							DialogBoxController noUsersErrorCtr = null;
 							String message = translate("conf.mail.error");
@@ -373,10 +373,7 @@ public class DropboxController extends BasicController {
 		return processedConfirmation.replace("\n", "&#10;").replace("\r", "&#10;").replace("\u2028", "&#10;");
 	}
 	
-	/**
-	 * 
-	 * @see org.olat.core.gui.control.DefaultController#doDispose(boolean)
-	 */
+	@Override
 	protected void doDispose() {
 		// DialogBoxController gets disposed by BasicController
 		if (fileChooserController != null) {

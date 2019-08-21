@@ -19,30 +19,34 @@
  */
 package org.olat.core.commons.modules.bc.commands;
 
+import java.io.IOException;
 import java.io.InputStream;
+import java.io.OutputStream;
 import java.util.ArrayList;
-import java.util.Iterator;
 import java.util.List;
 import java.util.zip.ZipOutputStream;
 
 import javax.servlet.http.HttpServletResponse;
 
+import org.apache.logging.log4j.Logger;
+import org.olat.core.CoreSpringFactory;
 import org.olat.core.commons.modules.bc.FileSelection;
 import org.olat.core.commons.modules.bc.components.FolderComponent;
-import org.olat.core.commons.modules.bc.meta.MetaInfo;
-import org.olat.core.commons.modules.bc.meta.tagged.MetaTagged;
+import org.olat.core.commons.services.vfs.VFSRepositoryService;
 import org.olat.core.gui.UserRequest;
 import org.olat.core.gui.control.Controller;
 import org.olat.core.gui.control.WindowControl;
 import org.olat.core.gui.media.MediaResource;
 import org.olat.core.gui.media.ServletUtil;
 import org.olat.core.gui.translator.Translator;
-import org.olat.core.logging.OLog;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.StringHelper;
 import org.olat.core.util.ZipUtil;
+import org.olat.core.util.vfs.VFSConstants;
 import org.olat.core.util.vfs.VFSContainer;
 import org.olat.core.util.vfs.VFSItem;
+import org.olat.core.util.vfs.VFSLeaf;
+import org.olat.core.util.vfs.VFSManager;
 
 /**
  * 
@@ -52,23 +56,20 @@ import org.olat.core.util.vfs.VFSItem;
  */
 public class CmdDownloadZip implements FolderCommand {
 	
-	private static final OLog log = Tracing.createLoggerFor(CmdDownloadZip.class);
+	private static final Logger log = Tracing.createLoggerFor(CmdDownloadZip.class);
 
-	private FileSelection selection;
-	private VFSContainer currentContainer;
 	private int status = FolderCommandStatus.STATUS_SUCCESS;
 
-	
 	@Override
 	public Controller execute(FolderComponent folderComponent, UserRequest ureq, WindowControl wControl, Translator trans) {
-		currentContainer = folderComponent.getCurrentContainer();
+		VFSContainer currentContainer = folderComponent.getCurrentContainer();
 
 		status = FolderCommandHelper.sanityCheck(wControl, folderComponent);
 		if(status == FolderCommandStatus.STATUS_FAILED) {
 			return null;
 		}
 	
-		selection = new FileSelection(ureq, folderComponent.getCurrentContainerPath());
+		FileSelection selection = new FileSelection(ureq, folderComponent.getCurrentContainerPath());
 		status = FolderCommandHelper.sanityCheck3(wControl, folderComponent, selection);
 		if(status == FolderCommandStatus.STATUS_FAILED) {
 			return null;
@@ -159,6 +160,24 @@ public class CmdDownloadZip implements FolderCommand {
 			hres.setHeader("Content-Disposition","attachment; filename*=UTF-8''" + urlEncodedLabel);			
 			hres.setHeader("Content-Description", urlEncodedLabel);
 			
+			if(selectedFiles.size() == 1 && selectedFiles.get(0).toLowerCase().endsWith(".zip")) {
+				VFSItem singleItem = currentContainer.resolve(selectedFiles.get(0));
+				if(singleItem instanceof VFSLeaf) {
+					try(OutputStream out = hres.getOutputStream()) {
+						VFSManager.copyContent((VFSLeaf)singleItem, out);
+					} catch(IOException e) {
+						log.error("", e);
+					}
+				} else {
+					prepareZip(hres, selectedFiles);
+				}
+			} else {
+				prepareZip(hres, selectedFiles);
+			}
+		}
+		
+		private void prepareZip(HttpServletResponse hres, List<String> selectedFiles) {
+			VFSRepositoryService vfsRepositoryService = CoreSpringFactory.getImpl(VFSRepositoryService.class);
 			try(ZipOutputStream zout = new ZipOutputStream(hres.getOutputStream())) {
 				zout.setLevel(9);
 				
@@ -168,18 +187,14 @@ public class CmdDownloadZip implements FolderCommand {
 					if (item != null) {
 						vfsFiles.add(item);
 						// update download counter
-						if (item instanceof MetaTagged) {
-							MetaTagged itemWithMeta = (MetaTagged) item;
-							MetaInfo meta = itemWithMeta.getMetaInfo();
-							meta.increaseDownloadCount();
-							meta.write();
+						if (item instanceof VFSLeaf && item.canMeta() == VFSConstants.YES) {
+							vfsRepositoryService.increaseDownloadCount((VFSLeaf)item);
 						}
 					}
 				}
 				
-				boolean success = true;
-				for (Iterator<VFSItem> iter = vfsFiles.iterator(); success && iter.hasNext();) {
-					success = ZipUtil.addToZip(iter.next(), "", zout);
+				for (VFSItem item:vfsFiles) {
+					ZipUtil.addToZip(item, "", zout);
 				}
 				zout.flush();
 			} catch (Exception e) {

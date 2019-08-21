@@ -27,14 +27,14 @@ import java.util.Locale;
 import org.olat.basesecurity.IdentityRef;
 import org.olat.core.commons.persistence.DB;
 import org.olat.core.id.Identity;
-import org.olat.core.logging.OLog;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.FileUtils;
 import org.olat.core.util.StringHelper;
 import org.olat.core.util.tree.TreeVisitor;
 import org.olat.core.util.vfs.VFSContainer;
 import org.olat.core.util.vfs.VFSItem;
-import org.olat.core.util.vfs.filters.SystemItemFilter;
+import org.olat.core.util.vfs.filters.VFSSystemItemFilter;
 import org.olat.course.CourseFactory;
 import org.olat.course.ICourse;
 import org.olat.course.nodes.PFCourseNode;
@@ -52,7 +52,7 @@ import org.springframework.stereotype.Service;
 @Service
 public class PFUserDataManager implements UserDataExportable {
 	
-	private static final OLog log = Tracing.createLoggerFor(PFUserDataManager.class);
+	private static final Logger log = Tracing.createLoggerFor(PFUserDataManager.class);
 	
 	@Autowired
 	private DB dbInstance;
@@ -96,7 +96,7 @@ public class PFUserDataManager implements UserDataExportable {
 	private void exportPFNode(Identity identity, PFCourseNode pfNode, ICourse course, File pfArchiveDirectory) {
 		VFSContainer dropBox = pfManager.resolveDropFolder(course.getCourseEnvironment(), pfNode, identity);
 		if(dropBox != null) {
-			List<VFSItem> droppedItems = dropBox.getItems(new SystemItemFilter());
+			List<VFSItem> droppedItems = dropBox.getItems(new VFSSystemItemFilter());
 			if(!droppedItems.isEmpty()) {
 				String name = StringHelper.transformDisplayNameToFileSystemName(course.getCourseTitle()) +
 						"_" + StringHelper.transformDisplayNameToFileSystemName(getNodeName(pfNode));

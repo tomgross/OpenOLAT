@@ -36,14 +36,10 @@ import org.olat.core.gui.control.generic.messages.MessageUIFactory;
 import org.olat.core.util.Util;
 import org.olat.repository.RepositoryEntry;
 import org.olat.repository.RepositoryEntryShort;
-import org.olat.repository.RepositoryManager;
+import org.olat.repository.RepositoryEntryStatusEnum;
 import org.olat.repository.RepositoryModule;
 
 /**
- * Description:<br>
- * TODO: patrickb Class Description for RepositoyUIFactory
- * 
- * <P>
  * Initial Date:  03.12.2007 <br>
  * @author patrickb
  */
@@ -56,8 +52,10 @@ public class RepositoyUIFactory {
 	}
 	
 	public static String getIconCssClass(RepositoryEntryShort re) {
+		if(re == null) return "";
+		
 		String iconCSSClass = "o_" + re.getResourceType().replace(".", "-");
-		if (re != null && RepositoryManager.getInstance().createRepositoryEntryStatus(re.getStatusCode()).isClosed()) {
+		if (re.getEntryStatus() == RepositoryEntryStatusEnum.closed) {
 			iconCSSClass = iconCSSClass.concat("_icon_closed");
 		} else {
 			iconCSSClass = iconCSSClass.concat("_icon");
@@ -66,8 +64,10 @@ public class RepositoyUIFactory {
 	}
 	
 	public static String getIconCssClass(RepositoryEntry re) {
+		if(re == null) return "";
+		
 		String iconCSSClass = "o_" + re.getOlatResource().getResourceableTypeName().replace(".", "-");
-		if (re != null && RepositoryManager.getInstance().createRepositoryEntryStatus(re.getStatusCode()).isClosed()) {
+		if (re.getEntryStatus() == RepositoryEntryStatusEnum.closed) {
 			iconCSSClass = iconCSSClass.concat("_icon_closed");
 		} else {
 			iconCSSClass = iconCSSClass.concat("_icon");
@@ -110,8 +110,7 @@ public class RepositoyUIFactory {
 	}
 
 	
-	public static Controller createLifecylceAdminController(UserRequest ureq, WindowControl wControl) {
-		Controller ctrl = new LifecycleAdminController(ureq, wControl);
-		return ctrl;
+	public static Controller createLifecycleAdminController(UserRequest ureq, WindowControl wControl) {
+		return new LifecycleAdminController(ureq, wControl);
 	}
 }

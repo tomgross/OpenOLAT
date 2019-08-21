@@ -33,7 +33,7 @@ import javax.servlet.http.HttpServletResponse;
 
 import org.olat.core.gui.media.MediaResource;
 import org.olat.core.gui.media.ServletUtil;
-import org.olat.core.logging.OLog;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.FileUtils;
 import org.olat.core.util.StringHelper;
@@ -53,7 +53,7 @@ import org.olat.core.util.vfs.VFSContainer;
  */
 public class VideoExportMediaResource implements MediaResource {
 	
-	private static final OLog log = Tracing.createLoggerFor(VideoExportMediaResource.class);
+	private static final Logger log = Tracing.createLoggerFor(VideoExportMediaResource.class);
 	private final VFSContainer baseContainer;
 	private final String title;
 	
@@ -118,24 +118,22 @@ public class VideoExportMediaResource implements MediaResource {
 				public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
 					Path relativeFile = unzipPath.relativize(file);
 					String names = relativeFile.toString();
-					
-					if(!attrs.isDirectory()) {
-						// add everything that belongs to resource to zip
-						zout.putNextEntry(new ZipEntry(names));							
-						
-						try(InputStream in=Files.newInputStream(file)) {
-							FileUtils.copy(in, zout);
-						} catch (Exception e) {
-							log.error("Error during copy of video resource export", e);
-						}
-						
-						zout.closeEntry();
-					}
+					zout.putNextEntry(new ZipEntry(names));							
+					zip(file, zout);
+					zout.closeEntry();
 					return FileVisitResult.CONTINUE;
 				}
 			});
 		} catch (Exception e) {
 			log.error("Unknown error while video resource export", e);
+		}
+	}
+	
+	private final void zip(Path file, ZipOutputStream zout) {
+		try(InputStream in=Files.newInputStream(file)) {
+			FileUtils.copy(in, zout);
+		} catch (Exception e) {
+			log.error("Error during copy of video resource export", e);
 		}
 	}
 

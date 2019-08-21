@@ -117,8 +117,8 @@ public class ExtendedSearchController extends FormBasicController implements Ext
 		FormLayoutContainer buttonsCont = FormLayoutContainer.createButtonLayout("buttons", getTranslator());
 		buttonsCont.setRootForm(mainForm);
 		formLayout.add(buttonsCont);
-		searchButton = uifactory.addFormLink("search", buttonsCont, Link.BUTTON);
 		uifactory.addFormCancelButton("cancel", buttonsCont, ureq, getWindowControl());
+		searchButton = uifactory.addFormLink("search", buttonsCont, Link.BUTTON);
 	}
 	
 	@Override

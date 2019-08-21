@@ -32,8 +32,8 @@ import java.util.List;
 import org.olat.core.commons.modules.bc.FileSelection;
 import org.olat.core.commons.modules.bc.FolderEvent;
 import org.olat.core.commons.modules.bc.components.FolderComponent;
-import org.olat.core.commons.modules.bc.meta.MetaInfo;
-import org.olat.core.commons.modules.bc.meta.tagged.MetaTagged;
+import org.olat.core.commons.services.vfs.VFSMetadata;
+import org.olat.core.commons.services.vfs.VFSRepositoryService;
 import org.olat.core.gui.UserRequest;
 import org.olat.core.gui.components.form.flexible.FormItemContainer;
 import org.olat.core.gui.components.form.flexible.elements.TextElement;
@@ -50,6 +50,7 @@ import org.olat.core.util.vfs.VFSConstants;
 import org.olat.core.util.vfs.VFSContainer;
 import org.olat.core.util.vfs.VFSItem;
 import org.olat.core.util.vfs.VFSLeaf;
+import org.springframework.beans.factory.annotation.Autowired;
 
 /**
  * 
@@ -67,6 +68,9 @@ public class CmdZip extends FormBasicController implements FolderCommand {
 	private VFSContainer currentContainer;
 	private FileSelection selection;
 	private TextElement textElement;
+	
+	@Autowired
+	private VFSRepositoryService vfsRepositoryService;
 	
 	protected CmdZip(UserRequest ureq, WindowControl wControl) {
 		super(ureq, wControl);
@@ -145,8 +149,6 @@ public class CmdZip extends FormBasicController implements FolderCommand {
 
 	/**
 	 * Creates a zipFile by using ZipUtil and fires Event.DONE_EVENT if successful.
-	 * 
-	 * @see org.olat.core.commons.modules.bc.commands.AbstractCreateItemForm#formOK(org.olat.core.gui.UserRequest)
 	 */
 	@Override
 	protected void formOK(UserRequest ureq) {
@@ -156,7 +158,7 @@ public class CmdZip extends FormBasicController implements FolderCommand {
 		}
 
 		VFSItem zipFile = currentContainer.createChildLeaf(name);
-		if (zipFile == null) {
+		if (!(zipFile instanceof VFSLeaf)) {
 			fireEvent(ureq, Event.FAILED_EVENT);
 			return;				
 		}
@@ -174,12 +176,10 @@ public class CmdZip extends FormBasicController implements FolderCommand {
 			status = FolderCommandStatus.STATUS_FAILED;
 			fireEvent(ureq, FOLDERCOMMAND_FINISHED);
 		} else {
-			if(zipFile instanceof MetaTagged) {
-				MetaInfo info = ((MetaTagged)zipFile).getMetaInfo();
-				if(info != null) {
-					info.setAuthor(ureq.getIdentity());
-					info.write();
-				}
+			if(zipFile.canMeta() == VFSConstants.YES) {
+				VFSMetadata info = zipFile.getMetaInfo();
+				info.setAuthor(ureq.getIdentity());
+				vfsRepositoryService.updateMetadata(info);
 			}
 			
 			fireEvent(ureq, new FolderEvent(FolderEvent.ZIP_EVENT, selection.renderAsHtml()));				

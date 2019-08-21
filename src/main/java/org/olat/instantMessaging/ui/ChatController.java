@@ -34,7 +34,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.LinkedBlockingDeque;
 
-import org.olat.basesecurity.BaseSecurityManager;
+import org.olat.basesecurity.BaseSecurity;
 import org.olat.basesecurity.IdentityShort;
 import org.olat.core.CoreSpringFactory;
 import org.olat.core.dispatcher.mapper.MapperService;
@@ -80,7 +80,7 @@ public class ChatController extends BasicController implements GenericEventListe
 	private final VelocityContainer mainVC;
 	private final VelocityContainer chatMsgFieldContent;
 
-	private Map<Long,Long> avatarKeyCache = new HashMap<Long,Long>();
+	private Map<Long,Long> avatarKeyCache = new HashMap<>();
 	private Deque<ChatMessage> messageHistory = new LinkedBlockingDeque<>();
 
 	private Link refresh, todayLink, lastWeek, lastMonth;
@@ -98,6 +98,8 @@ public class ChatController extends BasicController implements GenericEventListe
 	
 	@Autowired
 	private UserManager userManager;
+	@Autowired
+	private BaseSecurity securityManager;
 	@Autowired
 	private MapperService mapperService;
 	@Autowired
@@ -133,7 +135,8 @@ public class ChatController extends BasicController implements GenericEventListe
 
 		// configure anonym mode depending on configuration. separate configurations for course and group chats
 		InstantMessagingModule imModule = CoreSpringFactory.getImpl(InstantMessagingModule.class);
-		boolean offerAnonymMode, defaultAnonym;
+		boolean offerAnonymMode;
+		boolean defaultAnonym;
 		if ("CourseModule".equals(ores.getResourceableTypeName())) {
 			offerAnonymMode = imModule.isCourseAnonymEnabled();
 			defaultAnonym = offerAnonymMode && imModule.isCourseAnonymDefaultEnabled();
@@ -380,7 +383,7 @@ public class ChatController extends BasicController implements GenericEventListe
 			}
 		}
 		if(avatarKey == null) {
-			IdentityShort id = BaseSecurityManager.getInstance().loadIdentityShortByKey(identityKey);
+			IdentityShort id = securityManager.loadIdentityShortByKey(identityKey);
 			if(id != null) {
 				// check if avatar image exists at all
 				if (portraitManager.getSmallPortraitResource(id.getKey())  != null) {

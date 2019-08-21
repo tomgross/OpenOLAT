@@ -36,6 +36,7 @@ import org.olat.core.id.Identity;
 import org.olat.core.util.vfs.LocalFolderImpl;
 import org.olat.core.util.vfs.VFSContainer;
 import org.olat.core.util.vfs.VFSItem;
+import org.olat.core.util.vfs.filters.VFSSystemItemFilter;
 import org.olat.modules.fo.portfolio.ForumArtefact;
 import org.olat.portfolio.manager.EPArtefactManager;
 import org.olat.portfolio.manager.EPFrontendManager;
@@ -52,7 +53,6 @@ import org.springframework.beans.factory.annotation.Autowired;
  * 
  * Description:<br>
  * This is an integration test of the EPArtefactManager to test the DB
- * TODO: epf: access the manager-methods over EPFrontendManager, as they are protected
  * 
  * <P>
  * Initial Date:  24 jun. 2010 <br>
@@ -112,7 +112,7 @@ public class EPArtefactManagerTest extends OlatTestCase {
 		epFrontendManager.addArtefactToStructure(ident1, artefact2, el);
 		assertTrue(epFrontendManager.getArtefacts(el).get(0).equalsByPersistableKey(artefact2));
 		epFrontendManager.deleteArtefact(artefact2);
-		assertEquals(epFrontendManager.getArtefacts(el).size(),0);
+		assertEquals(0, epFrontendManager.getArtefacts(el).size());
 	}
 		
 	@Test
@@ -121,7 +121,7 @@ public class EPArtefactManagerTest extends OlatTestCase {
 		AbstractArtefact artefact3 = epFrontendManager.createAndPersistArtefact(ident1, "Forum");
 		VFSContainer artCont = epFrontendManager.getArtefactContainer(artefact3);
 		artCont.createChildLeaf("testfile.txt");
-		assertEquals(1, artCont.getItems().size());
+		assertEquals(1, artCont.getItems(new VFSSystemItemFilter()).size());
 		Long artKey3 = artefact3.getKey();
 		epFrontendManager.deleteArtefact(artefact3);
 		VFSItem item = epFrontendManager.getArtefactsRoot().resolve(artKey3.toString());

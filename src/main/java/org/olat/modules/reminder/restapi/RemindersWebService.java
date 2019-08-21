@@ -20,7 +20,6 @@
 package org.olat.modules.reminder.restapi;
 
 import static org.olat.restapi.security.RestSecurityHelper.getIdentity;
-import static org.olat.restapi.security.RestSecurityHelper.getRoles;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -40,7 +39,6 @@ import javax.ws.rs.core.Response;
 import javax.ws.rs.core.Response.Status;
 
 import org.olat.core.id.Identity;
-import org.olat.core.id.Roles;
 import org.olat.modules.reminder.Reminder;
 import org.olat.modules.reminder.ReminderService;
 import org.olat.modules.reminder.manager.ReminderRulesXStream;
@@ -58,12 +56,14 @@ import org.springframework.beans.factory.annotation.Autowired;
 public class RemindersWebService {
 	
 	private RepositoryEntry entry;
+	private final boolean administrator;
 	
 	@Autowired	
 	private ReminderService reminderService;
 	
-	public RemindersWebService(RepositoryEntry entry) {
+	public RemindersWebService(RepositoryEntry entry, boolean administrator) {
 		this.entry = entry;
+		this.administrator = administrator;
 	}
 	
 	/**
@@ -74,14 +74,12 @@ public class RemindersWebService {
 	 * @response.representation.200.example {@link org.olat.modules.reminder.restapi.Examples#SAMPLE_REMINDERVO}
 	 * @response.representation.401.doc The roles of the authenticated user are not sufficient
 	 * @response.representation.404.doc The resource not found
-	 * @param httpRequest The HTTP request
 	 * @return The reminders
 	 */
 	@GET
 	@Produces({MediaType.APPLICATION_JSON, MediaType.APPLICATION_XML})
-	public Response getReminders(@Context HttpServletRequest httpRequest) {
-		Roles roles = getRoles(httpRequest);
-		if(!roles.isOLATAdmin()) {
+	public Response getReminders() {
+		if(!administrator) {
 			return Response.serverError().status(Status.UNAUTHORIZED).build();
 		}
 		
@@ -111,8 +109,7 @@ public class RemindersWebService {
 	@Produces({MediaType.APPLICATION_XML, MediaType.APPLICATION_JSON})
 	@Consumes({MediaType.APPLICATION_XML, MediaType.APPLICATION_JSON})
 	public Response putReminder(ReminderVO reminder, @Context HttpServletRequest httpRequest) {
-		Roles roles = getRoles(httpRequest);
-		if(!roles.isOLATAdmin()) {
+		if(!administrator) {
 			return Response.serverError().status(Status.UNAUTHORIZED).build();
 		}
 		Reminder updatedReminder = saveReminder(reminder, httpRequest);
@@ -136,8 +133,7 @@ public class RemindersWebService {
 	@Produces({MediaType.APPLICATION_JSON, MediaType.APPLICATION_XML})
 	@Consumes({MediaType.APPLICATION_FORM_URLENCODED, MediaType.APPLICATION_XML, MediaType.APPLICATION_JSON})
 	public Response postReminder(ReminderVO reminder, @Context HttpServletRequest httpRequest) {
-		Roles roles = getRoles(httpRequest);
-		if(!roles.isOLATAdmin()) {
+		if(!administrator) {
 			return Response.serverError().status(Status.UNAUTHORIZED).build();
 		}
 		Reminder updatedReminder = saveReminder(reminder, httpRequest);
@@ -181,14 +177,12 @@ public class RemindersWebService {
 	 * @response.representation.401.doc The roles of the authenticated user are not sufficient
 	 * @response.representation.404.doc The course or repository entry not found
 	 * @param reminderKey The reminder primary key
-	 * @param httpRequest The HTTP request
 	 * @return Nothing
 	 */
 	@DELETE
 	@Path("{reminderKey}")
-	public Response deleteReminder(@PathParam("reminderKey") Long reminderKey, @Context HttpServletRequest httpRequest) {
-		Roles roles = getRoles(httpRequest);
-		if(!roles.isOLATAdmin()) {
+	public Response deleteReminder(@PathParam("reminderKey") Long reminderKey) {
+		if(!administrator) {
 			return Response.serverError().status(Status.UNAUTHORIZED).build();
 		}
 		Reminder reminder = reminderService.loadByKey(reminderKey);

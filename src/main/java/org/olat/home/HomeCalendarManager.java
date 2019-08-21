@@ -44,26 +44,24 @@ import org.olat.commons.calendar.model.CalendarUserConfiguration;
 import org.olat.commons.calendar.ui.components.KalendarRenderWrapper;
 import org.olat.core.CoreSpringFactory;
 import org.olat.core.commons.persistence.DB;
+import org.olat.core.commons.persistence.QueryBuilder;
 import org.olat.core.gui.UserRequest;
 import org.olat.core.gui.control.WindowControl;
 import org.olat.core.id.Identity;
-import org.olat.core.logging.OLog;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.FileUtils;
-import org.olat.core.util.nodes.INode;
-import org.olat.core.util.tree.TreeVisitor;
-import org.olat.core.util.tree.Visitor;
 import org.olat.course.CorruptedCourseException;
 import org.olat.course.CourseFactory;
 import org.olat.course.ICourse;
 import org.olat.course.groupsandrights.CourseRights;
-import org.olat.course.nodes.CalCourseNode;
-import org.olat.course.nodes.CourseNode;
+import org.olat.course.nodes.cal.CourseCalendars;
 import org.olat.course.run.calendar.CourseLinkProviderController;
 import org.olat.group.BusinessGroup;
 import org.olat.group.BusinessGroupService;
 import org.olat.group.model.SearchBusinessGroupParams;
 import org.olat.repository.RepositoryEntry;
+import org.olat.repository.RepositoryEntryStatusEnum;
 import org.olat.resource.OLATResource;
 import org.olat.user.UserDataDeletable;
 import org.olat.user.UserDataExportable;
@@ -80,7 +78,7 @@ import org.springframework.stereotype.Service;
 @Service
 public class HomeCalendarManager implements PersonalCalendarManager, UserDataDeletable, UserDataExportable {
 	
-	private static final OLog log = Tracing.createLoggerFor(HomeCalendarManager.class);
+	private static final Logger log = Tracing.createLoggerFor(HomeCalendarManager.class);
 	
 	@Autowired
 	private DB dbInstance;
@@ -249,9 +247,8 @@ public class HomeCalendarManager implements PersonalCalendarManager, UserDataDel
 				Long courseResourceableID = courseEntry.getOlatResource().getResourceableId();
 				try {
 					ICourse course = CourseFactory.loadCourse(courseEntry);
-					if(isCourseCalendarEnabled(course)) {
+					if(CourseCalendars.isCourseCalendarEnabled(course)) {
 						//calendar course aren't enabled per default but course node of type calendar are always possible
-						//REVIEW if (!course.getCourseEnvironment().getCourseConfig().isCalendarEnabled()) continue;
 						// add course calendar
 						KalendarRenderWrapper courseCalendarWrapper = calendarManager.getCourseCalendar(course);
 						boolean isPrivileged = GroupRoles.owner.name().equals(role) || editoredResources.contains(courseEntry.getOlatResource());
@@ -274,25 +271,15 @@ public class HomeCalendarManager implements PersonalCalendarManager, UserDataDel
 					}
 				} catch (CorruptedCourseException e) {
 					OLATResource olatResource = courseEntry.getOlatResource();
-					log.error("Corrupted course: " + olatResource.getResourceableTypeName() + " :: " + courseResourceableID, null);
+					log.error("Corrupted course: " + olatResource.getResourceableTypeName() + " :: " + courseResourceableID);
 				} catch (Exception e) {
 					OLATResource olatResource = courseEntry.getOlatResource();
-					log.error("Cannor read calendar of course: " + olatResource.getResourceableTypeName() + " :: " + courseResourceableID, null);
+					log.error("Cannor read calendar of course: " + olatResource.getResourceableTypeName() + " :: " + courseResourceableID);
 				}
 			}
 		}
 	}
-	
-	private boolean isCourseCalendarEnabled(ICourse course) {
-		if(course.getCourseConfig().isCalendarEnabled()) {
-			return true;
-		}
-		
-		CourseNode rootNode = course.getRunStructure().getRootNode();
-		CalCourseNodeVisitor v = new CalCourseNodeVisitor();
-		new TreeVisitor(v, rootNode, true).visitAll();
-		return v.isFound();
-	}
+
 	
 	/**
 	 * 
@@ -300,7 +287,7 @@ public class HomeCalendarManager implements PersonalCalendarManager, UserDataDel
 	 * @return List of array, first the repository entry, second the role
 	 */
 	private List<Object[]> getCourses(IdentityRef identity) {
-		StringBuilder sb = new StringBuilder();
+		QueryBuilder sb = new QueryBuilder(2048);
 		sb.append("select v, membership.role from repositoryentry  v ")
 		  .append(" inner join fetch v.olatResource as resource ")
 		  .append(" inner join v.groups as retogroup")
@@ -308,11 +295,11 @@ public class HomeCalendarManager implements PersonalCalendarManager, UserDataDel
 		  .append(" inner join baseGroup.members as membership")
 		  .append(" where v.olatResource.resName='CourseModule' and membership.identity.key=:identityKey and")
 		  .append(" (")
-		  .append("   (v.access=").append(RepositoryEntry.ACC_OWNERS).append(" and v.membersOnly=true and membership.role in ('").append(GroupRoles.owner.name()).append("','").append(GroupRoles.coach.name()).append("','").append(GroupRoles.participant.name()).append("'))")
+		  .append("   (v.status ").in(RepositoryEntryStatusEnum.reviewToClosed()).append(" and membership.role='").append(GroupRoles.owner.name()).append("')")
 		  .append("   or")
-		  .append("   (v.access>=").append(RepositoryEntry.ACC_OWNERS).append(" and membership.role='").append(GroupRoles.owner.name()).append("')")
+		  .append("   (v.status ").in(RepositoryEntryStatusEnum.coachPublishedToClosed()).append(" and membership.role='").append(GroupRoles.coach.name()).append("')")
 		  .append("   or")
-		  .append("   (v.access>=").append(RepositoryEntry.ACC_USERS).append(" and membership.role in ('").append(GroupRoles.coach.name()).append("','").append(GroupRoles.participant.name()).append("'))")
+		  .append("   (v.status ").in(RepositoryEntryStatusEnum.publishedAndClosed()).append(" and membership.role='").append(GroupRoles.participant.name()).append("')")
 		  .append(" )");
 		
 		return dbInstance.getCurrentEntityManager()
@@ -415,21 +402,6 @@ public class HomeCalendarManager implements PersonalCalendarManager, UserDataDel
 				Files.deleteIfExists(calendarFile.toPath());
 			} catch (IOException e) {
 				log.error("Cannot delete calendar: " + calendarFile);
-			}
-		}
-	}
-
-	private static class CalCourseNodeVisitor implements Visitor {
-		private boolean found = false;
-		
-		public boolean isFound() {
-			return found;
-		}
-		
-		@Override
-		public void visit(INode node) {
-			if(node instanceof CalCourseNode) {
-				found = true;
 			}
 		}
 	}

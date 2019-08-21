@@ -29,10 +29,9 @@ import org.apache.lucene.queryparser.classic.QueryParser;
 import org.apache.lucene.search.IndexSearcher;
 import org.apache.lucene.search.Query;
 import org.apache.lucene.search.TopDocs;
-import org.olat.core.logging.OLog;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.Encoder;
-import org.olat.search.SearchService;
 import org.olat.search.model.AbstractOlatDocument;
 
 /**
@@ -43,7 +42,12 @@ import org.olat.search.model.AbstractOlatDocument;
  */
 class GetDocumentByCallable implements Callable<Document> {
 	
-	private static final OLog log = Tracing.createLoggerFor(GetDocumentByCallable.class);
+	private static final Logger log = Tracing.createLoggerFor(GetDocumentByCallable.class);
+	
+	/**
+	 * To prevent flooding the logs with errors during a re-index
+	 */
+	private static int countEx = 0;
 	
 	private final String resourceUrl;
 	private final SearchServiceImpl searchService;
@@ -53,23 +57,26 @@ class GetDocumentByCallable implements Callable<Document> {
 		this.searchService = searchService;
 	}
 	
+	public static int incrementEx() {
+		return countEx++;
+	}
+	
 	@Override
 	public Document call() {
 		Document doc = null;
 		IndexSearcher searcher = null;
-		try {
+		try(KeywordAnalyzer analyzer=new KeywordAnalyzer()) {
 			if (searchService.existIndex()) {
 				searcher = searchService.getIndexSearcher();
 				String url = Encoder.md5hash(resourceUrl);
 				String queryStr = "+" + AbstractOlatDocument.RESOURCEURL_MD5_FIELD_NAME + ":\"" + url + "\"";
-				QueryParser idQueryParser = new QueryParser(SearchService.OO_LUCENE_VERSION, queryStr, new KeywordAnalyzer());
+				QueryParser idQueryParser = new QueryParser(queryStr, analyzer);
 				Query query = idQueryParser.parse(queryStr);
 				
 				TopDocs docs = searcher.search(query, 500);
-				int numOfDocs = docs.totalHits;
-				
+				long numOfDocs = docs.totalHits;
 
-				Set<String> retrievedFields = new HashSet<String>();
+				Set<String> retrievedFields = new HashSet<>();
 				retrievedFields.add(AbstractOlatDocument.RESOURCEURL_FIELD_NAME);
 				retrievedFields.add(AbstractOlatDocument.RESOURCEURL_MD5_FIELD_NAME);
 
@@ -80,6 +87,12 @@ class GetDocumentByCallable implements Callable<Document> {
 						doc = searcher.doc(docs.scoreDocs[i].doc);
 					}
 				}
+			}
+		} catch(IllegalStateException ise) {
+			if(incrementEx() % 500 == 0) {
+				log.error("", ise);
+			} else {
+				log.warn("", ise);
 			}
 		} catch (Exception naex) {
 			log.error("", naex);

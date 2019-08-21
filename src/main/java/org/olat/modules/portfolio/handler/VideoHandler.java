@@ -26,9 +26,9 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 
-import org.olat.core.commons.modules.bc.meta.MetaInfo;
-import org.olat.core.commons.modules.bc.meta.tagged.MetaTagged;
 import org.olat.core.commons.services.image.Size;
+import org.olat.core.commons.services.vfs.VFSMetadata;
+import org.olat.core.commons.services.vfs.VFSRepositoryService;
 import org.olat.core.gui.UserRequest;
 import org.olat.core.gui.control.Controller;
 import org.olat.core.gui.control.WindowControl;
@@ -37,9 +37,13 @@ import org.olat.core.id.Identity;
 import org.olat.core.logging.activity.ThreadLocalUserActivityLogger;
 import org.olat.core.util.FileUtils;
 import org.olat.core.util.StringHelper;
+import org.olat.core.util.vfs.VFSConstants;
 import org.olat.core.util.vfs.VFSContainer;
 import org.olat.core.util.vfs.VFSItem;
 import org.olat.core.util.vfs.VFSLeaf;
+import org.olat.modules.ceditor.InteractiveAddPageElementHandler;
+import org.olat.modules.ceditor.PageElementAddController;
+import org.olat.modules.ceditor.PageElementCategory;
 import org.olat.modules.portfolio.Media;
 import org.olat.modules.portfolio.MediaInformations;
 import org.olat.modules.portfolio.MediaLight;
@@ -47,8 +51,6 @@ import org.olat.modules.portfolio.MediaRenderingHints;
 import org.olat.modules.portfolio.PortfolioLoggingAction;
 import org.olat.modules.portfolio.manager.MediaDAO;
 import org.olat.modules.portfolio.manager.PortfolioFileStorage;
-import org.olat.modules.portfolio.ui.editor.InteractiveAddPageElementHandler;
-import org.olat.modules.portfolio.ui.editor.PageElementAddController;
 import org.olat.modules.portfolio.ui.media.CollectVideoMediaController;
 import org.olat.modules.portfolio.ui.media.UploadMedia;
 import org.olat.modules.portfolio.ui.media.VideoMediaController;
@@ -77,6 +79,8 @@ public class VideoHandler extends AbstractMediaHandler implements InteractiveAdd
 	private MediaDAO mediaDao;
 	@Autowired
 	private PortfolioFileStorage fileStorage;
+	@Autowired
+	private VFSRepositoryService vfsRepositoryService;
 	
 	public VideoHandler() {
 		super(VIDEO_TYPE);
@@ -85,6 +89,11 @@ public class VideoHandler extends AbstractMediaHandler implements InteractiveAdd
 	@Override
 	public String getIconCssClass() {
 		return "o_icon_video";
+	}
+	
+	@Override
+	public PageElementCategory getCategory() {
+		return PageElementCategory.embed;
 	}
 
 	@Override
@@ -109,12 +118,8 @@ public class VideoHandler extends AbstractMediaHandler implements InteractiveAdd
 		if(StringHelper.containsNonWhitespace(storagePath)) {
 			VFSContainer storageContainer = fileStorage.getMediaContainer(media);
 			VFSItem item = storageContainer.resolve(media.getRootFilename());
-			if(item instanceof VFSLeaf) {
-				VFSLeaf leaf = (VFSLeaf)item;
-				if(leaf instanceof MetaTagged) {
-					MetaInfo metaInfo = ((MetaTagged)leaf).getMetaInfo();
-					thumbnail = metaInfo.getThumbnail(size.getHeight(), size.getWidth(), true);
-				}
+			if(item instanceof VFSLeaf && item.canMeta() == VFSConstants.YES) {
+				thumbnail = vfsRepositoryService.getThumbnail((VFSLeaf)item, size.getHeight(), size.getWidth(), true);
 			}
 		}
 		
@@ -130,8 +135,8 @@ public class VideoHandler extends AbstractMediaHandler implements InteractiveAdd
 	public MediaInformations getInformations(Object mediaObject) {
 		String title = null;
 		String description = null;
-		if (mediaObject instanceof MetaTagged) {
-			MetaInfo meta = ((MetaTagged)mediaObject).getMetaInfo();
+		if (mediaObject instanceof VFSLeaf && ((VFSLeaf)mediaObject).canMeta() == VFSConstants.YES) {
+			VFSMetadata meta = ((VFSLeaf)mediaObject).getMetaInfo();
 			title = meta.getTitle();
 			description = meta.getComment();
 		}

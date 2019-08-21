@@ -25,10 +25,12 @@
 
 package org.olat.search.service.searcher;
 
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Random;
 import java.util.Set;
 
@@ -50,7 +52,7 @@ import org.olat.core.commons.persistence.SortKey;
 import org.olat.core.id.Identity;
 import org.olat.core.id.Roles;
 import org.olat.core.logging.OLATRuntimeException;
-import org.olat.core.logging.OLog;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
 import org.olat.search.QueryException;
 import org.olat.search.SearchResults;
@@ -68,7 +70,7 @@ import org.olat.search.ServiceNotAvailableException;
  */
 public class SearchClientProxy implements SearchClient {
 	
-	private static final OLog log = Tracing.createLoggerFor(SearchClientProxy.class);
+	private static final Logger log = Tracing.createLoggerFor(SearchClientProxy.class);
 	
 	protected static final String JMS_RESPONSE_STATUS_PROPERTY_NAME = "response_status";
 	protected static final String JMS_RESPONSE_STATUS_OK = "ok";
@@ -82,8 +84,8 @@ public class SearchClientProxy implements SearchClient {
 	private long receiveTimeout_ = 45000;
 	private long timeToLive_ = 45000;
 	private Connection connection_;
-	private LinkedList<Destination> tempQueues_ = new LinkedList<Destination>();
-	private LinkedList<Session> sessions_ = new LinkedList<Session>();
+	private LinkedList<Destination> tempQueues_ = new LinkedList<>();
+	private LinkedList<Session> sessions_ = new LinkedList<>();
 	
 	/**
 	 * [used by spring]	 
@@ -115,7 +117,7 @@ public class SearchClientProxy implements SearchClient {
 	}
 	
 	private synchronized Destination acquireTempQueue(Session session) throws JMSException {
-		if (tempQueues_.size()==0) {
+		if (tempQueues_.isEmpty()) {
 			if (session==null) {
 				Session s = connection_.createSession(false, Session.AUTO_ACKNOWLEDGE);
 				Destination tempQ = s.createTemporaryQueue();
@@ -129,7 +131,7 @@ public class SearchClientProxy implements SearchClient {
 	}
 	
 	private synchronized Session acquireSession() throws JMSException {
-		if (sessions_.size()==0) {
+		if (sessions_.isEmpty()) {
 			return connection_.createSession(false, Session.AUTO_ACKNOWLEDGE);
 		} else {
 			return sessions_.removeFirst();
@@ -155,12 +157,13 @@ public class SearchClientProxy implements SearchClient {
 	 * @see org.olat.search.service.searcher.OLATSearcher#doSearch(java.lang.String, org.olat.core.id.Identity, org.olat.core.id.Roles, boolean)
 	 */
 	@Override
-	public SearchResults doSearch(String queryString, List<String> condQueries, Identity identity, Roles roles, int firstResult, int maxResults, boolean doHighlighting) throws ServiceNotAvailableException, ParseException, QueryException {
-		boolean isDebug = log.isDebug();
+	public SearchResults doSearch(String queryString, List<String> condQueries, Identity identity, Roles roles, Locale locale,
+			int firstResult, int maxResults, boolean doHighlighting) throws ServiceNotAvailableException, ParseException, QueryException {
+		boolean isDebug = log.isDebugEnabled();
 		if(isDebug){
 			log.debug("STARTqueryString=" + queryString);
 		}
-		SearchRequest searchRequest = new SearchRequest(queryString, condQueries, identity.getKey(), roles, firstResult, maxResults, doHighlighting);
+		SearchRequest searchRequest = new SearchRequest(queryString, condQueries, identity.getKey(), roles, locale, firstResult, maxResults, doHighlighting);
 		Session session = null;
 		try {
 			session = acquireSession();
@@ -200,15 +203,13 @@ public class SearchClientProxy implements SearchClient {
 		}
 	}
 	
-	
-	
 	@Override
 	public List<Long> doSearch(String queryString, List<String> condQueries,
-			Identity identity, Roles roles, int firstResult, int maxResults,
+			Identity identity, Roles roles, Locale locale, int firstResult, int maxResults,
 			SortKey... orderBy) throws ServiceNotAvailableException, ParseException,
 			QueryException {
-		// TODO Auto-generated method stub
-		return null;
+		// only goes local
+		return Collections.emptyList();
 	}
 
 	/**
@@ -224,7 +225,7 @@ public class SearchClientProxy implements SearchClient {
 			if(returnedMessage!=null){
 				@SuppressWarnings("unchecked")
 				List<String> spellStringList = (List<String>)((ObjectMessage)returnedMessage).getObject();	
-			  return new HashSet<String>(spellStringList);		
+				return new HashSet<>(spellStringList);		
 			} else {
 				//null returnedMessage
 				throw new ServiceNotAvailableException("spellCheck, communication error with JMS - cannot receive messages!!!");
@@ -269,7 +270,7 @@ public class SearchClientProxy implements SearchClient {
 	
 	private Message doSearchRequest(Session session, Message message) throws JMSException {
 		Destination replyQueue = acquireTempQueue(session);
-		if(log.isDebug()){
+		if(log.isDebugEnabled()){
 			log.debug("doSearchRequest replyQueue=" + replyQueue);
 		}
 		try{
@@ -282,7 +283,7 @@ public class SearchClientProxy implements SearchClient {
 			MessageProducer producer = session.createProducer(searchQueue_);
 			producer.setDeliveryMode(DeliveryMode.NON_PERSISTENT);
 			producer.setTimeToLive(timeToLive_);
-			if (log.isDebug()) {
+			if (log.isDebugEnabled()) {
 				log.debug("Sending search request message with correlationId="+correlationId);
 			}
 			producer.send(message);
@@ -297,7 +298,7 @@ public class SearchClientProxy implements SearchClient {
 					log.info("Timeout in search. Remaining time zero or negative.");
 					break;
 				}
-				if (log.isDebug()) {
+				if (log.isDebugEnabled()) {
 					log.debug("doSearchRequest: call receive with timeout=" + diff);
 				}
 				returnedMessage = responseConsumer.receive(diff);
@@ -315,7 +316,7 @@ public class SearchClientProxy implements SearchClient {
 				}
 			}
 			responseConsumer.close();
-			if (log.isDebug()) {
+			if (log.isDebugEnabled()) {
 				log.debug("doSearchRequest: returnedMessage=" + returnedMessage);
 			}
 			return returnedMessage;

@@ -1,6 +1,5 @@
 (function ($) {
 	$.fn.matchInteractionDnd = function(options) {
-		"use strict";
 		var settings = $.extend({
 			responseIdentifier : null,
 			formDispatchFieldId : null,
@@ -75,8 +74,8 @@
 				var choiceEl = jQuery(ui.draggable)
 				var choiceQtiId = choiceEl.data('qti-id');
 				var choiceInSources = box.find("li[data-qti-id='" + choiceQtiId + "']");
-				if (choiceInSources.size() > 0) {
-					if (choiceEl.parents(".o_match_dnd_sources").size() == 0) {
+				if (choiceInSources.length > 0) {
+					if (choiceEl.parents(".o_match_dnd_sources").length == 0) {
 						choiceEl.remove();
 					}
 				} else {
@@ -96,7 +95,7 @@
 					jQuery(el).removeClass('oo-selected');
 				});
 				itemEl.addClass('oo-selected');
-			} else if(itemEl.parents(".o_match_dnd_targets").size() > 0 && !itemEl.hasClass('oo-dropped-mrk')) {
+			} else if(itemEl.parents(".o_match_dnd_targets").length > 0 && !itemEl.hasClass('oo-dropped-mrk')) {
 				removeSourceFromTarget(itemEl, containerId);
 				recalculate(containerId, settings);
 				setFlexiFormDirty(settings.formDispatchFieldId, false);
@@ -115,7 +114,7 @@
 			},
 			helper: function() {
 				var choiceEl = jQuery(this);
-				var boxed = choiceEl.parent('.o_match_dnd_target').size() > 0;
+				var boxed = choiceEl.parent('.o_match_dnd_target').length > 0;
 				if(!boxed && needToBeAvailable(this, containerId)) {
 					choiceEl.removeClass('oo-selected');
 					var cloned =  choiceEl.clone();// need some click / drag listeners
@@ -147,12 +146,12 @@
 
     function needToBeAvailable(selectedEl, containerId) {
 		var choiceEl = jQuery(selectedEl);
-		if (choiceEl.parents(".o_match_dnd_target").size() > 0) {
+		if (choiceEl.parents(".o_match_dnd_target").length > 0) {
 			return false;
 		}
 		var matchMax = choiceEl.data("qti-match-max");
 		var gapId = choiceEl.data("qti-id");
-		var currentUsed = jQuery("#" + containerId + " .o_match_dnd_targets li[data-qti-id='" + gapId + "']").size();
+		var currentUsed = jQuery("#" + containerId + " .o_match_dnd_targets li[data-qti-id='" + gapId + "']").length;
 		return (matchMax == 0 || currentUsed + 1 < matchMax);
 	}
 
@@ -160,17 +159,17 @@
 		jElements.on('click', function(e, el) {
 			var box = this;
 			var boxEl = jQuery(box);
-			var hasItems = jQuery(".o_associate_item", this).size();
+			var hasItems = jQuery(".o_associate_item", this).length;
 			if(hasItems == 0) {
 				jQuery("#" + containerId + " .o_match_dnd_sources .oo-selected").each(function(index, selectedEl) {
 					var choiceEl = jQuery(selectedEl);
 					var choiceQtiId = choiceEl.data('qti-id');
-					var currentItems = jQuery(".o_match_dnd_source[data-qti-id='" + choiceQtiId + "']", box).size();
+					var currentItems = jQuery(".o_match_dnd_source[data-qti-id='" + choiceQtiId + "']", box).length;
 					
 					var moveAllowed = currentItems == 0;
 					var targetMatchMax = jQuery(box).data("qti-match-max");
 					if(targetMatchMax > 0) {
-						var filled = jQuery(".o_match_dnd_source", box).size();
+						var filled = jQuery(".o_match_dnd_source", box).length;
 						if(filled >= targetMatchMax) {
 							moveAllowed &= false;
 						}
@@ -195,11 +194,11 @@
 			accept: function(el) {
 				var choiceQtiId = jQuery(el).data('qti-id');
 				//check if the source is already in the target
-				var dropAllowed = jQuery(".o_match_dnd_source[data-qti-id='" + choiceQtiId + "']", this).size() == 0;
+				var dropAllowed = jQuery(".o_match_dnd_source[data-qti-id='" + choiceQtiId + "']", this).length == 0;
 				if(dropAllowed) {
 					var targetMatchMax = jQuery(this).data("qti-match-max");
 					if(targetMatchMax > 0) {
-						var filled = jQuery(".o_match_dnd_source", this).size();
+						var filled = jQuery(".o_match_dnd_source", this).length;
 						if(filled >= targetMatchMax) {
 							dropAllowed = false;
 						}
@@ -220,7 +219,7 @@
 				var choiceEl= jQuery(ui.draggable);
 				//prevent 2x the same source
 				var choiceQtiId = choiceEl.data('qti-id');
-				var currentItems = jQuery(".o_match_dnd_source[data-qti-id='" + choiceQtiId + "']", this).size();
+				var currentItems = jQuery(".o_match_dnd_source[data-qti-id='" + choiceQtiId + "']", this).length;
 				if(currentItems > 0) {
 					return;
 				}
@@ -265,7 +264,7 @@
 			.removeClass('oo-choosed');
 
 		var gapId = jSelectedEl.data('qti-id');
-		var availableSources = jQuery("#" + containerId + " .o_match_dnd_sources li[data-qti-id='" + gapId + "']").size();
+		var availableSources = jQuery("#" + containerId + " .o_match_dnd_sources li[data-qti-id='" + gapId + "']").length;
 		if (availableSources == 0) {
 			jSelectedEl
 				.css({'width' : 'auto', 'left' : '0px', 'top' : '0px', 'z-index' : ''})

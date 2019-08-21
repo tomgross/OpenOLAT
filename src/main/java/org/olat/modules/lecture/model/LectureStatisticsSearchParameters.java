@@ -19,10 +19,13 @@
  */
 package org.olat.modules.lecture.model;
 
+import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 import java.util.Map;
 
+import org.olat.core.id.OrganisationRef;
+import org.olat.repository.RepositoryEntryRef;
 import org.olat.repository.model.RepositoryEntryLifecycle;
 
 /**
@@ -40,6 +43,8 @@ public class LectureStatisticsSearchParameters {
 	private Date startDate;
 	private Date endDate;
 	private RepositoryEntryLifecycle lifecycle;
+	private List<OrganisationRef> organisations;
+	private List<RepositoryEntryRef> entries;
 	
 	public String getLogin() {
 		return login;
@@ -80,6 +85,22 @@ public class LectureStatisticsSearchParameters {
 	public void setBulkIdentifiers(List<String> bulkIdentifiers) {
 		this.bulkIdentifiers = bulkIdentifiers;
 	}
+	
+	public boolean hasEntries() {
+		return entries != null && !entries.isEmpty();
+	}
+
+	public List<RepositoryEntryRef> getEntries() {
+		return new ArrayList<>(entries);
+	}
+
+	public void setEntries(List<? extends RepositoryEntryRef> entries) {
+		if(entries == null) {
+			this.entries = null;
+		} else {
+			this.entries = new ArrayList<>(entries);
+		}
+	}
 
 	public Map<String, String> getUserProperties() {
 		return userProperties;
@@ -87,5 +108,21 @@ public class LectureStatisticsSearchParameters {
 
 	public void setUserProperties(Map<String, String> userProperties) {
 		this.userProperties = userProperties;
+	}
+	
+	public boolean hasOrganisations() {
+		return organisations != null && !organisations.isEmpty();
+	}
+	
+	public List<OrganisationRef> getOrganisations() {
+		return organisations;
+	}
+
+	public void setOrganisations(List<? extends OrganisationRef> organisations) {
+		if(organisations == null) {
+			this.organisations = null;
+		} else {
+			this.organisations = new ArrayList<>(organisations);
+		}
 	}
 }

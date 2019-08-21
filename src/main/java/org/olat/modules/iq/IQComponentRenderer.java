@@ -29,7 +29,6 @@ import java.util.Date;
 import java.util.List;
 import java.util.Locale;
 
-import org.apache.commons.lang.StringEscapeUtils;
 import org.dom4j.Element;
 import org.olat.core.gui.components.Component;
 import org.olat.core.gui.components.ComponentRenderer;
@@ -231,7 +230,7 @@ public class IQComponentRenderer implements ComponentRenderer {
 				if (!displayForm) {
 					sb.append(" style=\"display: none;\"");
 				}
-				sb.append(" />");
+				sb.append(" />").append("</div><div class='col-md-10'>");
 			} else {
 				// render "next" button to proceed with subsequent item
 				sb.append("<a class=\"btn btn-primary\" onclick=\"return o2cl()\" href=\"");
@@ -276,7 +275,7 @@ public class IQComponentRenderer implements ComponentRenderer {
 					sb.append("<a class=\"btn btn-primary\" onclick=\"return o2cl()\" href=\"");
 					ubu.buildURI(sb, new String[] { VelocityContainer.COMMAND_ID }, new String[] { "sitsec" });
 					String title = translator.translate("next"); 
-					sb.append("\" title=\"" + StringEscapeUtils.escapeHtml(title) + "\">");
+					sb.append("\" title=\"" + StringHelper.escapeHtml(title) + "\">");
 					sb.append("<span>").append(title).append("</span>");
 					sb.append("</a>");
 				}
@@ -356,7 +355,7 @@ public class IQComponentRenderer implements ComponentRenderer {
 			sb.append("<a onclick=\"return o2cl();\" href=\"");
 			ubu.buildURI(sb, new String[] { VelocityContainer.COMMAND_ID }, new String[] { "git" });
 			sb.append("?itid="	+ itemPos	+ "&seid=" + sectionPos);
-			sb.append("\" class=\"o_sel_qti_menu_item\" title=\"" + StringEscapeUtils.escapeHtml(titleNotEscaped) + "\">");
+			sb.append("\" class=\"o_sel_qti_menu_item\" title=\"" + StringHelper.escapeHtml(titleNotEscaped) + "\">");
 		}
 		
 		sb.append("<b>" + (sectionPos + 1) + "." + (itemPos + 1) + ".</b>&nbsp;");	
@@ -375,7 +374,7 @@ public class IQComponentRenderer implements ComponentRenderer {
 			// add lock image
 			sb.append("<td>");
 			sb.append("<div class='o_qti_closed_icon' title=\"");
-			sb.append(StringEscapeUtils.escapeHtml(r.getTranslator().translate("itemclosed")));
+			sb.appendHtmlEscaped(r.getTranslator().translate("itemclosed"));
 			sb.append("\"><i class='o_icon o_icon_locked'> </i></div>");
 			sb.append("</td>");
 		} else if (info) {
@@ -384,9 +383,9 @@ public class IQComponentRenderer implements ComponentRenderer {
 			if (maxdur != -1) {
 					sb.append("<div class='o_qti_timelimit_icon' title=\"");
 					if (!itc.isStarted()) {
-						sb.append(StringEscapeUtils.escapeHtml(r.getTranslator().translate("timelimit.initial", new String[] {getFormattedLimit(maxdur)})));
+						sb.appendHtmlEscaped(r.getTranslator().translate("timelimit.initial", new String[] {getFormattedLimit(maxdur)}));
 					} else  {
-						sb.append(StringEscapeUtils.escapeHtml(r.getTranslator().translate("timelimit.running", new String[] {fdue})));
+						sb.appendHtmlEscaped(r.getTranslator().translate("timelimit.running", new String[] {fdue}));
 					}
 					sb.append("\" ><i class='o_icon o_icon_timelimit'> </i></div>");
 			}
@@ -398,7 +397,7 @@ public class IQComponentRenderer implements ComponentRenderer {
 			int attempts = itc.getTimesAnswered();
 			if (maxa != -1) { // only limited times of answers
 				sb.append("<div class='o_qti_attemptslimit_icon' title=\"");
-				sb.append(StringEscapeUtils.escapeHtml(r.getTranslator().translate("attemptsleft", new String[] {"" + (maxa - attempts)})));
+				sb.appendHtmlEscaped(r.getTranslator().translate("attemptsleft", new String[] {"" + (maxa - attempts)}));
 				sb.append("\" ><i class='o_icon o_icon_attempt_limit'> </i></div>");
 			}
 			sb.append("</td>");
@@ -457,7 +456,7 @@ public class IQComponentRenderer implements ComponentRenderer {
 			sb.append("<a onclick=\"return o2cl()\" href=\"");
 			ubu.buildURI(sb, new String[] { VelocityContainer.COMMAND_ID }, new String[] { "gse" });
 			sb.append("?seid=" + sectionPos);
-			sb.append("\" title=\"" + StringEscapeUtils.escapeHtml(sc.getTitle()) + "\">");
+			sb.append("\" title=\"" + StringHelper.escapeHtml(sc.getTitle()) + "\">");
 		}
 		sb.append("<b>" + (sectionPos + 1) + ".</b>&nbsp;");
 		sb.append(title);
@@ -470,16 +469,16 @@ public class IQComponentRenderer implements ComponentRenderer {
 		sb.append("<td>");
 		if (!sc.isOpen()) {
 			sb.append("<div class='o_qti_closed_icon' title=\"");
-			sb.append(StringEscapeUtils.escapeHtml(r.getTranslator().translate("itemclosed")));
+			sb.appendHtmlEscaped(r.getTranslator().translate("itemclosed"));
 			sb.append("\"><i class='o_icon o_icon_locked'> </i></div>");
 		} else {
 			// max duration info
 			if (maxdur != -1) {
 					sb.append("<div class='o_qti_timelimit_icon' title=\"");
 					if (!sc.isStarted()) {
-						sb.append(StringEscapeUtils.escapeHtml(r.getTranslator().translate("timelimit.initial", new String[] {getFormattedLimit(maxdur)})));
+						sb.appendHtmlEscaped(r.getTranslator().translate("timelimit.initial", new String[] {getFormattedLimit(maxdur)}));
 					} else  {
-						sb.append(StringEscapeUtils.escapeHtml(r.getTranslator().translate("timelimit.running", new String[] {fdue})));
+						sb.appendHtmlEscaped(r.getTranslator().translate("timelimit.running", new String[] {fdue}));
 					}
 					sb.append("\" ><i class='o_icon o_icon_timelimit'> </i></div>");
 			}
@@ -614,7 +613,7 @@ public class IQComponentRenderer implements ComponentRenderer {
 			int sectionPos = ac.getCurrentSectionContextPos();
 			sb.append("?itid=" + 0 + "&seid=" + sectionPos);
 			String title = translator.translate("next"); 
-			sb.append("\" title=\"" + StringEscapeUtils.escapeHtml(title) + "\">");
+			sb.append("\" title=\"" + StringHelper.escapeHtml(title) + "\">");
 			sb.append("<span>").append(title).append("</span>");
 			sb.append("</a>");
 		}		
@@ -637,7 +636,7 @@ public class IQComponentRenderer implements ComponentRenderer {
 			ubu.buildURI(sb, new String[] { VelocityContainer.COMMAND_ID }, new String[] { "gse" });
 			sb.append("?seid=" + 0);				
 			String title = translator.translate("next"); 
-			sb.append("\" title=\"" + StringEscapeUtils.escapeHtml(title) + "\">");	
+			sb.append("\" title=\"" + StringHelper.escapeHtml(title) + "\">");	
 			sb.append("<span>").append(title).append("</span>");
 			sb.append("</a>");
 		}				

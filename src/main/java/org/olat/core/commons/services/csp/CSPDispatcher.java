@@ -26,15 +26,16 @@ import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import javax.servlet.http.HttpSession;
 
-import org.codehaus.jackson.map.ObjectMapper;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.commons.services.csp.model.CSPReportRequest;
 import org.olat.core.dispatcher.Dispatcher;
 import org.olat.core.id.Identity;
-import org.olat.core.logging.OLog;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.UserSession;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 /**
  * 
@@ -45,7 +46,7 @@ import org.springframework.stereotype.Service;
 @Service("cspDispatcher")
 public class CSPDispatcher implements Dispatcher {
 	
-	private static final OLog log = Tracing.createLoggerFor(CSPDispatcher.class);
+	private static final Logger log = Tracing.createLoggerFor(CSPDispatcher.class);
 	
 	private final ObjectMapper mapper = new ObjectMapper();
 	

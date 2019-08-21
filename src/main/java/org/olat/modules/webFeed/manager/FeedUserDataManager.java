@@ -37,14 +37,14 @@ import org.olat.core.gui.render.StringOutput;
 import org.olat.core.gui.render.velocity.VelocityRenderDecorator;
 import org.olat.core.gui.translator.Translator;
 import org.olat.core.id.Identity;
-import org.olat.core.logging.OLog;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.FileUtils;
 import org.olat.core.util.StringHelper;
 import org.olat.core.util.Util;
 import org.olat.core.util.vfs.VFSContainer;
 import org.olat.core.util.vfs.VFSItem;
-import org.olat.core.util.vfs.filters.SystemItemFilter;
+import org.olat.core.util.vfs.filters.VFSSystemItemFilter;
 import org.olat.modules.portfolio.ui.MediaCenterController;
 import org.olat.modules.webFeed.Item;
 import org.olat.user.UserDataExportable;
@@ -61,7 +61,7 @@ import org.springframework.stereotype.Service;
 @Service
 public class FeedUserDataManager implements UserDataExportable {
 	
-	private static final OLog log = Tracing.createLoggerFor(FeedUserDataManager.class);
+	private static final Logger log = Tracing.createLoggerFor(FeedUserDataManager.class);
 	
 	@Autowired
 	private DB dbInstance;
@@ -96,7 +96,7 @@ public class FeedUserDataManager implements UserDataExportable {
 		VFSContainer itemContainer = feedManager.getItemContainer(item);
 		List<File> attachments = new ArrayList<>();
 		if(itemContainer != null) {
-			List<VFSItem> attachmentItems = itemContainer.getItems(new SystemItemFilter());
+			List<VFSItem> attachmentItems = itemContainer.getItems(new VFSSystemItemFilter());
 			for(VFSItem attachmentItem:attachmentItems) {
 				FileUtils.copyItemToDir(attachmentItem, itemDir, "Copy blog/podcast files");
 				attachments.add(new File(itemDir, attachmentItem.getName()));

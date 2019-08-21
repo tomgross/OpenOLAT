@@ -60,6 +60,7 @@ import org.olat.core.id.Identity;
 import org.olat.core.id.OLATResourceable;
 import org.olat.core.id.context.ContextEntry;
 import org.olat.core.id.context.StateEntry;
+import org.olat.core.logging.Tracing;
 import org.olat.core.logging.activity.CourseLoggingAction;
 import org.olat.core.logging.activity.ThreadLocalUserActivityLogger;
 import org.olat.core.util.Formatter;
@@ -94,7 +95,7 @@ import org.olat.group.BusinessGroup;
 import org.olat.group.ui.edit.BusinessGroupModifiedEvent;
 import org.olat.modules.cp.TreeNodeEvent;
 import org.olat.repository.RepositoryEntry;
-import org.olat.repository.RepositoryManager;
+import org.olat.repository.RepositoryEntryStatusEnum;
 import org.olat.repository.RepositoryService;
 import org.olat.repository.model.RepositoryEntrySecurity;
 import org.olat.util.logging.activity.LoggingResourceable;
@@ -137,9 +138,7 @@ public class RunMainController extends MainLayoutBasicController implements Gene
 	private String courseTitle;
 	private Link nextLink, previousLink;
 	private GlossaryMarkupItemController glossaryMarkerCtr;
-	
-	@Autowired
-	private RepositoryManager repositoryManager;
+
 	@Autowired
 	private RepositoryService repositoryService;
 	
@@ -175,7 +174,7 @@ public class RunMainController extends MainLayoutBasicController implements Gene
 		
 		// log shows who entered which course, this can then be further used to jump
 		// to the courselog
-		logAudit("Entering course: [[["+courseTitle+"]]]", course.getResourceableId().toString());
+		getLogger().info(Tracing.M_AUDIT, "Entering course: [[[{}]]] {}", courseTitle, course.getResourceableId().toString());
 		
 		luTree = new MenuTree(null, "luTreeRun", this);
 		luTree.setScrollTopOnClick(true);
@@ -183,7 +182,7 @@ public class RunMainController extends MainLayoutBasicController implements Gene
 		luTree.setElementCssClass("o_course_menu");
 		contentP = new Panel("building_block_content");
 
-		// build up the running structure for this user;
+		// build up the running structure for this user
 		// get all group memberships for this course
 		uce = loadUserCourseEnvironment(ureq, reSecurity);
 
@@ -206,7 +205,7 @@ public class RunMainController extends MainLayoutBasicController implements Gene
 
 		currentCourseNode = updateTreeAndContent(ureq, currentCourseNode, null);
 
-		if (courseRepositoryEntry != null && repositoryManager.createRepositoryEntryStatus(courseRepositoryEntry.getStatusCode()).isClosed()) {
+		if (courseRepositoryEntry != null && courseRepositoryEntry.getEntryStatus() == RepositoryEntryStatusEnum.closed) {
 			wControl.setWarning(translate("course.closed"));
 		}
 
@@ -297,32 +296,7 @@ public class RunMainController extends MainLayoutBasicController implements Gene
 	}
 	
 	private UserCourseEnvironmentImpl loadUserCourseEnvironment(UserRequest ureq, RepositoryEntrySecurity reSecurity) {
-		CourseGroupManager cgm = course.getCourseEnvironment().getCourseGroupManager();
-		List<BusinessGroup> coachedGroups;
-		if(reSecurity.isGroupCoach()) {
-			coachedGroups = cgm.getOwnedBusinessGroups(ureq.getIdentity());
-		} else {
-			coachedGroups = Collections.emptyList();
-		}
-		List<BusinessGroup> participatedGroups;
-		if(reSecurity.isGroupParticipant()) {
-			participatedGroups = cgm.getParticipatingBusinessGroups(ureq.getIdentity());
-		} else {
-			participatedGroups = Collections.emptyList();
-		}
-		List<BusinessGroup> waitingLists;
-		if(reSecurity.isGroupWaiting()) {
-			waitingLists = cgm.getWaitingListGroups(ureq.getIdentity());
-		} else {
-			waitingLists = Collections.emptyList();
-		}
-
-		return new UserCourseEnvironmentImpl(ureq.getUserSession().getIdentityEnvironment(), course.getCourseEnvironment(), getWindowControl(),
-				coachedGroups, participatedGroups, waitingLists,
-				reSecurity.isCourseCoach() || reSecurity.isGroupCoach(),
-				reSecurity.isEntryAdmin(),
-				reSecurity.isCourseParticipant() || reSecurity.isGroupParticipant(),
-				reSecurity.isReadOnly());
+		return UserCourseEnvironmentImpl.load(ureq, course, reSecurity, getWindowControl());
 	}
 	
 	/**
@@ -547,7 +521,7 @@ public class RunMainController extends MainLayoutBasicController implements Gene
 			if (needsRebuildAfterPublish) {
 				needsRebuildAfterPublish = false;
 				
-			  // rebuild up the running structure for this user, after publish;
+			  // rebuild up the running structure for this user, after publish
 				course = CourseFactory.loadCourse(course.getResourceableId());
 				uce = loadUserCourseEnvironment(ureq, reSecurity);
 				// build score now

@@ -41,6 +41,8 @@ import org.olat.core.gui.media.MediaResource;
 import org.olat.core.gui.translator.Translator;
 import org.olat.core.id.Identity;
 import org.olat.core.id.OLATResourceable;
+import org.olat.core.id.Organisation;
+import org.olat.core.id.Roles;
 import org.olat.core.logging.AssertException;
 import org.olat.core.util.Util;
 import org.olat.course.assessment.AssessmentMode;
@@ -79,7 +81,7 @@ import org.olat.resource.references.ReferenceManager;
 public class QTITestHandler extends QTIHandler {
 	
 	@Override
-	public boolean isCreate() {
+	public boolean supportCreate(Identity identity, Roles roles) {
 		return CoreSpringFactory.getImpl(QTIModule.class).isCreateResourcesEnabled();
 	}
 	
@@ -89,9 +91,15 @@ public class QTITestHandler extends QTIHandler {
 	}
 
 	@Override
-	public RepositoryEntry createResource(Identity initialAuthor, String displayname, String description, Object createObject, Locale locale) {
+	public RepositoryEntry createResource(Identity initialAuthor, String displayname, String description,
+			Object createObject, Organisation organisation, Locale locale) {
 		TestFileResource ores = new TestFileResource();
-		return super.createResource(AssessmentInstance.QMD_ENTRY_TYPE_ASSESS, ores, initialAuthor, displayname, description, createObject, locale);
+		return super.createResource(AssessmentInstance.QMD_ENTRY_TYPE_ASSESS, ores, initialAuthor, displayname, description, createObject, organisation, locale);
+	}
+	
+	@Override
+	public boolean supportImport() {
+		return true;
 	}
 
 	@Override
@@ -100,13 +108,29 @@ public class QTITestHandler extends QTIHandler {
 	}
 
 	@Override
-	public RepositoryEntry importResource(Identity initialAuthor, String initialAuthorAlt, String displayname, String description,
-			boolean withReferences, Locale locale, File file, String filename) {
-		return super.importResource(initialAuthor, displayname, description, new TestFileResource(), file, filename);
+	public boolean supportImportUrl() {
+		return false;
 	}
 
 	@Override
-	public MediaResource getAsMediaResource(OLATResourceable res, boolean backwardsCompatible) {
+	public ResourceEvaluation acceptImport(String url) {
+		return ResourceEvaluation.notValid();
+	}
+
+	@Override
+	public RepositoryEntry importResource(Identity initialAuthor, String initialAuthorAlt, String displayname, String description,
+			boolean withReferences, Organisation organisation, Locale locale, File file, String filename) {
+		return super.importResource(initialAuthor, displayname, description, organisation, new TestFileResource(), file, filename);
+	}
+	
+	@Override
+	public RepositoryEntry importResource(Identity initialAuthor, String initialAuthorAlt, String displayname,
+			String description, Organisation organisation, Locale locale, String url) {
+		return null;
+	}
+
+	@Override
+	public MediaResource getAsMediaResource(OLATResourceable res) {
 		return FileResourceManager.getInstance().getAsDownloadeableMediaResource(res);
 	}
 
@@ -121,7 +145,7 @@ public class QTITestHandler extends QTIHandler {
 	}
 
 	@Override
-	public EditionSupport supportsEdit(OLATResourceable resource) { 
+	public EditionSupport supportsEdit(OLATResourceable resource, Identity identity, Roles roles) { 
 		if(resource != null && QTIResourceTypeModule.isOnyxTest(resource)) {
 			return EditionSupport.no;
 		}

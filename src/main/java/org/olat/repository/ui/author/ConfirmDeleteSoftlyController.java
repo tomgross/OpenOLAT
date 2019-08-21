@@ -83,7 +83,7 @@ public class ConfirmDeleteSoftlyController extends FormBasicController {
 		this.rows = rows;
 		this.notAllDeleteable = notAllDeleteable;
 		numOfMembers = repositoryService.countMembers(rows, getIdentity());
-		references = referenceManager.getReferencesInfos(rows, getIdentity(), ureq.getUserSession().getRoles());
+		references = referenceManager.getReferencesInfos(rows, getIdentity());
 		if(references.size() > 1) {
 			Collections.sort(references, new ReferenceInfosComparator(Collator.getInstance(getLocale())));
 		}
@@ -116,7 +116,7 @@ public class ConfirmDeleteSoftlyController extends FormBasicController {
 			notificationEl = uifactory.addCheckboxesHorizontal("notifications", "details.notifications.acknowledge", layoutCont, new String[]{ "" },  notifications);
 			if(repositoryModule.isLifecycleNotificationByCloseDeleteEnabled()) {
 				notificationEl.select("", true);
-				notificationEl.setEnabled(ureq.getUserSession().getRoles().isOLATAdmin());
+				notificationEl.setEnabled(ureq.getUserSession().getRoles().isSystemAdmin());
 			}
 			
 			FormLayoutContainer buttonsCont = FormLayoutContainer.createButtonLayout("buttons", getTranslator());

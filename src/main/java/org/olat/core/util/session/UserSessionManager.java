@@ -45,7 +45,7 @@ import org.olat.core.id.OLATResourceable;
 import org.olat.core.id.Roles;
 import org.olat.core.id.context.HistoryManager;
 import org.olat.core.logging.AssertException;
-import org.olat.core.logging.OLog;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
 import org.olat.core.logging.activity.CoreLoggingResourceable;
 import org.olat.core.logging.activity.OlatLoggingAction;
@@ -69,11 +69,11 @@ import org.springframework.stereotype.Service;
  * @author srosse, stephane.rosse@frentix.com, http://www.frentix.com
  *
  */
-@Service
+@Service("userSessionManager")
 public class UserSessionManager implements GenericEventListener {
 	
-	private static final OLog log = Tracing.createLoggerFor(UserSessionManager.class);
-	public static final String USERSESSIONKEY = UserSession.class.getName();
+	private static final Logger log = Tracing.createLoggerFor(UserSessionManager.class);
+	private static final String USERSESSIONKEY = UserSession.class.getName();
 	
 	public static final OLATResourceable ORES_USERSESSION = OresHelper.createOLATResourceableType(UserSession.class);
 	public static final String STORE_KEY_KILLED_EXISTING_SESSION = "killedExistingSession";
@@ -133,8 +133,7 @@ public class UserSessionManager implements GenericEventListener {
 	public UserSession getUserSession(HttpServletRequest hreq) {
 		// get existing or create new session
 		HttpSession httpSession = hreq.getSession(true);
-		UserSession usess = getUserSession(httpSession);
-		return usess;
+		return getUserSession(httpSession);
 	}
 	
 	/**
@@ -184,7 +183,7 @@ public class UserSessionManager implements GenericEventListener {
 	 * @return set of authenticated active user sessions
 	 */
 	public Set<UserSession> getAuthenticatedUserSessions() {
-		return new HashSet<UserSession>(authUserSessions);
+		return new HashSet<>(authUserSessions);
 	}
 	
 	public int getNumberOfAuthenticatedUserSessions() {
@@ -240,7 +239,7 @@ public class UserSessionManager implements GenericEventListener {
 	 * prior to calling this method, all instance vars must be set.
 	 */
 	public void signOn(UserSession usess) {
-		boolean isDebug = log.isDebug();
+		boolean isDebug = log.isDebugEnabled();
 		// Added synchronized to be symmetric with sign off and to
 		// fix a possible dead-lock see also OLAT-3390
 		synchronized(usess) {
@@ -266,7 +265,7 @@ public class UserSessionManager implements GenericEventListener {
 				// we're only adding this webdav session to the authUserSessions - not to the userNameToIdentity.
 				// userNameToIdentity is only needed for IM which can't do anything with a webdav session
 				authUserSessions.add(usess);
-				log.audit("Logged on [via webdav]: " + sessionInfo.toString());
+				log.info(Tracing.M_AUDIT, "Logged on [via webdav]: " + sessionInfo.toString());
 			} else {	
 				UserSession invalidatedSession = null;
 
@@ -300,7 +299,7 @@ public class UserSessionManager implements GenericEventListener {
 				//reload user prefs
 				usess.reloadPreferences();
 	
-				log.audit("Logged on: " + sessionInfo.toString());
+				log.info(Tracing.M_AUDIT, "Logged on: " + sessionInfo.toString());
 				CoordinatorManager.getInstance().getCoordinator().getEventBus().fireEventToListenersOf(new SignOnOffEvent(identity, true), ORES_USERSESSION);
 	
 				// THE FOLLOWING CHECK MUST BE PLACED HERE NOT TO PRODUCE A DEAD-LOCK WITH SIGNOFFANDCLEAR
@@ -357,7 +356,7 @@ public class UserSessionManager implements GenericEventListener {
 	}
 	
 	private void internSignOffAndClear(UserSession usess) {
-		boolean isDebug = log.isDebug();
+		boolean isDebug = log.isDebugEnabled();
 		if(isDebug) log.debug("signOffAndClear() START");
 		
 		signOffAndClearWithout(usess);
@@ -367,7 +366,7 @@ public class UserSessionManager implements GenericEventListener {
 				SessionInfo sessionInfo = usess.getSessionInfo();
 				IdentityEnvironment identityEnvironment = usess.getIdentityEnvironment();
 				Identity identity = identityEnvironment.getIdentity();
-				log.audit("Logged off: " + sessionInfo);
+				log.info(Tracing.M_AUDIT, "Logged off: " + sessionInfo);
 				CoordinatorManager.getInstance().getCoordinator().getEventBus().fireEventToListenersOf(new SignOnOffEvent(identity, false), ORES_USERSESSION);
 				if(isDebug) log.debug("signOffAndClear() deregistering usersession from eventbus, id="+sessionInfo);
 				//fxdiff FXOLAT-231: event on GUI Preferences extern changes
@@ -392,7 +391,7 @@ public class UserSessionManager implements GenericEventListener {
 	 * without firing an event.
 	 */
 	private void signOffAndClearWithout(final UserSession usess) {
-		boolean isDebug = log.isDebug();
+		boolean isDebug = log.isDebugEnabled();
 		if(isDebug) log.debug("signOffAndClearWithout() START");
 		
 		final IdentityEnvironment identityEnvironment = usess.getIdentityEnvironment();
@@ -442,7 +441,7 @@ public class UserSessionManager implements GenericEventListener {
 
 					String objtostr = "n/a";
 					try {
-						objtostr = obj.toString();
+						objtostr = (obj == null ? "NULL" : obj.toString());
 					} catch (Exception ee) {
 						// ignore
 					}
@@ -496,7 +495,7 @@ public class UserSessionManager implements GenericEventListener {
 	
 	private void processSignOnOffEvent(SignOnOffEvent se) {
 		try {
-			boolean debug = log.isDebug();
+			boolean debug = log.isDebugEnabled();
 			if(debug) log.debug("event() START");
 			if(debug) log.debug("event() is SignOnOffEvent. isSignOn="+se.isSignOn());
 			if (!se.isEventOnThisNode()) {
@@ -537,12 +536,12 @@ public class UserSessionManager implements GenericEventListener {
 	public int invalidateAllSessions() {
 		log.debug("invalidateAllSessions() START");
 		int invalidateCounter = 0;
-		log.audit("All sessions were invalidated by an administrator");
+		log.info(Tracing.M_AUDIT, "All sessions were invalidated by an administrator");
 		//clusterNOK ?? invalidate only locale sessions ?
 		Set<UserSession> userSessions = getAuthenticatedUserSessions();
 		for (UserSession userSession : userSessions) {
 			Roles userRoles = userSession != null ? userSession.getRoles() : null; 
-			if (userRoles != null && !userRoles.isOLATAdmin()) {
+			if (userRoles != null && !userRoles.isAdministrator() && !userRoles.isSystemAdmin()) {
 				//do not logout administrators
 				try {
 					internSignOffAndClear(userSession);
@@ -571,19 +570,20 @@ public class UserSessionManager implements GenericEventListener {
 		Comparator<UserSession> sessionComparator = new Comparator<UserSession>() {
 			@Override
 			public int compare(UserSession o1, UserSession o2) {
-				Long long1 = new Long((o1).getSessionInfo().getLastClickTime());
-				Long long2 = new Long((o2).getSessionInfo().getLastClickTime());
+				Long long1 = Long.valueOf((o1).getSessionInfo().getLastClickTime());
+				Long long2 = Long.valueOf((o2).getSessionInfo().getLastClickTime());
 				return long1.compareTo(long2);
 			}
 		};
 		// clusterNOK ?? invalidate only locale sessions ?
-		TreeSet<UserSession> sortedSet = new TreeSet<UserSession>(sessionComparator);
+		TreeSet<UserSession> sortedSet = new TreeSet<>(sessionComparator);
 		sortedSet.addAll(authUserSessions);
 		int i = 0;	
 		for (Iterator<UserSession> iterator = sortedSet.iterator(); iterator.hasNext() && i++<nbrSessions;) {
 			try {
 				UserSession userSession = iterator.next();
-				if (!userSession.getRoles().isOLATAdmin() && !userSession.getSessionInfo().isWebDAV()) {
+				if (!userSession.getRoles().isAdministrator() && !userSession.getRoles().isSystemAdmin()
+						&& !userSession.getSessionInfo().isWebDAV()) {
 					internSignOffAndClear(userSession);
 					invalidateCounter++;
 				}

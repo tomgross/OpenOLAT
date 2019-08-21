@@ -37,7 +37,7 @@ import javax.xml.transform.TransformerFactoryConfigurationError;
 import javax.xml.transform.dom.DOMSource;
 import javax.xml.transform.stream.StreamResult;
 
-import org.apache.commons.lang.StringEscapeUtils;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.gui.components.Component;
 import org.olat.core.gui.components.form.flexible.impl.Form;
 import org.olat.core.gui.components.form.flexible.impl.FormJSHelper;
@@ -48,7 +48,6 @@ import org.olat.core.gui.render.StringOutput;
 import org.olat.core.gui.render.URLBuilder;
 import org.olat.core.gui.translator.Translator;
 import org.olat.core.logging.OLATRuntimeException;
-import org.olat.core.logging.OLog;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.Formatter;
 import org.olat.core.util.StringHelper;
@@ -98,7 +97,7 @@ import uk.ac.ed.ph.jqtiplus.value.Value;
  */
 public class AssessmentTestComponentRenderer extends AssessmentObjectComponentRenderer {
 	
-	private static final OLog log = Tracing.createLoggerFor(AssessmentTestComponentRenderer.class);
+	private static final Logger log = Tracing.createLoggerFor(AssessmentTestComponentRenderer.class);
 	
 	@Override
 	public void render(Renderer renderer, StringOutput sb, Component source, URLBuilder ubu,
@@ -783,7 +782,7 @@ public class AssessmentTestComponentRenderer extends AssessmentObjectComponentRe
 	
 	private void renderItemStatusMessage(String status, String i18nKey, StringOutput sb, Translator translator) {
 		String title = translator.translate(i18nKey);
-		sb.append("<span class='o_assessmentitem_status ").append(status).append(" ' title=\"").append(StringEscapeUtils.escapeHtml(title))
+		sb.append("<span class='o_assessmentitem_status ").append(status).append(" ' title=\"").append(StringHelper.escapeHtml(title))
 		.append("\"><i class='o_icon o_icon-fw o_icon_qti_").append(status).append("'> </i><span>").append(title).append("</span></span>");
 	}
 

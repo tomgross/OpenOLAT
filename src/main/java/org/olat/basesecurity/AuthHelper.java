@@ -25,8 +25,6 @@
 
 package org.olat.basesecurity;
 
-import java.net.InetAddress;
-import java.net.UnknownHostException;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Date;
@@ -38,6 +36,7 @@ import java.util.Map;
 import javax.servlet.http.Cookie;
 import javax.servlet.http.HttpSession;
 
+import org.apache.logging.log4j.Logger;
 import org.olat.basesecurity.manager.GroupDAO;
 import org.olat.core.CoreSpringFactory;
 import org.olat.core.commons.fullWebApp.BaseFullWebappController;
@@ -55,7 +54,6 @@ import org.olat.core.id.Identity;
 import org.olat.core.id.Roles;
 import org.olat.core.id.UserConstants;
 import org.olat.core.logging.AssertException;
-import org.olat.core.logging.OLog;
 import org.olat.core.logging.Tracing;
 import org.olat.core.logging.activity.OlatLoggingAction;
 import org.olat.core.logging.activity.ThreadLocalUserActivityLogger;
@@ -107,7 +105,7 @@ public class AuthHelper {
 	private static boolean loginBlocked = false;
 	private static int maxSessions = MAX_SESSION_NO_LIMIT;
 
-	private static OLog log = Tracing.createLoggerFor(AuthHelper.class);
+	private static final Logger log = Tracing.createLoggerFor(AuthHelper.class);
 
 	/**
 	 * Used by DMZDispatcher to do regular logins and by ShibbolethDispatcher
@@ -246,7 +244,6 @@ public class AuthHelper {
 		}
 
 		UserManager um = UserManager.getInstance();
-		BaseSecurity securityManager = BaseSecurityManager.getInstance();
 		GroupDAO groupDao = CoreSpringFactory.getImpl(GroupDAO.class);
 		Invitation invitation = invitationDao.findInvitation(invitationToken);
 		if(invitation == null) {
@@ -256,8 +253,8 @@ public class AuthHelper {
 		//check if identity exists
 		Identity identity = um.findUniqueIdentityByEmail(invitation.getMail());
 		if(identity != null) {
-			SecurityGroup allUsers = securityManager.findSecurityGroupByName(Constants.GROUP_OLATUSERS);
-			if(securityManager.isIdentityInSecurityGroup(identity, allUsers)) {
+			OrganisationService organisationService = CoreSpringFactory.getImpl(OrganisationService.class);
+			if(organisationService.hasRole(identity, OrganisationRoles.user)) {
 				//already a normal olat user, cannot be invited
 				return LOGIN_DENIED;
 			} else {
@@ -300,7 +297,7 @@ public class AuthHelper {
 		if (identity == null) return LOGIN_FAILED;
 		//test if a user may not logon, since he/she is in the PERMISSION_LOGON
 		if (!BaseSecurityManager.getInstance().isIdentityVisible(identity)) {
-			log.audit("was denied login");
+			log.info(Tracing.M_AUDIT, "was denied login");
 			return LOGIN_DENIED;
 		}
 		UserSessionManager sessionManager = CoreSpringFactory.getImpl(UserSessionManager.class);
@@ -313,18 +310,20 @@ public class AuthHelper {
 		// init the UserSession for the new User
 		// we can set the identity and finish the log in process
 		usess.setIdentity(identity);
+		Tracing.setIdentity(identity);
 		setRolesFor(identity, usess);
 
 		// check if loginDenied or maxSession (only for non-admin)
-		if ( (loginBlocked && !usess.getRoles().isOLATAdmin())
-				|| ( ((maxSessions != MAX_SESSION_NO_LIMIT) && (sessionManager.getUserSessionsCnt() >= maxSessions)) && !usess.getRoles().isOLATAdmin() ) ) {
-			log.audit("Login was blocked for identity=" + usess.getIdentity().getKey() + ", loginBlocked=" + loginBlocked + " NbrOfSessions=" + sessionManager.getUserSessionsCnt());
+		if ( (loginBlocked && !usess.getRoles().isAdministrator() && !usess.getRoles().isSystemAdmin())
+				|| ( ((maxSessions != MAX_SESSION_NO_LIMIT) && (sessionManager.getUserSessionsCnt() >= maxSessions))
+						&& !usess.getRoles().isAdministrator() && !usess.getRoles().isSystemAdmin())) {
+			log.info(Tracing.M_AUDIT, "Login was blocked for identity=" + usess.getIdentity().getKey() + ", loginBlocked=" + loginBlocked + " NbrOfSessions=" + sessionManager.getUserSessionsCnt());
 			sessionManager.signOffAndClear(usess);
 			return LOGIN_NOTAVAILABLE;
 		}
 
 		//need to block the all things for assessment?
-		if(usess.getRoles() != null && usess.getRoles().isOLATAdmin()) {
+		if(usess.getRoles() != null && (usess.getRoles().isAdministrator() || usess.getRoles().isSystemAdmin())) {
 			usess.setAssessmentModes(Collections.<TransientAssessmentMode>emptyList());
 		} else {
 			AssessmentModule assessmentModule = CoreSpringFactory.getImpl(AssessmentModule.class);
@@ -409,7 +408,7 @@ public class AuthHelper {
 			cookie.setMaxAge(0);
 			cookie.setPath("/");
 			ureq.getHttpResp().addCookie(cookie);
-			if(log.isDebug()) {
+			if(log.isDebugEnabled()) {
 				log.info("AuthHelper - shibsession cookie deleted");
 			}
 		}
@@ -427,13 +426,6 @@ public class AuthHelper {
 		sinfo.setFirstname(identity.getUser().getProperty(UserConstants.FIRSTNAME, ureq.getLocale()));
 		sinfo.setLastname(identity.getUser().getProperty(UserConstants.LASTNAME, ureq.getLocale()));
 		sinfo.setFromIP(ureq.getHttpReq().getRemoteAddr());
-		sinfo.setFromFQN(ureq.getHttpReq().getRemoteAddr());
-		try {
-			InetAddress[] iaddr = InetAddress.getAllByName(ureq.getHttpReq().getRemoteAddr());
-			if (iaddr.length > 0) sinfo.setFromFQN(iaddr[0].getHostName());
-		} catch (UnknownHostException e) {
-			//       ok, already set IP as FQDN
-		}
 		sinfo.setAuthProvider(authProvider);
 		sinfo.setUserAgent(ureq.getHttpReq().getHeader("User-Agent"));
 		sinfo.setSecure(ureq.getHttpReq().isSecure());

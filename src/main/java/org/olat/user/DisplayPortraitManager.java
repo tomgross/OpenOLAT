@@ -32,26 +32,29 @@ import java.nio.file.StandardCopyOption;
 import java.util.List;
 import java.util.Locale;
 
+import org.apache.logging.log4j.Logger;
 import org.olat.basesecurity.BaseSecurityManager;
 import org.olat.core.CoreSpringFactory;
 import org.olat.core.commons.modules.bc.FolderConfig;
-import org.olat.core.commons.modules.bc.meta.tagged.MetaTagged;
-import org.olat.core.commons.modules.bc.vfs.OlatRootFolderImpl;
 import org.olat.core.commons.services.image.ImageService;
 import org.olat.core.commons.services.image.Size;
+import org.olat.core.commons.services.vfs.VFSRepositoryService;
 import org.olat.core.gui.media.FileMediaResource;
 import org.olat.core.gui.media.MediaResource;
 import org.olat.core.gui.media.ServletUtil;
 import org.olat.core.id.Identity;
-import org.olat.core.logging.OLog;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.FileUtils;
 import org.olat.core.util.StringHelper;
 import org.olat.core.util.io.SystemFilenameFilter;
+import org.olat.core.util.vfs.LocalFolderImpl;
+import org.olat.core.util.vfs.VFSConstants;
 import org.olat.core.util.vfs.VFSContainer;
 import org.olat.core.util.vfs.VFSItem;
 import org.olat.core.util.vfs.VFSLeaf;
+import org.olat.core.util.vfs.VFSManager;
 import org.olat.user.manager.ManifestBuilder;
+import org.springframework.beans.factory.annotation.Autowired;
 
 /**
  * 
@@ -59,7 +62,7 @@ import org.olat.user.manager.ManifestBuilder;
  * @author Alexander Schneider
  */
 public class DisplayPortraitManager implements UserDataDeletable, UserDataExportable {
-	private static final OLog log = Tracing.createLoggerFor(DisplayPortraitManager.class);
+	private static final Logger log = Tracing.createLoggerFor(DisplayPortraitManager.class);
 	
 	private static final String LOGO_PREFIX_FILENAME = "logo";
 	private static final String LOGO_BIG_FILENAME = LOGO_PREFIX_FILENAME + "_big";
@@ -93,6 +96,10 @@ public class DisplayPortraitManager implements UserDataDeletable, UserDataExport
 	
 	public static final int WIDTH_LOGO_BIG = HEIGHT_BIG * 4;  // 4-8 kbytes (jpeg)
 	public static final int WIDTH_LOGO_SMALL = HEIGHT_SMALL * 4; // 2-4
+	
+	
+	@Autowired
+	private VFSRepositoryService vfsRepositoryService;
 
 	public MediaResource getSmallPortraitResource(String username) {
 		return getPortraitResource(username, PORTRAIT_SMALL_FILENAME);
@@ -305,8 +312,8 @@ public class DisplayPortraitManager implements UserDataDeletable, UserDataExport
 		}
 		
 		VFSLeaf vfsPortrait = getLargestVFSPortrait(username);
-		if(vfsPortrait instanceof MetaTagged) {
-			((MetaTagged)vfsPortrait).getMetaInfo().clearThumbnails();
+		if(vfsPortrait.canMeta() == VFSConstants.YES) {
+			vfsRepositoryService.resetThumbnails(vfsPortrait);
 		}
 	}
 
@@ -359,8 +366,8 @@ public class DisplayPortraitManager implements UserDataDeletable, UserDataExport
 		return portraitDir;
 	}
 	
-	public OlatRootFolderImpl getPortraitFolder(String identityName) {
-		OlatRootFolderImpl folder = new OlatRootFolderImpl(FolderConfig.getUserHomePage(identityName) + "/portrait", null); 
+	public LocalFolderImpl getPortraitFolder(String identityName) {
+		LocalFolderImpl folder = VFSManager.olatRootContainer(FolderConfig.getUserHomePage(identityName) + "/portrait", null); 
 		if(!folder.exists()) {
 			folder.getBasefile().mkdirs();
 		}

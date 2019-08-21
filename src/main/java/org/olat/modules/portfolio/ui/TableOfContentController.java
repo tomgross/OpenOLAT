@@ -29,6 +29,7 @@ import org.olat.core.commons.fullWebApp.popup.BaseFullWebappPopupLayoutFactory;
 import org.olat.core.commons.services.commentAndRating.CommentAndRatingDefaultSecurityCallback;
 import org.olat.core.commons.services.commentAndRating.CommentAndRatingSecurityCallback;
 import org.olat.core.commons.services.commentAndRating.ui.UserCommentsController;
+import org.olat.core.commons.services.pdf.PdfModule;
 import org.olat.core.gui.UserRequest;
 import org.olat.core.gui.components.Component;
 import org.olat.core.gui.components.dropdown.Dropdown;
@@ -36,6 +37,7 @@ import org.olat.core.gui.components.dropdown.DropdownOrientation;
 import org.olat.core.gui.components.link.Link;
 import org.olat.core.gui.components.link.LinkFactory;
 import org.olat.core.gui.components.link.LinkPopupSettings;
+import org.olat.core.gui.components.stack.PopEvent;
 import org.olat.core.gui.components.stack.TooledController;
 import org.olat.core.gui.components.stack.TooledStackedPanel;
 import org.olat.core.gui.components.stack.TooledStackedPanel.Align;
@@ -52,7 +54,9 @@ import org.olat.core.gui.control.generic.dtabs.Activateable2;
 import org.olat.core.gui.control.generic.modal.DialogBoxController;
 import org.olat.core.gui.control.generic.modal.DialogBoxUIFactory;
 import org.olat.core.gui.control.generic.spacesaver.ToggleBoxController;
+import org.olat.core.gui.control.winmgr.ScrollTopCommand;
 import org.olat.core.gui.media.MediaResource;
+import org.olat.core.helpers.Settings;
 import org.olat.core.id.Identity;
 import org.olat.core.id.OLATResourceable;
 import org.olat.core.id.context.ContextEntry;
@@ -85,11 +89,13 @@ import org.olat.modules.portfolio.ui.event.PageDeletedEvent;
 import org.olat.modules.portfolio.ui.event.PageRemovedEvent;
 import org.olat.modules.portfolio.ui.event.RestoreBinderEvent;
 import org.olat.modules.portfolio.ui.event.SectionSelectionEvent;
+import org.olat.modules.portfolio.ui.event.SelectPageEvent;
 import org.olat.modules.portfolio.ui.export.ExportBinderAsCPResource;
 import org.olat.modules.portfolio.ui.export.ExportBinderAsPDFResource;
 import org.olat.modules.portfolio.ui.model.ReadOnlyCommentsSecurityCallback;
 import org.olat.modules.portfolio.ui.renderer.PortfolioRendererHelper;
 import org.olat.modules.portfolio.ui.renderer.SharedPageStatusCellRenderer;
+import org.olat.repository.RepositoryEntry;
 import org.olat.user.UserManager;
 import org.olat.util.logging.activity.LoggingResourceable;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -134,6 +140,8 @@ public class TableOfContentController extends BasicController implements TooledC
 	private final BinderSecurityCallback secCallback;
 	
 	@Autowired
+	private PdfModule pdfModule;
+	@Autowired
 	private UserManager userManager;
 	@Autowired
 	private PortfolioService portfolioService;
@@ -148,6 +156,7 @@ public class TableOfContentController extends BasicController implements TooledC
 		this.stackPanel = stackPanel;
 		this.secCallback = secCallback;
 		
+		stackPanel.addListener(this);
 		mainVC = createVelocityContainer("table_of_contents");
 
 		owners = portfolioService.getMembers(binder, PortfolioRoles.owner.name());
@@ -160,6 +169,13 @@ public class TableOfContentController extends BasicController implements TooledC
 
 		mainVC.contextPut("isTemplate", secCallback.canNewAssignment());
 		mainVC.contextPut("isPersonalBinder", (!secCallback.canNewAssignment() && secCallback.canEditMetadataBinder()));
+
+		RepositoryEntry repoEntry = binder.getEntry();
+		if (repoEntry != null) {
+			mainVC.contextPut("referenceEntryName", repoEntry.getDisplayname());
+			String url = Settings.getServerContextPathURI() + "/url/RepositoryEntry/" + repoEntry.getKey();
+			mainVC.contextPut("referenceEntryUrl", url);
+		}
 		
 		summaryComp = TextFactory.createTextComponentFromString("summaryCmp" + CodeHelper.getRAMUniqueID(), "", null,
 				false, null);
@@ -192,62 +208,68 @@ public class TableOfContentController extends BasicController implements TooledC
 	public void initTools() {
 		if(secCallback.canEditMetadataBinder()) {
 			editBinderMetadataLink = LinkFactory.createToolLink("edit.binder.metadata", translate("edit.binder.metadata"), this);
-			editBinderMetadataLink.setIconLeftCSS("o_icon o_icon-lg o_icon_new_portfolio");
+			editBinderMetadataLink.setIconLeftCSS("o_icon o_icon-lg o_icon-fw o_icon_new_portfolio");
 			stackPanel.addTool(editBinderMetadataLink, Align.left);
 		}
 		
 		if(secCallback.canMoveToTrashBinder(binder)) {
 			moveToTrashBinderLink = LinkFactory.createToolLink("delete.binder", translate("delete.binder"), this);
-			moveToTrashBinderLink.setIconLeftCSS("o_icon o_icon-lg o_icon_delete_item");
+			moveToTrashBinderLink.setIconLeftCSS("o_icon o_icon-lg o_icon-fw o_icon_delete_item");
 			stackPanel.addTool(moveToTrashBinderLink, Align.left);
 		}
 		
 		if(secCallback.canExportBinder()) {
 			Dropdown exportTools = new Dropdown("export.binder", "export.binder", false, getTranslator());
 			exportTools.setElementCssClass("o_sel_pf_export_tools");
-			exportTools.setIconCSS("o_icon o_icon_download");
+			exportTools.setIconCSS("o_icon o_icon_download o_icon-fw ");
 			stackPanel.addTool(exportTools, Align.left);
 
 			exportBinderAsCpLink = LinkFactory.createToolLink("export.binder.cp", translate("export.binder.cp"), this);
-			exportBinderAsCpLink.setIconLeftCSS("o_icon o_icon_download");
+			exportBinderAsCpLink.setIconLeftCSS("o_icon o_icon_download o_icon-fw ");
 			exportTools.addComponent(exportBinderAsCpLink);
 			
+			if(pdfModule.isEnabled()) {
+				exportBinderAsPdfLink = LinkFactory.createToolLink("export.binder.pdf", translate("export.binder.pdf"), this);
+				exportBinderAsPdfLink.setIconLeftCSS("o_icon o_filetype_pdf o_icon-fw ");
+				exportTools.addComponent(exportBinderAsPdfLink);
+			}
+			
 			printLink = LinkFactory.createToolLink("export.binder.onepage", translate("export.binder.onepage"), this);
-			printLink.setIconLeftCSS("o_icon o_icon_print");
+			printLink.setIconLeftCSS("o_icon o_icon_print o_icon-fw ");
 			printLink.setPopup(new LinkPopupSettings(950, 750, "binder"));
 			exportTools.addComponent(printLink);
 		}
 		
 		if(secCallback.canDeleteBinder(binder)) {
 			deleteBinderLink = LinkFactory.createToolLink("delete.binder", translate("delete.binder"), this);
-			deleteBinderLink.setIconLeftCSS("o_icon o_icon-lg o_icon_delete_item");
+			deleteBinderLink.setIconLeftCSS("o_icon o_icon-lg o_icon-fw o_icon_delete_item");
 			stackPanel.addTool(deleteBinderLink, Align.left);
 			
 			restoreBinderLink = LinkFactory.createToolLink("restore.binder", translate("restore.binder"), this);
-			restoreBinderLink.setIconLeftCSS("o_icon o_icon-lg o_icon_restore");
+			restoreBinderLink.setIconLeftCSS("o_icon o_icon-lg o_icon-fw o_icon_restore");
 			stackPanel.addTool(restoreBinderLink, Align.left);
 		}
 		
 		if(secCallback.canAddSection()) {
 			newSectionTool = LinkFactory.createToolLink("new.section", translate("create.new.section"), this);
-			newSectionTool.setIconLeftCSS("o_icon o_icon-lg o_icon_new_portfolio");
+			newSectionTool.setIconLeftCSS("o_icon o_icon-lg o_icon-fw o_icon_new_portfolio");
 			newSectionTool.setElementCssClass("o_sel_pf_new_section");
 			stackPanel.addTool(newSectionTool, Align.right);
 		}
 		
-		if(secCallback.canAddPage(null)) {
+		if(secCallback.canAddPage(null) || secCallback.canInstantianteBinderAssignment()) {
 			newEntryLink = LinkFactory.createToolLink("new.page", translate("create.new.page"), this);
-			newEntryLink.setIconLeftCSS("o_icon o_icon-lg o_icon_new_portfolio");
+			newEntryLink.setIconLeftCSS("o_icon o_icon-lg o_icon-fw o_icon_new_portfolio");
 			newEntryLink.setElementCssClass("o_sel_pf_new_entry");
-			newEntryLink.setVisible(sectionList != null && sectionList.size() > 0);
+			newEntryLink.setVisible(sectionList != null && !sectionList.isEmpty());
 			stackPanel.addTool(newEntryLink, Align.right);
 		}
 		
 		if(secCallback.canNewAssignment()) {
 			newAssignmentLink = LinkFactory.createToolLink("new.assignment", translate("create.new.assignment"), this);
-			newAssignmentLink.setIconLeftCSS("o_icon o_icon-lg o_icon_new_portfolio");
+			newAssignmentLink.setIconLeftCSS("o_icon o_icon-lg o_icon-fw o_icon_new_portfolio");
 			newAssignmentLink.setElementCssClass("o_sel_pf_new_assignment");
-			newAssignmentLink.setVisible(sectionList != null && sectionList.size() > 0);
+			newAssignmentLink.setVisible(sectionList != null && !sectionList.isEmpty());
 			stackPanel.addTool(newAssignmentLink, Align.right);
 		}
 	}
@@ -256,7 +278,7 @@ public class TableOfContentController extends BasicController implements TooledC
 		mainVC.contextPut("binderTitle", StringHelper.escapeHtml(binder.getTitle()));
 
 		if (StringHelper.containsNonWhitespace(binder.getSummary())) {
-			summaryComp.setText(binder.getSummary());
+			summaryComp.setText(StringHelper.xssScan(binder.getSummary()));
 			mainVC.put("summary", summaryCtrl.getInitialComponent());
 		} else {
 			mainVC.remove("summary");
@@ -274,7 +296,7 @@ public class TableOfContentController extends BasicController implements TooledC
 		}
 		
 		//assignments
-		List<Assignment> assignments = portfolioService.getAssignments(binder, null);
+		List<Assignment> assignments = portfolioService.getSectionsAssignments(binder, null);
 		Map<Section,List<Assignment>> sectionToAssignmentMap = new HashMap<>();
 		for(Assignment assignment:assignments) {
 			List<Assignment> assignmentList;
@@ -317,7 +339,7 @@ public class TableOfContentController extends BasicController implements TooledC
 			mainVC.put("create.new.section", newSectionButton);
 		}
 		
-		boolean hasSection = (sectionList != null && sectionList.size() > 0);
+		boolean hasSection = (sectionList != null && !sectionList.isEmpty());
 		if(newEntryLink != null && newEntryLink.isVisible() != hasSection) {
 			newEntryLink.setVisible(hasSection);
 			stackPanel.setDirty(true);
@@ -384,9 +406,8 @@ public class TableOfContentController extends BasicController implements TooledC
 		
 		Dropdown editDropdown = new Dropdown(sectionId.concat("_dropdown"), null, false, getTranslator());
 		editDropdown.setElementCssClass("o_sel_pf_section_tools");
-		editDropdown.setTranslatedLabel("");
 		editDropdown.setOrientation(DropdownOrientation.right);
-		editDropdown.setIconCSS("o_icon o_icon_actions");
+		editDropdown.setIconCSS("o_icon o_icon-fw o_icon-lg o_icon_actions");
 		
 		if(secCallback.canCloseSection(section)) {
 			if(SectionStatus.isClosed(section)) {
@@ -408,26 +429,28 @@ public class TableOfContentController extends BasicController implements TooledC
 		
 		if(secCallback.canEditSection()) {
 			Link editSectionLink = LinkFactory.createLink(sectionId.concat("_edit"), "section.edit", "edit_section", mainVC, this);
-			editSectionLink.setIconLeftCSS("o_icon o_icon_edit");
+			editSectionLink.setIconLeftCSS("o_icon o_icon-fw o_icon_edit");
 			editSectionLink.setUserObject(sectionRow);
 			editDropdown.addComponent(editSectionLink);
 			
 			Link deleteSectionLink = LinkFactory.createLink(sectionId.concat("_delete"), "section.delete", "delete_section", mainVC, this);
 			deleteSectionLink.setElementCssClass("o_sel_pf_delete_section");
-			deleteSectionLink.setIconLeftCSS("o_icon o_icon_delete_item");
+			deleteSectionLink.setIconLeftCSS("o_icon o_icon-fw o_icon_delete_item");
 			deleteSectionLink.setUserObject(sectionRow);
 			editDropdown.addComponent(deleteSectionLink);
 			
 			Link upSectionLink = LinkFactory.createCustomLink(sectionId.concat("_up"), "up_section", "", Link.LINK | Link.NONTRANSLATED, mainVC, this);
-			upSectionLink.setIconLeftCSS("o_icon o_icon o_icon-lg o_icon_move_up");
+			upSectionLink.setIconLeftCSS("o_icon o_icon o_icon-fw o_icon_move_up");
 			upSectionLink.setUserObject(sectionRow);
 			upSectionLink.setEnabled(!first);
+			upSectionLink.setTitle(translate("move.up"));
 			sectionRow.setUpSectionLink(upSectionLink);
 			
 			Link downSectionLink = LinkFactory.createCustomLink(sectionId.concat("_down"), "down_section", "", Link.LINK | Link.NONTRANSLATED, mainVC, this);
-			downSectionLink.setIconLeftCSS("o_icon o_icon o_icon-lg o_icon_move_down");
+			downSectionLink.setIconLeftCSS("o_icon o_icon o_icon-fw o_icon_move_down");
 			downSectionLink.setUserObject(sectionRow);
 			downSectionLink.setEnabled(!last);
+			downSectionLink.setTitle(translate("move.down"));
 			sectionRow.setDownSectionLink(downSectionLink);
 		}
 		
@@ -455,6 +478,7 @@ public class TableOfContentController extends BasicController implements TooledC
 			Link commentLink = LinkFactory.createCustomLink("com_" + (++counter), "comments", "(" + numOfComments + ")", Link.LINK | Link.NONTRANSLATED, mainVC, this);
 			commentLink.setDomReplacementWrapperRequired(false);
 			commentLink.setIconLeftCSS("o_icon o_icon-fw o_icon_comments");
+			commentLink.setElementCssClass("o_comment");
 			commentLink.setUserObject(pageRow);
 			pageRow.setCommentLink(commentLink);
 		}
@@ -464,6 +488,9 @@ public class TableOfContentController extends BasicController implements TooledC
 
 	@Override
 	protected void doDispose() {
+		if(stackPanel != null) {
+			stackPanel.removeListener(this);
+		}
 		removeAsListenerAndDispose(summaryCtrl);
 		summaryCtrl = null;
 	}
@@ -513,6 +540,15 @@ public class TableOfContentController extends BasicController implements TooledC
 				stackPanel.popController(pageCtrl);
 				loadModel();
 				fireEvent(ureq, Event.CHANGED_EVENT);
+			} else if(event instanceof SelectPageEvent) {
+				SelectPageEvent spe = (SelectPageEvent)event;
+				if(SelectPageEvent.NEXT_PAGE.equals(spe.getCommand())) {
+					doNextPage(ureq, pageCtrl.getPage());
+				} else if(SelectPageEvent.PREVIOUS_PAGE.equals(spe.getCommand())) {
+					doPreviousPage(ureq, pageCtrl.getPage());
+				} else if(SelectPageEvent.ALL_PAGES.equals(spe.getCommand())) {
+					doAllPages();
+				}
 			}
 		} else if(binderMetadataCtrl == source) {
 			if(event == Event.DONE_EVENT) {
@@ -563,8 +599,7 @@ public class TableOfContentController extends BasicController implements TooledC
 				loadModel();
 				fireEvent(ureq, new RestoreBinderEvent());
 			}	
-		}
-		else if(commentsCtrl == source) {
+		} else if(commentsCtrl == source) {
 			if("comment_count_changed".equals(event.getCommand())) {
 				loadModel();
 				fireEvent(ureq, Event.CHANGED_EVENT);
@@ -621,6 +656,11 @@ public class TableOfContentController extends BasicController implements TooledC
 			doPrint(ureq);
 		} else if(exportBinderAsPdfLink == source) {
 			doExportBinderAsPdf(ureq);
+		} else if(stackPanel == source) {
+			if(event instanceof PopEvent && pageCtrl != null && ((PopEvent)event).getController() == pageCtrl && pageCtrl.getSection() != null) {
+				stackPanel.popUserObject(new TOCSection(pageCtrl.getSection()));
+				addToHistory(ureq, this);
+			}
 		} else if(source instanceof Link) {
 			Link link = (Link)source;
 			String cmd = link.getCommand();
@@ -726,6 +766,47 @@ public class TableOfContentController extends BasicController implements TooledC
 		cmc.activate();
 	}
 	
+	protected void doPreviousPage(UserRequest ureq, Page currentPage) {
+		Page selectedPage = currentPage;
+		for(SectionRow sectionRow:sectionList) {
+			int numOfPages = sectionRow.getPages() == null ? 0 : sectionRow.getPages().size();
+			for(int i=0; i<numOfPages; i++) {
+				PageRow pageRow = sectionRow.getPages().get(i);
+				if(currentPage.equals(pageRow.getPage()) && i > 0) {
+					selectedPage = sectionRow.getPages().get(i-1).getPage();
+				}
+			}
+		}
+
+		stackPanel.popController(pageCtrl);
+		Page reloadedPage = portfolioService.getPageByKey(selectedPage.getKey());
+		doOpenPage(ureq, reloadedPage);
+		getWindowControl().getWindowBackOffice().sendCommandTo(new ScrollTopCommand());
+	}
+	
+	protected void doNextPage(UserRequest ureq, Page currentPage) {
+		Page selectedPage = currentPage;
+		for(SectionRow sectionRow:sectionList) {
+			int numOfPages = sectionRow.getPages() == null ? 0 : sectionRow.getPages().size();
+			for(int i=0; i<numOfPages; i++) {
+				PageRow pageRow = sectionRow.getPages().get(i);
+				if(currentPage.equals(pageRow.getPage()) && i+1 < numOfPages) {
+					selectedPage = sectionRow.getPages().get(i+1).getPage();
+				}
+			}
+		}
+
+		stackPanel.popController(pageCtrl);
+		Page reloadedPage = portfolioService.getPageByKey(selectedPage.getKey());
+		doOpenPage(ureq, reloadedPage);
+		getWindowControl().getWindowBackOffice().sendCommandTo(new ScrollTopCommand());
+	}
+	
+	protected void doAllPages() {
+		stackPanel.popController(pageCtrl);
+		getWindowControl().getWindowBackOffice().sendCommandTo(new ScrollTopCommand());
+	}
+	
 	private PageRunController doOpenPage(UserRequest ureq, Page page) {
 		removeAsListenerAndDispose(pageCtrl);
 
@@ -737,14 +818,32 @@ public class TableOfContentController extends BasicController implements TooledC
 				&& (reloadedPage.getPageStatus() == null || reloadedPage.getPageStatus() == PageStatus.draft || reloadedPage.getPageStatus() == PageStatus.inRevision));
 		pageCtrl = new PageRunController(ureq, swControl, stackPanel, secCallback, reloadedPage, openInEditMode);
 		listenTo(pageCtrl);
+		
+		Section section = page.getSection();
+		if(section != null) {
+			stackPanel.pushController(section.getTitle(), null, new TOCSection(section));
+		}
 		stackPanel.pushController(page.getTitle(), pageCtrl);
+		
+		for(SectionRow sectionRow:sectionList) {
+			int numOfPages = sectionRow.getPages() == null ? 0 : sectionRow.getPages().size();
+			for(int i=0; i<numOfPages; i++) {
+				PageRow pageRow = sectionRow.getPages().get(i);
+				if(page.equals(pageRow.getPage())) {
+					boolean hasPrevious = (i > 0);
+					boolean hasNext = (i + 1 < numOfPages);
+					pageCtrl.initPaging(hasPrevious, hasNext);
+				}
+			}
+		}
+		
 		return pageCtrl;
 	}
 	
 	private void doCreateNewEntry(UserRequest ureq) {
 		if(newPageCtrl != null) return;
 		
-		newPageCtrl = new PageMetadataEditController(ureq, getWindowControl(), binder, false, null, true);
+		newPageCtrl = new PageMetadataEditController(ureq, getWindowControl(), secCallback, binder, false, (Section)null, true);
 		listenTo(newPageCtrl);
 		
 		String title = translate("create.new.page");
@@ -878,14 +977,11 @@ public class TableOfContentController extends BasicController implements TooledC
 	}
 	
 	private void doPrint(UserRequest ureq) {
-		ControllerCreator ctrlCreator = new ControllerCreator() {
-			@Override
-			public Controller createController(UserRequest lureq, WindowControl lwControl) {			
-				BinderOnePageController printCtrl = new BinderOnePageController(lureq, lwControl, binder, ExtendedMediaRenderingHints.toPrint(), true);
-				LayoutMain3ColsController layoutCtr = new LayoutMain3ColsController(lureq, lwControl, printCtrl);
-				layoutCtr.addDisposableChildController(printCtrl); // dispose controller on layout dispose
-				return layoutCtr;
-			}					
+		ControllerCreator ctrlCreator = (lureq, lwControl) -> {			
+			BinderOnePageController printCtrl = new BinderOnePageController(lureq, lwControl, binder, ExtendedMediaRenderingHints.toPrint(), true);
+			LayoutMain3ColsController layoutCtr = new LayoutMain3ColsController(lureq, lwControl, printCtrl);
+			layoutCtr.addDisposableChildController(printCtrl); // dispose controller on layout dispose
+			return layoutCtr;				
 		};
 		ControllerCreator layoutCtrlr = BaseFullWebappPopupLayoutFactory.createPrintPopupLayout(ctrlCreator);
 		openInNewBrowserWindow(ureq, layoutCtrlr);
@@ -915,6 +1011,11 @@ public class TableOfContentController extends BasicController implements TooledC
 					? PageStatus.draft.cssClass() : page.getPageStatus().cssClass();
 		}
 
+		public String getI18nKeyStatus() {
+			return page.getPageStatus() == null
+					? PageStatus.draft.i18nKey() : page.getPageStatus().i18nKey();			
+		}
+		
 		public PageUserStatus getUserInfosStatus() {
 			return userInfosStatus;
 		}
@@ -944,7 +1045,8 @@ public class TableOfContentController extends BasicController implements TooledC
 		
 		private final Section section;
 		private final Link sectionLink;
-		private Link upSectionLink, downSectionLink;
+		private Link upSectionLink;
+		private Link downSectionLink;
 		private Dropdown editDropdown;
 		private final List<PageRow> pages = new ArrayList<>();
 		private final List<Assignment> assignments;
@@ -965,6 +1067,11 @@ public class TableOfContentController extends BasicController implements TooledC
 		public String getCssClassStatus() {
 			return section.getSectionStatus() == null
 					? SectionStatus.notStarted.cssClass() : section.getSectionStatus().cssClass();
+		}
+		
+		public String getI18nKeyStatus() {
+			return section.getSectionStatus() == null
+					? SectionStatus.notStarted.cssClass() : section.getSectionStatus().i18nKey();			
 		}
 		
 		public boolean isAssessable() {
@@ -1024,6 +1131,32 @@ public class TableOfContentController extends BasicController implements TooledC
 
 		public void setDownSectionLink(Link downSectionLink) {
 			this.downSectionLink = downSectionLink;
+		}
+	}
+	
+	private static class TOCSection {
+		
+		private final Section section;
+		
+		public TOCSection(Section section) {
+			this.section = section;
+		}
+
+		@Override
+		public int hashCode() {
+			return section.hashCode();
+		}
+
+		@Override
+		public boolean equals(Object obj) {
+			if(this == obj) {
+				return true;
+			}
+			if(obj instanceof TOCSection) {
+				TOCSection tocs = (TOCSection)obj;
+				return section.equals(tocs.section);
+			}
+			return false;
 		}
 	}
 }

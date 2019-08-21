@@ -27,6 +27,9 @@
 				<entry key="/remotelogin/">
 					<ref bean="remoteloginbean" />
 				</entry>
+				<entry key="/library/">
+					<ref bean="librarydispatcher" />
+				</entry>
 				<entry key="/auth/">
 					<!-- if you change /auth make sure you also modify olatcore/src/main/java/org/olat/core/gui/components/form/flexible/impl/elements/richText/_static/js/BTinyHelper.js accordingly -->
 					<ref bean="authbean" />
@@ -55,6 +58,12 @@
 				<entry key="/tiny/">
 					<ref bean="tinywebbean" />
 				</entry>
+				<entry key="/survey/">
+					<ref bean="evaluationformwebbean" />
+				</entry>
+				<entry key="/edusharing/">
+					<ref bean="edusharingwebbean" />
+				</entry>
 				<entry key="/podcast/">
 					<ref bean="podcastMediaBean" />
 				</entry>
@@ -67,17 +76,30 @@
 				<entry key="/oauthcallback">
 					<ref bean="oauthcallback" />
 				</entry>
+				<entry key="/getgocallback">
+					<ref bean="getgocallback" />
+				</entry>
 				<entry key="/csp/">
 					<ref bean="cspDispatcher" />
+				</entry>
+				<entry key="/pdfd/">
+					<ref bean="pdfDeliveryBean" />
 				</entry>
 			</map>
 		</property>
 	</bean>
 	
 	
-	<bean id="restdispatcher" class="org.olat.dispatcher.RESTDispatcher" />
+	<bean id="restdispatcher" class="org.olat.dispatcher.RESTDispatcher">
+		<property name="userDeletionManager" ref="userDeletionManager" />
+		<property name="userSessionManager" ref="userSessionManager" />
+		<property name="restSecurityBean" ref="restSecurityBean" />
+		<property name="loginModule" ref="loginModule" />
+	</bean>
 	
 	<bean id="oauthcallback" class="org.olat.login.oauth.OAuthDispatcher" />
+	
+	<bean id="getgocallback" class="org.olat.modules.gotomeeting.oauth.GetGoOAuthDispatcher" />
 	
 	<bean id="robotsdispatcher" class="org.olat.dispatcher.RobotsDispatcher" />
 	
@@ -178,6 +200,7 @@
 						</property>
 					</bean>
 				</entry>
+				
 			</map>
 		</property>
 	</bean>
@@ -211,7 +234,10 @@
 		form submit method : POST (GET not allowed)
 		form action: /olat/remotelogin/
 	-->
-	<bean id="remoteloginbean" class="org.olat.dispatcher.RemoteLoginformDispatcher" />
+	<bean id="remoteloginbean" class="org.olat.dispatcher.RemoteLoginformDispatcher">
+		<property name="userDeletionManager" ref="userDeletionManager" />
+	</bean>
+	<bean id="librarydispatcher" class="org.olat.modules.library.ui.LibraryDispatcher" />
 
 	<bean id="shibbean" class="org.olat.shibboleth.ShibbolethDispatcher">
 		<property name="shibbolethModule" ref="shibbolethModule"/>
@@ -238,6 +264,12 @@
 		
 	<bean id="tinywebbean"
 		class="org.olat.core.gui.components.form.flexible.impl.elements.richText.plugins.olatmovieviewer.TinyDispatcher" />
+		
+	<bean id="evaluationformwebbean"
+		class="org.olat.modules.forms.EvaluationFormDispatcher" />
+
+	<bean id="edusharingwebbean"
+		class="org.olat.modules.edusharing.EdusharingDispatcher" />
 
 	<!-- podcast media dispatcher -->
 	<bean id="podcastMediaBean" class="org.olat.modules.webFeed.dispatching.FeedMediaDispatcher">

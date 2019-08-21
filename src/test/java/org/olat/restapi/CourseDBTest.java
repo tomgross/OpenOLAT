@@ -42,15 +42,15 @@ import org.olat.core.commons.persistence.DB;
 import org.olat.core.id.Identity;
 import org.olat.core.id.OLATResourceable;
 import org.olat.core.util.resource.OresHelper;
+import org.olat.course.CourseFactory;
 import org.olat.course.ICourse;
 import org.olat.course.db.CourseDBEntry;
 import org.olat.course.db.CourseDBManager;
 import org.olat.repository.RepositoryEntry;
 import org.olat.repository.RepositoryManager;
-import org.olat.restapi.repository.course.CoursesWebService;
 import org.olat.restapi.support.vo.KeyValuePair;
 import org.olat.test.JunitTestHelper;
-import org.olat.test.OlatJerseyTestCase;
+import org.olat.test.OlatRestTestCase;
 import org.springframework.beans.factory.annotation.Autowired;
 
 /**
@@ -59,7 +59,7 @@ import org.springframework.beans.factory.annotation.Autowired;
  * @author srosse, stephane.rosse@frentix.com, http://www.frentix.com
  *
  */
-public class CourseDBTest extends OlatJerseyTestCase {
+public class CourseDBTest extends OlatRestTestCase {
 	
 	private Identity auth;
 	private ICourse course;
@@ -75,11 +75,11 @@ public class CourseDBTest extends OlatJerseyTestCase {
 
 	@Before
 	public void setUp() throws Exception {
-		super.setUp();
 		// create course and persist as OLATResourceImpl
 		if(!initialized) {
 			auth = JunitTestHelper.createAndPersistIdentityAsUser("rest-course-cal-one");
-			course = CoursesWebService.createEmptyCourse(auth, "course calendar", "course with calendar for REST API testing", null);
+			RepositoryEntry courseEntry = JunitTestHelper.deployBasicCourse(auth);
+			course = CourseFactory.loadCourse(courseEntry);
 			initialized = true;
 		}
 	}

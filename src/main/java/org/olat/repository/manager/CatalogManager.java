@@ -33,22 +33,21 @@ import java.util.List;
 
 import javax.persistence.TypedQuery;
 
-import org.olat.basesecurity.BaseSecurity;
-import org.olat.basesecurity.Constants;
+import org.apache.logging.log4j.Logger;
 import org.olat.basesecurity.GroupRoles;
+import org.olat.basesecurity.OrganisationService;
 import org.olat.basesecurity.SecurityGroup;
 import org.olat.basesecurity.SecurityGroupMembershipImpl;
+import org.olat.basesecurity.manager.SecurityGroupDAO;
 import org.olat.core.CoreSpringFactory;
 import org.olat.core.commons.modules.bc.FolderConfig;
-import org.olat.core.commons.modules.bc.meta.MetaInfo;
-import org.olat.core.commons.modules.bc.meta.tagged.MetaTagged;
 import org.olat.core.commons.persistence.DB;
 import org.olat.core.commons.persistence.PersistenceHelper;
 import org.olat.core.commons.services.image.ImageService;
 import org.olat.core.commons.services.image.Size;
+import org.olat.core.commons.services.vfs.VFSRepositoryService;
 import org.olat.core.id.Identity;
 import org.olat.core.id.OLATResourceable;
-import org.olat.core.logging.OLog;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.FileUtils;
 import org.olat.core.util.StringHelper;
@@ -56,6 +55,7 @@ import org.olat.core.util.coordinate.CoordinatorManager;
 import org.olat.core.util.event.MultiUserEvent;
 import org.olat.core.util.resource.Resourceable;
 import org.olat.core.util.vfs.LocalFolderImpl;
+import org.olat.core.util.vfs.VFSConstants;
 import org.olat.core.util.vfs.VFSContainer;
 import org.olat.core.util.vfs.VFSItem;
 import org.olat.core.util.vfs.VFSLeaf;
@@ -95,14 +95,14 @@ import org.springframework.stereotype.Service;
 @Service("catalogManager")
 public class CatalogManager implements UserDataDeletable, InitializingBean {
 	
-	private static final OLog log = Tracing.createLoggerFor(CatalogManager.class);
+	private static final Logger log = Tracing.createLoggerFor(CatalogManager.class);
 	
 	/**
 	 * Default value for the catalog root <code>CATALOGROOT</code>
 	 */
 	public static final String CATALOGROOT = "CATALOG ROOT";
 	/**
-	 * Resource identifyer for catalog entries
+	 * Resource identifier for catalog entries
 	 */
 	public static final String CATALOGENTRY = "CatalogEntry";
 	
@@ -111,23 +111,23 @@ public class CatalogManager implements UserDataDeletable, InitializingBean {
 	@Autowired
 	private ImageService imageHelper;
 	@Autowired
-	private BaseSecurity securityManager;
+	private SecurityGroupDAO securityGroupDao;
 	@Autowired
 	private RepositoryService repositoryService;
+	@Autowired
+	private OrganisationService organisationService;
+	@Autowired
+	private VFSRepositoryService vfsRepositoryService;
 
-	/**
-	 * [spring]
-	 * @param userDeletionManager
-	 */
-	private CatalogManager() {
-		// singleton
-	}
 
 	/**
 	 * @return transient catalog entry object
 	 */
 	public CatalogEntry createCatalogEntry() {
-		return new CatalogEntryImpl();
+		CatalogEntryImpl entry = new CatalogEntryImpl();
+		
+		entry.setOwnerGroup(securityGroupDao.createAndPersistSecurityGroup());
+		return entry;
 	}
 	
 	public List<CatalogEntry> getNodesChildrenOf(CatalogEntry ce) {
@@ -190,8 +190,7 @@ public class CatalogManager implements UserDataDeletable, InitializingBean {
 			dbQuery.setMaxResults(maxResults);
 		}
 
-		List<CatalogEntry> entries = dbQuery.getResultList();
-		return entries;
+		return dbQuery.getResultList();
 	}
 
 	/**
@@ -254,7 +253,7 @@ public class CatalogManager implements UserDataDeletable, InitializingBean {
 	 * @return List of catalog entries
 	 */
 	public List<CatalogEntry> filterOwnedLeafs(Identity identity, List<CatalogEntry> catalogEntries) {
-		List<CatalogEntry> ownedEntries = new ArrayList<CatalogEntry>();
+		List<CatalogEntry> ownedEntries = new ArrayList<>();
 		for(CatalogEntry cate:catalogEntries) {
 			if (cate.getType() == CatalogEntry.TYPE_LEAF) {
 				RepositoryEntry repe = cate.getRepositoryEntry();
@@ -311,7 +310,7 @@ public class CatalogManager implements UserDataDeletable, InitializingBean {
 			dbInstance.getCurrentEntityManager().remove(ce);
 			if (owner != null) {
 				log.debug("deleteCatalogEntry case_1: delete owner-group=" + owner);
-				securityManager.deleteSecurityGroup(owner);
+				securityGroupDao.deleteSecurityGroup(owner);
 			}
 		} 
 	}
@@ -324,7 +323,7 @@ public class CatalogManager implements UserDataDeletable, InitializingBean {
 	 * @param ce
 	 */
 	public void deleteCatalogEntry(CatalogEntry ce) {
-		final boolean debug = log.isDebug();
+		final boolean debug = log.isDebugEnabled();
 		if(debug) log.debug("deleteCatalogEntry start... ce=" + ce);
 		
 		if (ce.getType() == CatalogEntry.TYPE_LEAF) {
@@ -335,11 +334,11 @@ public class CatalogManager implements UserDataDeletable, InitializingBean {
 				dbInstance.getCurrentEntityManager().remove(ce);
 				if (owner != null) {
 					log.debug("deleteCatalogEntry case_1: delete owner-group=" + owner);
-					securityManager.deleteSecurityGroup(owner);
+					securityGroupDao.deleteSecurityGroup(owner);
 				}
 			}
 		} else {
-			List<SecurityGroup> secGroupsToBeDeleted = new ArrayList<SecurityGroup>();
+			List<SecurityGroup> secGroupsToBeDeleted = new ArrayList<>();
 			//FIXME pb: the transaction must also include the deletion of the security
 			// groups. Why not using this method as a recursion and seperating the 
 			// deletion of the ce and the groups by collecting the groups? IMHO there 
@@ -354,7 +353,7 @@ public class CatalogManager implements UserDataDeletable, InitializingBean {
 			for (Iterator<SecurityGroup> iter = secGroupsToBeDeleted.iterator(); iter.hasNext();) {
 				SecurityGroup grp = iter.next();
 				if(debug) log.debug("deleteCatalogEntry case_2: delete groups of deleteCatalogSubtree grp=" + grp);
-				securityManager.deleteSecurityGroup(grp);
+				securityGroupDao.deleteSecurityGroup(grp);
 			}
 		}
 		if(debug) log.debug("deleteCatalogEntry END");
@@ -475,6 +474,26 @@ public class CatalogManager implements UserDataDeletable, InitializingBean {
 		}
 		return entries.get(0);
 	}
+	
+	public boolean isOwner(CatalogEntry catalogEntry, Identity identity) {
+		return securityGroupDao.isIdentityInSecurityGroup(identity, catalogEntry.getOwnerGroup());
+	}
+	
+	public List<Identity> getOwners(CatalogEntry catalogEntry) {
+		return securityGroupDao.getIdentitiesOfSecurityGroup(catalogEntry.getOwnerGroup());
+	}
+	
+	public boolean addOwner(CatalogEntry catalogEntry, Identity identity) {
+		if (!securityGroupDao.isIdentityInSecurityGroup(identity, catalogEntry.getOwnerGroup())) {
+			securityGroupDao.addIdentityToSecurityGroup(identity, catalogEntry.getOwnerGroup());
+			return true;
+		}
+		return false;
+	}
+	
+	public void removeOwner(CatalogEntry catalogEntry, Identity identity) {
+		securityGroupDao.removeIdentityFromSecurityGroup(identity, catalogEntry.getOwnerGroup());
+	}
 
 	/**
 	 * Find catalog entries for certain identity
@@ -507,19 +526,21 @@ public class CatalogManager implements UserDataDeletable, InitializingBean {
 		return count == null ? false : count.intValue() > 0;
 	}
 	
+
+	
 	public List<Identity> getOwnersOfParentLine(CatalogEntry entry) {
 		List<CatalogEntry> parentLine = getCategoryParentLine(entry);
-		List<SecurityGroup> secGroups = new ArrayList<SecurityGroup>();
+		List<SecurityGroup> secGroups = new ArrayList<>();
 		for(CatalogEntry parent:parentLine) {
 			if(parent.getOwnerGroup() != null) {
 				secGroups.add(parent.getOwnerGroup());
 			}
 		}
-		return securityManager.getIdentitiesOfSecurityGroups(secGroups);
+		return securityGroupDao.getIdentitiesOfSecurityGroups(secGroups);
 	}
 	
 	private final List<CatalogEntry> getCategoryParentLine(CatalogEntry entry) {
-		List<CatalogEntry> parentLine = new ArrayList<CatalogEntry>();
+		List<CatalogEntry> parentLine = new ArrayList<>();
 		parentLine.add(entry);
 		
 		CatalogEntry current = entry;
@@ -537,7 +558,7 @@ public class CatalogManager implements UserDataDeletable, InitializingBean {
 	 * @param newEntry
 	 */
 	public void addCatalogEntry(CatalogEntry parent, CatalogEntry newEntry) {
-		boolean debug = log.isDebug();
+		boolean debug = log.isDebugEnabled();
 		if(debug) log.debug("addCatalogEntry parent=" + parent);
 		newEntry.setParent(parent);
 		if(debug) log.debug("addCatalogEntry newEntry=" + newEntry);
@@ -571,11 +592,10 @@ public class CatalogManager implements UserDataDeletable, InitializingBean {
 			 * secMgr.findSecurityGroupByName(Constants.GROUP_ADMIN) directly into a
 			 * CatalogEntry!!
 			 */
-			SecurityGroup olatAdmins = securityManager.findSecurityGroupByName(Constants.GROUP_ADMIN);
-			List<Identity> olatAdminIdents = securityManager.getIdentitiesOfSecurityGroup(olatAdmins);
-			SecurityGroup catalogAdmins = securityManager.createAndPersistSecurityGroup();
+			List<Identity> olatAdminIdents = organisationService.getDefaultsSystemAdministator();
+			SecurityGroup catalogAdmins = securityGroupDao.createAndPersistSecurityGroup();
 			for (int i = 0; i < olatAdminIdents.size(); i++) {
-				securityManager.addIdentityToSecurityGroup(olatAdminIdents.get(i), catalogAdmins);
+				securityGroupDao.addIdentityToSecurityGroup(olatAdminIdents.get(i), catalogAdmins);
 			}
 			/*
 			 * start with something called CATALOGROOT, you can rename it to whatever
@@ -634,7 +654,7 @@ public class CatalogManager implements UserDataDeletable, InitializingBean {
 	public void resourceableDeleted(RepositoryEntry repositoryEntry) {
 		// if a repository entry gets deleted, the referencing Catalog Entries gets
 		// retired to
-		if(log.isDebug()) log.debug("sourceableDeleted start... repositoryEntry=" + repositoryEntry);
+		if(log.isDebugEnabled()) log.debug("sourceableDeleted start... repositoryEntry=" + repositoryEntry);
 		List<CatalogEntry> references = getCatalogEntriesReferencing(repositoryEntry);
 		if (references != null && !references.isEmpty()) {
 			for (int i = 0; i < references.size(); i++) {
@@ -655,15 +675,15 @@ public class CatalogManager implements UserDataDeletable, InitializingBean {
 		List<CatalogEntry> catalogEntries = getCatalogEntriesOwnedBy(identity);
 		for (CatalogEntry catalogEntry:catalogEntries) {
 			
-			securityManager.removeIdentityFromSecurityGroup(identity, catalogEntry.getOwnerGroup());
-			if (securityManager.countIdentitiesOfSecurityGroup(catalogEntry.getOwnerGroup()) == 0 ) {
+			securityGroupDao.removeIdentityFromSecurityGroup(identity, catalogEntry.getOwnerGroup());
+			if (securityGroupDao.countIdentitiesOfSecurityGroup(catalogEntry.getOwnerGroup()) == 0 ) {
 				// This group has no owner anymore => add OLAT-Admin as owner
 				Identity admin = CoreSpringFactory.getImpl(RepositoryDeletionModule.class).getAdminUserIdentity();
-				securityManager.addIdentityToSecurityGroup(admin, catalogEntry.getOwnerGroup());
+				securityGroupDao.addIdentityToSecurityGroup(admin, catalogEntry.getOwnerGroup());
 				log.info("Delete user-data, add Administrator-identity as owner of catalogEntry=" + catalogEntry.getName());
 			}
 		}
-		if(log.isDebug()) log.debug("All owner entries in catalog deleted for identity=" + identity);
+		if(log.isDebugEnabled()) log.debug("All owner entries in catalog deleted for identity=" + identity);
 	}
 
 	/**
@@ -719,17 +739,19 @@ public class CatalogManager implements UserDataDeletable, InitializingBean {
 		if(image instanceof VFSLeaf) {
 			return (VFSLeaf)image;
 		}
+		imageName = entry.getKey() + ".gif";
+		image = catalogResourceHome.resolve(imageName);
+		if(image instanceof VFSLeaf) {
+			return (VFSLeaf)image;
+		}
 		return null;
 	}
 	
 	public void deleteImage(CatalogEntryRef entry) {
 		VFSLeaf imgFile =  getImage(entry);
 		if (imgFile != null) {
-			if(imgFile instanceof MetaTagged) {
-				MetaInfo info = ((MetaTagged)imgFile).getMetaInfo();
-				if(info != null) {
-					info.clearThumbnails();
-				}
+			if(imgFile.canMeta() == VFSConstants.YES) {
+				vfsRepositoryService.resetThumbnails(imgFile);
 			}
 			imgFile.delete();
 		}
@@ -738,11 +760,8 @@ public class CatalogManager implements UserDataDeletable, InitializingBean {
 	public boolean setImage(VFSLeaf newImageFile, CatalogEntryRef re) {
 		VFSLeaf currentImage = getImage(re);
 		if(currentImage != null) {
-			if(currentImage instanceof MetaTagged) {
-				MetaInfo info = ((MetaTagged)currentImage).getMetaInfo();
-				if(info != null) {
-					info.clearThumbnails();
-				}
+			if(currentImage.canMeta() == VFSConstants.YES) {
+				vfsRepositoryService.resetThumbnails(currentImage);
 			}
 			currentImage.delete();
 		}
@@ -757,10 +776,13 @@ public class CatalogManager implements UserDataDeletable, InitializingBean {
 		try {
 			if("jpeg".equals(extension) || "jpg".equals(extension)) {
 				VFSLeaf repoImage = catalogResourceHome.createChildLeaf(re.getKey() + ".jpg");
-				ok = VFSManager.copyContent(newImageFile, repoImage);
+				ok = VFSManager.copyContent(newImageFile, repoImage, false);
 			} else if("png".equals(extension)) {
 				VFSLeaf repoImage = catalogResourceHome.createChildLeaf(re.getKey() + ".png");
-				ok = VFSManager.copyContent(newImageFile, repoImage);
+				ok = VFSManager.copyContent(newImageFile, repoImage, false);
+			} else if("gif".equals(extension)) {
+				VFSLeaf repoImage = catalogResourceHome.createChildLeaf(re.getKey() + ".gif");
+				ok = VFSManager.copyContent(newImageFile, repoImage, false);
 			} else {
 				//scale to default and png
 				VFSLeaf repoImage = catalogResourceHome.createChildLeaf(re.getKey() + ".png");

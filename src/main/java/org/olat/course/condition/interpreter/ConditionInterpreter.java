@@ -27,10 +27,10 @@ package org.olat.course.condition.interpreter;
 
 import java.text.ParseException;
 
+import org.apache.logging.log4j.Logger;
 import org.olat.core.gui.translator.Translator;
 import org.olat.core.logging.AssertException;
 import org.olat.core.logging.OLATRuntimeException;
-import org.olat.core.logging.OLog;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.Util;
 import org.olat.course.condition.Condition;
@@ -60,7 +60,7 @@ import de.bps.course.condition.interpreter.score.GetOnyxTestOutcomeNumFunction;
  * Comment:
  */
 public class ConditionInterpreter {
-	private OLog log = Tracing.createLoggerFor(this.getClass());
+	private static final Logger log = Tracing.createLoggerFor(ConditionInterpreter.class);
 
 	/** static Integer(1) object */
 	public static final Integer INT_TRUE = Integer.valueOf(1);
@@ -139,6 +139,7 @@ public class ConditionInterpreter {
 		env.addFunction(IsCourseCoachFunction.name, new IsCourseCoachFunction(userCourseEnv));
 		env.addFunction(IsCourseParticipantFunction.name, new IsCourseParticipantFunction(userCourseEnv));
 		env.addFunction(IsCourseAdministratorFunction.name, new IsCourseAdministratorFunction(userCourseEnv));
+		env.addFunction(IsInOrganisationFunction.name, new IsInOrganisationFunction(userCourseEnv));
 		
 		env.addFunction(IsAssessmentModeFunction.name, new IsAssessmentModeFunction(userCourseEnv));
 		env.addFunction(GetCourseBeginDateFunction.name, new GetCourseBeginDateFunction(userCourseEnv));

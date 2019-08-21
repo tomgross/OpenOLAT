@@ -27,12 +27,15 @@
 package org.olat.ims.cp;
 
 import java.util.Iterator;
+import java.util.List;
 import java.util.Vector;
-import java.util.logging.Logger;
 
+import org.apache.logging.log4j.Logger;
+import org.dom4j.Element;
 import org.dom4j.tree.DefaultDocument;
 import org.dom4j.tree.DefaultElement;
 import org.olat.core.logging.OLATRuntimeException;
+import org.olat.core.logging.Tracing;
 import org.olat.core.util.vfs.VFSContainer;
 import org.olat.ims.cp.objects.CPDependency;
 import org.olat.ims.cp.objects.CPFile;
@@ -56,6 +59,8 @@ import org.olat.modules.wiki.WikiToCPExport;
  * @author Sergio Trentini
  */
 public class CPCore {
+	
+	private static final Logger log = Tracing.createLoggerFor(CPCore.class);
 
 	/**
 	 * The CP Manifest name
@@ -93,12 +98,12 @@ public class CPCore {
 	private VFSContainer rootDir;
 	private CPManifest rootNode;
 
-	private Vector<String> errors;
+	private List<String> errors;
 
 	public CPCore(DefaultDocument doc, VFSContainer rootDir) {
 		this.doc = doc;
 		this.rootDir = rootDir;
-		errors = new Vector<String>();
+		errors = new Vector<>();
 		buildTree();
 	}
 
@@ -227,7 +232,7 @@ public class CPCore {
 			// beforeElement is a <item>
 			// ==> newElement has to be an <item>
 			CPItem beforeItem = (CPItem) beforeElement;
-			DefaultElement parent = beforeItem.getParentElement();
+			Element parent = beforeItem.getParentElement();
 			if (!(newElement instanceof CPItem)) { throw new OLATRuntimeException(CPOrganizations.class, "only <item> element allowed",
 					new Exception()); }
 			if (parent instanceof CPItem) {
@@ -314,7 +319,7 @@ public class CPCore {
 	protected int referencesCount(CPResource resource) {
 
 		int linkCount = 0;
-		Vector<CPItem> items = new Vector<CPItem>();
+		List<CPItem> items = new Vector<>();
 		for (Iterator<CPOrganization> it = rootNode.getOrganizations().getOrganizationIterator(); it.hasNext();) {
 			CPOrganization org = it.next();
 			items.addAll(org.getAllItems());
@@ -324,7 +329,7 @@ public class CPCore {
 			if (item.getIdentifierRef().equals(resource.getIdentifier())) linkCount++;
 		}
 
-		Vector<CPDependency> dependencies = rootNode.getResources().getAllDependencies();
+		List<CPDependency> dependencies = rootNode.getResources().getAllDependencies();
 		for (CPDependency dependency : dependencies) {
 			if (dependency.getIdentifierRef().equals(resource.getIdentifier())) linkCount++;
 		}
@@ -516,7 +521,6 @@ public class CPCore {
 				CPResource res = (CPResource) resElement;
 				return res.getFullHref();
 			} else {
-				Logger log = Logger.getLogger(this.getClass().getName());
 				log.info("method: getPageByItemID(" + id + ") :  invalid manifest.. identifierred of <item> must point to a <resource>-element");
 				return null;
 			}
@@ -563,8 +567,8 @@ public class CPCore {
 	 * @return
 	 */
 	String getLastError() {
-		if (errors.size() == 0) { return rootNode.getLastError(); }
-		return errors.firstElement();
+		if (errors.isEmpty()) { return rootNode.getLastError(); }
+		return errors.get(0);
 	}
 
 	protected void setLastError(String err) {

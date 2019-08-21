@@ -323,14 +323,13 @@ public class ConditionTest extends OlatTestCase {
 		String condition = "2 / 0";
 		boolean result = interpreter.evaluateCondition(condition);
 		Assert.assertFalse(condition, result);
-		
 	}
 
 	
 	private UserCourseEnvironment getUserDemoCourseEnvironment() {
-		Identity author = JunitTestHelper.createAndPersistIdentityAsRndUser("junit_auth-");
+		Identity author = JunitTestHelper.createAndPersistIdentityAsRndUser("junit_auth");
 		Identity id = JunitTestHelper.createAndPersistIdentityAsUser("condition");
-		Roles roles = new Roles(false, false, false, false, false, false, false);
+		Roles roles = Roles.userRoles();
 		RepositoryEntry re = JunitTestHelper.deployDemoCourse(author);
 		ICourse course = CourseFactory.loadCourse(re);
 		IdentityEnvironment identityEnv = new IdentityEnvironment(id, roles);

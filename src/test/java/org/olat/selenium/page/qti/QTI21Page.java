@@ -23,10 +23,9 @@ import java.io.File;
 import java.util.List;
 
 import org.junit.Assert;
-import org.olat.selenium.page.NavigationPage;
+import org.olat.repository.RepositoryEntryStatusEnum;
 import org.olat.selenium.page.graphene.OOGraphene;
 import org.olat.selenium.page.graphene.Position;
-import org.olat.selenium.page.repository.RepositoryAccessPage;
 import org.openqa.selenium.By;
 import org.openqa.selenium.Dimension;
 import org.openqa.selenium.WebDriver;
@@ -44,7 +43,6 @@ import org.openqa.selenium.support.ui.Select;
 public class QTI21Page {
 	
 	private final By toolsMenu = By.cssSelector("ul.o_sel_repository_tools");
-	private final By settingsMenu = By.cssSelector("ul.o_sel_course_settings");
 	
 	private WebDriver browser;
 	
@@ -52,21 +50,32 @@ public class QTI21Page {
 		this.browser = browser;
 	}
 	
+	/**
+	 * Get only the page. You need to assert on start or assessment item
+	 * to make it reliable.
+	 * 
+	 * @param browser The browser
+	 * @return The QTI 2.1 page
+	 */
 	public static QTI21Page getQTI21Page(WebDriver browser) {
 		By mainBy = By.id("o_main_wrapper");
-		OOGraphene.waitElement(mainBy, 5, browser);
-		WebElement main = browser.findElement(mainBy);
-		Assert.assertTrue(main.isDisplayed());
+		OOGraphene.waitElement(mainBy, browser);
 		return new QTI21Page(browser);
+	}
+	
+	public QTI21Page assertOnStart() {
+		By startBy = By.cssSelector("a.o_sel_start_qti21assessment");
+		OOGraphene.waitElement(startBy, browser);
+		return this;
 	}
 	
 	public QTI21Page start() {
 		By startBy = By.cssSelector("a.o_sel_start_qti21assessment");
-		WebElement startButton = browser.findElement(startBy);
-		startButton.click();
+		OOGraphene.waitElement(startBy, browser);
+		browser.findElement(startBy).click();
 		OOGraphene.waitBusy(browser);
 		By mainBy = By.cssSelector("div.qtiworks.o_assessmenttest");
-		OOGraphene.waitElement(mainBy, 5, browser);
+		OOGraphene.waitElement(mainBy, browser);
 		return this;
 	}
 	
@@ -80,22 +89,23 @@ public class QTI21Page {
 	
 	public QTI21Page startTestPart() {
 		By startBy = By.xpath("//button[contains(@onclick,'advanceTestPart')]");
+		OOGraphene.waitElement(startBy, browser);
 		browser.findElement(startBy).click();
 		OOGraphene.waitBusy(browser);
 		By menuBy = By.id("o_qti_menu");
-		OOGraphene.waitElement(menuBy, 5, browser);
+		OOGraphene.waitElement(menuBy, browser);
 		return this;
 	}
 	
 	public QTI21Page assertOnAssessmentItem() {
 		By assessmentItemBy = By.cssSelector("div.qtiworks.o_assessmentitem.o_assessmenttest");
-		OOGraphene.waitElement(assessmentItemBy, 5, browser);
+		OOGraphene.waitElement(assessmentItemBy, browser);
 		return this;
 	}
 	
 	public QTI21Page assertOnAssessmentItem(String title) {
 		By itemTitleBy = By.xpath("//div[@class='o_assessmentitem_wrapper']/h4[contains(normalize-space(.),'" + title + "')]");
-		OOGraphene.waitElement(itemTitleBy, 5, browser);
+		OOGraphene.waitElement(itemTitleBy, browser);
 		return this;
 	}
 	
@@ -168,9 +178,10 @@ public class QTI21Page {
 		if(browser instanceof FirefoxDriver) {
 			String coords = areaEl.getAttribute("coords");
 			By hotspotBy = By.xpath("//div[contains(@class,'hotspotInteraction')]/div/div/img");
+			OOGraphene.waitElementPresence(hotspotBy, 5, browser);
 			WebElement element = browser.findElement(hotspotBy);
 			Dimension dim = element.getSize();
-			Position pos = Position.valueOf(coords, dim, browser);
+			Position pos = Position.valueOf(coords, dim);
 			new Actions(browser)
 				.moveToElement(element, pos.getX(), pos.getY())
 				.click()
@@ -209,7 +220,7 @@ public class QTI21Page {
 			By imgBy = By.xpath("//div[contains(@class,'graphicOrderInteraction')]/div/img");
 			WebElement element = browser.findElement(imgBy);
 			Dimension dim = element.getSize();
-			Position pos = Position.valueOf(coords, dim, browser);
+			Position pos = Position.valueOf(coords, dim);
 			new Actions(browser)
 				.moveToElement(element, pos.getX(), pos.getY())
 				.click()
@@ -369,9 +380,7 @@ public class QTI21Page {
 	public QTI21Page moveToAssociateItems() {
 		By associateItemsBy = By.xpath("//div[@class='association'][3]");
 		OOGraphene.waitElement(associateItemsBy, browser);
-		if(browser instanceof FirefoxDriver) {
-			OOGraphene.scrollTo(associateItemsBy, browser);
-		}
+		OOGraphene.scrollTo(associateItemsBy, browser);
 		return this;
 	}
 	
@@ -384,7 +393,7 @@ public class QTI21Page {
 			By imgBy = By.xpath("//div[contains(@class,'graphicAssociateInteraction')]/div/div/img");
 			WebElement element = browser.findElement(imgBy);
 			Dimension dim = element.getSize();
-			Position pos = Position.valueOf(coords, dim, browser);
+			Position pos = Position.valueOf(coords, dim);
 			new Actions(browser)
 				.moveToElement(element, pos.getX(), pos.getY())
 				.click()
@@ -404,7 +413,7 @@ public class QTI21Page {
 		By associateItemsBy = By.xpath("//div[@class='graphicAssociateInteraction']");
 		OOGraphene.waitElement(associateItemsBy, browser);
 		if(browser instanceof FirefoxDriver) {
-			OOGraphene.scrollTo(associateItemsBy, browser);
+			OOGraphene.moveTo(associateItemsBy, browser);
 		}
 		return this;
 	}
@@ -416,8 +425,8 @@ public class QTI21Page {
 		By targetBy = By.xpath("//div[@class='orderInteraction']//div[contains(@class,'target')]/ul");
 		WebElement targetEl = browser.findElement(targetBy);
 		
-		Position sourcePos = Position.valueOf(30, 30, sourceEl.getSize(), browser);
-		Position targetPos = Position.valueOf(30, 30,  targetEl.getSize(), browser);
+		Position sourcePos = Position.valueOf(30, 30, sourceEl.getSize());
+		Position targetPos = Position.valueOf(30, 30,  targetEl.getSize());
 		new Actions(browser)
 			.moveToElement(sourceEl, sourcePos.getX(), sourcePos.getY())
 			.clickAndHold()
@@ -459,20 +468,15 @@ public class QTI21Page {
 		browser.findElement(sourceBy).click();
 		By areaBy = By.xpath("//div[@class='graphicGapMatchInteraction']//map/area[@data-qti-id='" + gap + "']");
 		WebElement areaEl = browser.findElement(areaBy);
-		if(browser instanceof FirefoxDriver) {
-			String coords = areaEl.getAttribute("coords");
-			By imgBy = By.xpath("//div[contains(@class,'graphicGapMatchInteraction')]/div/div/img");
-			WebElement element = browser.findElement(imgBy);
-			Dimension dim = element.getSize();
-			Position pos = Position.valueOf(coords, dim, browser);
-			new Actions(browser)
-				.moveToElement(element, pos.getX(), pos.getY())
-				.click()
-				.perform();
-			
-		} else {
-			areaEl.click();
-		}
+		String coords = areaEl.getAttribute("coords");
+		By imgBy = By.xpath("//div[contains(@class,'graphicGapMatchInteraction')]/div/div/img");
+		WebElement element = browser.findElement(imgBy);
+		Dimension dim = element.getSize();
+		Position pos = Position.valueOf(coords, dim);
+		new Actions(browser)
+			.moveToElement(element, pos.getX(), pos.getY())
+			.click()
+			.perform();
 		return this;
 	}
 	
@@ -484,7 +488,7 @@ public class QTI21Page {
 	 * @return Itself
 	 */
 	public QTI21Page answerSelectPoint(int x, int y, int width, int height) {
-		Position pos = Position.valueOf(x, y, width, height, browser);
+		Position pos = Position.valueOf(x, y, width, height);
 		By canvasBy = By.xpath("//div[contains(@class,'selectPointInteraction')]/div/canvas");
 		WebElement canvasEl = browser.findElement(canvasBy);
 		new Actions(browser)
@@ -525,9 +529,9 @@ public class QTI21Page {
 		By targetBy = By.xpath("//div[@class='positionObjectStage']//img[contains(@id,'qtiworks_id_container_')]");
 		WebElement targetEl = browser.findElement(targetBy);
 		Dimension targetDim = targetEl.getSize();
-		Position targetPos = Position.valueOf(x, y, firefoxCorrection, targetDim, browser);
+		Position targetPos = Position.valueOf(x, y, firefoxCorrection, targetDim);
 		Dimension itemDim = itemEl.getSize();
-		Position itemPos = Position.valueOf(5, 5, itemDim, browser);
+		Position itemPos = Position.valueOf(5, 5, itemDim);
 		new Actions(browser)
 			.moveToElement(itemEl, itemPos.getX(), itemPos.getY())
 			.clickAndHold()
@@ -544,9 +548,9 @@ public class QTI21Page {
 	 * @return Itself
 	 */
 	public QTI21Page moveToVerticalSlider() {
-		By interactionBy = By.id("itemBody");
+		By interactionBy = By.cssSelector("span.ui-slider-handle");
 		OOGraphene.waitElement(interactionBy, browser);
-		OOGraphene.scrollTo(interactionBy, browser);
+		OOGraphene.moveTo(interactionBy, browser);
 		return this;
 	}
 	
@@ -563,7 +567,7 @@ public class QTI21Page {
 		Dimension size = sliderEl.getSize();
 		float height = (size.getHeight() / 100f) * val;
 		int scaledY = Math.round(size.getHeight() - height);
-		Position pos = Position.valueOf(5, scaledY, size, browser);
+		Position pos = Position.valueOf(5, scaledY, size);
 		new Actions(browser)
 			.moveToElement(sliderEl, pos.getX(), pos.getY())
 			.click()
@@ -596,7 +600,6 @@ public class QTI21Page {
 	public QTI21Page answerDrawing() {
 		By drawingBy = By.xpath("//div[contains(@class,'drawingInteraction')]//canvas[@id='tmp_canvas']");
 		WebElement drawingEl = browser.findElement(drawingBy);
-		
 		new Actions(browser)
 			.moveToElement(drawingEl, 30, 30)
 			.clickAndHold()
@@ -616,6 +619,12 @@ public class QTI21Page {
 		return this;
 	}
 	
+	public QTI21Page assertAnswered() {
+		By answeredBy = By.xpath("//span[contains(@class,'o_assessmentitem_status')][i[contains(@class,'o_icon_qti_answered')]]");
+		OOGraphene.waitElement(answeredBy, browser);
+		return this;
+	}
+	
 	/**
 	 * For hotspot because Firefox cannot click the save without
 	 * special scrolling.
@@ -623,12 +632,12 @@ public class QTI21Page {
 	 */
 	public QTI21Page saveGraphicAnswer() {
 		By saveAnswerBy = By.cssSelector("button.o_sel_assessment_item_submit");
-		browser.findElement(saveAnswerBy).click();
 		if(browser instanceof FirefoxDriver) {
-			OOGraphene.clickAndWait(saveAnswerBy, browser);
+			OOGraphene.moveAndClick(saveAnswerBy, browser);
 		} else {
-			OOGraphene.waitBusy(browser);
+			browser.findElement(saveAnswerBy).click();
 		}
+		OOGraphene.waitBusy(browser);
 		return this;
 	}
 	
@@ -917,7 +926,7 @@ public class QTI21Page {
 	 */
 	public QTI21Page assertOnAssessmentTestTerminated() {
 		By terminatedBy = By.cssSelector("div.o_sel_assessment_test_terminated");
-		OOGraphene.waitElement(terminatedBy, 5, browser);
+		OOGraphene.waitElement(terminatedBy, browser);
 		return this;
 	}
 	
@@ -958,34 +967,18 @@ public class QTI21Page {
 		return editor;
 	}
 	
-	public QTI21OptionsPage options() {
-		if(!browser.findElement(settingsMenu).isDisplayed()) {
-			openSettingsMenu();
+	public QTI21SettingsPage settings() {
+		By toolsLinkBy = By.cssSelector("ul.o_tools li.o_tool_dropdown a.o_sel_repository_tools");
+		OOGraphene.waitElement(toolsLinkBy, browser);
+		if(!browser.findElement(toolsMenu).isDisplayed()) {
+			openToolsMenu();
 		}
 		
-		By optionsBy = By.cssSelector("ul.o_sel_course_settings a.o_sel_qti_resource_options");
+		By optionsBy = By.cssSelector("ul.o_sel_repository_tools a.o_sel_repo_settings");
 		OOGraphene.waitElement(optionsBy, browser);
 		browser.findElement(optionsBy).click();
 		OOGraphene.waitBusy(browser);
-		return new QTI21OptionsPage(browser);
-	}
-	
-	/**
-	 * Open the access configuration
-	 * 
-	 * @return
-	 */
-	public RepositoryAccessPage accessConfiguration() {
-		if(!browser.findElement(settingsMenu).isDisplayed()) {
-			openSettingsMenu();
-		}
-		By accessConfigBy = By.cssSelector("a.o_sel_course_access");
-		browser.findElement(accessConfigBy).click();
-		OOGraphene.waitBusy(browser);
-
-		By mainId = By.id("o_main_container");
-		OOGraphene.waitElement(mainId, 5, browser);
-		return new RepositoryAccessPage(browser);
+		return new QTI21SettingsPage(browser);
 	}
 	
 	/**
@@ -999,19 +992,30 @@ public class QTI21Page {
 		return this;
 	}
 	
-	public QTI21Page openSettingsMenu() {
-		By settingsMenuCaret = By.cssSelector("a.o_sel_course_settings");
-		OOGraphene.waitElement(settingsMenuCaret, browser);
-		browser.findElement(settingsMenuCaret).click();
-		OOGraphene.waitElement(settingsMenu, browser);
-		return this;
+	public QTI21Page clickToolbarBack() {
+		OOGraphene.clickBreadcrumbBack(browser);
+		return QTI21Page.getQTI21Page(browser);
 	}
 	
-	public QTI21Page clickToolbarBack() {
-		OOGraphene.closeBlueMessageWindow(browser);
-		browser.findElement(NavigationPage.toolbarBackBy).click();
+	public QTI21Page publish() {
+		return changeStatus(RepositoryEntryStatusEnum.published);
+	}
+	
+	public QTI21Page changeStatus(RepositoryEntryStatusEnum status) {
+		By statusMenuBy = By.cssSelector("ul.o_repo_tools_status");
+		if(!browser.findElement(statusMenuBy).isDisplayed()) {
+			By statusMenuCaret = By.cssSelector("a.o_repo_tools_status");
+			browser.findElement(statusMenuCaret).click();
+			OOGraphene.waitElement(statusMenuBy, browser);
+		}
+		
+		By statusBy = By.cssSelector("ul.o_repo_tools_status>li>a.o_repo_status_" + status.name());
+		browser.findElement(statusBy).click();
 		OOGraphene.waitBusy(browser);
-		return QTI21Page.getQTI21Page(browser);
+		
+		By statusViewBy = By.xpath("//li[contains(@class,'o_tool_dropdown')]/a[contains(@class,'o_repo_tools_status')]/span[contains(@class,'o_repo_status_" + status + "')]");
+		OOGraphene.waitElement(statusViewBy, browser);
+		return this;
 	}
 	
 	public enum TrueFalse {

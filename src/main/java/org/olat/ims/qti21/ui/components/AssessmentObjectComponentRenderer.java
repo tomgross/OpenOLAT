@@ -61,7 +61,7 @@ import java.util.List;
 import javax.xml.transform.sax.TransformerHandler;
 import javax.xml.transform.stream.StreamResult;
 
-import org.apache.commons.lang.StringEscapeUtils;
+import org.apache.logging.log4j.Logger;
 import org.apache.velocity.VelocityContext;
 import org.apache.velocity.context.Context;
 import org.olat.core.CoreSpringFactory;
@@ -71,6 +71,7 @@ import org.olat.core.gui.components.form.flexible.FormUIFactory;
 import org.olat.core.gui.components.form.flexible.elements.FormLink;
 import org.olat.core.gui.components.form.flexible.impl.Form;
 import org.olat.core.gui.components.form.flexible.impl.FormJSHelper;
+import org.olat.core.gui.components.form.flexible.impl.NameValuePair;
 import org.olat.core.gui.components.link.Link;
 import org.olat.core.gui.render.RenderResult;
 import org.olat.core.gui.render.Renderer;
@@ -80,7 +81,6 @@ import org.olat.core.gui.render.URLBuilder;
 import org.olat.core.gui.render.velocity.VelocityHelper;
 import org.olat.core.gui.translator.Translator;
 import org.olat.core.helpers.Settings;
-import org.olat.core.logging.OLog;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.CodeHelper;
 import org.olat.core.util.StringHelper;
@@ -192,7 +192,7 @@ import uk.ac.ed.ph.qtiworks.mathassess.MathEntryInteraction;
  */
 public abstract class AssessmentObjectComponentRenderer extends DefaultComponentRenderer {
 	
-	private static final OLog log = Tracing.createLoggerFor(AssessmentObjectComponentRenderer.class);
+	private static final Logger log = Tracing.createLoggerFor(AssessmentObjectComponentRenderer.class);
 	private static final String velocity_root = Util.getPackageVelocityRoot(AssessmentObjectComponentRenderer.class);
 	private static final URI ctopXsltUri = URI.create("classpath:/org/olat/ims/qti21/ui/components/_content/ctop.xsl");
 	
@@ -247,8 +247,16 @@ public abstract class AssessmentObjectComponentRenderer extends DefaultComponent
 	
 	private void renderItemStatusMessage(String status, String i18nKey, StringOutput sb, Translator translator) {
 		String title = translator.translate(i18nKey);
-		sb.append("<span class='o_assessmentitem_status ").append(status).append(" ' title=\"").append(StringEscapeUtils.escapeHtml(title))
+		sb.append("<span class='o_assessmentitem_status ").append(status).append(" ' title=\"").append(StringHelper.escapeHtml(title))
 		.append("\"><i class='o_icon o_icon-fw o_icon_qti_").append(status).append("'> </i><span>").append(title).append("</span></span>");
+	}
+	
+	protected void renderControl(StringOutput sb, AssessmentObjectComponent component, String title, boolean primary, String cssClass, NameValuePair... pairs) {
+		Form form = component.getQtiItem().getRootForm();
+		String dispatchId = component.getQtiItem().getFormDispatchId();
+		sb.append("<button type='button' ")
+		  .onClickKeyEnter(FormJSHelper.getXHRFnCallFor(form, dispatchId, 1, true, true, pairs))
+		  .append(" class='btn ").append("btn-primary ", "btn-default ", primary).append(cssClass).append("'").append("><span>").append(title).append("</span></button>");
 	}
 	
 	protected void renderTestItemModalFeedback(AssessmentRenderer renderer, StringOutput sb, AssessmentObjectComponent component,
@@ -878,7 +886,7 @@ public abstract class AssessmentObjectComponentRenderer extends DefaultComponent
     </xsl:when>
     <xsl:when test="$allowComment and $isItemSessionEnded and exists($itemSessionState/qw:candidateComment)">
       <fieldset class="candidateComment">
-        <legend>You submitted the folllowing comment with this item:</legend>
+        <legend>You submitted the following comment with this item:</legend>
         <input name="qtiworks_comment_presented" type="hidden" value="true"/>
         <textarea name="qtiworks_comments" disabled="disabled"><xsl:value-of select="$itemSessionState/qw:candidateComment"/></textarea>
       </fieldset>
@@ -1467,7 +1475,7 @@ public abstract class AssessmentObjectComponentRenderer extends DefaultComponent
 				renderEndTag(out, fElement);
 			}
 		} else if(mathElement instanceof TextRun) {
-			out.append(StringEscapeUtils.escapeXml(((TextRun)mathElement).getTextContent()));
+			out.append(StringHelper.escapeXml(((TextRun)mathElement).getTextContent()));
 		}
 	}
 	

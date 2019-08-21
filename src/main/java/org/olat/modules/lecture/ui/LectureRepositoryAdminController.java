@@ -33,7 +33,6 @@ import org.olat.core.gui.components.stack.TooledController;
 import org.olat.core.gui.components.stack.TooledStackedPanel;
 import org.olat.core.gui.components.stack.TooledStackedPanel.Align;
 import org.olat.core.gui.components.velocity.VelocityContainer;
-import org.olat.core.gui.control.Controller;
 import org.olat.core.gui.control.Event;
 import org.olat.core.gui.control.WindowControl;
 import org.olat.core.gui.control.controller.BasicController;
@@ -59,20 +58,23 @@ import org.springframework.beans.factory.annotation.Autowired;
  */
 public class LectureRepositoryAdminController extends BasicController implements TooledController, Activateable2 {
 	
-	private Link archiveLink, logLink;
+	private Link logLink;
+	private Link archiveLink;
+	private final Link appealsLink;
+	private final Link lecturesLink;
+	private final Link participantsLink;
 	private final VelocityContainer mainVC;
 	private final SegmentViewComponent segmentView;
 	private final TooledStackedPanel stackPanel;
-	private final Link lecturesLink, settingsLink, participantsLink;
-	
+
+	private AppealListRepositoryController appealsCtrl;
 	private LectureListRepositoryController lecturesCtrl;
-	private final LectureRepositorySettingsController settingsCtrl;
 	private ParticipantListRepositoryController participantsCtrl;
 	
 	private RepositoryEntry entry;
-	private boolean configurationChanges = false;
 	private final boolean isAdministrativeUser;
 	private final boolean authorizedAbsenceEnabled;
+	private final LecturesSecurityCallback secCallback;
 	
 	@Autowired
 	private LectureModule lectureModule;
@@ -82,10 +84,11 @@ public class LectureRepositoryAdminController extends BasicController implements
 	private BaseSecurityModule securityModule;
 	
 	public LectureRepositoryAdminController(UserRequest ureq, WindowControl wControl, TooledStackedPanel stackPanel,
-			RepositoryEntry entry) {
+			RepositoryEntry entry, LecturesSecurityCallback secCallback) {
 		super(ureq, wControl);
 		this.entry = entry;
 		this.stackPanel = stackPanel;
+		this.secCallback = secCallback;
 		
 		Roles roles = ureq.getUserSession().getRoles();
 		isAdministrativeUser = securityModule.isUserAllowedAdminProps(roles);
@@ -98,30 +101,16 @@ public class LectureRepositoryAdminController extends BasicController implements
 
 		lecturesLink = LinkFactory.createLink("repo.lectures.block", mainVC, this);
 		participantsLink = LinkFactory.createLink("repo.participants", mainVC, this);
-		settingsLink = LinkFactory.createLink("repo.settings", mainVC, this);
-		
-		WindowControl swControl = addToHistory(ureq, OresHelper.createOLATResourceableType("Settings"), null);
-		settingsCtrl = new LectureRepositorySettingsController(ureq, swControl, entry);
-		listenTo(settingsCtrl);
-		
-		if(settingsCtrl.isLectureEnabled()) {
-			segmentView.addSegment(lecturesLink, true);
-			segmentView.addSegment(participantsLink, false);
-			doOpenLectures(ureq);
-		} else {
-			doOpenSettings(ureq);
+		appealsLink = LinkFactory.createLink("repo.lectures.appeals", mainVC, this);
+
+		segmentView.addSegment(lecturesLink, true);
+		segmentView.addSegment(participantsLink, false);
+		if(lectureModule.isAbsenceAppealEnabled()) {
+			segmentView.addSegment(appealsLink, false);
 		}
-		segmentView.addSegment(settingsLink, !settingsCtrl.isLectureEnabled());
+		doOpenLectures(ureq);
 
 		putInitialPanel(mainVC);
-	}
-	
-	public boolean hasConfigurationChanges() {
-		return configurationChanges;
-	}
-	
-	public void configurationChangesConsumed() {
-		configurationChanges = false;
 	}
 
 	@Override
@@ -133,12 +122,10 @@ public class LectureRepositoryAdminController extends BasicController implements
 	public void initTools() {
 		archiveLink = LinkFactory.createToolLink("archive.entry", translate("archive.entry"), this);
 		archiveLink.setIconLeftCSS("o_icon o_icon_archive_tool");
-		archiveLink.setVisible(settingsCtrl.isLectureEnabled());
 		stackPanel.addTool(archiveLink, Align.right);
 		
 		logLink = LinkFactory.createToolLink("log", translate("log"), this);
 		logLink.setIconLeftCSS("o_icon o_icon_log");
-		logLink.setVisible(settingsCtrl.isLectureEnabled());
 		stackPanel.addTool(logLink, Align.right);
 	}
 
@@ -153,9 +140,11 @@ public class LectureRepositoryAdminController extends BasicController implements
 		} else if("Participants".equalsIgnoreCase(name)) {
 			doOpenParticipants(ureq);
 			segmentView.select(participantsLink);
-		} else if("Settings".equalsIgnoreCase(name)) {
-			doOpenSettings(ureq);
-			segmentView.select(settingsLink);
+		} else if("Appeals".equalsIgnoreCase(name)) {
+			if(lectureModule.isAbsenceAppealEnabled()) {
+				doOpenAppeals(ureq);
+				segmentView.select(appealsLink);
+			}
 		}
 	}
 
@@ -168,10 +157,10 @@ public class LectureRepositoryAdminController extends BasicController implements
 				Component clickedLink = mainVC.getComponent(segmentCName);
 				if (clickedLink == lecturesLink) {
 					doOpenLectures(ureq);
-				} else if (clickedLink == settingsLink){
-					doOpenSettings(ureq);
 				} else if(clickedLink == participantsLink) {
 					doOpenParticipants(ureq);
+				} else if(clickedLink == appealsLink) {
+					doOpenAppeals(ureq);
 				}
 			}
 		} else if(archiveLink == source) {
@@ -180,38 +169,12 @@ public class LectureRepositoryAdminController extends BasicController implements
 			doExportLog(ureq);
 		}
 	}
-	
-	@Override
-	protected void event(UserRequest ureq, Controller source, Event event) {
-		if(settingsCtrl == source) {
-			if(event == Event.DONE_EVENT) {
-				updateSegments();
-				configurationChanges = true;
-			}
-		}
-	}
-	
-	/**
-	 * Update the segment view after a change in the configuration.
-	 */
-	private void updateSegments() {
-		if(settingsCtrl.isLectureEnabled()) {
-			if(segmentView.getSegments().size() == 1) {
-				segmentView.addSegment(0, participantsLink, false);
-				segmentView.addSegment(0, lecturesLink, false);
-			}
-		} else if(segmentView.getSegments().size() > 1) {
-			// remove the unused segments
-			segmentView.removeSegment(lecturesLink);
-			segmentView.removeSegment(participantsLink);
-		}	
-	}
 
 	private void doOpenLectures(UserRequest ureq) {
 		if(lecturesCtrl == null) {
 			OLATResourceable ores = OresHelper.createOLATResourceableType("LectureBlocks");
 			WindowControl swControl = addToHistory(ureq, ores, null);
-			lecturesCtrl = new LectureListRepositoryController(ureq, swControl, entry);
+			lecturesCtrl = new LectureListRepositoryController(ureq, swControl, entry, secCallback);
 			listenTo(lecturesCtrl);
 		} else {
 			addToHistory(ureq, lecturesCtrl);
@@ -219,16 +182,11 @@ public class LectureRepositoryAdminController extends BasicController implements
 		mainVC.put("segmentCmp", lecturesCtrl.getInitialComponent());
 	}
 	
-	private void doOpenSettings(UserRequest ureq) {
-		mainVC.put("segmentCmp", settingsCtrl.getInitialComponent());
-		addToHistory(ureq, settingsCtrl);
-	}
-	
 	private void doOpenParticipants(UserRequest ureq) {
 		if(participantsCtrl == null) {
 			OLATResourceable ores = OresHelper.createOLATResourceableType("Participants");
 			WindowControl swControl = addToHistory(ureq, ores, null);
-			participantsCtrl = new ParticipantListRepositoryController(ureq, swControl, entry, false, true);
+			participantsCtrl = new ParticipantListRepositoryController(ureq, swControl, entry, secCallback, false);
 			listenTo(participantsCtrl);
 		} else {
 			addToHistory(ureq, participantsCtrl);
@@ -236,8 +194,19 @@ public class LectureRepositoryAdminController extends BasicController implements
 		mainVC.put("segmentCmp", participantsCtrl.getInitialComponent());
 	}
 	
+	private void doOpenAppeals(UserRequest ureq) {
+		if(appealsCtrl == null) {
+			OLATResourceable ores = OresHelper.createOLATResourceableType("Appeals");
+			WindowControl swControl = addToHistory(ureq, ores, null);
+			appealsCtrl = new AppealListRepositoryController(ureq, swControl, entry, secCallback);
+			listenTo(appealsCtrl);
+		} else {
+			addToHistory(ureq, appealsCtrl);
+		}
+		mainVC.put("segmentCmp", appealsCtrl.getInitialComponent());
+	}
+	
 	private void doExportArchive(UserRequest ureq) {
-		
 		LecturesBlocksEntryExport archive = new LecturesBlocksEntryExport(entry, isAdministrativeUser, authorizedAbsenceEnabled, getTranslator());
 		ureq.getDispatchResult().setResultingMediaResource(archive);
 	}

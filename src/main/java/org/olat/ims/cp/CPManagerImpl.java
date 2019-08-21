@@ -26,17 +26,21 @@
 
 package org.olat.ims.cp;
 
-import java.io.*;
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.net.MalformedURLException;
+import java.net.URISyntaxException;
 import java.net.URL;
 
-import org.apache.commons.io.IOUtils;
+import org.apache.logging.log4j.Logger;
 import org.dom4j.tree.DefaultDocument;
 import org.dom4j.tree.DefaultElement;
 import org.olat.core.gui.control.generic.iframe.DeliveryOptions;
 import org.olat.core.id.OLATResourceable;
 import org.olat.core.logging.OLATRuntimeException;
-import org.olat.core.logging.OLog;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.CodeHelper;
 import org.olat.core.util.FileUtils;
@@ -55,6 +59,7 @@ import org.olat.ims.cp.ui.CPPackageConfig;
 import org.olat.ims.cp.ui.CPPage;
 import org.olat.repository.RepositoryEntry;
 import org.olat.repository.RepositoryManager;
+import org.springframework.stereotype.Service;
 
 import com.thoughtworks.xstream.XStream;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -71,9 +76,10 @@ import javax.servlet.ServletContext;
  * 
  * @author Sergio Trentini
  */
-public class CPManagerImpl extends CPManager {
+@Service("org.olat.ims.cp.CPManager")
+public class CPManagerImpl implements CPManager {
 	
-	private static final OLog log = Tracing.createLoggerFor(CPManagerImpl.class);
+	private static final Logger log = Tracing.createLoggerFor(CPManagerImpl.class);
 
 	public static final String PACKAGE_CONFIG_FILE_NAME = "CPPackageConfig.xml";
 
@@ -122,64 +128,53 @@ public class CPManagerImpl extends CPManager {
 				configXml.delete();
 			}
 		} else {
-			OutputStream out = null;
-			try {
-				out = new FileOutputStream(configXml);
+			try(OutputStream out = new FileOutputStream(configXml)) {
 				configXstream.toXML(config, out);
 			} catch (IOException e) {
 				log.error("", e);
-			} finally {
-				IOUtils.closeQuietly(out);
 			}
 		}
 	}
 
-	/**
-	 * 
-	 * @see org.olat.ims.cp.CPManager#load(org.olat.core.util.vfs.VFSContainer)
-	 */
+	@Override
 	public ContentPackage load(VFSContainer directory, OLATResourceable ores) {
-		XMLParser parser = new XMLParser();
 		ContentPackage cp;
-
-		VFSLeaf file = (VFSLeaf) directory.resolve("imsmanifest.xml");
-
-		if (file != null) {
-			try {
-				DefaultDocument doc = (DefaultDocument) parser.parse(file.getInputStream(), false);
+		VFSItem file = directory.resolve("imsmanifest.xml");
+		if (file instanceof VFSLeaf) {
+			try(InputStream in = ((VFSLeaf)file).getInputStream()) {
+				XMLParser parser = new XMLParser();
+				DefaultDocument doc = (DefaultDocument) parser.parse(in, false);
 				cp = new ContentPackage(doc, directory, ores);
 				// If a wiki is imported or a new cp created, set a unique orga
 				// identifier.
-				if (cp.getLastError() == null) {
-					if (cp.isOLATContentPackage() && CPCore.OLAT_ORGANIZATION_IDENTIFIER.equals(cp.getFirstOrganizationInManifest().getIdentifier())) {
-						setUniqueOrgaIdentifier(cp);
-					}
+				if (cp.getLastError() == null && cp.isOLATContentPackage()
+						&& CPCore.OLAT_ORGANIZATION_IDENTIFIER.equals(cp.getFirstOrganizationInManifest().getIdentifier())) {
+					setUniqueOrgaIdentifier(cp);
 				}
-
-			} catch (OLATRuntimeException e) {
+			} catch (IOException | OLATRuntimeException e) {
 				cp = new ContentPackage(null, directory, ores);
-				logError("Reading imsmanifest failed. Dir: " + directory.getName() + ". Ores: " + ores.getResourceableId(), e);
+				log.error("Reading imsmanifest failed. Dir: " + directory.getName() + ". Ores: " + ores.getResourceableId(), e);
 				cp.setLastError("Exception reading XML for IMS CP: invalid xml-file ( " + directory.getName() + ")");
 			}
-
 		} else {
 			cp = new ContentPackage(null, directory, ores);
 			cp.setLastError("Exception reading XML for IMS CP: IMS-Manifest not found in " + directory.getName());
-			logError("IMS manifiest xml couldn't be found in dir " + directory.getName() + ". Ores: " + ores.getResourceableId(), null);
+			log.error("IMS manifiest xml couldn't be found in dir " + directory.getName() + ". Ores: " + ores.getResourceableId());
 			throw new OLATRuntimeException(CPManagerImpl.class, "The imsmanifest.xml file was not found.", new IOException());
 		}
 		return cp;
 	}
 
-	/**
-	 * @see org.olat.ims.cp.CPManager#createNewCP(org.olat.core.id.OLATResourceable)
-	 */
+	@Override
 	public ContentPackage createNewCP(OLATResourceable ores, String initalPageTitle) {
 		// copy template cp to new repo-location
 		if (copyTemplCP(ores)) {
 			File cpRoot = FileResourceManager.getInstance().unzipFileResource(ores);
-			logDebug("createNewCP: cpRoot=" + cpRoot);
-			logDebug("createNewCP: cpRoot.getAbsolutePath()=" + cpRoot.getAbsolutePath());
+			if(log.isDebugEnabled()) {
+				log.debug("createNewCP: cpRoot=" + cpRoot);
+				log.debug("createNewCP: cpRoot.getAbsolutePath()=" + cpRoot.getAbsolutePath());
+			}
+			
 			LocalFolderImpl vfsWrapper = new LocalFolderImpl(cpRoot);
 			ContentPackage cp = load(vfsWrapper, ores);
 
@@ -200,7 +195,7 @@ public class CPManagerImpl extends CPManager {
 			return cp;
 
 		} else {
-			logError("CP couldn't be created. Error when copying template. Ores: " + ores.getResourceableId(), null);
+			log.error("CP couldn't be created. Error when copying template. Ores: " + ores.getResourceableId());
 			throw new OLATRuntimeException("ERROR while creating new empty cp. an error occured while trying to copy template CP", null);
 		}
 	}
@@ -235,6 +230,7 @@ public class CPManagerImpl extends CPManager {
 		return orga;
 	}
 
+	@Override
 	public boolean isSingleUsedResource(CPResource res, ContentPackage cp) {
 		return cp.isSingleUsedResource(res);
 	}
@@ -254,73 +250,48 @@ public class CPManagerImpl extends CPManager {
 		cp.updatePage(page);
 	}
 
-	/**
-	 * @see org.olat.ims.cp.CPManager#addElement(org.olat.ims.cp.ContentPackage,
-	 *      org.dom4j.tree.DefaultElement)
-	 */
+	@Override
 	public boolean addElement(ContentPackage cp, DefaultElement newElement) {
 		return cp.addElement(newElement);
 
 	}
 
-	/**
-	 * @see org.olat.ims.cp.CPManager#addElement(org.olat.ims.cp.ContentPackage,
-	 *      org.dom4j.tree.DefaultElement, java.lang.String)
-	 */
+	@Override
 	public boolean addElement(ContentPackage cp, DefaultElement newElement, String parentIdentifier, int position) {
 		return cp.addElement(newElement, parentIdentifier, position);
 	}
 
-	/**
-	 * 
-	 * @see org.olat.ims.cp.CPManager#addElementAfter(org.olat.ims.cp.ContentPackage,
-	 *      org.dom4j.tree.DefaultElement, java.lang.String)
-	 */
+	@Override
 	public boolean addElementAfter(ContentPackage cp, DefaultElement newElement, String identifier) {
 		return cp.addElementAfter(newElement, identifier);
 	}
 
-	/**
-	 * 
-	 * @see org.olat.ims.cp.CPManager#removeElement(org.olat.ims.cp.ContentPackage,
-	 *      java.lang.String)
-	 */
+	@Override
 	public void removeElement(ContentPackage cp, String identifier, boolean deleteResource) {
 		cp.removeElement(identifier, deleteResource);
 	}
 
-	/**
-	 * @see org.olat.ims.cp.CPManager#moveElement(org.olat.ims.cp.ContentPackage,
-	 *      java.lang.String, java.lang.String, int)
-	 */
+	@Override
 	public void moveElement(ContentPackage cp, String nodeID, String newParentID, int position) {
 		cp.moveElement(nodeID, newParentID, position);
 	}
 
-	/**
-	 * 
-	 * @see org.olat.ims.cp.CPManager#copyElement(org.olat.ims.cp.ContentPackage,
-	 *      java.lang.String)
-	 */
+	@Override
 	public String copyElement(ContentPackage cp, String sourceID) {
 		return cp.copyElement(sourceID, sourceID);
 	}
 
-	/**
-	 * @see org.olat.ims.cp.CPManager#getDocument(org.olat.ims.cp.ContentPackage)
-	 */
+	@Override
 	public DefaultDocument getDocument(ContentPackage cp) {
 		return cp.getDocument();
 	}
 
+	@Override
 	public String getItemTitle(ContentPackage cp, String itemID) {
 		return cp.getItemTitle(itemID);
 	}
 
-	/**
-	 * @see org.olat.ims.cp.CPManager#getElementByIdentifier(org.olat.ims.cp.ContentPackage,
-	 *      java.lang.String)
-	 */
+	@Override
 	public DefaultElement getElementByIdentifier(ContentPackage cp, String identifier) {
 		return cp.getElementByIdentifier(identifier);
 	}
@@ -330,34 +301,22 @@ public class CPManagerImpl extends CPManager {
 		return cp.buildTreeDataModel();
 	}
 
-	/**
-	 * 
-	 * @see org.olat.ims.cp.CPManager#getFirstOrganizationInManifest(org.olat.ims.cp.ContentPackage)
-	 */
 	@Override
 	public CPOrganization getFirstOrganizationInManifest(ContentPackage cp) {
 		return cp.getFirstOrganizationInManifest();
 	}
 
-	/**
-	 * 
-	 * @see org.olat.ims.cp.CPManager#getFirstPageToDisplay(org.olat.ims.cp.ContentPackage)
-	 */
 	@Override
 	public CPPage getFirstPageToDisplay(ContentPackage cp) {
 		return cp.getFirstPageToDisplay();
 	}
 
-	/**
-	 * @see org.olat.ims.cp.CPManager#WriteToFile(org.olat.ims.cp.ContentPackage)
-	 */
+	@Override
 	public void writeToFile(ContentPackage cp) {
 		cp.writeToFile();
 	}
 
-	/**
-	 * @see org.olat.ims.cp.CPManager#writeToZip(org.olat.ims.cp.ContentPackage)
-	 */
+	@Override
 	public VFSLeaf writeToZip(ContentPackage cp) {
 		OLATResourceable ores = cp.getResourcable();
 		VFSContainer cpRoot = cp.getRootDir();
@@ -376,15 +335,9 @@ public class CPManagerImpl extends CPManager {
 			oldArchive.deleteSilently();//don't versioned the zip
 		}
 		ZipUtil.zip(cpRoot.getItems(), oresRoot.createChildLeaf(zipFileName), true);
-		VFSLeaf zip = (VFSLeaf) oresRoot.resolve(zipFileName);
-		return zip;
+		return (VFSLeaf) oresRoot.resolve(zipFileName);
 	}
 
-	/**
-	 * 
-	 * @see org.olat.ims.cp.CPManager#getPageByItemId(org.olat.ims.cp.ContentPackage,
-	 *      java.lang.String)
-	 */
 	@Override
 	public String getPageByItemId(ContentPackage cp, String itemIdentifier) {
 		return cp.getPageByItemId(itemIdentifier);
@@ -405,6 +358,7 @@ public class CPManagerImpl extends CPManager {
 
 		path = VFSManager.sanitizePath(path);
 		try {
+<<<<<<< HEAD
 			URL url = servletContext.getResource(path);
 			assert url != null;
 			try {
@@ -416,9 +370,19 @@ public class CPManagerImpl extends CPManager {
 			}
 		} catch (MalformedURLException e) {
 			logError("Bad url syntax when copying cp template. url: " + path + " Ores:" + ores.getResourceableId(), null);
+=======
+			File f = new File(url.toURI());
+			if (f.exists() && root.exists()) {
+				FileUtils.copyFileToDir(f, root, "copy imscp template");
+			} else {
+				log.error("cp template was not copied. Source:  " + url + " Target: " + root.getAbsolutePath());
+			}
+		} catch (URISyntaxException e) {
+			log.error("Bad url syntax when copying cp template. url: " + url + " Ores:" + ores.getResourceableId());
+			return false;
+>>>>>>> OpenOLAT_14.0.2
 		}
 
 		return false;
 	}
-
 }

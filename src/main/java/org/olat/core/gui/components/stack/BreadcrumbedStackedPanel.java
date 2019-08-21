@@ -22,6 +22,7 @@ package org.olat.core.gui.components.stack;
 import java.util.ArrayList;
 import java.util.List;
 
+import org.apache.logging.log4j.Logger;
 import org.olat.core.gui.UserRequest;
 import org.olat.core.gui.components.Component;
 import org.olat.core.gui.components.ComponentEventListener;
@@ -38,7 +39,6 @@ import org.olat.core.gui.control.WindowControl;
 import org.olat.core.gui.translator.Translator;
 import org.olat.core.id.context.BusinessControlFactory;
 import org.olat.core.logging.AssertException;
-import org.olat.core.logging.OLog;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.StringHelper;
 import org.olat.core.util.Util;
@@ -50,7 +50,7 @@ import org.olat.core.util.Util;
  *
  */
 public class BreadcrumbedStackedPanel extends Panel implements StackedPanel, BreadcrumbPanel, ComponentEventListener {
-	private static final OLog log = Tracing.createLoggerFor(BreadcrumbedStackedPanel.class);
+	private static final Logger log = Tracing.createLoggerFor(BreadcrumbedStackedPanel.class);
 	private static final ComponentRenderer RENDERER = new BreadcrumbedStackedPanelRenderer();
 	
 	protected final List<Link> stack = new ArrayList<>(3);
@@ -76,13 +76,13 @@ public class BreadcrumbedStackedPanel extends Panel implements StackedPanel, Bre
 		this.cssClass = cssClass;
 		
 		// Add back link before the bread crumbs, when pressed delegates click to current bread-crumb - 1
-		backLink = LinkFactory.createCustomLink("back", "back", null, Link.NONTRANSLATED + Link.LINK_CUSTOM_CSS, null, this);
+		backLink = LinkFactory.createCustomLink("back", "back", "\u00A0", Link.NONTRANSLATED + Link.LINK_CUSTOM_CSS, null, this);
 		backLink.setIconLeftCSS("o_icon o_icon_back");
 		backLink.setTitle(translator.translate("back"));
 		backLink.setAccessKey("b"); // allow navigation using keyboard
 
 		// Add back link before the bread crumbs, when pressed delegates click to current bread-crumb - 1
-		closeLink = LinkFactory.createCustomLink("close", "close", null, Link.NONTRANSLATED + Link.LINK_CUSTOM_CSS, null, this);
+		closeLink = LinkFactory.createCustomLink("close", "close", "\u00A0", Link.NONTRANSLATED + Link.LINK_CUSTOM_CSS, null, this);
 		closeLink.setIconLeftCSS("o_icon o_icon_close_tool");
 		closeLink.setCustomDisplayText(translator.translate("close"));
 		closeLink.setAccessKey("x"); // allow navigation using keyboard
@@ -94,6 +94,7 @@ public class BreadcrumbedStackedPanel extends Panel implements StackedPanel, Bre
 	 * Get a string with all css classes to be applied to this DOM element
 	 * @return
 	 */
+	@Override
 	public String getCssClass() {
 		return cssClass;
 	}
@@ -104,6 +105,7 @@ public class BreadcrumbedStackedPanel extends Panel implements StackedPanel, Bre
 	 * 
 	 * @param cssClass
 	 */
+	@Override
 	public void setCssClass(String cssClass) {
 		this.cssClass = cssClass;
 	}
@@ -251,15 +253,16 @@ public class BreadcrumbedStackedPanel extends Panel implements StackedPanel, Bre
 		WindowControl wControl = controller.getWindowControlForDebug();
 		BusinessControlFactory.getInstance().addToHistory(ureq, wControl);
 	}
-	
+
+	@Override
 	public int size() {
-		return stack == null ? 0 : stack.size();
+		return stack.size();
 	}
 	
 	@Override
 	public Controller getRootController() {
 		Controller controller = null;
-		if(stack.size() > 0) {
+		if(!stack.isEmpty()) {
 			Link lastPath = stack.get(0);
 			BreadCrumb crumb = (BreadCrumb)lastPath.getUserObject();
 			controller = crumb.getController();
@@ -269,21 +272,30 @@ public class BreadcrumbedStackedPanel extends Panel implements StackedPanel, Bre
 	
 	public Controller getLastController() {
 		Controller controller = null;
-		if(stack.size() > 0) {
+		if(!stack.isEmpty()) {
 			Link lastPath = stack.get(stack.size() - 1);
 			BreadCrumb crumb = (BreadCrumb)lastPath.getUserObject();
 			controller = crumb.getController();
 		}
 		return controller;
 	}
+	
+	public boolean hasController(Controller controller) {
+		return getIndex(controller) >= 0;
+	}
 
 	@Override
-	public void popContent() {
+	public Component popContent() {
+		Component component = null;
 		if(stack.size() > 1) {
 			Link link = stack.remove(stack.size() - 1);
 			BreadCrumb crumb = (BreadCrumb)link.getUserObject();
+			if(crumb.getController() != null) {
+				component = crumb.getController().getInitialComponent();
+			}
 			crumb.dispose();
 		}
+		return component;
 	}
 
 	@Override
@@ -319,6 +331,22 @@ public class BreadcrumbedStackedPanel extends Panel implements StackedPanel, Bre
 			updateCloseLinkTitle();
 		}
 	}
+	
+	@Override
+	public void popUserObject(Object uobject) {
+		int index = getIndex(uobject);
+		if(index > 0 && index < stack.size()) {
+			BreadCrumb popedCrumb = null;
+			for(int i=stack.size(); i--> index; ) {
+				Link link = stack.remove(i);
+				popedCrumb = (BreadCrumb)link.getUserObject();
+				popedCrumb.dispose();
+			}
+			
+			setContent(index - 1);
+			updateCloseLinkTitle();
+		}
+	}
 
 	@Override
 	public void pushContent(Component newContent) {
@@ -336,6 +364,17 @@ public class BreadcrumbedStackedPanel extends Panel implements StackedPanel, Bre
 		return index;
 	}
 	
+	private int getIndex(Object uobject) {
+		int index = -1;
+		for(int i=0; i<stack.size(); i++) {
+			BreadCrumb crumb = (BreadCrumb)stack.get(i).getUserObject();
+			if(crumb.getUserObject() != null && crumb.getUserObject().equals(uobject)) {
+				index = i;
+			}
+		}
+		return index;
+	}
+	
 	private Controller getControllerToPop(Component source) {
 		int index = stack.indexOf(source);
 		if(index < (stack.size() - 1)) {
@@ -344,7 +383,7 @@ public class BreadcrumbedStackedPanel extends Panel implements StackedPanel, Bre
 				Link link = stack.get(i);
 				popedCrumb = (BreadCrumb)link.getUserObject();
 			}
-			return popedCrumb.getController();
+			return popedCrumb == null ? null : popedCrumb.getController();
 		}
 		return null;
 	}
@@ -429,7 +468,7 @@ public class BreadcrumbedStackedPanel extends Panel implements StackedPanel, Bre
 	 */
 	public void pushController(String displayName, String iconLeftCss, Controller controller, Object uobject) {
 		//deduplicate last crumb
-		if(uobject != null && controller == null && stack.size() > 0) {
+		if(uobject != null && controller == null && !stack.isEmpty()) {
 			Link lastLink = stack.get(stack.size() - 1);
 			BreadCrumb lastCrumb = (BreadCrumb)lastLink.getUserObject();
 			if(lastCrumb.getController() == null && lastCrumb.getUserObject() != null && lastCrumb.getUserObject().equals(uobject)) {
@@ -482,9 +521,7 @@ public class BreadcrumbedStackedPanel extends Panel implements StackedPanel, Bre
 		BreadCrumb crumb  = (BreadCrumb)currentLink.getUserObject();
 		if(crumb.getController() == null) {
 			if(crumbIndex - 1 >= 0) {
-				Link parentLink = stack.get(crumbIndex - 1);
-				BreadCrumb parentCrumb  = (BreadCrumb)parentLink.getUserObject();
-				setContent(parentCrumb.getController());
+				setContent(crumbIndex - 1);
 			}
 		} else {
 			setContent(crumb.getController());

@@ -21,6 +21,7 @@
 	<import resource="classpath:/org/olat/course/nodes/info/_spring/infoMessageContext.xml"/>
 	<import resource="classpath:/org/olat/course/nodes/gotomeeting/_spring/buildingblockContext.xml"/>
 	<import resource="classpath:/org/olat/course/nodes/openmeetings/_spring/buildingblockContext.xml"/>
+	<import resource="classpath:/org/olat/course/nodes/adobeconnect/_spring/buildingblockContext.xml"/>
 	<import resource="classpath:/org/olat/course/nodes/portfolio/_spring/portfolioBBContext.xml"/>
 	<import resource="classpath:/org/olat/course/nodes/vitero/_spring/buildingblockContext.xml"/>
 	<import resource="classpath:/org/olat/course/statistic/_spring/statisticContext.xml"/>
@@ -32,9 +33,7 @@
 		depends-on="businessGroupService,resourceManager,baseSecurityManager,glossaryManager, org.olat.core.util.event.FrameworkStartupEventChannel">
 		
 		<constructor-arg index="0" ref="coordinatorManager" />
-		<constructor-arg index="1" ref="repositoryManager" />
-		<constructor-arg index="2" ref="repositoryService" />
-		<constructor-arg index="3" ref="referenceManager" />
+		<constructor-arg index="1" ref="referenceManager" />
 	</bean>
 	
 	<!-- Three Logs are available within a course:
@@ -80,7 +79,8 @@
 			</list>
 		</property>
 	</bean>
-		<bean class="org.olat.core.extensions.action.GenericActionExtension" init-method="initExtensionPoints">
+	
+	<bean class="org.olat.core.extensions.action.GenericActionExtension" init-method="initExtensionPoints">
 		<property name="order" value="8210" />
 		<property name="actionController">	
 			<bean class="org.olat.core.gui.control.creator.AutoCreator" scope="prototype">
@@ -98,5 +98,24 @@
 			</list>
 		</property>
 	</bean>
+	
+	<bean class="org.olat.core.extensions.action.GenericActionExtension" init-method="initExtensionPoints">
+		<property name="order" value="7210" />
+		<property name="actionController">
+			<bean class="org.olat.core.gui.control.creator.AutoCreator" scope="prototype">
+				<property name="className" value="org.olat.course.nodes.livestream.ui.LiveStreamAdminController"/>
+			</bean>
+		</property>
+		<property name="navigationKey" value="livestream" />
+		<property name="parentTreeNodeIdentifier" value="modulesParent" />
+		<property name="i18nActionKey" value="admin.menu.title"/>
+		<property name="i18nDescriptionKey" value="admin.menu.title.alt"/>
+		<property name="translationPackage" value="org.olat.course.nodes.livestream.ui"/>
+		<property name="extensionPoints">
+			<list>
+				<value>org.olat.admin.SystemAdminMainController</value>
+			</list>
+		</property>
+	</bean>	
 
 </beans>

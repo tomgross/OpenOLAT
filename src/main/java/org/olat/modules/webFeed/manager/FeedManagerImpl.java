@@ -31,22 +31,19 @@ import org.apache.commons.lang.RandomStringUtils;
 import org.olat.admin.quota.QuotaConstants;
 import org.olat.basesecurity.Authentication;
 import org.olat.basesecurity.BaseSecurity;
-import org.olat.basesecurity.BaseSecurityManager;
 import org.olat.core.CoreSpringFactory;
-import org.olat.core.commons.modules.bc.meta.tagged.MetaTagged;
-import org.olat.core.commons.modules.bc.vfs.OlatRootFolderImpl;
 import org.olat.core.commons.persistence.DB;
 import org.olat.core.commons.persistence.PersistenceHelper;
 import org.olat.core.commons.services.commentAndRating.CommentAndRatingService;
 import org.olat.core.commons.services.image.Size;
 import org.olat.core.commons.services.notifications.NotificationsManager;
+import org.olat.core.commons.services.vfs.VFSRepositoryService;
 import org.olat.core.gui.components.form.flexible.elements.FileElement;
 import org.olat.core.gui.media.MediaResource;
 import org.olat.core.helpers.Settings;
 import org.olat.core.id.Identity;
 import org.olat.core.id.OLATResourceable;
-import org.olat.core.id.Roles;
-import org.olat.core.logging.OLog;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.Encoder;
 import org.olat.core.util.FileUtils;
@@ -57,8 +54,10 @@ import org.olat.core.util.coordinate.CoordinatorManager;
 import org.olat.core.util.coordinate.LockResult;
 import org.olat.core.util.coordinate.SyncerCallback;
 import org.olat.core.util.resource.OresHelper;
+import org.olat.core.util.vfs.LocalFolderImpl;
 import org.olat.core.util.vfs.Quota;
 import org.olat.core.util.vfs.QuotaManager;
+import org.olat.core.util.vfs.VFSConstants;
 import org.olat.core.util.vfs.VFSContainer;
 import org.olat.core.util.vfs.VFSItem;
 import org.olat.core.util.vfs.VFSLeaf;
@@ -98,7 +97,7 @@ import com.rometools.rome.feed.synd.SyndFeed;
  */
 public class FeedManagerImpl extends FeedManager {
 
-	private static final OLog log = Tracing.createLoggerFor(FeedManagerImpl.class);
+	private static final Logger log = Tracing.createLoggerFor(FeedManagerImpl.class);
 
 	// 10 minutes
 	private static final int EXTERNAL_FEED_ACTUALIZATION_MILLIS = 10*60*1000;
@@ -115,13 +114,17 @@ public class FeedManagerImpl extends FeedManager {
 	@Autowired
 	private ItemDAO itemDAO;
 	@Autowired
+	private QuotaManager quotaManager;
+	@Autowired
+	private BaseSecurity securityManager;
+	@Autowired
 	private FeedFileStorge feedFileStorage;
 	@Autowired
 	private ExternalFeedFetcher externalFeedFetcher;
 	@Autowired
 	private NotificationsManager notificationsManager;
 	@Autowired
-	private BaseSecurity securityManager;
+	private VFSRepositoryService vfsRepositoryService;
 
 	/**
 	 * spring only
@@ -259,9 +262,7 @@ public class FeedManagerImpl extends FeedManager {
 			reloaded.setExternalFeedUrl(null);
 		}
 		reloaded.setLastModified(new Date());
-		Feed updated = feedDAO.updateFeed(reloaded);
-
-		return updated;
+		return feedDAO.updateFeed(reloaded);
 	}
 
 	@Override
@@ -365,8 +366,7 @@ public class FeedManagerImpl extends FeedManager {
 	public List<Item> loadFilteredAndSortedItems(Feed feed, List<Long> filteredItemIds, FeedSecurityCallback callback, Identity identity) {
 		List<Item> items = itemDAO.loadItems(feed, filteredItemIds);
 		List<Item> filteredItems = new ArrayList<>();
-		final Roles roles = BaseSecurityManager.getInstance().getRoles(identity);
-		if (roles != null && (roles.isOLATAdmin() || feed.isExternal())) {
+		if (feed.isExternal()) {
 			// show all items
 			filteredItems = items;
 		} else {
@@ -382,9 +382,7 @@ public class FeedManagerImpl extends FeedManager {
 					// scheduled items and drafts of oneself are shown
 					filteredItems.add(item);
 				} else if (item.isDraft()) {
-					if(callback.mayViewAllDrafts()) {
-						filteredItems.add(item);
-					} else if (identity.getKey() == item.getModifierKey()) {
+					if(callback.mayViewAllDrafts() || identity.getKey().equals(item.getModifierKey())) {
 						filteredItems.add(item);
 					}
 				}
@@ -646,7 +644,7 @@ public class FeedManagerImpl extends FeedManager {
 				mediaResource = new VFSMediaResource((VFSLeaf) item);
 			}
 		} catch (NullPointerException e) {
-			log.debug("Media resource could not be created from file: ", fileName);
+			log.debug("Media resource could not be created from file: " + fileName);
 		}
 		return mediaResource;
 	}
@@ -658,16 +656,19 @@ public class FeedManagerImpl extends FeedManager {
 		try {
 			VFSItem item =feedFileStorage.getOrCreateFeedMediaContainer(feed);
 			item = item.resolve(fileName);
+			if (item  == null) {
+				item = feedFileStorage.getOrCreateResourceMediaContainer(feed);
+				item = item.resolve(fileName);
+			}
 			if (thumbnailSize != null && thumbnailSize.getHeight() > 0 && thumbnailSize.getWidth() > 0
-					&& item instanceof MetaTagged) {
-				item = ((MetaTagged) item).getMetaInfo().getThumbnail(thumbnailSize.getWidth(),
-						thumbnailSize.getHeight(), false);
+					&& item instanceof VFSLeaf && item.canMeta() == VFSConstants.YES) {
+				item = vfsRepositoryService.getThumbnail((VFSLeaf)item, thumbnailSize.getWidth(), thumbnailSize.getHeight(), false);
 			}
 			if (item instanceof VFSLeaf) {
 				mediaResource = (VFSLeaf) item;
 			}
 		} catch (NullPointerException e) {
-			log.debug("Media resource could not be created from file: ", fileName);
+			log.debug("Media resource could not be created from file: " + fileName);
 		}
 		return mediaResource;
 	}
@@ -682,7 +683,6 @@ public class FeedManagerImpl extends FeedManager {
 	 */
 	@Override
 	public String getFeedBaseUri(Feed feed, Identity identity, Long courseId, String nodeId) {
-		BaseSecurity manager = BaseSecurityManager.getInstance();
 		boolean isCourseNode = courseId != null && nodeId != null;
 
 		final String slash = "/";
@@ -700,11 +700,11 @@ public class FeedManagerImpl extends FeedManager {
 		if (identity != null) {
 			// The identity can be null for guests
 			String idKey = identity.getKey().toString();
-			Authentication authentication = manager.findAuthenticationByAuthusername(idKey, FeedMediaDispatcher.TOKEN_PROVIDER);
+			Authentication authentication = securityManager.findAuthenticationByAuthusername(idKey, FeedMediaDispatcher.TOKEN_PROVIDER);
 			if (authentication == null) {
 				// Create an authentication
 				String token = RandomStringUtils.randomAlphanumeric(6);
-				authentication = manager.createAndPersistAuthentication(identity, FeedMediaDispatcher.TOKEN_PROVIDER, idKey, token, null);
+				authentication = securityManager.createAndPersistAuthentication(identity, FeedMediaDispatcher.TOKEN_PROVIDER, idKey, token, null);
 			}
 			// If the repository entry allows guest access it is public, thus not
 			// private.
@@ -715,7 +715,7 @@ public class FeedManagerImpl extends FeedManager {
 			} else {
 				entry = repositoryManager.lookupRepositoryEntry(feed, false);
 			}
-			if (entry == null || entry.getAccess() != RepositoryEntry.ACC_USERS_GUESTS) {
+			if (entry == null || entry.isGuests()) {
 				// identity key
 				uri.append(idKey);
 				uri.append(slash);
@@ -969,15 +969,13 @@ public class FeedManagerImpl extends FeedManager {
 
 	@Override
 	public Quota getQuota(OLATResourceable feed) {
-		OlatRootFolderImpl container = feedFileStorage.getResourceContainer(feed);
+		LocalFolderImpl container = feedFileStorage.getResourceContainer(feed);
 
-		Quota quota = QuotaManager.getInstance().getCustomQuota(container.getRelPath());
+		Quota quota = quotaManager.getCustomQuota(container.getRelPath());
 		if (quota == null) {
-			Quota defQuota = QuotaManager.getInstance().getDefaultQuota(QuotaConstants.IDENTIFIER_DEFAULT_FEEDS);
-			quota = QuotaManager.getInstance().createQuota(container.getRelPath(), defQuota.getQuotaKB(),
-					defQuota.getUlLimitKB());
+			Quota defQuota = quotaManager.getDefaultQuota(QuotaConstants.IDENTIFIER_DEFAULT_FEEDS);
+			quota = quotaManager.createQuota(container.getRelPath(), defQuota.getQuotaKB(), defQuota.getUlLimitKB());
 		}
-
 		return quota;
 	}
 

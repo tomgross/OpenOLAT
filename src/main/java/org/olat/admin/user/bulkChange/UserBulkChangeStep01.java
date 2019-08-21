@@ -19,19 +19,17 @@
  */
 package org.olat.admin.user.bulkChange;
 
-import java.util.HashMap;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 
 import org.olat.admin.user.SystemRolesAndRightsController;
-import org.olat.basesecurity.BaseSecurity;
-import org.olat.basesecurity.Constants;
-import org.olat.basesecurity.SecurityGroup;
+import org.olat.basesecurity.OrganisationRoles;
 import org.olat.core.gui.UserRequest;
 import org.olat.core.gui.components.form.flexible.FormItem;
 import org.olat.core.gui.components.form.flexible.FormItemContainer;
 import org.olat.core.gui.components.form.flexible.elements.MultipleSelectionElement;
 import org.olat.core.gui.components.form.flexible.elements.SingleSelection;
-import org.olat.core.gui.components.form.flexible.elements.TextElement;
 import org.olat.core.gui.components.form.flexible.impl.Form;
 import org.olat.core.gui.components.form.flexible.impl.FormEvent;
 import org.olat.core.gui.components.form.flexible.impl.FormLayoutContainer;
@@ -44,6 +42,7 @@ import org.olat.core.gui.control.generic.wizard.StepFormController;
 import org.olat.core.gui.control.generic.wizard.StepsEvent;
 import org.olat.core.gui.control.generic.wizard.StepsRunContext;
 import org.olat.core.id.Identity;
+import org.olat.core.id.Roles;
 import org.olat.core.util.Util;
 import org.olat.user.UserManager;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -59,66 +58,53 @@ import org.springframework.beans.factory.annotation.Autowired;
  */
 class UserBulkChangeStep01 extends BasicStep {
 
-	boolean canCreateOLATPassword;
-	static final String usageIdentifyer = UserBulkChangeStep01.class.getCanonicalName();
-	TextElement textAreaElement;
+	private static final String[] onKeys = new String[] { "on" };
+	private static final String[] onValues = new String[] { "" };
+	
+	private final UserBulkChanges userBulkChanges;
 
-	public UserBulkChangeStep01(UserRequest ureq) {
+	public UserBulkChangeStep01(UserRequest ureq, UserBulkChanges userBulkChanges) {
 		super(ureq);
+		this.userBulkChanges = userBulkChanges;
 		setI18nTitleAndDescr("step1.description", null);
-		setNextStep(new UserBulkChangeStep01a(ureq));
+		setNextStep(new UserBulkChangeStep01a(ureq, userBulkChanges));
 	}
 
-	/**
-	 * @see org.olat.core.gui.control.generic.wizard.Step#getInitialPrevNextFinishConfig()
-	 */
+	@Override
 	public PrevNextFinishConfig getInitialPrevNextFinishConfig() {
 		return new PrevNextFinishConfig(true, true, false);
 	}
 
-	/**
-	 * @see org.olat.core.gui.control.generic.wizard.Step#getStepController(org.olat.core.gui.UserRequest,
-	 *      org.olat.core.gui.control.WindowControl,
-	 *      org.olat.core.gui.control.generic.wizard.StepsRunContext,
-	 *      org.olat.core.gui.components.form.flexible.impl.Form)
-	 */
+	@Override
 	public StepFormController getStepController(UserRequest ureq, WindowControl windowControl, StepsRunContext stepsRunContext, Form form) {
-		StepFormController stepI = new UserBulkChangeStepForm01(ureq, windowControl, form, stepsRunContext);
-		return stepI;
+		return new UserBulkChangeStepForm01(ureq, windowControl, form, stepsRunContext);
 	}
+	
+
 
 	private final class UserBulkChangeStepForm01 extends StepFormBasicController {
 
-		private FormLayoutContainer textContainer;
-
-		private MultipleSelectionElement chkAuthor;
-		private SingleSelection setAuthor;
-		private MultipleSelectionElement chkUserManager;
-		private SingleSelection setUserManager;
-		private MultipleSelectionElement chkGroupManager;
-		private SingleSelection setGroupManager;
-		private MultipleSelectionElement chkPoolManager;
-		private SingleSelection setPoolManager;
-		private MultipleSelectionElement chkInstitutionManager;
-		private SingleSelection setInstitutionManager;
-		private MultipleSelectionElement chkAdmin;
-		private SingleSelection setAdmin;
-		private MultipleSelectionElement chkStatus;
 		private SingleSelection setStatus;
+		private MultipleSelectionElement chkStatus;
 		private MultipleSelectionElement sendLoginDeniedEmail;
+		private final List<RoleChange> roleChanges = new ArrayList<>();
 		
-		private Identity identity;
+		private int counter = 0;
+		private final String[] addremove;
+		private final String[] addremoveTranslated;
 		
 		@Autowired
 		private UserManager userManager;
-		@Autowired
-		private BaseSecurity securityManager;
 
 		public UserBulkChangeStepForm01(UserRequest ureq, WindowControl control, Form rootForm, StepsRunContext runContext) {
 			super(ureq, control, rootForm, runContext, LAYOUT_VERTICAL, null);
 			// use custom translator with fallback to user properties translator
 			setTranslator(userManager.getPropertyHandlerTranslator(getTranslator()));
 			flc.setTranslator(getTranslator());
+			
+			addremove = new String[] { "add", "remove" };
+			addremoveTranslated = new String[] { translate("role.add"), translate("role.remove") };
+			
 			initForm(ureq);
 		}
 
@@ -129,73 +115,39 @@ class UserBulkChangeStep01 extends BasicStep {
 
 		@Override
 		protected void formOK(UserRequest ureq) {
-			Boolean validChange = (Boolean) getFromRunContext("validChange");
-			Map<String, String> roleChangeMap = new HashMap<>();
-
-			if (chkUserManager!=null && chkUserManager.getSelectedKeys().contains("Usermanager")) {
-				roleChangeMap.put(Constants.GROUP_USERMANAGERS, setUserManager.getSelectedKey());
-				validChange = true;
+			boolean validChange = userBulkChanges.isValidChange();
+			Map<OrganisationRoles, String> roleChangeMap = userBulkChanges.getRoleChangeMap();
+			for(RoleChange change:roleChanges) {
+				if(change.getSet().isOneSelected()) {
+					roleChangeMap.put(change.getRole(), change.getSet().getSelectedKey());
+					validChange = true;
+				}
 			}
 
-			if (chkGroupManager!=null && chkGroupManager.getSelectedKeys().contains("Groupmanager")) {
-				roleChangeMap.put(Constants.GROUP_GROUPMANAGERS, setGroupManager.getSelectedKey());
-				validChange = true;
-			}
-
-			if (chkAuthor!=null && chkAuthor.getSelectedKeys().contains("Author")) {
-				roleChangeMap.put(Constants.GROUP_AUTHORS, setAuthor.getSelectedKey());
-				validChange = true;
-			}
-			
-			if (chkPoolManager!=null && chkPoolManager.getSelectedKeys().contains("PoolManager")) {
-				roleChangeMap.put(Constants.GROUP_POOL_MANAGER, setPoolManager.getSelectedKey());
-				validChange = true;
-			}
-			
-			if (chkInstitutionManager!=null && chkInstitutionManager.getSelectedKeys().contains("InstitutionManager")) {
-				roleChangeMap.put(Constants.GROUP_INST_ORES_MANAGER, setInstitutionManager.getSelectedKey());
-				validChange = true;
-			}
-
-			if (chkAdmin!=null && chkAdmin.getSelectedKeys().contains("Admin")) {
-				roleChangeMap.put(Constants.GROUP_ADMIN, setAdmin.getSelectedKey());
-				validChange = true;
-			}
-
-			if (chkStatus!=null && chkStatus.getSelectedKeys().contains("Status")) {
-				roleChangeMap.put("Status", setStatus.getSelectedKey());
+			if (chkStatus!=null && chkStatus.isAtLeastSelected(1)) {
+				userBulkChanges.setStatus(Integer.parseInt(setStatus.getSelectedKey()));
 				// also check dependent send-email checkbox
-				if (sendLoginDeniedEmail!=null) {
-					roleChangeMap.put("sendLoginDeniedEmail", Boolean.toString(sendLoginDeniedEmail.isSelected(0)));					
+				if (sendLoginDeniedEmail != null) {
+					userBulkChanges.setSendLoginDeniedEmail(sendLoginDeniedEmail.isSelected(0));				
 				}
 				validChange = true;
 			}
-
-			addToRunContext("roleChangeMap", roleChangeMap);
-			addToRunContext("validChange", validChange);
-
+			
+			userBulkChanges.setValidChange(validChange);
 			fireEvent(ureq, StepsEvent.ACTIVATE_NEXT);
 		}
 
 		@Override
-		protected void formInnerEvent(UserRequest ureq, FormItem source, FormEvent event) {
-			if(chkUserManager == source) {
-				setUserManager.setVisible(chkUserManager.isAtLeastSelected(1));
-			} else if(chkGroupManager == source) {
-				setGroupManager.setVisible(chkGroupManager.isAtLeastSelected(1));
-			} else if(chkAuthor == source) {
-				setAuthor.setVisible(chkAuthor.isAtLeastSelected(1));
-			} else if(chkPoolManager == source) {
-				setPoolManager.setVisible(chkPoolManager.isAtLeastSelected(1));
-			} else if(chkInstitutionManager == source) {
-				setInstitutionManager.setVisible(chkInstitutionManager.isAtLeastSelected(1));
-			} else if(chkAdmin == source) {
-				setAdmin.setVisible(chkAdmin.isAtLeastSelected(1));
-			} else if(chkStatus == source || setStatus == source) {
+		protected void formInnerEvent(UserRequest ureq, FormItem source, FormEvent event) {	
+			if(chkStatus == source || setStatus == source) {
 				setStatus.setVisible(chkStatus.isAtLeastSelected(1));
 				boolean loginDenied = chkStatus.isAtLeastSelected(1) && setStatus.isOneSelected()
 						&& Integer.toString(Identity.STATUS_LOGIN_DENIED).equals(setStatus.getSelectedKey());
 				sendLoginDeniedEmail.setVisible(loginDenied);
+			} else if(source instanceof MultipleSelectionElement) {
+				MultipleSelectionElement check = (MultipleSelectionElement)source;
+				RoleChange change = (RoleChange)check.getUserObject();
+				change.getSet().setVisible(change.getCheck().isAtLeastSelected(1));
 			}
 			super.formInnerEvent(ureq, source, event);
 		}
@@ -205,15 +157,28 @@ class UserBulkChangeStep01 extends BasicStep {
 			// always true, because no changes are required
 			return true;
 		}
+		
+		private void initRole(OrganisationRoles role, FormItemContainer formLayout) {
+			MultipleSelectionElement chkAuthor = uifactory.addCheckboxesHorizontal("rolechk_" + (++counter), "table.role." + role.name(), formLayout, onKeys, onValues);
+			chkAuthor.select("Author", false);
+			
+			chkAuthor.addActionListener(FormEvent.ONCLICK);
+
+			SingleSelection setAuthor = uifactory.addDropdownSingleselect("roleset_" + (++counter), null, formLayout, addremove, addremoveTranslated, null);
+			setAuthor.setVisible(false);
+			
+			RoleChange change = new RoleChange(chkAuthor, setAuthor, OrganisationRoles.author);
+			roleChanges.add(change);
+			chkAuthor.setUserObject(change);
+		}
 
 		@Override
 		protected void initForm(FormItemContainer formLayout, Controller listener, UserRequest ureq) {
 			setFormTitle("step1.title");
 
-			textContainer = FormLayoutContainer.createCustomFormLayout("index", getTranslator(), this.velocity_root + "/step1.html");
+			FormLayoutContainer textContainer = FormLayoutContainer.createCustomFormLayout("index", getTranslator(), this.velocity_root + "/step1.html");
 			formLayout.add(textContainer);
-			String[] addremove = new String[] { "add", "remove" };
-			String[] addremoveTranslated = new String[] { translate("role.add"), translate("role.remove") };
+			
 
 			// Main layout is a vertical layout without left side padding. To format
 			// the checkboxes properly we need a default layout for the remaining form
@@ -222,97 +187,47 @@ class UserBulkChangeStep01 extends BasicStep {
 			formLayout.add(innerFormLayout);
 
 			// check user rights:
-			boolean iAmOlatAdmin = ureq.getUserSession().getRoles().isOLATAdmin();
-			identity = ureq.getIdentity();
-			
-			// get user system roles groups from security manager
-			SecurityGroup adminGroup = securityManager.findSecurityGroupByName(Constants.GROUP_ADMIN);
-			boolean isAdmin = securityManager.isIdentityInSecurityGroup(identity, adminGroup);
-			SecurityGroup userManagerGroup = securityManager.findSecurityGroupByName(Constants.GROUP_USERMANAGERS);
-			boolean isUserManager = securityManager.isIdentityInSecurityGroup(identity, userManagerGroup);
-			SecurityGroup authorGroup = securityManager.findSecurityGroupByName(Constants.GROUP_AUTHORS);
-			boolean isAuthor = securityManager.isIdentityInSecurityGroup(identity, authorGroup);
-			SecurityGroup groupmanagerGroup = securityManager.findSecurityGroupByName(Constants.GROUP_GROUPMANAGERS);
-			boolean isGroupManager = securityManager.isIdentityInSecurityGroup(identity, groupmanagerGroup);
-			SecurityGroup poolManagerGroup = securityManager.findSecurityGroupByName(Constants.GROUP_POOL_MANAGER);
-			boolean isPoolManager = securityManager.isIdentityInSecurityGroup(identity, poolManagerGroup);
-			SecurityGroup insitutionManagerGroup = securityManager.findSecurityGroupByName(Constants.GROUP_INST_ORES_MANAGER);
-			boolean isInstitutionManager = securityManager.isIdentityInSecurityGroup(identity, insitutionManagerGroup);
-
-			// usermanager:
-			if (isAdmin || isUserManager || iAmOlatAdmin) {
-				chkUserManager = uifactory.addCheckboxesHorizontal("Usermanager", "table.role.useradmin", innerFormLayout, new String[] { "Usermanager" }, new String[] { "" });
-				chkUserManager.select("Usermanager", false);
-				chkUserManager.addActionListener(FormEvent.ONCLICK);
-
-				setUserManager = uifactory.addDropdownSingleselect("setUserManager", null, innerFormLayout, addremove, addremoveTranslated, null);
-				setUserManager.setVisible(false);
+			Roles roles = ureq.getUserSession().getRoles();
+			if(roles.isUserManager() || roles.isRolesManager() || roles.isAdministrator()) {
+				initRole(OrganisationRoles.author, innerFormLayout);
 			}
-
-			// groupmanager
-			if (isAdmin || isGroupManager || iAmOlatAdmin) {
-				chkGroupManager = uifactory.addCheckboxesHorizontal("Groupmanager", "table.role.groupadmin", innerFormLayout, new String[] { "Groupmanager" }, new String[] { "" });
-				chkGroupManager.select("Groupmanager", false);
-				chkGroupManager.addActionListener(FormEvent.ONCLICK);
-
-				setGroupManager = uifactory.addDropdownSingleselect("setGroupManager", null, innerFormLayout, addremove, addremoveTranslated, null);
-				setGroupManager.setVisible(false);
-			}
-
-			// author
-			if (isAdmin || isAuthor || iAmOlatAdmin) {
-				chkAuthor = uifactory.addCheckboxesHorizontal("Author", "table.role.author", innerFormLayout, new String[] { "Author" }, new String[] { "" });
-				chkAuthor.select("Author", false);
-				chkAuthor.addActionListener(FormEvent.ONCLICK);
-
-				setAuthor = uifactory.addDropdownSingleselect("setAuthor", null, innerFormLayout, addremove, addremoveTranslated, null);
-				setAuthor.setVisible(false);
-			}
-			
-			//pool manager
-			if (isAdmin || isPoolManager || iAmOlatAdmin) {
-				chkPoolManager = uifactory.addCheckboxesHorizontal("PoolManager", "table.role.poolManager", innerFormLayout, new String[] { "PoolManager" }, new String[] { "" });
-				chkPoolManager.select("Author", false);
-				chkPoolManager.addActionListener(FormEvent.ONCLICK);
-
-				setPoolManager = uifactory.addDropdownSingleselect("setPoolManager", null, innerFormLayout, addremove, addremoveTranslated, null);
-				setPoolManager.setVisible(false);
-			}
-			
-			//
-			if (isAdmin || isInstitutionManager || iAmOlatAdmin) {
-				chkInstitutionManager = uifactory.addCheckboxesHorizontal("InsitutionManager", "table.role.institutionManager", innerFormLayout, new String[] { "InstitutionManager" }, new String[] { "" });
-				chkInstitutionManager.select("Author", false);
-				chkInstitutionManager.addActionListener(FormEvent.ONCLICK);
-
-				setInstitutionManager = uifactory.addDropdownSingleselect("setInstitutionManager", null, innerFormLayout, addremove, addremoveTranslated, null);
-				setInstitutionManager.setVisible(false);
-			}
-			
-			// sysadmin
-			if (isAdmin || iAmOlatAdmin) {
-				chkAdmin = uifactory.addCheckboxesHorizontal("Admin", "table.role.admin", innerFormLayout, new String[] { "Admin" }, new String[] { "" });
-				chkAdmin.select("Admin", false);
-				chkAdmin.addActionListener(FormEvent.ONCLICK);
-
-				setAdmin = uifactory.addDropdownSingleselect("setAdmin",null, innerFormLayout, addremove, addremoveTranslated, null);
-				setAdmin.setVisible(false);
+			if(roles.isRolesManager() || roles.isAdministrator()) {
+				OrganisationRoles[] roleArr = new OrganisationRoles[] {
+						OrganisationRoles.usermanager, OrganisationRoles.rolesmanager,
+						OrganisationRoles.groupmanager, OrganisationRoles.learnresourcemanager,
+						OrganisationRoles.poolmanager, OrganisationRoles.curriculummanager,
+						OrganisationRoles.lecturemanager, OrganisationRoles.qualitymanager,
+						OrganisationRoles.linemanager, OrganisationRoles.principal,
+						OrganisationRoles.administrator
+				};
+				
+				for(OrganisationRoles role:roleArr) {
+					initRole(role, innerFormLayout);
+				}
 			}
 
 			// status
-			if (isAdmin || iAmOlatAdmin) {
-				chkStatus = uifactory.addCheckboxesHorizontal("Status", "table.role.status", innerFormLayout, new String[] { "Status" }, new String[] { "" });
+			if (roles.isAdministrator() || roles.isRolesManager()) {
+				chkStatus = uifactory.addCheckboxesHorizontal("Status", "table.role.status", innerFormLayout, onKeys, onValues);
 				chkStatus.select("Status", false);
 				chkStatus.addActionListener(FormEvent.ONCLICK);
 
-				// TODO: RH: pay attention: if status changes in Identity-statics this
+				// Pay attention: if status changes in Identity-statics this
 				// may lead to missing status
 				// implement methods in SystemRolesAndRightsController.java
 				setTranslator(Util.createPackageTranslator(SystemRolesAndRightsController.class, getLocale()));
-				String[] statusKeys = { Integer.toString(Identity.STATUS_ACTIV), Integer.toString(Identity.STATUS_PERMANENT),
-						Integer.toString(Identity.STATUS_LOGIN_DENIED) };
-				String[] statusValues = { translate("rightsForm.status.activ"), translate("rightsForm.status.permanent"),
-						translate("rightsForm.status.login_denied") };
+				String[] statusKeys = {
+						Integer.toString(Identity.STATUS_ACTIV),
+						Integer.toString(Identity.STATUS_PERMANENT),
+						Integer.toString(Identity.STATUS_LOGIN_DENIED),
+						Integer.toString(Identity.STATUS_PENDING)
+					};
+				String[] statusValues = {
+						translate("rightsForm.status.activ"),
+						translate("rightsForm.status.permanent"),
+						translate("rightsForm.status.login_denied"),
+						translate("rightsForm.status.pending")
+					};
 
 				setStatus = uifactory.addDropdownSingleselect("setStatus",null, innerFormLayout, statusKeys, statusValues, null);
 				setStatus.setVisible(false);
@@ -322,6 +237,30 @@ class UserBulkChangeStep01 extends BasicStep {
 				sendLoginDeniedEmail.setLabel(null, null);
 				sendLoginDeniedEmail.setVisible(false);
 			}
+		}
+	}
+	
+	private static final class RoleChange {
+		private final MultipleSelectionElement check;
+		private final SingleSelection set;
+		private final OrganisationRoles role;
+		
+		public RoleChange(MultipleSelectionElement check, SingleSelection set, OrganisationRoles role) {
+			this.check = check;
+			this.set = set;
+			this.role = role;
+		}
+
+		public MultipleSelectionElement getCheck() {
+			return check;
+		}
+
+		public SingleSelection getSet() {
+			return set;
+		}
+
+		public OrganisationRoles getRole() {
+			return role;
 		}
 	}
 }

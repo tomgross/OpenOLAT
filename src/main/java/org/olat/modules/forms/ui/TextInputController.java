@@ -19,17 +19,25 @@
  */
 package org.olat.modules.forms.ui;
 
+import java.math.BigDecimal;
+
 import org.olat.core.gui.UserRequest;
 import org.olat.core.gui.components.form.flexible.FormItemContainer;
-import org.olat.core.gui.components.form.flexible.elements.FormLink;
 import org.olat.core.gui.components.form.flexible.elements.TextAreaElement;
+import org.olat.core.gui.components.form.flexible.elements.TextElement;
+import org.olat.core.gui.components.form.flexible.impl.Form;
 import org.olat.core.gui.components.form.flexible.impl.FormBasicController;
-import org.olat.core.gui.components.form.flexible.impl.FormLayoutContainer;
-import org.olat.core.gui.components.link.Link;
 import org.olat.core.gui.control.Controller;
 import org.olat.core.gui.control.WindowControl;
 import org.olat.core.util.CodeHelper;
+import org.olat.core.util.StringHelper;
+import org.olat.modules.forms.EvaluationFormManager;
+import org.olat.modules.forms.EvaluationFormResponse;
+import org.olat.modules.forms.EvaluationFormSession;
+import org.olat.modules.forms.model.jpa.EvaluationFormResponses;
 import org.olat.modules.forms.model.xml.TextInput;
+import org.olat.modules.forms.ui.model.EvaluationFormResponseController;
+import org.springframework.beans.factory.annotation.Autowired;
 
 /**
  * 
@@ -37,44 +45,52 @@ import org.olat.modules.forms.model.xml.TextInput;
  * @author srosse, stephane.rosse@frentix.com, http://www.frentix.com
  *
  */
-public class TextInputController extends FormBasicController {
+public class TextInputController extends FormBasicController implements EvaluationFormResponseController {
 	
-	private FormLink saveButton;
-	private TextAreaElement textEl;
+	private TextElement singleRowEl;
+	private TextAreaElement multiRowEl;
 	
 	private final TextInput textInput;
+	private boolean singleRow;
+	private EvaluationFormResponse response;
 	
+	@Autowired
+	private EvaluationFormManager evaluationFormManager;
+
 	public TextInputController(UserRequest ureq, WindowControl wControl, TextInput textInput) {
-		super(ureq, wControl, "textinput");
+		super(ureq, wControl, LAYOUT_VERTICAL);
+		this.textInput = textInput;
+		initForm(ureq);
+	}
+	
+	public TextInputController(UserRequest ureq, WindowControl wControl, TextInput textInput, Form rootForm) {
+		super(ureq, wControl, LAYOUT_VERTICAL, null, rootForm);
 		this.textInput = textInput;
 		initForm(ureq);
 	}
 
 	@Override
 	protected void initForm(FormItemContainer formLayout, Controller listener, UserRequest ureq) {
-		int rows = 12;
-		if(textInput.getRows() > 0) {
-			rows = textInput.getRows();
-		}
+		singleRowEl = uifactory.addTextElement("textinput_" + CodeHelper.getRAMUniqueID(), null, 1000, null, formLayout);
+
+		multiRowEl = uifactory.addTextAreaElement("textinput_" + CodeHelper.getRAMUniqueID(), null, 56000, -1, 72, false, true, "", formLayout);
 		
-		long postfix = CodeHelper.getRAMUniqueID();
-		textEl = uifactory.addTextAreaElement("textinput_" + postfix, rows, 72, "", formLayout);
-		saveButton = uifactory.addFormLink("save_" + postfix, "save", null, formLayout, Link.BUTTON);
-		saveButton.setEnabled(false);
-		if(formLayout instanceof FormLayoutContainer) {
-			FormLayoutContainer layoutCont = (FormLayoutContainer)formLayout;
-			layoutCont.getFormItemComponent().contextPut("postfix", Long.toString(postfix));
-		}
+		update();
 	}
 	
 	public void update() {
+		singleRow = textInput.isNumeric() || textInput.isSingleRow();
+		
 		int rows = 12;
 		if(textInput.getRows() > 0) {
 			rows = textInput.getRows();
 		}
-		textEl.setRows(rows);
+		multiRowEl.setRows(rows);
+		
+		singleRowEl.setVisible(singleRow);
+		multiRowEl.setVisible(!singleRow);
 	}
-
+	
 	@Override
 	protected void doDispose() {
 		//
@@ -83,5 +99,81 @@ public class TextInputController extends FormBasicController {
 	@Override
 	protected void formOK(UserRequest ureq) {
 		//
+	}
+	
+	@Override
+	protected boolean validateFormLogic(UserRequest ureq) {
+		boolean allOk = super.validateFormLogic(ureq);
+		
+		if (textInput.isNumeric()) {
+			String val = singleRowEl.getValue();
+			if(StringHelper.containsNonWhitespace(val)) {
+				try {
+					Double.parseDouble(val);
+				} catch (NumberFormatException e) {
+					singleRowEl.setErrorKey("error.no.number", null);
+					allOk = false;
+				}
+			}
+		}
+		
+		return allOk;
+	}
+
+	@Override
+	public void setReadOnly(boolean readOnly) {
+		singleRowEl.setEnabled(!readOnly);
+		int rows = readOnly? -1: textInput.getRows();
+		multiRowEl.setRows(rows);
+		multiRowEl.setEnabled(!readOnly);
+	}
+
+	@Override
+	public boolean hasResponse() {
+		return response != null && StringHelper.containsNonWhitespace(response.getStringuifiedResponse());
+	}
+
+	@Override
+	public void initResponse(EvaluationFormSession session, EvaluationFormResponses responses) {
+		response = responses.getResponse(session, textInput.getId());
+		if (response != null) {
+			if (singleRow) {
+				singleRowEl.setValue(response.getStringuifiedResponse());
+			} else {
+				multiRowEl.setValue(response.getStringuifiedResponse());
+			}
+		}
+	}
+
+	@Override
+	public void saveResponse(EvaluationFormSession session) {
+		String valueToSave = getValueToSave();
+		if (StringHelper.containsNonWhitespace(valueToSave)) {
+			if (textInput.isNumeric()) {
+				BigDecimal value = new BigDecimal(valueToSave);
+				if (response == null) {
+					response = evaluationFormManager.createNumericalResponse(textInput.getId(), session, value);
+				} else {
+					response = evaluationFormManager.updateNumericalResponse(response, value);
+				}
+			} else {
+				if (response == null) {
+					response = evaluationFormManager.createStringResponse(textInput.getId(), session, valueToSave);
+				} else {
+					response = evaluationFormManager.updateStringResponse(response, valueToSave);
+				}
+			}
+		} else if (response != null) {
+			// If all text is deleted by the user, the response should be deleted as well.
+			evaluationFormManager.deleteResponse(response);
+			response = null;
+		}
+	}
+
+	private String getValueToSave() {
+		if (singleRow) {
+			return singleRowEl.getValue();
+		}
+		return multiRowEl.getValue();
 	}
 }

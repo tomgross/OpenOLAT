@@ -22,7 +22,6 @@
 
 package org.olat.core.commons.services.notifications.restapi;
 
-import static org.olat.restapi.security.RestSecurityHelper.isAdmin;
 import static org.olat.restapi.security.RestSecurityHelper.parseDate;
 
 import java.util.ArrayList;
@@ -46,7 +45,6 @@ import javax.ws.rs.core.Response;
 import javax.ws.rs.core.Response.Status;
 
 import org.olat.basesecurity.BaseSecurity;
-import org.olat.core.CoreSpringFactory;
 import org.olat.core.commons.services.notifications.NotificationHelper;
 import org.olat.core.commons.services.notifications.NotificationsManager;
 import org.olat.core.commons.services.notifications.Publisher;
@@ -60,11 +58,14 @@ import org.olat.core.commons.services.notifications.restapi.vo.SubscriberVO;
 import org.olat.core.commons.services.notifications.restapi.vo.SubscriptionInfoVO;
 import org.olat.core.commons.services.notifications.restapi.vo.SubscriptionListItemVO;
 import org.olat.core.id.Identity;
+import org.olat.core.id.Roles;
 import org.olat.core.id.context.BusinessControlFactory;
 import org.olat.core.id.context.ContextEntry;
 import org.olat.core.util.StringHelper;
 import org.olat.restapi.security.RestSecurityHelper;
 import org.olat.user.restapi.UserVO;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Component;
 
 /**
  * 
@@ -74,8 +75,14 @@ import org.olat.user.restapi.UserVO;
  * Initial Date:  25 aug 2010 <br>
  * @author srosse, srosse@frentix.com, http://www.frentix.com
  */
+@Component
 @Path("notifications")
 public class NotificationsWebService {
+	
+	@Autowired
+	private BaseSecurity securityManager;
+	@Autowired
+	private NotificationsManager notificationsMgr;
 
 	
 	/**
@@ -84,7 +91,7 @@ public class NotificationsWebService {
 	 * @response.representation.200.qname {http://www.example.com}publisherVo
 	 * @response.representation.200.mediaType application/xml, application/json
 	 * @response.representation.200.doc The publisher
-	 * @response.representation.200.example {@link org.olat.restapi.support.vo.Examples#SAMPLE_PUBLISHERVO}
+	 * @response.representation.200.example {@link org.olat.core.commons.services.notifications.restapi.vo.Examples#SAMPLE_PUBLISHERVO}
 	 * @response.representation.204.doc The publisher doesn't exist
 	 * @response.representation.401.doc The roles of the authenticated user are not sufficient
 	 * @return It returns the <code>CourseVO</code> object representing the course.
@@ -95,11 +102,9 @@ public class NotificationsWebService {
 	public Response getPublisher(@PathParam("ressourceName") String ressourceName, @PathParam("ressourceId") Long ressourceId,
 			@PathParam("subIdentifier") String subIdentifier, @Context HttpServletRequest request) {
 		if(!isAdmin(request)) {
-			return Response.serverError().status(Status.UNAUTHORIZED).build();
+			return Response.serverError().status(Status.FORBIDDEN).build();
 		}
 
-		NotificationsManager notificationsMgr = NotificationsManager.getInstance();
-		
 		SubscriptionContext subsContext
 			= new SubscriptionContext(ressourceName, ressourceId, subIdentifier);
 
@@ -117,10 +122,8 @@ public class NotificationsWebService {
 	public Response getSubscriber(@PathParam("ressourceName") String ressourceName, @PathParam("ressourceId") Long ressourceId,
 			@PathParam("subIdentifier") String subIdentifier, @Context HttpServletRequest request) {
 		if(!isAdmin(request)) {
-			return Response.serverError().status(Status.UNAUTHORIZED).build();
+			return Response.serverError().status(Status.FORBIDDEN).build();
 		}
-
-		NotificationsManager notificationsMgr = NotificationsManager.getInstance();
 		
 		SubscriptionContext subsContext
 			= new SubscriptionContext(ressourceName, ressourceId, subIdentifier);
@@ -142,19 +145,15 @@ public class NotificationsWebService {
 		}
 		return Response.ok(subscriberVoes).build();
 	}
-	
 
 	@PUT
 	@Path("subscribers")
 	@Consumes({MediaType.APPLICATION_XML ,MediaType.APPLICATION_JSON})
 	public Response subscribe(PublisherVO publisherVO, @Context HttpServletRequest request) {
 		if(!isAdmin(request)) {
-			return Response.serverError().status(Status.NOT_FOUND).build();
+			return Response.serverError().status(Status.FORBIDDEN).build();
 		}
-		
-		NotificationsManager notificationsMgr = NotificationsManager.getInstance();
-		BaseSecurity securityManager = CoreSpringFactory.getImpl(BaseSecurity.class);
-		
+
 		SubscriptionContext subscriptionContext
 			= new SubscriptionContext(publisherVO.getResName(), publisherVO.getResId(), publisherVO.getSubidentifier());
 		PublisherData publisherData
@@ -178,7 +177,6 @@ public class NotificationsWebService {
 			return Response.serverError().status(Status.NOT_FOUND).build();
 		}
 		
-		NotificationsManager notificationsMgr = NotificationsManager.getInstance();
 		if(notificationsMgr.deleteSubscriber(subscriberKey)) {
 			return Response.ok().build();
 		}
@@ -212,13 +210,13 @@ public class NotificationsWebService {
 			compareDate = man.getCompareDateFromInterval(man.getUserIntervalOrDefault(identity));
 		}
 		
-		List<String> types = new ArrayList<String>(1);
+		List<String> types = new ArrayList<>(1);
 		if(StringHelper.containsNonWhitespace(type)) {
 			types.add(type);
 		}
 		
 		Map<Subscriber,SubscriptionInfo> subsInfoMap = NotificationHelper.getSubscriptionMap(identity, locale, true, compareDate, types);
-		List<SubscriptionInfoVO> voes = new ArrayList<SubscriptionInfoVO>();
+		List<SubscriptionInfoVO> voes = new ArrayList<>();
 		for(Map.Entry<Subscriber, SubscriptionInfo> entry: subsInfoMap.entrySet()) {
 			SubscriptionInfo info = entry.getValue();
 			if(info.hasNews()) {
@@ -234,7 +232,7 @@ public class NotificationsWebService {
 	private SubscriptionInfoVO createSubscriptionInfoVO(Publisher publisher, SubscriptionInfo info) {
 		SubscriptionInfoVO infoVO  = new SubscriptionInfoVO(info);
 		if(info.getSubscriptionListItems() != null && !info.getSubscriptionListItems().isEmpty()) {
-			List<SubscriptionListItemVO> itemVOes = new ArrayList<SubscriptionListItemVO>(info.getSubscriptionListItems().size());
+			List<SubscriptionListItemVO> itemVOes = new ArrayList<>(info.getSubscriptionListItems().size());
 			
 			String publisherType = publisher.getType();
 			String resourceType = publisher.getResName();
@@ -252,7 +250,7 @@ public class NotificationsWebService {
 				if("Forum".equals(publisherType)) {
 					//extract the message id
 					List<ContextEntry> ces = BusinessControlFactory.getInstance().createCEListFromString(item.getBusinessPath());
-					if(ces.size() > 0) {
+					if(!ces.isEmpty()) {
 						ContextEntry lastCe = ces.get(ces.size() - 1);
 						if("Message".equals(lastCe.getOLATResourceable().getResourceableTypeName())) {
 							itemVO.setMessageKey(lastCe.getOLATResourceable().getResourceableId());
@@ -260,7 +258,7 @@ public class NotificationsWebService {
 					}	
 				} else if("FolderModule".equals(publisherType)) {
 					List<ContextEntry> ces = BusinessControlFactory.getInstance().createCEListFromString(item.getBusinessPath());
-					if(ces.size() > 0) {
+					if(!ces.isEmpty()) {
 						ContextEntry lastCe = ces.get(ces.size() - 1);
 						if(lastCe.getOLATResourceable().getResourceableTypeName().startsWith("path=")) {
 							String path = BusinessControlFactory.getInstance().getPath(lastCe);
@@ -273,5 +271,14 @@ public class NotificationsWebService {
 			infoVO.setItems(itemVOes);
 		}
 		return infoVO;
+	}
+	
+	private boolean isAdmin(HttpServletRequest request) {
+		try {//TODO roles, make it resource dependant
+			Roles roles = RestSecurityHelper.getRoles(request);
+			return roles.isAdministrator();
+		} catch (Exception e) {
+			return false;
+		}
 	}
 }

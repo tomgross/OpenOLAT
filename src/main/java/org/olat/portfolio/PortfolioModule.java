@@ -28,15 +28,15 @@ import java.util.Iterator;
 import java.util.List;
 
 import org.olat.core.commons.modules.bc.FolderConfig;
-import org.olat.core.commons.modules.bc.vfs.OlatRootFolderImpl;
 import org.olat.core.configuration.AbstractSpringModule;
 import org.olat.core.configuration.ConfigOnOff;
-import org.olat.core.logging.OLog;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.FileUtils;
 import org.olat.core.util.StringHelper;
 import org.olat.core.util.coordinate.CoordinatorManager;
 import org.olat.core.util.vfs.VFSContainer;
+import org.olat.core.util.vfs.VFSManager;
 import org.olat.portfolio.model.artefacts.AbstractArtefact;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -54,7 +54,7 @@ import org.springframework.stereotype.Service;
 @Service("portfolioModule")
 public class PortfolioModule extends AbstractSpringModule implements ConfigOnOff {
 	
-	private static final OLog log = Tracing.createLoggerFor(PortfolioModule.class);
+	private static final Logger log = Tracing.createLoggerFor(PortfolioModule.class);
 	
 
 	@Value("${portfolio.enabled:false}")
@@ -62,7 +62,7 @@ public class PortfolioModule extends AbstractSpringModule implements ConfigOnOff
 	private VFSContainer portfolioRoot;
 	@Value("${portfolio.map.styles}")
 	private String availableMapStylesProperty;
-	private List<String> availableMapStyles = new ArrayList<String>();
+	private List<String> availableMapStyles = new ArrayList<>();
 	@Value("${portfolio.offer.public.map.list:true}")
 	private boolean offerPublicMapList;
 	@Value("${wizard.step.reflexion:true}")
@@ -95,7 +95,7 @@ public class PortfolioModule extends AbstractSpringModule implements ConfigOnOff
 		
 		String styles = getStringPropertyValue("portfolio.map.styles", true);
 		if(StringHelper.containsNonWhitespace(styles)) {
-			availableMapStyles = new ArrayList<String>();
+			availableMapStyles = new ArrayList<>();
 			for(String style:styles.split(",")) {
 				availableMapStyles.add(style);
 			}
@@ -131,7 +131,7 @@ public class PortfolioModule extends AbstractSpringModule implements ConfigOnOff
 
 	@Override
 	protected void initDefaultProperties() {
-		availableMapStyles = new ArrayList<String>();
+		availableMapStyles = new ArrayList<>();
 		if(StringHelper.containsNonWhitespace(availableMapStylesProperty)) {	
 			for(String style:availableMapStylesProperty.split(",")) {
 				availableMapStyles.add(style);
@@ -162,7 +162,7 @@ public class PortfolioModule extends AbstractSpringModule implements ConfigOnOff
 	 * @return
 	 */
 	public List<EPArtefactHandler<?>> getAllAvailableArtefactHandlers() {
-		List<EPArtefactHandler<?>> handlers = new ArrayList<EPArtefactHandler<?>>(artefactHandlers.size());
+		List<EPArtefactHandler<?>> handlers = new ArrayList<>(artefactHandlers.size());
 		handlers.addAll(artefactHandlers);
 		return handlers;
 	}
@@ -176,7 +176,7 @@ public class PortfolioModule extends AbstractSpringModule implements ConfigOnOff
 	 * @return
 	 */
 	public List<EPArtefactHandler<?>> getArtefactHandlers() {
-		List<EPArtefactHandler<?>> handlers = new ArrayList<EPArtefactHandler<?>>(artefactHandlers.size());
+		List<EPArtefactHandler<?>> handlers = new ArrayList<>(artefactHandlers.size());
 		for(EPArtefactHandler<?> handler:artefactHandlers) {
 			if(handler.isEnabled()) {
 				handlers.add(handler);
@@ -191,7 +191,7 @@ public class PortfolioModule extends AbstractSpringModule implements ConfigOnOff
 				return handler;
 			}
 		}
-		log.warn("Either tried to get a disabled handler or could not return a handler for artefact-type: " + type, null);
+		log.warn("Either tried to get a disabled handler or could not return a handler for artefact-type: " + type);
 		return null;
 	}
 	
@@ -226,7 +226,7 @@ public class PortfolioModule extends AbstractSpringModule implements ConfigOnOff
 	
 	public VFSContainer getPortfolioRoot() {
 		if(portfolioRoot == null) {
-			portfolioRoot = new OlatRootFolderImpl(File.separator + "portfolio", null);
+			portfolioRoot = VFSManager.olatRootContainer(File.separator + "portfolio", null);
 		}
 		return portfolioRoot;
 	}
@@ -235,7 +235,7 @@ public class PortfolioModule extends AbstractSpringModule implements ConfigOnOff
 	 * @param availableMapStyles The availableMapStyles to set.
 	 */
 	public void setAvailableMapStylesStr(String availableMapStylesStr) {
-		this.availableMapStyles = new ArrayList<String>();
+		this.availableMapStyles = new ArrayList<>();
 		if(StringHelper.containsNonWhitespace(availableMapStylesStr)) {	
 			String[] styles = availableMapStylesStr.split(",");
 			for(String style:styles) {

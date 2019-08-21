@@ -27,15 +27,13 @@ package org.olat.search.service.indexer.repository.course;
 
 import java.io.IOException;
 
+import org.apache.logging.log4j.Logger;
 import org.apache.lucene.document.Document;
-import org.olat.basesecurity.BaseSecurityManager;
-import org.olat.basesecurity.Constants;
 import org.olat.core.CoreSpringFactory;
 import org.olat.core.id.Identity;
 import org.olat.core.id.Roles;
 import org.olat.core.id.context.BusinessControl;
 import org.olat.core.id.context.ContextEntry;
-import org.olat.core.logging.OLog;
 import org.olat.core.logging.Tracing;
 import org.olat.course.ICourse;
 import org.olat.course.nodes.CourseNode;
@@ -56,12 +54,12 @@ import org.olat.search.service.indexer.OlatFullIndexer;
  * @author Christian Guretzki
  */
 public class FOCourseNodeIndexer extends ForumIndexer implements CourseNodeIndexer {
-	private static final OLog log = Tracing.createLoggerFor(FOCourseNodeIndexer.class);
+	private static final Logger log = Tracing.createLoggerFor(FOCourseNodeIndexer.class);
 	// Must correspond with LocalString_xx.properties
 	// Do not use '_' because we want to seach for certain documenttype and lucene haev problems with '_' 
-	public final static String TYPE = "type.course.node.forum.message";
+	public static final String TYPE = "type.course.node.forum.message";
 
-	private final static String SUPPORTED_TYPE_NAME = "org.olat.course.nodes.FOCourseNode";
+	private static final String SUPPORTED_TYPE_NAME = "org.olat.course.nodes.FOCourseNode";
 
 	@Override
 	public void doIndex(SearchResourceContext repositoryResourceContext, ICourse course, CourseNode courseNode, OlatFullIndexer indexWriter) {
@@ -73,8 +71,6 @@ public class FOCourseNodeIndexer extends ForumIndexer implements CourseNodeIndex
 			doIndexForum(courseNodeResourceContext, course, courseNode, indexWriter);
 		} catch(Exception ex) {
 			log.error("Exception indexing courseNode=" + courseNode, ex);
-		} catch (Error err) {
-			log.error("Error indexing courseNode=" + courseNode, err);
 		}
 	}
 
@@ -99,9 +95,8 @@ public class FOCourseNodeIndexer extends ForumIndexer implements CourseNodeIndex
 			}
 			boolean isMessageHidden = Status.getStatus(threadtop.getStatusCode()).isHidden(); 
 			//assumes that if is owner then is moderator so it is allowed to see the hidden forum threads
-			// TODO: (LD) fix this!!! - the contextEntry is not the right context for this check
-			if(isMessageHidden && !BaseSecurityManager.getInstance()/* isOwner */
-					.isIdentityPermittedOnResourceable(identity, Constants.PERMISSION_ACCESS,  contextEntry.getOLATResourceable())) {
+			// TODO policy owner: (LD) fix this!!! - the contextEntry is not the right context for this check
+			if(isMessageHidden) {
 				return false;
 			}
 		}
@@ -117,7 +112,7 @@ public class FOCourseNodeIndexer extends ForumIndexer implements CourseNodeIndex
 	 * @throws IOException
 	 */
 	private void doIndexForum(SearchResourceContext parentResourceContext, ICourse course, CourseNode courseNode, OlatFullIndexer indexWriter) throws IOException,InterruptedException  {
-		if (log.isDebug()) log.debug("Index Course Forum...");
+		if (log.isDebugEnabled()) log.debug("Index Course Forum...");
 		ForumManager fom = CoreSpringFactory.getImpl(ForumManager.class);
 		CoursePropertyManager cpm = course.getCourseEnvironment().getCoursePropertyManager();
 

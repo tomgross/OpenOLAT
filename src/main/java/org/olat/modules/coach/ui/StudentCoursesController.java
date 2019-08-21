@@ -381,7 +381,7 @@ public class StudentCoursesController extends FormBasicController implements Act
 		ContactList contactList = new ContactList(fullName);
 		contactList.add(student);
 		cmsg.addEmailTo(contactList);
-		contactCtrl = new ContactFormController(ureq, getWindowControl(), true, false, false, cmsg);
+		contactCtrl = new ContactFormController(ureq, getWindowControl(), true, false, false, cmsg, null);
 		listenTo(contactCtrl);
 		cmc = new CloseableModalController(getWindowControl(), translate("close"), contactCtrl.getInitialComponent());
 		cmc.activate();
@@ -430,7 +430,7 @@ public class StudentCoursesController extends FormBasicController implements Act
 	}
 	
 	private void openHome(UserRequest ureq) {
-		List<ContextEntry> ces = new ArrayList<ContextEntry>(4);
+		List<ContextEntry> ces = new ArrayList<>(4);
 		ces.add(BusinessControlFactory.getInstance().createContextEntry(student));
 
 		BusinessControl bc = BusinessControlFactory.getInstance().createFromContextEntries(ces);

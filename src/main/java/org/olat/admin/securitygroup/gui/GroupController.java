@@ -36,13 +36,11 @@ import java.util.UUID;
 
 import org.olat.admin.securitygroup.gui.multi.UsersToGroupWizardStep00;
 import org.olat.admin.user.UserSearchController;
-import org.olat.basesecurity.BaseSecurity;
-import org.olat.basesecurity.BaseSecurityManager;
 import org.olat.basesecurity.BaseSecurityModule;
 import org.olat.basesecurity.SecurityGroup;
 import org.olat.basesecurity.events.MultiIdentityChosenEvent;
 import org.olat.basesecurity.events.SingleIdentityChosenEvent;
-import org.olat.core.CoreSpringFactory;
+import org.olat.basesecurity.manager.SecurityGroupDAO;
 import org.olat.core.commons.fullWebApp.popup.BaseFullWebappPopupLayoutFactory;
 import org.olat.core.gui.UserRequest;
 import org.olat.core.gui.components.Component;
@@ -79,8 +77,8 @@ import org.olat.core.util.mail.MailBundle;
 import org.olat.core.util.mail.MailContext;
 import org.olat.core.util.mail.MailContextImpl;
 import org.olat.core.util.mail.MailHelper;
-import org.olat.core.util.mail.MailNotificationEditController;
 import org.olat.core.util.mail.MailManager;
+import org.olat.core.util.mail.MailNotificationEditController;
 import org.olat.core.util.mail.MailTemplate;
 import org.olat.core.util.mail.MailerResult;
 import org.olat.core.util.session.UserSessionManager;
@@ -93,6 +91,7 @@ import org.olat.instantMessaging.model.Presence;
 import org.olat.user.UserInfoMainController;
 import org.olat.user.UserManager;
 import org.olat.user.propertyhandlers.UserPropertyHandler;
+import org.springframework.beans.factory.annotation.Autowired;
 
 /**
  * Description:<BR>
@@ -149,11 +148,19 @@ public class GroupController extends BasicController {
 	protected boolean mandatoryEmail;
 	protected boolean chatEnabled;
 
-	protected BaseSecurity securityManager;
+	@Autowired
+	private SecurityGroupDAO securityGroupDao;
+	@Autowired
+	private BaseSecurityModule securityModule;
+	@Autowired
 	protected UserManager userManager;
+	@Autowired
 	private InstantMessagingModule imModule;
+	@Autowired
 	private InstantMessagingService imService;
+	@Autowired
 	private UserSessionManager sessionManager;
+	@Autowired
 	private MailManager mailManager;
 	
 	public Object userObject;
@@ -181,15 +188,8 @@ public class GroupController extends BasicController {
 		this.mayModifyMembers = mayModifyMembers;
 		this.keepAtLeastOne = keepAtLeastOne;
 		this.mandatoryEmail = mandatoryEmail;
-		securityManager = BaseSecurityManager.getInstance();
-		imModule = CoreSpringFactory.getImpl(InstantMessagingModule.class);
-		imService = CoreSpringFactory.getImpl(InstantMessagingService.class);
-		userManager = CoreSpringFactory.getImpl(UserManager.class);
-		sessionManager = CoreSpringFactory.getImpl(UserSessionManager.class);
-		mailManager = CoreSpringFactory.getImpl(MailManager.class);
 		
 		Roles roles = ureq.getUserSession().getRoles();
-		BaseSecurityModule securityModule = CoreSpringFactory.getImpl(BaseSecurityModule.class);
 		isAdministrativeUser = securityModule.isUserAllowedAdminProps(roles);
 		chatEnabled = imModule.isEnabled() && imModule.isPrivateEnabled();
 
@@ -357,7 +357,7 @@ public class GroupController extends BasicController {
 						showError("msg.selectionempty");
 						return;
 					}
-					toAdd = new ArrayList<Identity>();
+					toAdd = new ArrayList<>();
 					toAdd.add(choosenIdentity);
 				} else if (event instanceof MultiIdentityChosenEvent) {
 					MultiIdentityChosenEvent multiEvent = (MultiIdentityChosenEvent) event;
@@ -372,7 +372,7 @@ public class GroupController extends BasicController {
 				
 				if (toAdd.size() == 1) {
 					//check if already in group [makes only sense for a single choosen identity]
-					if (securityManager.isIdentityInSecurityGroup(toAdd.get(0), securityGroup)) {
+					if (securityGroupDao.isIdentityInSecurityGroup(toAdd.get(0), securityGroup)) {
 						String fullName = userManager.getUserDisplayName(toAdd.get(0));
 						getWindowControl().setInfo(translate("msg.subjectalreadyingroup", new String[]{ fullName }));
 						return;
@@ -381,7 +381,7 @@ public class GroupController extends BasicController {
 					//check if already in group
 					List<Identity> alreadyInGroup = new ArrayList<Identity>();
 					for (int i = 0; i < toAdd.size(); i++) {
-						if (securityManager.isIdentityInSecurityGroup(toAdd.get(i), securityGroup)) {
+						if (securityGroupDao.isIdentityInSecurityGroup(toAdd.get(i), securityGroup)) {
 							tableCtr.setMultiSelectSelectedAt(i, false);
 							alreadyInGroup.add(toAdd.get(i));
 						}
@@ -541,7 +541,9 @@ public class GroupController extends BasicController {
 				MailBundle ccBundle = mailManager.makeMailBundle(context, ureq.getIdentity(), mailTemplate, sender, metaId, result);
 				result.append(mailManager.sendMessage(ccBundle));
 			}
-			MailHelper.printErrorsAndWarnings(result, getWindowControl(), ureq.getUserSession().getRoles().isOLATAdmin(), ureq.getLocale());
+			Roles roles = ureq.getUserSession().getRoles();
+			boolean detailedErrorOutput = roles.isAdministrator() || roles.isSystemAdmin();
+			MailHelper.printErrorsAndWarnings(result, getWindowControl(), detailedErrorOutput, ureq.getLocale());
 		}
 	}
 
@@ -588,7 +590,9 @@ public class GroupController extends BasicController {
 				MailBundle ccBundle = mailManager.makeMailBundle(context, ureq.getIdentity(), mailTemplate, sender, metaId, result);
 				result.append(mailManager.sendMessage(ccBundle));
 			}
-			MailHelper.appendErrorsAndWarnings(result, errorMessage, infoMessage, ureq.getUserSession().getRoles().isOLATAdmin(), ureq.getLocale());
+			Roles roles = ureq.getUserSession().getRoles();
+			boolean detailedErrorOutput = roles.isAdministrator() || roles.isSystemAdmin();
+			MailHelper.appendErrorsAndWarnings(result, errorMessage, infoMessage, detailedErrorOutput, ureq.getLocale());
 		}
 		// report any errors on screen
 		if (infoMessage.length() > 0) getWindowControl().setWarning(infoMessage.toString());
@@ -654,11 +658,11 @@ public class GroupController extends BasicController {
 
 	public void reloadData() {
 		// refresh view		
-		List<Object[]> combo = securityManager.getIdentitiesAndDateOfSecurityGroup(securityGroup); 
-		List<GroupMemberView> views = new ArrayList<GroupMemberView>(combo.size());
-		Map<Long,GroupMemberView> idToViews = new HashMap<Long,GroupMemberView>();
+		List<Object[]> combo = securityGroupDao.getIdentitiesAndDateOfSecurityGroup(securityGroup); 
+		List<GroupMemberView> views = new ArrayList<>(combo.size());
+		Map<Long,GroupMemberView> idToViews = new HashMap<>();
 
-		Set<Long> loadStatus = new HashSet<Long>();
+		Set<Long> loadStatus = new HashSet<>();
 		for(Object[] co:combo) {
 			Identity identity = (Identity)co[0];
 			Date addedAt = (Date)co[1];
@@ -678,7 +682,7 @@ public class GroupController extends BasicController {
 		}
 		
 		if(loadStatus.size() > 0) {
-			List<Long> statusToLoadList = new ArrayList<Long>(loadStatus);
+			List<Long> statusToLoadList = new ArrayList<>(loadStatus);
 			Map<Long,String> statusMap = imService.getBuddyStatus(statusToLoadList);
 			for(Long toLoad:statusToLoadList) {
 				String status = statusMap.get(toLoad);

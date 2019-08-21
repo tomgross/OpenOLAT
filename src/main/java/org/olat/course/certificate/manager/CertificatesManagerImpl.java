@@ -30,9 +30,11 @@ import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.Collections;
 import java.util.Date;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Properties;
+import java.util.Set;
 import java.util.UUID;
 
 import javax.annotation.Resource;
@@ -49,23 +51,32 @@ import javax.jms.QueueSession;
 import javax.jms.Session;
 import javax.persistence.TypedQuery;
 
+import org.apache.logging.log4j.Logger;
 import org.apache.velocity.app.VelocityEngine;
-import org.apache.velocity.runtime.RuntimeConstants;
 import org.olat.admin.user.imp.TransientIdentity;
 import org.olat.basesecurity.BaseSecurity;
+import org.olat.basesecurity.BaseSecurityModule;
+import org.olat.basesecurity.GroupRoles;
 import org.olat.basesecurity.IdentityRef;
+import org.olat.basesecurity.IdentityRelationshipService;
+import org.olat.basesecurity.IdentityToIdentityRelation;
+import org.olat.basesecurity.OrganisationRoles;
+import org.olat.basesecurity.RelationRight;
+import org.olat.basesecurity.RelationSearchParams;
+import org.olat.basesecurity.SearchIdentityParams;
 import org.olat.core.commons.modules.bc.FolderModule;
-import org.olat.core.commons.modules.bc.vfs.OlatRootFolderImpl;
 import org.olat.core.commons.persistence.DB;
 import org.olat.core.commons.services.notifications.NotificationsManager;
 import org.olat.core.commons.services.notifications.PublisherData;
 import org.olat.core.commons.services.notifications.SubscriptionContext;
+import org.olat.core.commons.services.pdf.PdfModule;
+import org.olat.core.commons.services.pdf.PdfService;
 import org.olat.core.gui.translator.Translator;
 import org.olat.core.helpers.Settings;
 import org.olat.core.id.Identity;
+import org.olat.core.id.OrganisationRef;
 import org.olat.core.id.Roles;
 import org.olat.core.id.UserConstants;
-import org.olat.core.logging.OLog;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.FileUtils;
 import org.olat.core.util.Formatter;
@@ -74,7 +85,6 @@ import org.olat.core.util.Util;
 import org.olat.core.util.WebappHelper;
 import org.olat.core.util.coordinate.CoordinatorManager;
 import org.olat.core.util.i18n.I18nManager;
-import org.olat.core.util.mail.ContactList;
 import org.olat.core.util.mail.MailBundle;
 import org.olat.core.util.mail.MailManager;
 import org.olat.core.util.mail.MailerResult;
@@ -88,6 +98,7 @@ import org.olat.course.CorruptedCourseException;
 import org.olat.course.CourseFactory;
 import org.olat.course.ICourse;
 import org.olat.course.certificate.Certificate;
+import org.olat.course.certificate.CertificateEmailRightProvider;
 import org.olat.course.certificate.CertificateEvent;
 import org.olat.course.certificate.CertificateLight;
 import org.olat.course.certificate.CertificateStatus;
@@ -96,6 +107,7 @@ import org.olat.course.certificate.CertificatesManager;
 import org.olat.course.certificate.CertificatesModule;
 import org.olat.course.certificate.EmailStatus;
 import org.olat.course.certificate.RecertificationTimeUnit;
+import org.olat.course.certificate.model.CertificateConfig;
 import org.olat.course.certificate.model.CertificateImpl;
 import org.olat.course.certificate.model.CertificateInfos;
 import org.olat.course.certificate.model.CertificateStandalone;
@@ -106,10 +118,7 @@ import org.olat.course.config.CourseConfig;
 import org.olat.course.nodes.CourseNode;
 import org.olat.course.run.environment.CourseEnvironment;
 import org.olat.group.BusinessGroup;
-import org.olat.group.BusinessGroupService;
 import org.olat.group.manager.BusinessGroupRelationDAO;
-import org.olat.group.model.SearchBusinessGroupParams;
-import org.olat.modules.vitero.model.GroupRole;
 import org.olat.repository.RepositoryEntry;
 import org.olat.repository.RepositoryManager;
 import org.olat.repository.RepositoryService;
@@ -137,12 +146,16 @@ import uk.ac.reload.diva.util.ZipUtils;
 public class CertificatesManagerImpl implements CertificatesManager, MessageListener,
 		InitializingBean, DisposableBean, UserDataExportable {
 	
-	private static final OLog log = Tracing.createLoggerFor(CertificatesManagerImpl.class);
+	private static final Logger log = Tracing.createLoggerFor(CertificatesManagerImpl.class);
 
 	private VelocityEngine velocityEngine;
 	
 	@Autowired
 	private DB dbInstance;
+	@Autowired
+	private PdfModule pdfModule;
+	@Autowired
+	private PdfService pdfService;
 	@Autowired
 	private I18nManager i18nManager;
 	@Autowired
@@ -152,11 +165,13 @@ public class CertificatesManagerImpl implements CertificatesManager, MessageList
 	@Autowired
 	private BaseSecurity securityManager;
 	@Autowired
+	private BaseSecurityModule baseSecurityModule;
+	@Autowired
+	private IdentityRelationshipService identityRelationshipService;
+	@Autowired
 	private RepositoryService repositoryService;
 	@Autowired
 	private RepositoryManager repositoryManager;
-	@Autowired
-	private BusinessGroupService businessGroupService;
 	@Autowired
 	private BusinessGroupRelationDAO businessGroupRelationDao;
 	@Autowired
@@ -189,15 +204,12 @@ public class CertificatesManagerImpl implements CertificatesManager, MessageList
 		getCertificateRoot();
 		usersStorage = new FileStorage(getCertificateRootContainer());
 		
-		Properties p = null;
+		Properties p = new Properties();
 		try {
 			velocityEngine = new VelocityEngine();
-			p = new Properties();
-			p.setProperty(RuntimeConstants.RUNTIME_LOG_LOGSYSTEM_CLASS, "org.apache.velocity.runtime.log.SimpleLog4JLogSystem");
-			p.setProperty("runtime.log.logsystem.log4j.category", "syslog");
 			velocityEngine.init(p);
 		} catch (Exception e) {
-			throw new RuntimeException("config error " + p.toString());
+			throw new RuntimeException("config error " + p);
 		}
 		
 		//deploy script
@@ -262,6 +274,10 @@ public class CertificatesManagerImpl implements CertificatesManager, MessageList
 
 	@Override
 	public boolean isHTMLTemplateAllowed() {
+		return pdfModule.isEnabled() || isPhantomAvailable();
+	}
+
+	private boolean isPhantomAvailable() {
 		if(phantomAvailable == null) {
 			phantomAvailable = CertificatePhantomWorker.checkPhantomJSAvailabilty();
 		}
@@ -272,15 +288,13 @@ public class CertificatesManagerImpl implements CertificatesManager, MessageList
 	public SubscriptionContext getSubscriptionContext(ICourse course) {
 		CourseNode cn = course.getRunStructure().getRootNode();
 		CourseEnvironment ce = course.getCourseEnvironment();
-		SubscriptionContext ctxt = new SubscriptionContext(ORES_CERTIFICATE, ce.getCourseResourceableId(), cn.getIdent());
-		return ctxt;
+		return new SubscriptionContext(ORES_CERTIFICATE, ce.getCourseResourceableId(), cn.getIdent());
 	}
 
 	@Override
 	public PublisherData getPublisherData(ICourse course, String businessPath) {
 		String data = String.valueOf(course.getCourseEnvironment().getCourseResourceableId());
-		PublisherData pData = new PublisherData(ORES_CERTIFICATE, data, businessPath);
-		return pData;
+		return new PublisherData(ORES_CERTIFICATE, data, businessPath);
 	}
 
 	@Override
@@ -388,7 +402,7 @@ public class CertificatesManagerImpl implements CertificatesManager, MessageList
 				.setFirstResult(0)
 				.setMaxResults(1)
 				.getResultList();
-		return certififcates != null && certififcates.size() > 0;
+		return certififcates != null && !certififcates.isEmpty();
 	}
 
 	@Override
@@ -421,7 +435,7 @@ public class CertificatesManagerImpl implements CertificatesManager, MessageList
 	public List<Certificate> getCertificatesForNotifications(Identity identity, RepositoryEntry entry, Date lastNews) {
 		Roles roles = securityManager.getRoles(identity);
 		RepositoryEntrySecurity security = repositoryManager.isAllowed(identity, roles, entry);
-		if(!security.isEntryAdmin() && !security.isCourseCoach() && !security.isGroupCoach() && !security.isCourseParticipant() && !security.isGroupParticipant()) {
+		if(!security.isEntryAdmin() && !security.isCoach() && !security.isParticipant()) {
 			return Collections.emptyList();
 		}
 
@@ -431,36 +445,19 @@ public class CertificatesManagerImpl implements CertificatesManager, MessageList
 		  .append(" where cer.olatResource.key=:resourceKey and cer.last=true ");
 		//must be some kind of restrictions
 		boolean securityCheck = false;
-		List<Long> baseGroupKeys = null;
 		if(!security.isEntryAdmin()) {
 			sb.append(" and (");
 			boolean or = false;
-			if(security.isCourseCoach()) {
+			if(security.isCoach()) {
 				or = or(sb, or);
-				sb.append(" exists (select membership.identity.key from repoentrytogroup as rel, bgroup as reBaseGroup, bgroupmember membership ")
-				  .append("   where ident.key=membership.identity.key and rel.entry.key=:repoKey and rel.group=reBaseGroup and membership.group=reBaseGroup and membership.role='").append(GroupRole.participant).append("'")
-				  .append(" )");
+				sb.append(" exists (select participant.identity.key from repoentrytogroup as rel, bgroupmember as participant, bgroupmember as coach")
+				  .append("    where rel.entry.key=:repoEntryKey")
+		          .append("      and rel.group.key=coach.group.key and coach.role='").append(GroupRoles.coach.name()).append("' and coach.identity.key=:identityKey")
+		          .append("      and rel.group.key=participant.group.key and participant.identity.key=ident.key and participant.role='").append(GroupRoles.participant.name()).append("'")
+		          .append(" )");
 				securityCheck = true;
 			}
-			
-			if(security.isGroupCoach()) {
-				SearchBusinessGroupParams params = new SearchBusinessGroupParams(identity, true, false);
-				List<BusinessGroup> groups = businessGroupService.findBusinessGroups(params, entry, 0, -1);
-				if(groups.size() > 0) {
-					or = or(sb, or);
-					sb.append(" exists (select membership.identity.key from bgroupmember membership ")
-					  .append("   where ident.key=membership.identity.key and membership.group.key in (:groups) and membership.role='").append(GroupRole.participant).append("'")
-					  .append(" )");
-					
-					baseGroupKeys = new ArrayList<>(groups.size());
-					for(BusinessGroup group:groups) {
-						baseGroupKeys.add(group.getBaseGroup().getKey());
-					}
-					securityCheck = true;
-				}
-			}
-			
-			if(security.isCourseParticipant() || security.isGroupParticipant()) {
+			if(security.isParticipant()) {
 				or = or(sb, or);
 				sb.append(" ident.key=:identityKey");
 				securityCheck = true;
@@ -477,20 +474,15 @@ public class CertificatesManagerImpl implements CertificatesManager, MessageList
 		TypedQuery<Certificate> certificates = dbInstance.getCurrentEntityManager()
 				.createQuery(sb.toString(), Certificate.class)
 				.setParameter("resourceKey", entry.getOlatResource().getKey());
-		
 		if(!security.isEntryAdmin()) {
-			if(security.isCourseCoach()) {
-				certificates.setParameter("repoKey", entry.getKey());
+			if(security.isCoach()) {
+				certificates.setParameter("repoEntryKey", entry.getKey());
 			}
-			
-			if(security.isCourseParticipant() || security.isGroupParticipant()) {
+			if(security.isCoach() || security.isParticipant()) {
 				certificates.setParameter("identityKey", identity.getKey());
 			}
 		}
-		
-		if(baseGroupKeys != null && !baseGroupKeys.isEmpty()) {
-			certificates.setParameter("groups", baseGroupKeys);
-		}
+
 		return certificates.getResultList();
 	}
 	
@@ -609,11 +601,9 @@ public class CertificatesManagerImpl implements CertificatesManager, MessageList
 				case month: cal.add(Calendar.MONTH, time); break;
 				case year: cal.add(Calendar.YEAR, time); break;
 			}
-			Date nextCertification = cal.getTime();
-			return nextCertification;
-		} else {
-			return null;
+			return cal.getTime();
 		}		
+		return null;
 	}
 
 	
@@ -634,7 +624,7 @@ public class CertificatesManagerImpl implements CertificatesManager, MessageList
 		//reorder the last flag
 		List<Certificate> certificates = getCertificates(relaodedCertificate.getIdentity(), relaodedCertificate.getOlatResource());
 		certificates.remove(relaodedCertificate);
-		if(certificates.size() > 0) {
+		if(!certificates.isEmpty()) {
 			boolean hasLast = false;
 			for(Certificate cer:certificates) {
 				if(((CertificateImpl)cer).isLast()) {
@@ -730,10 +720,10 @@ public class CertificatesManagerImpl implements CertificatesManager, MessageList
 
 	@Override
 	public void generateCertificates(List<CertificateInfos> certificateInfos, RepositoryEntry entry,
-			CertificateTemplate template, boolean sendMail) {
+			CertificateTemplate template, CertificateConfig config) {
 		int count = 0;
 		for(CertificateInfos certificateInfo:certificateInfos) {
-			generateCertificate(certificateInfo, entry, template, sendMail);
+			generateCertificate(certificateInfo, entry, template, config);
 			if(++count % 10 == 0) {
 				dbInstance.commitAndCloseSession();
 			}
@@ -742,26 +732,35 @@ public class CertificatesManagerImpl implements CertificatesManager, MessageList
 	}
 
 	@Override
-	public File previewCertificate(CertificateTemplate template, RepositoryEntry entry, Locale locale) {
+	public File previewCertificate(CertificateTemplate template, RepositoryEntry entry, Locale locale, String custom1,
+			String custom2, String custom3) {
 		Identity identity = getPreviewIdentity();
 		
 		File certificateFile;
 		File dirFile = new File(WebappHelper.getTmpDir(), UUID.randomUUID().toString());
+		dirFile.mkdirs();
+		
 		StringBuilder sb = new StringBuilder();
 		sb.append(Settings.getServerContextPathURI()).append("/certificate/")
 		  .append(UUID.randomUUID()).append("/preview.pdf");
-		 String certUrl = sb.toString();
+		String certUrl = sb.toString();
+		
 		if(template == null) {
 			CertificatePDFFormWorker worker = new CertificatePDFFormWorker(identity, entry, 2.0f, true,
-					new Date(), new Date(), new Date(), certUrl, locale, userManager, this);
+					new Date(), new Date(), new Date(), custom1, custom2, custom3, certUrl, locale, userManager, this);
 			certificateFile = worker.fill(null, dirFile, "Certificate.pdf");
 		} else if(template.getPath().toLowerCase().endsWith("pdf")) {
 			CertificatePDFFormWorker worker = new CertificatePDFFormWorker(identity, entry, 2.0f, true,
-					new Date(), new Date(), new Date(), certUrl, locale, userManager, this);
+					new Date(), new Date(), new Date(), custom1, custom2, custom3, certUrl, locale, userManager, this);
+			certificateFile = worker.fill(template, dirFile, "Certificate.pdf");
+		} else if (pdfModule.isEnabled()) {
+			CertificatePdfServiceWorker worker = new CertificatePdfServiceWorker(identity, entry, 2.0f, true,
+					new Date(), new Date(),new Date(), custom1, custom2, custom3, certUrl, locale,
+					userManager, this, pdfService);
 			certificateFile = worker.fill(template, dirFile, "Certificate.pdf");
 		} else {
-			CertificatePhantomWorker worker = new CertificatePhantomWorker(identity, entry, 2.0f, true,
-					new Date(), new Date(),new Date(),  certUrl, locale, userManager, this);
+			CertificatePhantomWorker worker = new CertificatePhantomWorker(identity, entry, 2.0f, true, new Date(),
+					new Date(), new Date(), custom1, custom2, custom3, certUrl, locale, userManager, this);
 			certificateFile = worker.fill(template, dirFile, "Certificate.pdf");
 		}
 		return certificateFile;
@@ -783,14 +782,14 @@ public class CertificatesManagerImpl implements CertificatesManager, MessageList
 
 	@Override
 	public Certificate generateCertificate(CertificateInfos certificateInfos, RepositoryEntry entry,
-			CertificateTemplate template, boolean sendMail) {
-		Certificate certificate = persistCertificate(certificateInfos, entry, template, sendMail);
+			CertificateTemplate template, CertificateConfig config) {
+		Certificate certificate = persistCertificate(certificateInfos, entry, template, config);
 		markPublisherNews(null, entry.getOlatResource());
 		return certificate;
 	}
 
 	private Certificate persistCertificate(CertificateInfos certificateInfos, RepositoryEntry entry,
-			CertificateTemplate template, boolean sendMail) {
+			CertificateTemplate template, CertificateConfig config) {
 		OLATResource resource = entry.getOlatResource();
 		Identity identity = certificateInfos.getAssessedIdentity();
 		
@@ -816,7 +815,7 @@ public class CertificatesManagerImpl implements CertificatesManager, MessageList
 		dbInstance.commit();
 		
 		//send message
-		sendJmsCertificateFile(certificate, template, certificateInfos.getScore(), certificateInfos.getPassed(), sendMail);
+		sendJmsCertificateFile(certificate, template, certificateInfos.getScore(), certificateInfos.getPassed(), config);
 
 		return certificate;
 	}
@@ -825,7 +824,7 @@ public class CertificatesManagerImpl implements CertificatesManager, MessageList
 		return velocityEngine;
 	}
 	
-	private void sendJmsCertificateFile(Certificate certificate, CertificateTemplate template, Float score, Boolean passed, boolean sendMail) {
+	private void sendJmsCertificateFile(Certificate certificate, CertificateTemplate template, Float score, Boolean passed, CertificateConfig config) {
 		QueueSender sender;
 		QueueSession session = null;
 		try  {
@@ -836,16 +835,16 @@ public class CertificatesManagerImpl implements CertificatesManager, MessageList
 			}
 			workUnit.setPassed(passed);
 			workUnit.setScore(score);
-			workUnit.setSendMail(sendMail);
+			workUnit.setConfig(config);
 			
-			session = connection.createQueueSession(false, QueueSession.AUTO_ACKNOWLEDGE );
+			session = connection.createQueueSession(false, QueueSession.AUTO_ACKNOWLEDGE);
 			ObjectMessage message = session.createObjectMessage();
 			message.setObject(workUnit);
 
 			sender = session.createSender(getJmsQueue());
 			sender.send( message );
 		} catch (JMSException e) {
-			log.error("", e );
+			log.error("", e);
 		} finally {
 			if(session != null) {
 				try {
@@ -894,6 +893,9 @@ public class CertificatesManagerImpl implements CertificatesManager, MessageList
 		Date dateCertification = certificate.getCreationDate();
 		Date dateFirstCertification = getDateFirstCertification(identity, resource.getKey());
 		Date dateNextRecertification = certificate.getNextRecertificationDate();
+		String custom1 = workUnit.getConfig().getCustom1();
+		String custom2 = workUnit.getConfig().getCustom2();
+		String custom3 = workUnit.getConfig().getCustom3();
 		
 		File certificateFile;
 		// File name with user name
@@ -911,8 +913,8 @@ public class CertificatesManagerImpl implements CertificatesManager, MessageList
 		
 		if(template == null || template.getPath().toLowerCase().endsWith("pdf")) {
 			CertificatePDFFormWorker worker = new CertificatePDFFormWorker(identity, entry, score, passed,
-					dateCertification, dateFirstCertification, dateNextRecertification, certUrl, locale,
-					userManager, this);
+					dateCertification, dateFirstCertification, dateNextRecertification, custom1, custom2, custom3,
+					certUrl, locale, userManager, this);
 			certificateFile = worker.fill(template, dirFile, filename);
 			if(certificateFile == null) {
 				certificate.setStatus(CertificateStatus.error);
@@ -920,10 +922,17 @@ public class CertificatesManagerImpl implements CertificatesManager, MessageList
 				certificate.setStatus(CertificateStatus.ok);
 			}
 		} else {
-			CertificatePhantomWorker worker = new CertificatePhantomWorker(identity, entry, score, passed,
-					dateCertification, dateFirstCertification, dateNextRecertification, certUrl, locale,
-					userManager, this);
-			certificateFile = worker.fill(template, dirFile, filename);
+			if(pdfModule.isEnabled()) {
+				CertificatePdfServiceWorker worker = new CertificatePdfServiceWorker(identity, entry, score, passed,
+						dateCertification, dateFirstCertification, dateNextRecertification, custom1, custom2, custom3,
+						certUrl, locale, userManager, this, pdfService);
+				certificateFile = worker.fill(template, dirFile, filename);
+			} else {
+				CertificatePhantomWorker worker = new CertificatePhantomWorker(identity, entry, score, passed,
+						dateCertification, dateFirstCertification, dateNextRecertification, custom1, custom2, custom3,
+						certUrl, locale, userManager, this);
+				certificateFile = worker.fill(template, dirFile, filename);
+			}
 			if(certificateFile == null) {
 				certificate.setStatus(CertificateStatus.error);
 			} else {
@@ -936,7 +945,7 @@ public class CertificatesManagerImpl implements CertificatesManager, MessageList
 			//not the first certification, reset the last of the others certificates
 			removeLastFlag(identity, resource.getKey());
 		}
-		MailerResult result = sendCertificate(identity, entry, certificateFile);
+		MailerResult result = sendCertificate(identity, entry, certificateFile, workUnit.getConfig());
 		if(result.isSuccessful()) {
 			certificate.setEmailStatus(EmailStatus.ok);
 		} else {
@@ -949,18 +958,17 @@ public class CertificatesManagerImpl implements CertificatesManager, MessageList
 		coordinatorManager.getCoordinator().getEventBus().fireEventToListenersOf(event, ORES_CERTIFICATE_EVENT);
 	}
 	
+	private MailerResult sendCertificate(Identity to, RepositoryEntry entry, File certificateFile, CertificateConfig config) {
+		MailerResult mailerResult = sendCertificate(to, entry, certificateFile);
+		sendCertificateCopies(to, entry, certificateFile, config);
+		return mailerResult;
+	}
+
 	private MailerResult sendCertificate(Identity to, RepositoryEntry entry, File certificateFile) {
 		MailBundle bundle = new MailBundle();
 		bundle.setToId(to);
 		bundle.setFrom(WebappHelper.getMailConfig("mailReplyTo"));
 		
-		List<String> bccs = certificatesModule.getCertificatesBccEmails();
-		if(bccs.size() > 0) {
-			ContactList bcc = new ContactList();
-			bccs.forEach(email -> { bcc.add(email); });
-			bundle.setContactList(bcc);
-		}
-
 		String[] args = new String[] {
 			entry.getDisplayname(),
 			userManager.getUserDisplayName(to)
@@ -975,6 +983,71 @@ public class CertificatesManagerImpl implements CertificatesManager, MessageList
 		return mailManager.sendMessage(bundle);
 	}
 	
+	private void sendCertificateCopies(Identity to, RepositoryEntry entry, File certificateFile, CertificateConfig config) {
+		String entryDisplayName = entry.getDisplayname();
+		String toDisplayName = userManager.getUserDisplayName(to);
+		String toUserLanguage = to.getUser().getPreferences().getLanguage();
+
+		List<MailBundle> mailBundles = new ArrayList<>();
+		List<String> bccs = certificatesModule.getCertificatesBccEmails();
+		if(config.isSendEmailBcc()) {
+			for (String bcc : bccs) {
+				MailBundle bundle = createCopyMailBundle(certificateFile, toUserLanguage, entryDisplayName, toDisplayName);
+				bundle.setTo(bcc);
+				mailBundles.add(bundle);
+			}
+		}
+		
+		Set<Identity> copiesTo = new HashSet<>();
+		if (config.isSendEmailLinemanager() && certificatesModule.isCertificateLinemanager()) {
+			List<Identity> linemanagers = getLinemanagers(to);
+			copiesTo.addAll(linemanagers);
+		}
+		if (config.isSendEmailIdentityRelations() && baseSecurityModule.isRelationRoleEnabled()) {
+			RelationSearchParams searchParams = new RelationSearchParams();
+			RelationRight right = identityRelationshipService.getRelationRightByRight(CertificateEmailRightProvider.RELATION_RIGHT);
+			searchParams.setRight(right);
+			List<IdentityToIdentityRelation> relationTargets = identityRelationshipService.getRelationsAsTarget(to, searchParams);
+			relationTargets.forEach(target -> { copiesTo.add( target.getSource()); });
+		}
+		
+		for (Identity copyTo : copiesTo) {
+			String language = copyTo.getUser().getPreferences().getLanguage();
+			MailBundle bundle = createCopyMailBundle(certificateFile, language, entryDisplayName, toDisplayName);
+			bundle.setToId(copyTo);
+			mailBundles.add(bundle);
+		}
+		
+		for (MailBundle mailBundle : mailBundles) {
+			mailManager.sendMessage(mailBundle);
+		}
+	}
+
+	private MailBundle createCopyMailBundle(File certificateFile, String language, String entryDisplayName, String toDisplayName) {
+		String[] args = new String[] {
+				entryDisplayName,
+				toDisplayName
+		};
+		MailBundle bundle = new MailBundle();
+		bundle.setFrom(WebappHelper.getMailConfig("mailReplyTo"));
+		Locale locale = i18nManager.getLocaleOrDefault(language);
+		Translator translator = Util.createPackageTranslator(CertificateController.class, locale);
+		String subject = translator.translate("certification.email.copy.subject", args);
+		String body = translator.translate("certification.email.copy.body", args);
+		bundle.setContent(subject, body, certificateFile);
+		return bundle;
+	}
+	
+	private List<Identity> getLinemanagers(Identity identity) {
+		Roles roles = securityManager.getRoles(identity);
+		List<OrganisationRef> identityOrgs = roles.getOrganisationsWithRole(OrganisationRoles.user);
+		SearchIdentityParams identityParams = new SearchIdentityParams();
+		identityParams.setOrganisations(identityOrgs);
+		identityParams.setRoles(new OrganisationRoles[]{ OrganisationRoles.linemanager });
+		identityParams.setStatus(Identity.STATUS_VISIBLE_LIMIT);
+		return securityManager.getIdentitiesByPowerSearch(identityParams, 0, -1);
+	}
+
 	private Date getDateFirstCertification(Identity identity, Long resourceKey) {
 		StringBuilder sb = new StringBuilder();
 		sb.append("select cer.creationDate from certificate cer")
@@ -1009,6 +1082,7 @@ public class CertificatesManagerImpl implements CertificatesManager, MessageList
 				.getResultList();
 	}
 	
+	@Override
 	public CertificateTemplate getTemplateById(Long key) {
 		String sb = "select template from certificatetemplate template where template.key=:templateKey";
 		List<CertificateTemplate> templates = dbInstance.getCurrentEntityManager()
@@ -1147,6 +1221,7 @@ public class CertificatesManagerImpl implements CertificatesManager, MessageList
 		return templateItem instanceof VFSLeaf ? (VFSLeaf)templateItem : null;
 	}
 	
+	@Override
 	public InputStream getDefaultTemplate() {
 		return CertificatesManager.class.getResourceAsStream("template.pdf");
 	}
@@ -1161,7 +1236,7 @@ public class CertificatesManagerImpl implements CertificatesManager, MessageList
 	}
 	
 	public VFSContainer getCertificateTemplatesRootContainer() {
-		return new OlatRootFolderImpl(File.separator + "certificates" + File.separator + "templates", null);
+		return VFSManager.olatRootContainer(File.separator + "certificates" + File.separator + "templates", null);
 	}
 	
 	public File getCertificateRoot() {
@@ -1182,7 +1257,7 @@ public class CertificatesManagerImpl implements CertificatesManager, MessageList
 	}
 	
 	public VFSContainer getCertificateRootContainer() {
-		return new OlatRootFolderImpl(File.separator + "certificates" + File.separator + "users", null);
+		return VFSManager.olatRootContainer(File.separator + "certificates" + File.separator + "users", null);
 	}
 
 	@Override

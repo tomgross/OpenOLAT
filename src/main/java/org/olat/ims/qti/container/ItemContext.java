@@ -33,6 +33,7 @@ import java.util.List;
 
 import org.dom4j.DocumentHelper;
 import org.dom4j.Element;
+import org.dom4j.Node;
 import org.dom4j.XPath;
 import org.olat.ims.qti.QTIConstants;
 import org.olat.ims.qti.container.qtielements.Item;
@@ -196,7 +197,7 @@ public class ItemContext implements Serializable {
 		//	<!ELEMENT render_choice ((material | material_ref | response_label |
 		// flow_label)* ,response_na?)>
 		// <!ATTLIST response_label rshuffle (Yes | No ) 'Yes' .....
-		List<?> el_labels = el_rendchoice.selectNodes(".//response_label[@rshuffle=\"Yes\"]");
+		List<Node> el_labels = el_rendchoice.selectNodes(".//response_label[@rshuffle=\"Yes\"]");
 		int shusize = el_labels.size();
 
 		// set up a list of children with their parents and the position of the
@@ -206,10 +207,10 @@ public class ItemContext implements Serializable {
 		int[] posList = new int[shusize];
 		int j = 0;
 
-		for (Iterator<?> responses = el_labels.iterator(); responses.hasNext();) {
+		for (Iterator<Node> responses = el_labels.iterator(); responses.hasNext();) {
 			Element response = (Element) responses.next();
 			Element parent = response.getParent();
-			int pos = parent.indexOf(response);
+			int pos = parent.elements().indexOf(response);
 			posList[j++] = pos;
 			respList.add((Element)response.clone()); // need to use clones so they are not attached anymore
 			parentList.add(parent);
@@ -221,8 +222,12 @@ public class ItemContext implements Serializable {
 			int pos = posList[i];
 			Element child = respList.get(i);
 			@SuppressWarnings("unchecked")
-			List<Object> siblings = parent.elements();
-			siblings.set(pos, child);
+			List<Element> elements = parent.elements();
+			if(pos < elements.size()) {
+				elements.set(pos, child);
+			} else {
+				elements.add(child);
+			}
 		}
 		return shuffleItem;
 	}

@@ -36,8 +36,10 @@ import org.junit.Test;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 import org.olat.basesecurity.BaseSecurity;
-import org.olat.basesecurity.Constants;
+import org.olat.basesecurity.OrganisationRoles;
+import org.olat.basesecurity.OrganisationService;
 import org.olat.basesecurity.SecurityGroup;
+import org.olat.basesecurity.manager.SecurityGroupDAO;
 import org.olat.core.id.Identity;
 import org.olat.core.id.Preferences;
 import org.olat.core.id.User;
@@ -61,6 +63,8 @@ public class ShibbolethManagerImplTest {
 	@Mock
 	private BaseSecurity securityManagerMock;
 	@Mock
+	private SecurityGroupDAO securityGroupDaoMock;
+	@Mock
 	private SecurityGroup securityGroupOlatusersMock;
 	@Mock
 	private SecurityGroup securityGroupAuthorMock;
@@ -68,6 +72,8 @@ public class ShibbolethManagerImplTest {
 	private UserManager userManagerMock;
 	@Mock
 	private AutoAccessManager autoAccessManagerMock;
+	@Mock
+	private OrganisationService organisationServiceMock;
 	@Mock
 	private ShibbolethAdvanceOrderInput advanceOrderInputMock;
 	@Mock
@@ -88,11 +94,8 @@ public class ShibbolethManagerImplTest {
 		ReflectionTestUtils.setField(sut, "acModule", acModuleMock);
 		ReflectionTestUtils.setField(sut, "autoAccessManager", autoAccessManagerMock);
 		ReflectionTestUtils.setField(sut, "userManager", userManagerMock);
+		ReflectionTestUtils.setField(sut, "organisationService", organisationServiceMock);
 
-		when(securityManagerMock.findSecurityGroupByName(Constants.GROUP_OLATUSERS))
-				.thenReturn(securityGroupOlatusersMock);
-		when(securityManagerMock.findSecurityGroupByName(Constants.GROUP_AUTHORS))
-				.thenReturn(securityGroupAuthorMock);
 		when(securityManagerMock.createAndPersistIdentityAndUser(anyString(), isNull(), any(User.class), anyString(), anyString()))
 				.thenReturn(identityMock);
 		when(userManagerMock.createUser(null, null, null)).thenReturn(userMock);
@@ -114,7 +117,7 @@ public class ShibbolethManagerImplTest {
 	public void shouldAddNewUserToUsersGroup() {
 		sut.createUser(anyString(), anyString(), anyString(), attributesMock);
 
-		verify(securityManagerMock).addIdentityToSecurityGroup(identityMock, securityGroupOlatusersMock);
+		verify(organisationServiceMock).addMember(identityMock, OrganisationRoles.user);
 	}
 
 	@Test
@@ -123,7 +126,7 @@ public class ShibbolethManagerImplTest {
 
 		sut.createUser(anyString(), anyString(), anyString(), attributesMock);
 
-		verify(securityManagerMock).addIdentityToSecurityGroup(identityMock, securityGroupAuthorMock);
+		verify(organisationServiceMock).addMember(identityMock, OrganisationRoles.author);
 	}
 
 	@Test
@@ -132,7 +135,7 @@ public class ShibbolethManagerImplTest {
 
 		sut.syncUser(identityMock, attributesMock);
 
-		verify(securityManagerMock).addIdentityToSecurityGroup(identityMock, securityGroupAuthorMock);
+		verify(organisationServiceMock).addMember(identityMock, OrganisationRoles.author);
 	}
 
 	@Test
@@ -141,7 +144,7 @@ public class ShibbolethManagerImplTest {
 
 		sut.syncUser(identityMock, attributesMock);
 
-		verify(securityManagerMock, never()).removeIdentityFromSecurityGroup(identityMock, securityGroupAuthorMock);
+		verify(securityGroupDaoMock, never()).removeIdentityFromSecurityGroup(identityMock, securityGroupAuthorMock);
 	}
 
 	@Test

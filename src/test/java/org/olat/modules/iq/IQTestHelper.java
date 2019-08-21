@@ -22,13 +22,16 @@ package org.olat.modules.iq;
 import java.util.Calendar;
 import java.util.Date;
 
+import org.olat.basesecurity.OrganisationService;
 import org.olat.core.CoreSpringFactory;
 import org.olat.core.commons.persistence.DB;
 import org.olat.core.commons.persistence.DBFactory;
 import org.olat.core.id.Identity;
+import org.olat.core.id.Organisation;
 import org.olat.ims.qti.QTIResult;
 import org.olat.ims.qti.QTIResultSet;
 import org.olat.repository.RepositoryEntry;
+import org.olat.repository.RepositoryEntryStatusEnum;
 import org.olat.repository.RepositoryService;
 import org.olat.resource.OLATResource;
 import org.olat.resource.OLATResourceManager;
@@ -101,8 +104,10 @@ public class IQTestHelper {
 		OLATResource r =  CoreSpringFactory.getImpl(OLATResourceManager.class).createOLATResourceInstance("QTIStatisticsTest");
 		dbInstance.getCurrentEntityManager().persist(r);
 		dbInstance.commit();
-
-		RepositoryEntry d = CoreSpringFactory.getImpl(RepositoryService.class).create("Rei Ayanami", "QTIStatisticsTest", "QTIStatisticsTest", "Repo entry", r);
+		
+		Organisation defOrganisation = CoreSpringFactory.getImpl(OrganisationService.class).getDefaultOrganisation();
+		RepositoryEntry d = CoreSpringFactory.getImpl(RepositoryService.class).create(null, "Rei Ayanami", "QTIStatisticsTest", "QTIStatisticsTest", "Repo entry", r,
+						RepositoryEntryStatusEnum.trash, defOrganisation);
 		d.setOlatResource(r);
 		dbInstance.getCurrentEntityManager().persist(d);
 		dbInstance.commit();

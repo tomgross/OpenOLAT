@@ -51,7 +51,6 @@ public class SearchAuthorRepositoryEntryViewParams {
 	private OrderBy orderBy;
 	private boolean orderByAsc;
 	private List<String> resourceTypes;
-	private List<Long> repoEntryKeys;
 	private Set<Long> licenseTypeKeys;
 	
 	public SearchAuthorRepositoryEntryViewParams(IdentityRef identity, Roles roles) {
@@ -107,14 +106,6 @@ public class SearchAuthorRepositoryEntryViewParams {
 		this.description = description;
 	}
 
-	public List<Long> getRepoEntryKeys() {
-		return repoEntryKeys;
-	}
-
-	public void setRepoEntryKeys(List<Long> repoEntryKeys) {
-		this.repoEntryKeys = repoEntryKeys;
-	}
-
 	public OrderBy getOrderBy() {
 		return orderBy;
 	}
@@ -132,7 +123,7 @@ public class SearchAuthorRepositoryEntryViewParams {
 	}
 
 	public boolean isResourceTypesDefined() {
-		return resourceTypes != null && resourceTypes.size() > 0;
+		return resourceTypes != null && !resourceTypes.isEmpty();
 	}
 
 	public List<String> getResourceTypes() {
@@ -145,7 +136,7 @@ public class SearchAuthorRepositoryEntryViewParams {
 	
 	public void addResourceTypes(String... types) {
 		if(this.resourceTypes == null) {
-			this.resourceTypes = new ArrayList<String>();
+			this.resourceTypes = new ArrayList<>();
 		}
 		if(types != null) {
 			for(String resourceType:types) {
@@ -202,8 +193,8 @@ public class SearchAuthorRepositoryEntryViewParams {
 		return licenseTypeKeys;
 	}
 
-	public void setLicneseTypeKeys(Set<Long> licneseTypeKeys) {
-		this.licenseTypeKeys = licneseTypeKeys;
+	public void setLicenseTypeKeys(Set<Long> licenseTypeKeys) {
+		this.licenseTypeKeys = licenseTypeKeys;
 	}
 
 	public enum OrderBy {
@@ -227,7 +218,9 @@ public class SearchAuthorRepositoryEntryViewParams {
 		lifecycleEnd,
 		references,
 		deletionDate,
-		deletedBy
+		deletedBy,
+		lectureEnabled,
+		guests
 	}
 	
 	public enum ResourceUsage {

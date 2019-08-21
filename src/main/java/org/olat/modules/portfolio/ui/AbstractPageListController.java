@@ -64,6 +64,7 @@ import org.olat.core.gui.control.generic.closablewrapper.CloseableModalControlle
 import org.olat.core.gui.control.generic.dtabs.Activateable2;
 import org.olat.core.gui.control.generic.modal.DialogBoxController;
 import org.olat.core.gui.control.generic.modal.DialogBoxUIFactory;
+import org.olat.core.gui.control.winmgr.ScrollTopCommand;
 import org.olat.core.gui.media.FileMediaResource;
 import org.olat.core.gui.media.MediaResource;
 import org.olat.core.gui.media.NotFoundMediaResource;
@@ -93,6 +94,7 @@ import org.olat.modules.portfolio.ui.component.CategoriesCellRenderer;
 import org.olat.modules.portfolio.ui.component.TimelineElement;
 import org.olat.modules.portfolio.ui.event.PageDeletedEvent;
 import org.olat.modules.portfolio.ui.event.PageRemovedEvent;
+import org.olat.modules.portfolio.ui.event.SelectPageEvent;
 import org.olat.modules.portfolio.ui.model.PortfolioElementRow;
 import org.olat.modules.portfolio.ui.model.ReadOnlyCommentsSecurityCallback;
 import org.olat.modules.portfolio.ui.renderer.PortfolioElementCellRenderer;
@@ -114,19 +116,22 @@ implements Activateable2, TooledController, FlexiTableComponentDelegate {
 	public static final int PICTURE_HEIGHT = 230 * 2 ; 	// max size for large images, see CSS, x2 for high res displays
 
 	protected TimelineElement timelineEl;
-	private FormLink timelineSwitchOnButton, timelineSwitchOffButton;
+	private FormLink timelineSwitchOnButton;
+	private FormLink timelineSwitchOffButton;
 	
 	protected FlexiTableElement tableEl;
 	protected PageListDataModel model;
 	protected final TooledStackedPanel stackPanel;
 	protected final VelocityContainer rowVC;
 	
-	private PageRunController pageCtrl;
+	protected PageRunController pageCtrl;
 	private CloseableModalController cmc;
 	private UserCommentsController commentsCtrl;
 	private AssignmentEditController editAssignmentCtrl;
 	private AssignmentMoveController moveAssignmentCtrl;
-	private DialogBoxController confirmCloseSectionCtrl, confirmReopenSectionCtrl, confirmDeleteAssignmentCtrl;
+	private DialogBoxController confirmCloseSectionCtrl;
+	private DialogBoxController confirmReopenSectionCtrl;
+	private DialogBoxController confirmDeleteAssignmentCtrl;
 	
 	protected int counter;
 	protected final boolean withSections;
@@ -328,7 +333,7 @@ implements Activateable2, TooledController, FlexiTableComponentDelegate {
 	
 	protected void disposeRows() {
 		List<PortfolioElementRow> rows = model.getObjects();
-		if(rows != null && rows.size() > 0) {
+		if(rows != null && !rows.isEmpty()) {
 			for(PortfolioElementRow row:rows) {
 				if(row.getPoster() != null) {
 					row.getPoster().dispose();
@@ -513,7 +518,7 @@ implements Activateable2, TooledController, FlexiTableComponentDelegate {
 	private List<String> getCategories(OLATResourceable ores, Map<OLATResourceable,List<Category>> categorizedElementMap) {
 		List<String> strings = null;
 		List<Category> categories = categorizedElementMap.get(ores);
-		if(categories != null && categories.size() > 0) {
+		if(categories != null && !categories.isEmpty()) {
 			strings = new ArrayList<>(categories.size());
 			for(Category category:categories) {
 				strings.add(category.getName());
@@ -563,6 +568,15 @@ implements Activateable2, TooledController, FlexiTableComponentDelegate {
 			} else if(event instanceof PageDeletedEvent) {
 				loadModel(ureq, null);
 				fireEvent(ureq, event);
+			} else if(event instanceof SelectPageEvent) {
+				SelectPageEvent spe = (SelectPageEvent)event;
+				if(SelectPageEvent.NEXT_PAGE.equals(spe.getCommand())) {
+					doNextPage(ureq, pageCtrl.getPage());
+				} else if(SelectPageEvent.PREVIOUS_PAGE.equals(spe.getCommand())) {
+					doPreviousPage(ureq, pageCtrl.getPage());
+				} else if(SelectPageEvent.ALL_PAGES.equals(spe.getCommand())) {
+					doAllPages();
+				}
 			}
 		} else if(commentsCtrl == source) {
 			if(event == Event.CHANGED_EVENT || "comment_count_changed".equals(event.getCommand())) {
@@ -867,6 +881,43 @@ implements Activateable2, TooledController, FlexiTableComponentDelegate {
 		}
 	}
 	
+	protected void doPreviousPage(UserRequest ureq, Page currentPage) {
+		List<PortfolioElementRow> rows = model.getObjects();
+		Page selectedPage = currentPage;
+		for(int i=0; i<rows.size(); i++) {
+			PortfolioElementRow row = rows.get(i);
+			if(row.isPage() && currentPage.equals(row.getPage()) && i > 0 && rows.get(i-1).isPage()) {
+				selectedPage = rows.get(i - 1).getPage();
+			}
+		}
+
+		stackPanel.popUpToController(this);
+		Page reloadedPage = portfolioService.getPageByKey(selectedPage.getKey());
+		doOpenPage(ureq, reloadedPage, false);
+		getWindowControl().getWindowBackOffice().sendCommandTo(new ScrollTopCommand());
+	}
+	
+	protected void doNextPage(UserRequest ureq, Page currentPage) {
+		List<PortfolioElementRow> rows = model.getObjects();
+		Page selectedPage = currentPage;
+		for(int i=0; i<rows.size(); i++) {
+			PortfolioElementRow row = rows.get(i);
+			if(row.isPage() && currentPage.equals(row.getPage()) && i+1 < rows.size() && rows.get(i+1).isPage()) {
+				selectedPage = rows.get(i+1).getPage();
+			}
+		}
+
+		stackPanel.popUpToController(this);
+		Page reloadedPage = portfolioService.getPageByKey(selectedPage.getKey());
+		doOpenPage(ureq, reloadedPage, false);
+		getWindowControl().getWindowBackOffice().sendCommandTo(new ScrollTopCommand());
+	}
+	
+	protected void doAllPages() {
+		stackPanel.popController(pageCtrl);
+		getWindowControl().getWindowBackOffice().sendCommandTo(new ScrollTopCommand());
+	}
+	
 	protected void doOpenPage(UserRequest ureq, Page reloadedPage, boolean newElement) {
 		OLATResourceable pageOres = OresHelper.createOLATResourceableInstance("Entry", reloadedPage.getKey());
 		WindowControl swControl = addToHistory(ureq, pageOres, null);
@@ -875,7 +926,23 @@ implements Activateable2, TooledController, FlexiTableComponentDelegate {
 				&& (reloadedPage.getPageStatus() == null || reloadedPage.getPageStatus() == PageStatus.draft || reloadedPage.getPageStatus() == PageStatus.inRevision));
 		pageCtrl = new PageRunController(ureq, swControl, stackPanel, secCallback, reloadedPage, openInEditMode);
 		listenTo(pageCtrl);
+		
+		if(reloadedPage.getSection() != null) {
+			Section section = reloadedPage.getSection();
+			stackPanel.pushController(section.getTitle(), null, new ListSection(section));
+		}
 		stackPanel.pushController(reloadedPage.getTitle(), pageCtrl);
+		
+		List<PortfolioElementRow> rows = model.getObjects();
+		int numOfRows = rows.size();
+		for(int i=0; i<numOfRows; i++) {
+			PortfolioElementRow row = rows.get(i);
+			if(row.isPage() && reloadedPage.equals(row.getPage())) {
+				boolean hasPrevious = (i > 0 && rows.get(i-1).isPage());	
+				boolean hasNext = (i + 1 < numOfRows && rows.get(i + 1).isPage());
+				pageCtrl.initPaging(hasPrevious, hasNext);	
+			}
+		}
 	}
 	
 	protected List<PortfolioElementRow> getSelectedRows() {
@@ -886,6 +953,32 @@ implements Activateable2, TooledController, FlexiTableComponentDelegate {
 			selectedRows.add(row);
 		}
 		return selectedRows;
+	}
+	
+	public static final class ListSection {
+		
+		private final Section section;
+		
+		public ListSection(Section section) {
+			this.section = section;
+		}
+
+		@Override
+		public int hashCode() {
+			return section == null ? 7346576 : section.hashCode();
+		}
+
+		@Override
+		public boolean equals(Object obj) {
+			if (this == obj) {
+				return true;
+			}
+			if (obj instanceof ListSection) {
+				ListSection ls = (ListSection) obj;
+				return section != null && section.equals(ls.section);
+			}
+			return true;
+		}
 	}
 	
 	private static final class PageImageMapper implements Mapper {
@@ -909,7 +1002,7 @@ implements Activateable2, TooledController, FlexiTableComponentDelegate {
 				int index = path.indexOf('/');
 				if(index > 0) {
 					String pageKey = path.substring(0, index);
-					Long key = new Long(pageKey);
+					Long key = Long.valueOf(pageKey);
 					for(int i=model.getRowCount(); i-->0; ) {
 						PortfolioElementRow row = model.getObject(i);
 						if(row.isPage() && row.getPage().getKey().equals(key)) {

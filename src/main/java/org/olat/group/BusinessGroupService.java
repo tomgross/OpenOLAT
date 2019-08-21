@@ -483,7 +483,7 @@ public interface BusinessGroupService {
 	
 	/**
 	 * Remove the members (tutors and participants) from all business groups connected
-	 * to the resource (the resource can be a BusinessGroup) by cancelling their membership
+	 * to the resource (the resource can be a BusinessGroup) by canceling their membership
 	 * or their reservations.<br>
 	 * This method respect the managed flags.
 	 * 
@@ -491,7 +491,7 @@ public interface BusinessGroupService {
 	 * @param identities
 	 * @param group
 	 */
-	public void removeMembers(Identity ureqIdentity, List<Identity> identities, OLATResource resource, MailPackage mailing);
+	public void removeMembers(Identity ureqIdentity, List<Identity> identities, OLATResource resource, MailPackage mailing, boolean overrideManaged);
 
 	
 	/**
@@ -618,8 +618,8 @@ public interface BusinessGroupService {
 	 * @param groups
 	 * @param fExportFile
 	 */
-	public void exportGroups(List<BusinessGroup> groups, List<BGArea> areas, File fExportFile, BusinessGroupEnvironment env,
-			boolean runtimeDatas, boolean backwardsCompatible);
+	public void exportGroups(List<BusinessGroup> groups, List<BGArea> areas, File fExportFile,
+			boolean runtimeDatas);
 
 	/**
 	 * Import previously exported group definitions.

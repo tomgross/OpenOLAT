@@ -19,16 +19,24 @@
  */
 package org.olat.repository.ui.author;
 
-import org.olat.core.CoreSpringFactory;
+import java.io.IOException;
+import java.util.Locale;
+
+import org.apache.logging.log4j.Logger;
 import org.olat.core.gui.components.form.flexible.impl.elements.table.FlexiCellRenderer;
 import org.olat.core.gui.components.form.flexible.impl.elements.table.FlexiTableComponent;
+import org.olat.core.gui.components.table.CustomCellRenderer;
 import org.olat.core.gui.render.Renderer;
 import org.olat.core.gui.render.StringOutput;
 import org.olat.core.gui.render.URLBuilder;
 import org.olat.core.gui.translator.Translator;
-import org.olat.login.LoginModule;
+import org.olat.core.logging.Tracing;
+import org.olat.core.util.StringHelper;
+import org.olat.core.util.Util;
 import org.olat.repository.RepositoryEntry;
 import org.olat.repository.RepositoryEntryLight;
+import org.olat.repository.RepositoryEntryStatusEnum;
+import org.olat.repository.RepositoryService;
 
 /**
  * 
@@ -36,51 +44,52 @@ import org.olat.repository.RepositoryEntryLight;
  * @author srosse, stephane.rosse@frentix.com, http://www.frentix.com
  *
  */
-public class AccessRenderer implements FlexiCellRenderer {
+public class AccessRenderer implements FlexiCellRenderer, CustomCellRenderer {
+
+	private static final Logger log = Tracing.createLoggerFor(AccessRenderer.class);
 	
-	private final boolean guestLoginEnabled;
+	private final Translator translator;
 	
-	public AccessRenderer() {
-		guestLoginEnabled = CoreSpringFactory.getImpl(LoginModule.class).isGuestLoginLinksEnabled();
+	public AccessRenderer(Locale locale) {
+		translator = Util.createPackageTranslator(RepositoryService.class, locale);
 	}
 
 	@Override
 	public void render(Renderer renderer, StringOutput sb, Object val,
-			int row, FlexiTableComponent source, URLBuilder ubu, Translator translator)  {
+			int row, FlexiTableComponent source, URLBuilder ubu, Translator trans)  {
 		if(val instanceof RepositoryEntryLight) {
 			RepositoryEntryLight re = (RepositoryEntryLight)val;
-			if(re.getAccess() == RepositoryEntry.DELETED) {
-				sb.append(translator.translate("table.header.access.deleted"));
-			} else if(re.isMembersOnly()) {
-				sb.append(translator.translate("table.header.access.membersonly")); 
-			} else {
-				switch (re.getAccess()) {
-					case RepositoryEntry.DELETED: {
-						sb.append(translator.translate("table.header.access.deleted"));
-						break;
-					}
-					case RepositoryEntry.ACC_OWNERS:
-						sb.append(translator.translate("table.header.access.owner"));
-						break;
-					case RepositoryEntry.ACC_OWNERS_AUTHORS:
-						sb.append(translator.translate("table.header.access.author"));
-						break;
-					case RepositoryEntry.ACC_USERS:
-						sb.append(translator.translate("table.header.access.user"));
-						break;
-					case RepositoryEntry.ACC_USERS_GUESTS: {
-						if(!guestLoginEnabled) {
-							sb.append(translator.translate("table.header.access.user"));
-						} else {
-							sb.append(translator.translate("table.header.access.guest"));
-						}
-						break;
-					} default:						
-						// OLAT-6272 in case of broken repo entries with no access code
-						// return error instead of nothing
-						sb.append("ERROR");
-				}
-			}
+			render(sb, re.getEntryStatus());
+		} else if(val instanceof RepositoryEntry) {
+			RepositoryEntry re = (RepositoryEntry)val;
+			render(sb, re.getEntryStatus());
+		} else if(val instanceof RepositoryEntryStatusEnum) {
+			RepositoryEntryStatusEnum entryStatus = (RepositoryEntryStatusEnum)val;
+			render(sb, entryStatus);
 		}
+	}
+
+	@Override
+	public void render(StringOutput sb, Renderer renderer, Object val, Locale locale, int alignment, String action) {
+		// use the FlexiCellRenderer method
+		render(renderer, sb, val, -1, null, null, null);
+	}
+	
+	public String renderEntryStatus(RepositoryEntry re) {
+		try(StringOutput sb = new StringOutput(32)) {
+			render(sb, re.getEntryStatus());
+			return sb.toString();
+		} catch(IOException e) {
+			log.error("",e);
+			return "";
+		}
+	}
+
+	public void render(StringOutput sb, RepositoryEntryStatusEnum status) {
+		sb.append("<span class='o_labeled_light o_repo_status_").append(status.name())
+		  .append("' title=\"").append(StringHelper.escapeHtml(translator.translate("status." + status.name() + ".desc"))).append("\">")
+		  .append("<i class='o_icon o_icon-fw o_icon_repo_status_").append(status.name()).append("'> </i> <span>")
+		  .append(translator.translate("table.status.".concat(status.name())))
+		  .append("</span></span>");
 	}
 }

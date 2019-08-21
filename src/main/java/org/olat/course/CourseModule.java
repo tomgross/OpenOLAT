@@ -69,8 +69,8 @@ public class CourseModule extends AbstractSpringModule {
 	private boolean displayChangeLog;
 	
 	// Repository types
-	public static String ORES_TYPE_COURSE = OresHelper.calculateTypeName(CourseModule.class);
-	public static OLATResourceable ORESOURCEABLE_TYPE_COURSE = OresHelper.lookupType(CourseModule.class);
+	public static final String ORES_TYPE_COURSE = OresHelper.calculateTypeName(CourseModule.class);
+	public static final OLATResourceable ORESOURCEABLE_TYPE_COURSE = OresHelper.lookupType(CourseModule.class);
 	public static final String ORES_COURSE_ASSESSMENT = OresHelper.calculateTypeName(AssessmentManager.class);
 	
 	private static CoordinatorManager coordinatorManager;
@@ -142,8 +142,7 @@ public class CourseModule extends AbstractSpringModule {
 	 * @return the generated SubscriptionContext
 	 */
 	public static SubscriptionContext createSubscriptionContext(CourseEnvironment ce, CourseNode cn) {
-		SubscriptionContext sc = new SubscriptionContext(getCourseTypeName(), ce.getCourseResourceableId(), cn.getIdent());
-		return sc;
+		return new SubscriptionContext(getCourseTypeName(), ce.getCourseResourceableId(), cn.getIdent());
 	}
 
 	/**
@@ -153,8 +152,7 @@ public class CourseModule extends AbstractSpringModule {
 	 *         to be able to cleanup/obtain
 	 */
 	public static SubscriptionContext createTechnicalSubscriptionContext(CourseEnvironment ce, CourseNode cn) {
-		SubscriptionContext sc = new SubscriptionContext(getCourseTypeName(), ce.getCourseResourceableId(), cn.getIdent());
-		return sc;
+		return new SubscriptionContext(getCourseTypeName(), ce.getCourseResourceableId(), cn.getIdent());
 	}
 
 	/**
@@ -168,8 +166,7 @@ public class CourseModule extends AbstractSpringModule {
 	 * @return
 	 */
 	public static SubscriptionContext createSubscriptionContext(CourseEnvironment ce, CourseNode cn, String subsubId) {
-		SubscriptionContext sc = new SubscriptionContext(getCourseTypeName(), ce.getCourseResourceableId(), cn.getIdent() + ":" + subsubId);
-		return sc;
+		return new SubscriptionContext(getCourseTypeName(), ce.getCourseResourceableId(), cn.getIdent() + ":" + subsubId);
 	}
 	
 	public static void registerForCourseType(GenericEventListener gel, Identity identity) {

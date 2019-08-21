@@ -43,18 +43,18 @@ import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 
 import org.apache.commons.io.IOUtils;
-import org.cyberneko.html.parsers.SAXParser;
+import org.apache.logging.log4j.Logger;
 import org.dom4j.Attribute;
 import org.dom4j.Document;
 import org.dom4j.DocumentFactory;
 import org.dom4j.Element;
+import org.dom4j.Node;
 import org.dom4j.io.OutputFormat;
 import org.dom4j.io.SAXReader;
 import org.dom4j.io.XMLWriter;
 import org.olat.core.CoreSpringFactory;
 import org.olat.core.commons.persistence.DB;
 import org.olat.core.id.Identity;
-import org.olat.core.logging.OLog;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.FileUtils;
 import org.olat.core.util.PathUtils;
@@ -87,6 +87,9 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.xml.sax.InputSource;
 import org.xml.sax.SAXException;
 
+import nu.validator.htmlparser.common.XmlViolationPolicy;
+import nu.validator.htmlparser.sax.HtmlParser;
+
 /**
  * This class is NOT thread-safe
  * 
@@ -96,7 +99,7 @@ import org.xml.sax.SAXException;
  */
 class QTIImportProcessor {
 	
-	private static final OLog log = Tracing.createLoggerFor(QTIImportProcessor.class);
+	private static final Logger log = Tracing.createLoggerFor(QTIImportProcessor.class);
 	
 	
 	private final Identity owner;
@@ -179,10 +182,9 @@ class QTIImportProcessor {
 			itemInfos.setComment(qtiComment);
 			itemElements.add(itemInfos);
 		} else if(assessment != null) {
-			@SuppressWarnings("unchecked")
-			List<Element> items = assessment.selectNodes("//item");
-			for(Element it:items) {
-				itemElements.add(new ItemInfos(it, false));
+			List<Node> items = assessment.selectNodes("//item");
+			for(Node it:items) {
+				itemElements.add(new ItemInfos((Element)it, false));
 			}
 		}
 		return itemElements;
@@ -334,9 +336,8 @@ class QTIImportProcessor {
 	}
 	
 	private void processItemMetadata(QuestionItemImpl poolItem, Element itemEl) {
-		@SuppressWarnings("unchecked")
-		List<Element> qtiMetadataFieldList = itemEl.selectNodes("./itemmetadata/qtimetadata/qtimetadatafield");
-		for(Element qtiMetadataField:qtiMetadataFieldList) {
+		List<Node> qtiMetadataFieldList = itemEl.selectNodes("./itemmetadata/qtimetadata/qtimetadatafield");
+		for(Node qtiMetadataField:qtiMetadataFieldList) {
 			Element labelEl = (Element)qtiMetadataField.selectSingleNode("./fieldlabel");
 			Element entryEl = (Element)qtiMetadataField.selectSingleNode("./fieldentry");
 			if(labelEl != null && entryEl != null) {
@@ -489,10 +490,11 @@ class QTIImportProcessor {
 	
 	@SuppressWarnings("unchecked")
 	protected List<String> getMaterials(Element el) {
-		List<String> materialPath = new ArrayList<String>();
+		List<String> materialPath = new ArrayList<>();
 		//mattext
-		List<Element> mattextList = el.selectNodes(".//mattext");
-		for(Element mat:mattextList) {
+		List<Node> mattextList = el.selectNodes(".//mattext");
+		for(Node matNode:mattextList) {
+			Element mat = (Element)matNode;
 			Attribute texttypeAttr = mat.attribute("texttype");
 			if(texttypeAttr != null) {
 				String texttype = texttypeAttr.getValue();
@@ -503,12 +505,13 @@ class QTIImportProcessor {
 			}
 		}
 		//matimage uri
-		List<Element> matList = new ArrayList<Element>();
+		List<Node> matList = new ArrayList<>();
 		matList.addAll(el.selectNodes(".//matimage"));
 		matList.addAll(el.selectNodes(".//mataudio"));
 		matList.addAll(el.selectNodes(".//matvideo"));
 		
-		for(Element mat:matList) {
+		for(Node matNode:matList) {
+			Element mat = (Element)matNode;
 			Attribute uriAttr = mat.attribute("uri");
 			String uri = uriAttr.getValue();
 			materialPath.add(uri);
@@ -523,7 +526,7 @@ class QTIImportProcessor {
 	 */
 	protected void findMaterialInMatText(String content, List<String> materialPath) {
 		try {
-			SAXParser parser = new SAXParser();
+			HtmlParser parser = new HtmlParser(XmlViolationPolicy.ALTER_INFOSET);
 			QTI12HtmlHandler contentHandler = new QTI12HtmlHandler(materialPath);
 			parser.setContentHandler(contentHandler);
 			parser.parse(new InputSource(new StringReader(content)));

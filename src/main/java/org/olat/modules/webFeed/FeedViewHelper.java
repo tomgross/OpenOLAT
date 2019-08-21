@@ -33,7 +33,7 @@ import org.olat.core.id.Identity;
 import org.olat.core.id.OLATResourceable;
 import org.olat.core.id.context.BusinessControlFactory;
 import org.olat.core.id.context.ContextEntry;
-import org.olat.core.logging.OLog;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.Formatter;
 import org.olat.core.util.StringHelper;
@@ -60,7 +60,7 @@ import org.olat.resource.OLATResourceManager;
  */
 public class FeedViewHelper {
 	
-	private static final OLog log = Tracing.createLoggerFor(FeedViewHelper.class);
+	private static final Logger log = Tracing.createLoggerFor(FeedViewHelper.class);
 	
 	// display 5 items per default
 	private int itemsPerPage = 5;
@@ -367,7 +367,7 @@ public class FeedViewHelper {
 				if (item.getFeed().isExternal()) {
 					// Apply xss filter for security reasons. Only necessary for external
 					// feeds (e.g. to not let them execute JS code in our OLAT environment)
-					Filter xssFilter = FilterFactory.getXSSFilter(description.length() + 1);
+					Filter xssFilter = FilterFactory.getXSSFilter();
 					itemDescription = xssFilter.filter(description);
 				} else {
 					// Add relative media base to media elements to display internal media
@@ -399,7 +399,7 @@ public class FeedViewHelper {
 				if (item.getFeed().isExternal()) {
 					// Apply xss filter for security reasons. Only necessary for external
 					// feeds (e.g. to not let them execute JS code in our OLAT environment)
-					Filter xssFilter = FilterFactory.getXSSFilter(content.length() + 1);
+					Filter xssFilter = FilterFactory.getXSSFilter();
 					itemContent = xssFilter.filter(content);
 				} else {
 					// Add relative media base to media elements to display internal media

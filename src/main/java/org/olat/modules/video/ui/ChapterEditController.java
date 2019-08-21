@@ -134,7 +134,7 @@ public class ChapterEditController extends FormBasicController {
 	
 	@Override
 	protected boolean validateFormLogic(UserRequest ureq) {
-		boolean allOk = true;
+		boolean allOk = super.validateFormLogic(ureq);
 		
 		beginEl.clearError();
 		if(StringHelper.containsNonWhitespace(beginEl.getValue())) {
@@ -164,7 +164,7 @@ public class ChapterEditController extends FormBasicController {
 			allOk &= false;
 		}
 		
-		return allOk & super.validateFormLogic(ureq);
+		return allOk;
 	}
 	
 	/**
@@ -172,9 +172,9 @@ public class ChapterEditController extends FormBasicController {
 	 *
 	 * @return true, if successful
 	 */
-	private boolean outOfRange(Date time) {
+	private boolean outOfRange(Date t) {
 		if (durationInSeconds > 0) {	
-			return time.getTime() > (durationInSeconds * 1000l);
+			return t.getTime() > (durationInSeconds * 1000l);
 		}
 		return false;
 	}
@@ -184,9 +184,9 @@ public class ChapterEditController extends FormBasicController {
 	 *
 	 * @return true, if successful
 	 */
-	private boolean timeAlreadyExists(Date time) {
+	private boolean timeAlreadyExists(Date t) {
 		if (chapters.size() > 0 && videoChapterTableRow != null) {
-			String newTimeFormat = displayDateFormat.format(time);
+			String newTimeFormat = displayDateFormat.format(t);
 			for (VideoChapterTableRow chapterRow : chapters) {
 				String beginFormat = displayDateFormat.format(chapterRow.getBegin());
 				if (beginFormat.equals(newTimeFormat) && !chapterRow.equals(videoChapterTableRow)) {

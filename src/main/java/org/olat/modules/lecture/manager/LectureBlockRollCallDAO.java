@@ -24,17 +24,23 @@ import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 import javax.persistence.TemporalType;
 import javax.persistence.TypedQuery;
 
 import org.olat.basesecurity.GroupRoles;
 import org.olat.basesecurity.IdentityRef;
+import org.olat.basesecurity.OrganisationRoles;
 import org.olat.core.commons.persistence.DB;
 import org.olat.core.commons.persistence.PersistenceHelper;
+import org.olat.core.commons.persistence.QueryBuilder;
 import org.olat.core.id.Identity;
+import org.olat.core.id.OrganisationRef;
 import org.olat.core.util.StringHelper;
 import org.olat.modules.lecture.LectureBlock;
+import org.olat.modules.lecture.LectureBlockAppealStatus;
 import org.olat.modules.lecture.LectureBlockAuditLog;
 import org.olat.modules.lecture.LectureBlockRef;
 import org.olat.modules.lecture.LectureBlockRollCall;
@@ -45,11 +51,13 @@ import org.olat.modules.lecture.RepositoryEntryLectureConfiguration;
 import org.olat.modules.lecture.model.AggregatedLectureBlocksStatistics;
 import org.olat.modules.lecture.model.LectureBlockAndRollCall;
 import org.olat.modules.lecture.model.LectureBlockIdentityStatistics;
+import org.olat.modules.lecture.model.LectureBlockRollCallAndCoach;
 import org.olat.modules.lecture.model.LectureBlockRollCallImpl;
 import org.olat.modules.lecture.model.LectureBlockStatistics;
 import org.olat.modules.lecture.model.LectureStatisticsSearchParameters;
 import org.olat.repository.RepositoryEntry;
 import org.olat.repository.RepositoryEntryRef;
+import org.olat.repository.RepositoryEntryStatusEnum;
 import org.olat.user.UserManager;
 import org.olat.user.propertyhandlers.UserPropertyHandler;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -261,6 +269,47 @@ public class LectureBlockRollCallDAO {
 		return rollCalls != null && rollCalls.size() > 0 ? rollCalls.get(0) : null;
 	}
 	
+	public List<LectureBlockRollCallAndCoach> getLectureBlockAndRollCalls(LectureBlockRollCallSearchParameters searchParams) {
+		List<LectureBlockRollCall> rollCalls = getRollCalls(searchParams);
+		Map<Long,String> coaches = getCoaches(searchParams.getEntry(), ", ");
+		List<LectureBlockRollCallAndCoach> blockAndRollCalls = new ArrayList<>(rollCalls.size());
+		for(LectureBlockRollCall rollCall:rollCalls) {
+			LectureBlock block = rollCall.getLectureBlock();
+			String coach = coaches.get(block.getKey());
+			blockAndRollCalls.add(new LectureBlockRollCallAndCoach(coach, block, rollCall));
+		}
+		return blockAndRollCalls;
+	}
+	
+	private Map<Long,String> getCoaches(RepositoryEntryRef entry, String teacherSeaparator) {
+		// append the coaches
+		StringBuilder sc = new StringBuilder();
+		sc.append("select block.key, coach")
+		  .append(" from lectureblock block")
+		  .append(" inner join block.teacherGroup tGroup")
+		  .append(" inner join tGroup.members membership")
+		  .append(" inner join membership.identity coach")
+		  .append(" inner join fetch coach.user usercoach")
+		  .append(" where membership.role='").append("teacher").append("' and block.entry.key=:repoEntryKey");
+		
+		//get all, it's quick
+		List<Object[]> rawCoachs = dbInstance.getCurrentEntityManager()
+				.createQuery(sc.toString(), Object[].class)
+				.setParameter("repoEntryKey", entry.getKey())
+				.getResultList();
+		Map<Long,String> coaches = new HashMap<>();
+		for(Object[] rawCoach:rawCoachs) {
+			Long blockKey = (Long)rawCoach[0];
+			Identity coach = (Identity)rawCoach[1];
+			String fullname = userManager.getUserDisplayName(coach);
+			if(coaches.containsKey(blockKey)) {
+				fullname = coaches.get(blockKey) + " " + teacherSeaparator + " " + fullname;
+			}
+			coaches.put(blockKey, fullname);
+		}
+		return coaches;
+	}
+	
 	public List<LectureBlockRollCall> getRollCalls(LectureBlockRollCallSearchParameters searchParams) {
 		StringBuilder sb = new StringBuilder();
 		sb.append("select rollcall from lectureblockrollcall rollcall")
@@ -304,10 +353,17 @@ public class LectureBlockRollCallDAO {
 			where = PersistenceHelper.appendAnd(sb, where);
 			sb.append("rollcall.key=:rollCallKey");
 		}
-		
 		if(searchParams.getLectureBlockKey() != null) {
 			where = PersistenceHelper.appendAnd(sb, where);
-			sb.append("rollcall.lectureBlock.key=:lectureBlockKey");
+			sb.append("block.key=:lectureBlockKey");
+		}
+		if(searchParams.getEntry() != null) {
+			where = PersistenceHelper.appendAnd(sb, where);
+			sb.append("block.entry.key=:entryKey");
+		}
+		if(searchParams.getAppealStatus() != null && !searchParams.getAppealStatus().isEmpty()) {
+			where = PersistenceHelper.appendAnd(sb, where);
+			sb.append("rollcall.appealStatusString in (:appealStatus)");
 		}
 
 		TypedQuery<LectureBlockRollCall> query = dbInstance.getCurrentEntityManager()
@@ -317,6 +373,14 @@ public class LectureBlockRollCallDAO {
 		}
 		if(searchParams.getLectureBlockKey() != null) {
 			query.setParameter("lectureBlockKey", searchParams.getLectureBlockKey());
+		}
+		if(searchParams.getEntry() != null) {
+			query.setParameter("entryKey", searchParams.getEntry().getKey());
+		}
+		if(searchParams.getAppealStatus() != null && !searchParams.getAppealStatus().isEmpty()) {
+			List<String> appealStatus = searchParams.getAppealStatus().stream()
+					.map(LectureBlockAppealStatus::name).collect(Collectors.toList());
+			query.setParameter("appealStatus", appealStatus);
 		}
 		
 		return query.getResultList();
@@ -385,10 +449,10 @@ public class LectureBlockRollCallDAO {
 		}
 	}
 	
-	public List<LectureBlockStatistics> getStatistics(IdentityRef identity, boolean authorizedAbsenceEnabled,
-			boolean absenceDefaultAuthorized, boolean countAuthorizedAbsenceAsAttendant,
+	public List<LectureBlockStatistics> getStatistics(IdentityRef identity, RepositoryEntryStatusEnum[] entryStatus,
+			boolean authorizedAbsenceEnabled, boolean absenceDefaultAuthorized, boolean countAuthorizedAbsenceAsAttendant,
 			boolean calculateAttendanceRate, double requiredAttendanceRateDefault) {
-		StringBuilder sb = new StringBuilder();
+		QueryBuilder sb = new QueryBuilder(5000);
 		sb.append("select call.key as callKey, ")
 		  .append("  call.lecturesAttendedNumber as attendedLectures,")
 		  .append("  call.lecturesAbsentNumber as absentLectures,")
@@ -416,20 +480,21 @@ public class LectureBlockRollCallDAO {
 		  .append(" inner join lectureentryconfig as config on (re.key=config.entry.key)")
 		  .append(" left join lectureparticipantsummary as summary on (summary.identity.key=membership.identity.key and summary.entry.key=block.entry.key)")
 		  .append(" left join lectureblockrollcall as call on (call.identity.key=membership.identity.key and call.lectureBlock.key=block.key)")
-		  .append(" where config.lectureEnabled=true and membership.identity.key=:identityKey and membership.role='").append(GroupRoles.participant.name()).append("'");
+		  .append(" where config.lectureEnabled=true and membership.identity.key=:identityKey")
+		  .append(" and membership.role='").append(GroupRoles.participant.name()).append("'")
+		  .append(" and re.status ").in(entryStatus);
 		
 		//take in account: requiredAttendanceRateDefault, from repo config requiredAttendanceRate
 		//take in account: authorized absence
 		//take in account: firstAddmissionDate and null
 		
 		Date now = new Date();
-		
-		List<Object[]> rawObjects = dbInstance.getCurrentEntityManager()
+
+		Map<Long,LectureBlockStatistics> stats = new HashMap<>();
+		dbInstance.getCurrentEntityManager()
 				.createQuery(sb.toString(), Object[].class)
 				.setParameter("identityKey", identity.getKey())
-				.getResultList();
-		Map<Long,LectureBlockStatistics> stats = new HashMap<>();
-		for(Object[] rawObject:rawObjects) {
+				.getResultStream().forEach(rawObject -> {
 			int pos = 1;//jump roll call key
 			Long lecturesAttended = PersistenceHelper.extractLong(rawObject, pos++);
 			Long lecturesAbsent = PersistenceHelper.extractLong(rawObject, pos++);
@@ -478,7 +543,7 @@ public class LectureBlockRollCallDAO {
 					absenceAuthorized, absenceDefaultAuthorized,
 					plannedLecturesNumber, effectiveLecturesNumber,
 					firstAdmissionDate, now);
-		}
+		});
 
 		List<LectureBlockStatistics> statisticsList = new ArrayList<>(stats.values());
 		calculateAttendanceRate(statisticsList, countAuthorizedAbsenceAsAttendant);
@@ -486,12 +551,12 @@ public class LectureBlockRollCallDAO {
 	}
 	
 	public List<LectureBlockIdentityStatistics> getStatistics(LectureStatisticsSearchParameters params,
-			List<UserPropertyHandler> userPropertyHandlers, Identity identity, boolean admin,
+			List<UserPropertyHandler> userPropertyHandlers, Identity identity,
 			boolean authorizedAbsenceEnabled,
 			boolean absenceDefaultAuthorized, boolean countAuthorizedAbsenceAsAttendant,
 			boolean calculateAttendanceRate, double requiredAttendanceRateDefault) {
 		
-		StringBuilder sb = new StringBuilder(2048);
+		QueryBuilder sb = new QueryBuilder(2048);
 		sb.append("select ident.key as participantKey, ident.name as participantName,")
 		  .append("  call.lecturesAttendedNumber as attendedLectures,")
 		  .append("  call.lecturesAbsentNumber as absentLectures,")
@@ -525,19 +590,16 @@ public class LectureBlockRollCallDAO {
 		  .append(" left join lectureblockrollcall as call on (call.identity.key=membership.identity.key and call.lectureBlock.key=block.key)")
 		  .append(" left join lectureparticipantsummary as summary on (summary.identity.key=membership.identity.key and summary.entry.key=block.entry.key)")
 		  .append(" where config.lectureEnabled=true and membership.role='").append(GroupRoles.participant.name()).append("'");
-		if(!admin) {
-			sb.append(" and (exists (select rel from repoentrytogroup as rel, bgroupmember as membership ")
-			  .append("     where re.key=rel.entry.key and membership.group.key=rel.group.key and rel.defaultGroup=true and membership.identity.key=:identityKey")
-			  .append("     and membership.role='").append(GroupRoles.owner.name()).append("'")
-			  .append("     and re.access >= ").append(RepositoryEntry.ACC_OWNERS)
-			  .append(" ) or exists (select membership.key from bgroupmember as membership ")
-			  .append("     where block.teacherGroup.key=membership.group.key and membership.identity.key=:identityKey")
-			  .append("     and (re.access >= ").append(RepositoryEntry.ACC_USERS)
-			  .append("     or (re.access = ").append(RepositoryEntry.ACC_OWNERS).append(" and re.membersOnly=true))")
-			  .append(" ))");
-		} else {
-			sb.append(" and re.access >= ").append(RepositoryEntry.ACC_OWNERS);
-		}
+	
+		// check access permission
+		sb.append(" and (exists (select rel from repoentrytogroup as rel, bgroupmember as membership ")
+		  .append("     where re.key=rel.entry.key and membership.group.key=rel.group.key and membership.identity.key=:identityKey")
+		  .append("     and membership.role in ('").append(OrganisationRoles.administrator.name()).append("','").append(OrganisationRoles.lecturemanager.name()).append("','").append(GroupRoles.owner.name()).append("')")
+		  .append("     and re.status ").in(RepositoryEntryStatusEnum.publishedAndClosed())
+		  .append(" ) or exists (select membership.key from bgroupmember as membership ")
+		  .append("     where block.teacherGroup.key=membership.group.key and membership.identity.key=:identityKey")
+		  .append("     and re.status ").in(RepositoryEntryStatusEnum.publishedAndClosed())
+		  .append(" ))");
 
 		if(params.getLifecycle() != null) {
 			sb.append(" and re.lifecycle.key=:lifecycleKey");
@@ -548,7 +610,7 @@ public class LectureBlockRollCallDAO {
 		if(params.getEndDate() != null) {
 			sb.append(" and block.endDate<=:endDate");
 		}
-		if(params.getBulkIdentifiers() != null && params.getBulkIdentifiers().size() > 0) {
+		if(params.getBulkIdentifiers() != null && !params.getBulkIdentifiers().isEmpty()) {
 			sb.append(" and (")
 			  .append("  lower(ident.name) in (:bulkIdentifiers)")
 			  .append("  or lower(ident.externalId) in (:bulkIdentifiers)")
@@ -557,12 +619,16 @@ public class LectureBlockRollCallDAO {
 			  .append("  or lower(user.institutionalUserIdentifier) in (:bulkIdentifiers)")
 			  .append(")");
 		}
+		if(params.hasEntries()) {
+			sb.append(" and re.key in (:repoEntryKeys)");
+		}
 		
 		Map<String,Object> queryParams = new HashMap<>();
 		appendUsersStatisticsSearchParams(params, queryParams, userPropertyHandlers, sb);
 
 		TypedQuery<Object[]> rawQuery = dbInstance.getCurrentEntityManager()
-				.createQuery(sb.toString(), Object[].class);
+				.createQuery(sb.toString(), Object[].class)
+				.setParameter("identityKey", identity.getKey());
 		if(StringHelper.containsNonWhitespace(params.getLogin())) {
 			rawQuery.setParameter("login", params.getLogin());
 		}
@@ -575,20 +641,21 @@ public class LectureBlockRollCallDAO {
 		if(params.getEndDate() != null) {
 			rawQuery.setParameter("endDate", params.getEndDate(), TemporalType.TIMESTAMP);
 		}
-		if(params.getBulkIdentifiers() != null && params.getBulkIdentifiers().size() > 0) {
+		if(params.getBulkIdentifiers() != null && !params.getBulkIdentifiers().isEmpty()) {
 			rawQuery.setParameter("bulkIdentifiers", params.getBulkIdentifiers());
+		}
+		if(params.hasEntries()) {
+			List<Long> repoEntryKeys = params.getEntries().stream()
+					.map(RepositoryEntryRef::getKey).collect(Collectors.toList());
+			rawQuery.setParameter("repoEntryKeys", repoEntryKeys);
 		}
 		for(Map.Entry<String, Object> entry:queryParams.entrySet()) {
 			rawQuery.setParameter(entry.getKey(), entry.getValue());
 		}
-		if(!admin) {
-			rawQuery.setParameter("identityKey", identity.getKey());
-		}
 
 		Date now = new Date();
-		List<Object[]> rawObjects = rawQuery.getResultList();
 		Map<Membership,LectureBlockIdentityStatistics> stats = new HashMap<>();
-		for(Object[] rawObject:rawObjects) {
+		rawQuery.getResultStream().forEach(rawObject -> {
 			int pos = 0;//jump roll call key
 			Long identityKey = (Long)rawObject[pos++];
 			String identityName = (String)rawObject[pos++];
@@ -652,7 +719,7 @@ public class LectureBlockRollCallDAO {
 					absenceAuthorized, absenceDefaultAuthorized,
 					plannedLecturesNumber, effectiveLecturesNumber,
 					firstAdmissionDate, now);
-		}
+		});
 		
 		List<LectureBlockIdentityStatistics> statisticsList = new ArrayList<>(stats.values());
 		calculateAttendanceRate(statisticsList, countAuthorizedAbsenceAsAttendant);
@@ -660,7 +727,7 @@ public class LectureBlockRollCallDAO {
 	}
 	
 	private void appendUsersStatisticsSearchParams(LectureStatisticsSearchParameters params, Map<String,Object> queryParams,
-			List<UserPropertyHandler> userPropertyHandlers, StringBuilder sb) {
+			List<UserPropertyHandler> userPropertyHandlers, QueryBuilder sb) {
 		if(StringHelper.containsNonWhitespace(params.getLogin())) {
 			String login = PersistenceHelper.makeFuzzyQueryString(params.getLogin());
 			if (login.contains("_") && dbInstance.isOracle()) {
@@ -703,6 +770,15 @@ public class LectureBlockRollCallDAO {
 				queryParams.put(qName, PersistenceHelper.makeFuzzyQueryString(propValue));
 			}
 		}
+		
+		if(params.hasOrganisations()) {
+			sb.append(" and exists (select orgtomember.key from bgroupmember as orgtomember")
+			  .append("  inner join organisation as org on (org.group.key=orgtomember.group.key)")
+			  .append("  where orgtomember.identity.key=ident.key and org.key in (:organisationKey))");
+			
+			Set<Long> organisationKeys = params.getOrganisations().stream().map(OrganisationRef::getKey).collect(Collectors.toSet());
+			queryParams.put("organisationKey", organisationKeys);
+		}
 	}
 	
 
@@ -734,20 +810,22 @@ public class LectureBlockRollCallDAO {
 		  .append(" left join lectureparticipantsummary as summary on (summary.identity.key=membership.identity.key and summary.entry.key=block.entry.key)")
 		  .append(" where block.entry.key=:entryKey and membership.role='").append(GroupRoles.participant.name()).append("'");
 
-		Date now = new Date();
-		Boolean repoCalculateRate = null;
-		Double repoRequiredRate = null;
+		final Date now = new Date();
+		final Boolean repoCalculateRate;
+		final Double repoRequiredRate;
 		if(config != null && config.isOverrideModuleDefault()) {
 			repoCalculateRate = config.getCalculateAttendanceRate();
 			repoRequiredRate = config.getRequiredAttendanceRate();
+		} else {
+			repoCalculateRate = null;
+			repoRequiredRate = null;
 		}
-		
-		List<Object[]> rawObjects = dbInstance.getCurrentEntityManager()
+
+		Map<Long,LectureBlockStatistics> stats = new HashMap<>();
+		dbInstance.getCurrentEntityManager()
 				.createQuery(sb.toString(), Object[].class)
 				.setParameter("entryKey", entry.getKey())
-				.getResultList();
-		Map<Long,LectureBlockStatistics> stats = new HashMap<>();
-		for(Object[] rawObject:rawObjects) {
+				.getResultStream().forEach(rawObject ->  {
 			int pos = 0;//jump roll call key
 			Long identityKey = (Long)rawObject[pos++];
 			Long lecturesAttended = PersistenceHelper.extractLong(rawObject, pos++);
@@ -791,7 +869,7 @@ public class LectureBlockRollCallDAO {
 					absenceAuthorized, absenceDefaultAuthorized,
 					plannedLecturesNumber, effectiveLecturesNumber,
 					firstAdmissionDate, now);
-		}
+		});
 		
 		List<LectureBlockStatistics> statisticsList = new ArrayList<>(stats.values());
 		calculateAttendanceRate(statisticsList, countAuthorizedAbsenceAsAttendant);

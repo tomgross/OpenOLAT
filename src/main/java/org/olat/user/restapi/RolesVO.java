@@ -35,6 +35,7 @@ import org.olat.core.id.Roles;
 @XmlRootElement(name = "rolesVO")
 public class RolesVO {
 	
+	private boolean systemAdmin = false;
 	private boolean olatAdmin = false;
 	private boolean userManager = false;
 	private boolean groupManager = false;
@@ -42,6 +43,7 @@ public class RolesVO {
 	private boolean guestOnly = false;
 	private boolean institutionalResourceManager = false;
 	private boolean poolAdmin = false;
+	private boolean curriculumManager = false;
 	private boolean invitee = false;
 
 	public RolesVO() {
@@ -49,18 +51,24 @@ public class RolesVO {
 	}
 
 	public RolesVO(Roles roles) {
-		this.olatAdmin = roles.isOLATAdmin();
-		this.groupManager = roles.isGroupManager();
-		this.userManager = roles.isUserManager();
-		this.author = roles.isAuthor();
-		this.guestOnly = roles.isGuestOnly();
-		this.institutionalResourceManager = roles.isInstitutionalResourceManager();
-		this.poolAdmin = roles.isPoolAdmin();
-		this.invitee = roles.isInvitee();
+		systemAdmin = roles.isSystemAdmin();
+		olatAdmin = roles.isAdministrator();
+		groupManager = roles.isGroupManager();
+		userManager = roles.isUserManager();
+		author = roles.isAuthor();
+		guestOnly = roles.isGuestOnly();
+		institutionalResourceManager = roles.isLearnResourceManager();
+		poolAdmin = roles.isPoolManager();
+		curriculumManager = roles.isCurriculumManager();
+		invitee = roles.isInvitee();
 	}
-	
-	public Roles toRoles() {
-		return new Roles(olatAdmin, userManager, groupManager, author, guestOnly, institutionalResourceManager, poolAdmin, invitee);
+
+	public boolean isSystemAdmin() {
+		return systemAdmin;
+	}
+
+	public void setSystemAdmin(boolean systemAdmin) {
+		this.systemAdmin = systemAdmin;
 	}
 
 	public boolean isOlatAdmin() {
@@ -117,6 +125,14 @@ public class RolesVO {
 
 	public void setPoolAdmin(boolean poolAdmin) {
 		this.poolAdmin = poolAdmin;
+	}
+
+	public boolean isCurriculumManager() {
+		return curriculumManager;
+	}
+
+	public void setCurriculumManager(boolean curriculumManager) {
+		this.curriculumManager = curriculumManager;
 	}
 
 	public boolean isInvitee() {

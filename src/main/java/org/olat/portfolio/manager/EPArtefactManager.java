@@ -32,16 +32,17 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
+import javax.persistence.TypedQuery;
+
+import org.apache.logging.log4j.Logger;
 import org.olat.basesecurity.IdentityRef;
-import org.olat.core.commons.modules.bc.vfs.OlatRootFolderImpl;
 import org.olat.core.commons.persistence.DB;
-import org.olat.core.commons.persistence.DBQuery;
 import org.olat.core.commons.services.tagging.manager.TaggingManager;
 import org.olat.core.commons.services.tagging.model.Tag;
 import org.olat.core.id.Identity;
 import org.olat.core.id.OLATResourceable;
 import org.olat.core.logging.AssertException;
-import org.olat.core.manager.BasicManager;
+import org.olat.core.logging.Tracing;
 import org.olat.core.util.FileUtils;
 import org.olat.core.util.StringHelper;
 import org.olat.core.util.resource.OresHelper;
@@ -68,7 +69,9 @@ import org.springframework.stereotype.Service;
  * @author Roman Haag, roman.haag@frentix.com, http://www.frentix.com
  */
 @Service("epArtefactManager")
-public class EPArtefactManager extends BasicManager {
+public class EPArtefactManager {
+
+	private static final Logger log = Tracing.createLoggerFor(EPArtefactManager.class);
 
 	private static final String ARTEFACT_FULLTEXT_ON_FS = "ARTEFACT_FULLTEXT_ON_FS";
 
@@ -97,7 +100,6 @@ public class EPArtefactManager extends BasicManager {
 	 * @param maxResults Max number of returned artefacts (0 or below for all)
 	 * @return
 	 */
-	@SuppressWarnings("unchecked")
 	protected List<AbstractArtefact> getArtefacts(Identity author, List<Long> artefactIds, int firstResult, int maxResults) {
 		StringBuilder sb = new StringBuilder();
 		sb.append("select artefact from ").append(AbstractArtefact.class.getName()).append(" artefact");
@@ -111,7 +113,8 @@ public class EPArtefactManager extends BasicManager {
 			else sb.append(" where ");
 			sb.append(" artefact.id in (:artefactIds)");
 		}
-		DBQuery query = dbInstance.createQuery(sb.toString());
+		TypedQuery<AbstractArtefact> query = dbInstance.getCurrentEntityManager()
+				.createQuery(sb.toString(), AbstractArtefact.class);
 		if(maxResults > 0) {
 			query.setMaxResults(maxResults);
 		}
@@ -119,14 +122,13 @@ public class EPArtefactManager extends BasicManager {
 			query.setFirstResult(firstResult);
 		}
 		if(author != null) {
-			query.setEntity("author", author);
+			query.setParameter("author", author);
 		}
 		if(artefactIds != null && !artefactIds.isEmpty()) {
-			query.setParameterList("artefactIds", artefactIds);
+			query.setParameter("artefactIds", artefactIds);
 		}
 		
-		List<AbstractArtefact> artefacts = query.list();
-		return artefacts;
+		return query.getResultList();
 	}
 	
 	protected boolean isArtefactClosed(AbstractArtefact artefact) {
@@ -136,9 +138,10 @@ public class EPArtefactManager extends BasicManager {
 			.append(" inner join structure.root rootStructure")
 			.append(" where link.artefact=:artefact and rootStructure.status='closed'");
 
-		DBQuery query = dbInstance.createQuery(sb.toString());
-		query.setEntity("artefact", artefact);
-		Number count = (Number)query.uniqueResult();
+		Number count = dbInstance.getCurrentEntityManager()
+				.createQuery(sb.toString(), Number.class)
+				.setParameter("artefact", artefact)
+				.getSingleResult();
 		return count.intValue() > 0;
 	}
 	
@@ -155,16 +158,14 @@ public class EPArtefactManager extends BasicManager {
 	}
 
 	protected List<AbstractArtefact> getArtefactPoolForUser(Identity ident) {
-		long start = System.currentTimeMillis();
 		StringBuilder sb = new StringBuilder();
 		sb.append("select artefact from ").append(AbstractArtefact.class.getName()).append(" artefact").append(" where author=:author");
-		DBQuery query = dbInstance.createQuery(sb.toString());
-		query.setEntity("author", ident);
-		@SuppressWarnings("unchecked")
-		List<AbstractArtefact> artefacts = query.list();
+		List<AbstractArtefact> artefacts = dbInstance.getCurrentEntityManager()
+				.createQuery(sb.toString(), AbstractArtefact.class)
+				.setParameter("author", ident)
+				.getResultList();
+
 		if (artefacts.isEmpty()) return null;
-		long duration = System.currentTimeMillis() - start;
-		if (isLogDebugEnabled()) logDebug("loading the full artefact pool took " + duration + "ms");
 		return artefacts;
 	}
 
@@ -177,14 +178,14 @@ public class EPArtefactManager extends BasicManager {
 			} else if (artefactsItem instanceof VFSContainer) {
 				artefactsRoot = (VFSContainer) artefactsItem;
 			} else {
-				logError("The root folder for artefact is a file and not a folder", null);
+				log.error("The root folder for artefact is a file and not a folder");
 			}
 		}
 		return artefactsRoot;
 	}
 	
 	protected VFSContainer getArtefactsTempContainer(Identity ident){
-		VFSContainer artRoot = new OlatRootFolderImpl(File.separator + "tmp", null);
+		VFSContainer artRoot = VFSManager.olatRootContainer(File.separator + "tmp", null);
 		VFSItem tmpI = artRoot.resolve("portfolio");
 		if (tmpI == null) {
 			tmpI = artRoot.createChildContainer("portfolio");
@@ -194,16 +195,14 @@ public class EPArtefactManager extends BasicManager {
 			userTmp = ((VFSContainer) tmpI).createChildContainer(ident.getName());
 		}
 		String idFolder = UUID.randomUUID().toString();
-		VFSContainer thisTmp = ((VFSContainer) userTmp).createChildContainer(idFolder);
-		return thisTmp;
+		return ((VFSContainer) userTmp).createChildContainer(idFolder);
 	}
 
 	protected List<String> getArtefactTags(AbstractArtefact artefact) {
 		// wrap concrete artefact as abstract-artefact to get the correct resName for the tag
 		if (artefact.getKey() == null ) return null;
 		OLATResourceable artefactOres = OresHelper.createOLATResourceableInstance(AbstractArtefact.class, artefact.getKey());
-		List<String> tags = taggingManager.getTagsAsString(null, artefactOres, null, null);
-		return tags;
+		return taggingManager.getTagsAsString(null, artefactOres, null, null);
 	}
 
 	protected void setArtefactTag(Identity identity, AbstractArtefact artefact, String tag) {
@@ -217,8 +216,8 @@ public class EPArtefactManager extends BasicManager {
 		// wrap concrete artefact as abstract-artefact to get the correct resName for the tag
 		OLATResourceable artefactOres = OresHelper.createOLATResourceableInstance(AbstractArtefact.class, artefact.getKey());
 		List<Tag> oldTags = taggingManager.loadTagsForResource(artefactOres, null, null);
-		List<String> oldTagStrings = new ArrayList<String>();
-		List<String> tagsToAdd = new ArrayList<String>(tags.size());
+		List<String> oldTagStrings = new ArrayList<>();
+		List<String> tagsToAdd = new ArrayList<>(tags.size());
 		tagsToAdd.addAll(tags);
 		if (oldTags != null) { // there might be no tags yet
 			for (Tag oTag : oldTags) {
@@ -291,11 +290,11 @@ public class EPArtefactManager extends BasicManager {
 					if (artData == null) {
 						artData = container.createChildLeaf(ARTEFACT_CONTENT_FILENAME);
 					} 
-					VFSManager.copyContent(new ByteArrayInputStream(fullText.getBytes()), artData, true);
+					VFSManager.copyContent(new ByteArrayInputStream(fullText.getBytes()), artData);
 					artefact.setFulltextContent(ARTEFACT_FULLTEXT_ON_FS);
 					dbInstance.updateObject(artefact);
 				} catch (Exception e) {
-					logError("could not really save the fulltext content of an artefact", e);
+					log.error("could not really save the fulltext content of an artefact", e);
 					return false;
 				}
 			}	else {
@@ -357,7 +356,7 @@ public class EPArtefactManager extends BasicManager {
 			}
 		}
 		long duration = System.currentTimeMillis() - start;
-		if (isLogDebugEnabled()) logDebug("filtering took " + duration + "ms");
+		if (log.isDebugEnabled()) log.debug("filtering took " + duration + "ms");
 		return filteredArtefactList;
 	}
 
@@ -370,7 +369,7 @@ public class EPArtefactManager extends BasicManager {
 	private void filterArtefactsByTags(List<AbstractArtefact> artefacts, EPFilterSettings filterSettings, Set<String> cloud) {
 		List<String> tags = filterSettings.getTagFilter();
 		// either search for artefacts with given tags, or such with no one!
-		List<AbstractArtefact> toRemove = new ArrayList<AbstractArtefact>();
+		List<AbstractArtefact> toRemove = new ArrayList<>();
 		if (tags != null && tags.size() != 0) {
 			// TODO: epf: RH: fix needed, as long as tags with uppercase initial are
 			// allowed!
@@ -395,7 +394,7 @@ public class EPArtefactManager extends BasicManager {
 
 	private void filterArtefactsByType(List<AbstractArtefact> artefacts, List<String> type) {
 		if (type != null && type.size() != 0) {
-			List<AbstractArtefact> toRemove = new ArrayList<AbstractArtefact>();
+			List<AbstractArtefact> toRemove = new ArrayList<>();
 			for (AbstractArtefact artefact : artefacts) {
 				if (!type.contains(artefact.getResourceableTypeName())) {
 					toRemove.add(artefact);
@@ -430,7 +429,7 @@ public class EPArtefactManager extends BasicManager {
 				cal.set(Calendar.MINUTE, 59);
 				cal.set(Calendar.SECOND, 59);
 				endDate = cal.getTime();
-				List<AbstractArtefact> toRemove = new ArrayList<AbstractArtefact>();
+				List<AbstractArtefact> toRemove = new ArrayList<>();
 				for (AbstractArtefact artefact : artefacts) {
 					Date creationDate = artefact.getCreationDate();
 					if (!(creationDate.before(endDate) && creationDate.after(startDate))) {
@@ -444,7 +443,7 @@ public class EPArtefactManager extends BasicManager {
 
 	private void filterArtefactsByString(List<AbstractArtefact> artefacts, String textFilter) {
 		if (StringHelper.containsNonWhitespace(textFilter)) {
-			List<AbstractArtefact> toRemove = new ArrayList<AbstractArtefact>();
+			List<AbstractArtefact> toRemove = new ArrayList<>();
 			for (AbstractArtefact artefact : artefacts) {
 				String textCompare = artefact.getTitle() + artefact.getDescription() + artefact.getFulltextContent();
 				if (!textCompare.toLowerCase().contains(textFilter.toLowerCase())) {
@@ -465,13 +464,12 @@ public class EPArtefactManager extends BasicManager {
 		if (key == null) throw new NullPointerException();
 
 		StringBuilder sb = new StringBuilder();
-		sb.append("select artefact from ").append(AbstractArtefact.class.getName()).append(" artefact").append(" where artefact=:key");
+		sb.append("select artefact from ").append(AbstractArtefact.class.getName()).append(" artefact").append(" where artefact.key=:key");
 
-		DBQuery query = dbInstance.createQuery(sb.toString());
-		query.setLong("key", key);
-
-		@SuppressWarnings("unchecked")
-		List<AbstractArtefact> artefacts = query.list();
+		List<AbstractArtefact> artefacts = dbInstance.getCurrentEntityManager()
+				.createQuery(sb.toString(), AbstractArtefact.class)
+				.setParameter("key", key)
+				.getResultList();
 		// if not found, it is an empty list
 		if (artefacts.isEmpty()) return null;
 		return artefacts.get(0);
@@ -487,14 +485,14 @@ public class EPArtefactManager extends BasicManager {
 			 sb.append(" and artefact.author=:ident");
 		}
 
-		DBQuery query = dbInstance.createQuery(sb.toString());
-		query.setString("bpath", businessPath);
+		TypedQuery<AbstractArtefact> query = dbInstance.getCurrentEntityManager()
+				.createQuery(sb.toString(), AbstractArtefact.class)
+				.setParameter("bpath", businessPath);
 		if (author != null) {
-			query.setEntity("ident", author);
+			query.setParameter("ident", author);
 		}
 
-		@SuppressWarnings("unchecked")
-		List<AbstractArtefact> artefacts = query.list();
+		List<AbstractArtefact> artefacts = query.getResultList();
 		// if not found, it is an empty list
 		if (artefacts.isEmpty()) return null;
 		return artefacts;		
@@ -543,7 +541,7 @@ public class EPArtefactManager extends BasicManager {
 		taggingManager.deleteTags(artefactOres, null, null);
 
 		dbInstance.deleteObject(artefact);
-		logInfo("Deleted artefact " + artefact.getTitle() + " with key: " + artefact.getKey());
+		log.info("Deleted artefact " + artefact.getTitle() + " with key: " + artefact.getKey());
 	}
 
 	protected VFSContainer getArtefactContainer(AbstractArtefact artefact) {
@@ -556,7 +554,7 @@ public class EPArtefactManager extends BasicManager {
 		} else if (item instanceof VFSContainer) {
 			container = (VFSContainer) item;
 		} else {
-			logError("Cannot create a container for artefact: " + artefact, null);
+			log.error("Cannot create a container for artefact: " + artefact);
 		}
 		return container;
 	}

@@ -42,33 +42,32 @@ import java.util.List;
 import javax.ws.rs.core.MediaType;
 import javax.ws.rs.core.UriBuilder;
 
+import org.apache.http.HttpEntity;
 import org.apache.http.HttpResponse;
 import org.apache.http.client.methods.HttpDelete;
 import org.apache.http.client.methods.HttpGet;
 import org.apache.http.client.methods.HttpPost;
 import org.apache.http.client.methods.HttpPut;
 import org.apache.http.util.EntityUtils;
-import org.codehaus.jackson.map.ObjectMapper;
-import org.codehaus.jackson.type.TypeReference;
+import org.apache.logging.log4j.Logger;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 import org.olat.basesecurity.GroupRoles;
 import org.olat.core.commons.persistence.DB;
 import org.olat.core.id.Identity;
-import org.olat.core.logging.OLog;
 import org.olat.core.logging.Tracing;
-import org.olat.course.ICourse;
 import org.olat.group.BusinessGroup;
 import org.olat.group.BusinessGroupService;
 import org.olat.group.manager.BusinessGroupRelationDAO;
 import org.olat.repository.RepositoryEntry;
-import org.olat.repository.RepositoryManager;
-import org.olat.restapi.repository.course.CoursesWebService;
 import org.olat.restapi.support.vo.GroupVO;
 import org.olat.test.JunitTestHelper;
-import org.olat.test.OlatJerseyTestCase;
+import org.olat.test.OlatRestTestCase;
 import org.springframework.beans.factory.annotation.Autowired;
+
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 
 /**
@@ -80,9 +79,9 @@ import org.springframework.beans.factory.annotation.Autowired;
  * Initial Date:  6 mai 2010 <br>
  * @author srosse, stephane.rosse@frentix.com
  */
-public class CourseGroupMgmtTest extends OlatJerseyTestCase {
+public class CourseGroupMgmtTest extends OlatRestTestCase {
 	
-	private static final OLog log = Tracing.createLoggerFor(CourseGroupMgmtTest.class);
+	private static final Logger log = Tracing.createLoggerFor(CourseGroupMgmtTest.class);
 	
 	private Identity id1, id2;
 	private BusinessGroup g1, g2;
@@ -97,18 +96,14 @@ public class CourseGroupMgmtTest extends OlatJerseyTestCase {
 	private BusinessGroupService businessGroupService;
 	@Autowired
 	private BusinessGroupRelationDAO businessGroupRelationDao;
-	@Autowired
-	private RepositoryManager repositoryManager;
 	
 	
 	/**
 	 * Set up a course with learn group and group area
-	 * @see org.olat.test.OlatJerseyTestCase#setUp()
+	 * @see org.olat.test.OlatRestTestCase#setUp()
 	 */
 	@Before
-	@Override
 	public void setUp() throws Exception {
-		super.setUp();
 		conn = new RestConnection();
 		//create a course with learn group
 		
@@ -116,28 +111,26 @@ public class CourseGroupMgmtTest extends OlatJerseyTestCase {
 		id2 = JunitTestHelper.createAndPersistIdentityAsUser("rest-c-g-2");
 		JunitTestHelper.createAndPersistIdentityAsUser("rest-c-g-3");
 		Identity auth = JunitTestHelper.createAndPersistIdentityAsUser("rest-course-grp-one");
-		ICourse course = CoursesWebService.createEmptyCourse(auth, "course for groups", "course with groups for REST API testing", null);
-		dbInstance.commitAndCloseSession();
-		courseRepoEntry = repositoryManager.lookupRepositoryEntry(course, true);
-
 		
-    // create groups without waiting list
-    g1 = businessGroupService.createBusinessGroup(null, "rest-g1", null, 0, 10, false, false, courseRepoEntry);
-    g2 = businessGroupService.createBusinessGroup(null, "rest-g2", null, 0, 10, false, false, courseRepoEntry);
-    // members
-    businessGroupRelationDao.addRole(id1, g2, GroupRoles.coach.name());
-	businessGroupRelationDao.addRole(id1, g1, GroupRoles.participant.name());
-	businessGroupRelationDao.addRole(id2, g1, GroupRoles.participant.name());
-	businessGroupRelationDao.addRole(id2, g2, GroupRoles.participant.name());
+		courseRepoEntry = JunitTestHelper.deployBasicCourse(auth);
+
+		// create groups without waiting list
+		g1 = businessGroupService.createBusinessGroup(null, "rest-g1", null, 0, 10, false, false, courseRepoEntry);
+		g2 = businessGroupService.createBusinessGroup(null, "rest-g2", null, 0, 10, false, false, courseRepoEntry);
+		// members
+		businessGroupRelationDao.addRole(id1, g2, GroupRoles.coach.name());
+		businessGroupRelationDao.addRole(id1, g1, GroupRoles.participant.name());
+		businessGroupRelationDao.addRole(id2, g1, GroupRoles.participant.name());
+		businessGroupRelationDao.addRole(id2, g2, GroupRoles.participant.name());
     
-    // groups
-    g3 = businessGroupService.createBusinessGroup(null, "rest-g3", null, -1, -1, false, false, courseRepoEntry);
-    g4 = businessGroupService.createBusinessGroup(null, "rest-g4", null, -1, -1, false, false, courseRepoEntry);
-    // members
-	businessGroupRelationDao.addRole(id1, g3, GroupRoles.participant.name());
-	businessGroupRelationDao.addRole(id2, g4, GroupRoles.participant.name());
+		// groups
+		g3 = businessGroupService.createBusinessGroup(null, "rest-g3", null, -1, -1, false, false, courseRepoEntry);
+		g4 = businessGroupService.createBusinessGroup(null, "rest-g4", null, -1, -1, false, false, courseRepoEntry);
+		// members
+		businessGroupRelationDao.addRole(id1, g3, GroupRoles.participant.name());
+		businessGroupRelationDao.addRole(id2, g4, GroupRoles.participant.name());
     
-    dbInstance.commitAndCloseSession(); // simulate user clicks
+		dbInstance.commitAndCloseSession(); // simulate user clicks
 	}
 	
   @After
@@ -161,9 +154,7 @@ public class CourseGroupMgmtTest extends OlatJerseyTestCase {
 		HttpGet method = conn.createGet(request, MediaType.APPLICATION_JSON, true);
 		HttpResponse response = conn.execute(method);
 		assertEquals(200, response.getStatusLine().getStatusCode());
-		InputStream body = response.getEntity().getContent();
-		
-		List<GroupVO> vos = parseGroupArray(body);
+		List<GroupVO> vos = parseGroupArray(response.getEntity());
 		assertNotNull(vos);
 		assertEquals(4, vos.size());//g1, g2, g3, g4
 		
@@ -305,10 +296,10 @@ public class CourseGroupMgmtTest extends OlatJerseyTestCase {
 		assertEquals(401, response.getStatusLine().getStatusCode());
 	}
 	
-	protected List<GroupVO> parseGroupArray(InputStream body) {
-		try {
+	protected List<GroupVO> parseGroupArray(HttpEntity body) {
+		try(InputStream in=body.getContent()) {
 			ObjectMapper mapper = new ObjectMapper(jsonFactory); 
-			return mapper.readValue(body, new TypeReference<List<GroupVO>>(){/* */});
+			return mapper.readValue(in, new TypeReference<List<GroupVO>>(){/* */});
 		} catch (Exception e) {
 			e.printStackTrace();
 			return null;

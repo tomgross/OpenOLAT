@@ -53,7 +53,7 @@ public class DeletedRolesCellRenderer implements FlexiCellRenderer {
 			for(int i=0; i<roleArray.length; i++) {
 				String role = roleArray[i];
 				if(!StringHelper.containsNonWhitespace(role)
-						|| "users".equals(role) || "anonymous".equals(role) || "ldap".equals(role)) continue;
+						|| "user".equals(role) || "users".equals(role) || "anonymous".equals(role) || "ldap".equals(role)) continue;
 				
 				if(!sep) {
 					sep = true;

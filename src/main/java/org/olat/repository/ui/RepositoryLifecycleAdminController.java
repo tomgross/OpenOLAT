@@ -55,10 +55,10 @@ public class RepositoryLifecycleAdminController extends FormBasicController {
 		};
 	
 	private MultipleSelectionElement notificationEl;
-	private MultipleSelectionElement toCloseEl, toUnpublishEl, toDeleteEl;
-	private TextElement closeValueEl, unpublishValueEl, deleteValueEl;
-	private SingleSelection closeUnitEl, unpublishUnitEl, deleteUnitEl;
-	private FormLayoutContainer closeRuleCont, unpublishRuleCont, deleteRuleCont;
+	private MultipleSelectionElement toCloseEl, toDeleteEl;
+	private TextElement closeValueEl, deleteValueEl;
+	private SingleSelection closeUnitEl, deleteUnitEl;
+	private FormLayoutContainer closeRuleCont, deleteRuleCont;
 	
 	@Autowired
 	private RepositoryModule repositoryModule;
@@ -106,31 +106,6 @@ public class RepositoryLifecycleAdminController extends FormBasicController {
 		closeUnitEl = uifactory.addDropdownSingleselect("clo-unit", null, closeRuleCont, unitKeys, unitValues, null);
 		closeUnitEl.setDomReplacementWrapperRequired(false);
 		selectUnitEl(closeUnitEl, autoCloseValue);
-
-		RepositoryEntryLifeCycleValue autoUnpublishValue = repositoryModule.getLifecycleAutoUnpublishValue();
-		String[] toUnpublishValues = new String[] { translate("change.to.unpublish.text")  };
-		toUnpublishEl = uifactory.addCheckboxesHorizontal("change.to.unpublish", lifecycleCont, onKeys, toUnpublishValues);
-		toUnpublishEl.addActionListener(FormEvent.ONCHANGE);
-		if(autoUnpublishValue != null) {
-			toUnpublishEl.select(onKeys[0], true);
-		}
-		
-		unpublishRuleCont = FormLayoutContainer.createCustomFormLayout("unpublish.".concat(id), lifecycleCont.getTranslator(), page);
-		unpublishRuleCont.setLabel(null, null);
-		unpublishRuleCont.setVisible(toUnpublishEl.isAtLeastSelected(1));
-		unpublishRuleCont.contextPut("prefix", "unp");
-		lifecycleCont.add(unpublishRuleCont);
-		unpublishRuleCont.setRootForm(mainForm);
-		
-		String currentUnpublishValue = autoUnpublishValue == null ? null : Integer.toString(autoUnpublishValue.getValue());
-		unpublishValueEl = uifactory.addTextElement("unp-value", null, 128, currentUnpublishValue, unpublishRuleCont);
-		unpublishValueEl.setDomReplacementWrapperRequired(false);
-		unpublishValueEl.setDisplaySize(3);
-
-		unpublishUnitEl = uifactory.addDropdownSingleselect("unp-unit", null, unpublishRuleCont, unitKeys, unitValues, null);
-		unpublishUnitEl.setDomReplacementWrapperRequired(false);
-		selectUnitEl(unpublishUnitEl, autoUnpublishValue);
-		
 		
 		RepositoryEntryLifeCycleValue autoDeleteValue = repositoryModule.getLifecycleAutoDeleteValue();
 		String[] toDeleteValues = new String[] { translate("change.to.delete.text") };
@@ -201,27 +176,12 @@ public class RepositoryLifecycleAdminController extends FormBasicController {
 		boolean allOk = super.validateFormLogic(ureq);
 		
 		allOk &= validateFormLogic(toCloseEl, closeValueEl, closeUnitEl);
-		allOk &= validateFormLogic(toUnpublishEl, unpublishValueEl, unpublishUnitEl);
 		allOk &= validateFormLogic(toDeleteEl, deleteValueEl, deleteUnitEl);
 		
 		RepositoryEntryLifeCycleValue autoClose = getValue(toCloseEl, closeValueEl, closeUnitEl);
-		RepositoryEntryLifeCycleValue autoUnpublish = getValue(toUnpublishEl, unpublishValueEl, unpublishUnitEl);
 		RepositoryEntryLifeCycleValue autoDelete = getValue(toDeleteEl, deleteValueEl, deleteUnitEl);
-		
-		if(autoUnpublish != null && autoClose != null) {
-			if(autoUnpublish.compareTo(autoClose) <= 0) {
-				unpublishValueEl.setErrorKey("error.lifecycle.after", null);
-				allOk &= false;
-			}
-		}
-		
+
 		if(autoDelete != null) {
-			if(autoUnpublish != null) {
-				if(autoDelete.compareTo(autoUnpublish) <= 0) {
-					deleteValueEl.setErrorKey("error.lifecycle.after", null);
-					allOk &= false;
-				}
-			}
 			if(autoClose != null) {
 				if(autoDelete.compareTo(autoClose) <= 0) {
 					deleteValueEl.setErrorKey("error.lifecycle.after", null);
@@ -266,8 +226,6 @@ public class RepositoryLifecycleAdminController extends FormBasicController {
 	protected void formInnerEvent(UserRequest ureq, FormItem source, FormEvent event) {
 		if(toCloseEl == source) {
 			closeRuleCont.setVisible(toCloseEl.isAtLeastSelected(1));
-		} else if(toUnpublishEl == source) {
-			unpublishRuleCont.setVisible(toUnpublishEl.isAtLeastSelected(1));
 		} else if(toDeleteEl == source) {
 			deleteRuleCont.setVisible(toDeleteEl.isAtLeastSelected(1));
 		}
@@ -277,8 +235,6 @@ public class RepositoryLifecycleAdminController extends FormBasicController {
 	protected void formOK(UserRequest ureq) {
 		String autoClose = getStringValue(toCloseEl, closeValueEl, closeUnitEl);
 		repositoryModule.setLifecycleAutoClose(autoClose);
-		String autoUnpublish = getStringValue(toUnpublishEl, unpublishValueEl, unpublishUnitEl);
-		repositoryModule.setLifecycleAutoUnpublish(autoUnpublish);
 		String autoDelete = getStringValue(toDeleteEl, deleteValueEl, deleteUnitEl);
 		repositoryModule.setLifecycleAutoDelete(autoDelete);
 		boolean notification = notificationEl.isAtLeastSelected(1);

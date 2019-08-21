@@ -19,10 +19,12 @@
  */
 package org.olat.login.ui;
 
+import static org.olat.login.ui.LoginUIFactory.validateInteger;
+
+import org.olat.basesecurity.OrganisationRoles;
 import org.olat.core.gui.UserRequest;
 import org.olat.core.gui.components.form.flexible.FormItemContainer;
 import org.olat.core.gui.components.form.flexible.elements.MultipleSelectionElement;
-import org.olat.core.gui.components.form.flexible.elements.SingleSelection;
 import org.olat.core.gui.components.form.flexible.elements.TextElement;
 import org.olat.core.gui.components.form.flexible.impl.FormBasicController;
 import org.olat.core.gui.components.form.flexible.impl.FormLayoutContainer;
@@ -43,16 +45,24 @@ public class PasswordPolicyController extends FormBasicController {
 	
 	private static final String[] onKeys = new String[] { "on" };
 	
-	private SingleSelection historyEl;
 	private MultipleSelectionElement changeOnceEl;
 	
+	private TextElement validUntilGuiEl;
+	private TextElement validUntilRestEl;
 	private TextElement maxAgeEl;
 	private TextElement maxAgeAuthorEl;
 	private TextElement maxAgeGroupManagerEl;
 	private TextElement maxAgePoolManagerEl;
 	private TextElement maxAgeUserManagerEl;
+	private TextElement maxAgeRolesManagerEl;
 	private TextElement maxAgeLearnResourceManagerEl;
+	private TextElement maxAgeCurriculumnManagerEl;
+	private TextElement maxAgeLectureManagerEl;
+	private TextElement maxAgeQualityManagerEl;
+	private TextElement maxAgeLineManagerEl;
+	private TextElement maxAgePrincipalEl;
 	private TextElement maxAgeAdministratorEl;
+	private TextElement maxAgeSysAdminEl;
 	
 	@Autowired
 	private LoginModule loginModule;
@@ -66,63 +76,65 @@ public class PasswordPolicyController extends FormBasicController {
 	@Override
 	protected void initForm(FormItemContainer formLayout, Controller listener, UserRequest ureq) {
 		
-		setFormTitle("password.policy.title");
 		setFormDescription("max.age.description");
+		
+		validUntilGuiEl = uifactory.addTextElement("password.change.valid.until.gui", 20, loginModule.getValidUntilHoursGui().toString(), formLayout);
+		validUntilGuiEl.setMandatory(true);
+		validUntilRestEl = uifactory.addTextElement("password.change.valid.until.rest", 20, loginModule.getValidUntilHoursRest().toString(), formLayout);
+		validUntilRestEl.setMandatory(true);
 
 		String[] onValues = new String[] { translate("on") };
 		changeOnceEl = uifactory.addCheckboxesHorizontal("change.once", "change.once", formLayout, onKeys, onValues);
 		if(loginModule.isPasswordChangeOnce()) {
 			changeOnceEl.select(onKeys[0], true);
 		}
-		
-		String selectedVal = Integer.toString(loginModule.getPasswordHistory());
-		boolean hasVal = false;
-		String[] historyKeys = new String[] { "0", "1", "2", "5", "10", "15" };
-		for(String historyKey:historyKeys) {
-			if(selectedVal.equals(historyKey)) {
-				hasVal = true;
-			}
-		}
-		String[] historyValues = new String[] { translate("disable.history"), translate("password.after","1"), translate("password.after","2"), translate("password.after","5"), translate("password.after","10"), translate("password.after","15")};
-		if(!hasVal) {
-			historyKeys = append(historyKeys, selectedVal);
-			historyValues = append(historyValues, selectedVal);
-		}
-		historyEl = uifactory.addDropdownSingleselect("password.history", "password.history", formLayout, historyKeys, historyValues, null);
-		historyEl.select(selectedVal, true);
 
 		String maxAge = toMaxAgeAsString(loginModule.getPasswordMaxAge());
 		maxAgeEl = uifactory.addTextElement("max.age", "max.age", 5, maxAge, formLayout);
 		maxAgeEl.setExampleKey("max.age.hint", null);
 		
-		String maxAgeAuthor = toMaxAgeAsString(loginModule.getPasswordMaxAgeAuthor());
+		String maxAgeAuthor = toMaxAgeAsString(loginModule.getPasswordMaxAgeFor(OrganisationRoles.author));
 		maxAgeAuthorEl = uifactory.addTextElement("max.age.author", "max.age.author", 5, maxAgeAuthor, formLayout);
 		
-		String maxAgeGroupManager = toMaxAgeAsString(loginModule.getPasswordMaxAgeGroupManager());
+		String maxAgeGroupManager = toMaxAgeAsString(loginModule.getPasswordMaxAgeFor(OrganisationRoles.groupmanager));
 		maxAgeGroupManagerEl = uifactory.addTextElement("max.age.groupmanager", "max.age.groupmanager", 5, maxAgeGroupManager, formLayout);
 		
-		String maxAgePoolManager = toMaxAgeAsString(loginModule.getPasswordMaxAgePoolManager());
+		String maxAgePoolManager = toMaxAgeAsString(loginModule.getPasswordMaxAgeFor(OrganisationRoles.poolmanager));
 		maxAgePoolManagerEl = uifactory.addTextElement("max.age.poolmanager", "max.age.poolmanager", 5, maxAgePoolManager, formLayout);
 
-		String maxAgeUserManager = toMaxAgeAsString(loginModule.getPasswordMaxAgeUserManager());
+		String maxAgeUserManager = toMaxAgeAsString(loginModule.getPasswordMaxAgeFor(OrganisationRoles.usermanager));
 		maxAgeUserManagerEl = uifactory.addTextElement("max.age.usermanager", "max.age.usermanager", 5, maxAgeUserManager, formLayout);
 
-		String maxAgeLearnResourceManager = toMaxAgeAsString(loginModule.getPasswordMaxAgeLearnResourceManager());
-		maxAgeLearnResourceManagerEl = uifactory.addTextElement("max.age.learnresourcemanager", "max.age.learnresourcemanager", 5, maxAgeLearnResourceManager, formLayout);
+		String maxAgeRolesManager = toMaxAgeAsString(loginModule.getPasswordMaxAgeFor(OrganisationRoles.rolesmanager));
+		maxAgeRolesManagerEl = uifactory.addTextElement("max.age.rolesmanager", "max.age.rolesmanager", 5, maxAgeRolesManager, formLayout);
 
-		String maxAgeAdministrator = toMaxAgeAsString(loginModule.getPasswordMaxAgeAdministrator());
+		String maxAgeLearnResourceManager = toMaxAgeAsString(loginModule.getPasswordMaxAgeFor(OrganisationRoles.learnresourcemanager));
+		maxAgeLearnResourceManagerEl = uifactory.addTextElement("max.age.learnresourcemanager", "max.age.learnresourcemanager", 5, maxAgeLearnResourceManager, formLayout);
+		
+		String maxAgeCurriculumManager = toMaxAgeAsString(loginModule.getPasswordMaxAgeFor(OrganisationRoles.curriculummanager));
+		maxAgeCurriculumnManagerEl = uifactory.addTextElement("max.age.curriculummanager", "max.age.curriculummanager", 5, maxAgeCurriculumManager, formLayout);
+	
+		String maxAgeLectureManager = toMaxAgeAsString(loginModule.getPasswordMaxAgeFor(OrganisationRoles.lecturemanager));
+		maxAgeLectureManagerEl = uifactory.addTextElement("max.age.lecturemanager", "max.age.lecturemanager", 5, maxAgeLectureManager, formLayout);
+		
+		String maxAgeQualityManager = toMaxAgeAsString(loginModule.getPasswordMaxAgeFor(OrganisationRoles.qualitymanager));
+		maxAgeQualityManagerEl = uifactory.addTextElement("max.age.qualitymanager", "max.age.qualitymanager", 5, maxAgeQualityManager, formLayout);
+		
+		String maxAgeLineManager = toMaxAgeAsString(loginModule.getPasswordMaxAgeFor(OrganisationRoles.linemanager));
+		maxAgeLineManagerEl = uifactory.addTextElement("max.age.linemanager", "max.age.linemanager", 5, maxAgeLineManager, formLayout);
+
+		String maxAgePrincipal = toMaxAgeAsString(loginModule.getPasswordMaxAgeFor(OrganisationRoles.principal));
+		maxAgePrincipalEl = uifactory.addTextElement("max.age.principal", "max.age.principal", 5, maxAgePrincipal, formLayout);
+		
+		String maxAgeAdministrator = toMaxAgeAsString(loginModule.getPasswordMaxAgeFor(OrganisationRoles.administrator));
 		maxAgeAdministratorEl = uifactory.addTextElement("max.age.administrator", "max.age.administrator", 5, maxAgeAdministrator, formLayout);
+		
+		String maxAgeSysAdmin = toMaxAgeAsString(loginModule.getPasswordMaxAgeFor(OrganisationRoles.sysadmin));
+		maxAgeSysAdminEl = uifactory.addTextElement("max.age.sysadmin", "max.age.sysadmin", 5, maxAgeSysAdmin, formLayout);
 		
 		FormLayoutContainer buttonsCont = FormLayoutContainer.createButtonLayout("buttons", getTranslator());
 		formLayout.add(buttonsCont);
 		uifactory.addFormSubmitButton("save", buttonsCont);
-	}
-	
-	private String[] append(String[] array, String val) {
-		String[] newArray = new String[array.length + 1];
-		System.arraycopy(array, 0, newArray, 0, array.length);
-		newArray[array.length] = val;
-		return newArray;
 	}
 	
 	private String toMaxAgeAsString(int maxAge) {
@@ -144,19 +156,22 @@ public class PasswordPolicyController extends FormBasicController {
 	@Override
 	protected boolean validateFormLogic(UserRequest ureq) {
 		boolean allOk = super.validateFormLogic(ureq);
+		allOk &= validateInteger(validUntilGuiEl, 1);
+		allOk &= validateInteger(validUntilRestEl, 1);
 		allOk &= validateMaxAgeEl(maxAgeEl);
 		allOk &= validateMaxAgeEl(maxAgeAuthorEl);
 		allOk &= validateMaxAgeEl(maxAgeGroupManagerEl);
 		allOk &= validateMaxAgeEl(maxAgePoolManagerEl);
 		allOk &= validateMaxAgeEl(maxAgeUserManagerEl);
+		allOk &= validateMaxAgeEl(maxAgeRolesManagerEl);
 		allOk &= validateMaxAgeEl(maxAgeLearnResourceManagerEl);
+		allOk &= validateMaxAgeEl(maxAgeCurriculumnManagerEl);
+		allOk &= validateMaxAgeEl(maxAgeQualityManagerEl);
+		allOk &= validateMaxAgeEl(maxAgeLectureManagerEl);
+		allOk &= validateMaxAgeEl(maxAgeLineManagerEl);
+		allOk &= validateMaxAgeEl(maxAgePrincipalEl);
 		allOk &= validateMaxAgeEl(maxAgeAdministratorEl);
-		
-		historyEl.clearError();
-		if(!historyEl.isOneSelected()) {
-			historyEl.setErrorKey("form.legende.mandatory", null);
-			allOk &= false;
-		}
+		allOk &= validateMaxAgeEl(maxAgeSysAdminEl);
 		
 		return allOk;
 	}
@@ -178,23 +193,32 @@ public class PasswordPolicyController extends FormBasicController {
 	protected void formOK(UserRequest ureq) {
 		loginModule.setPasswordChangeOnce(changeOnceEl.isAtLeastSelected(1));
 		
-		int history = Integer.parseInt(historyEl.getSelectedKey());
-		loginModule.setPasswordHistory(history);
+		Integer validUntilHoursGui = Integer.parseInt(validUntilGuiEl.getValue());
+		loginModule.setValidUntilHoursGui(validUntilHoursGui);
+		Integer validUntilHoursRest = Integer.parseInt(validUntilRestEl.getValue());
+		loginModule.setValidUntilHoursRest(validUntilHoursRest);
 		
 		loginModule.setPasswordMaxAge(getMaxAge(maxAgeEl));
-		loginModule.setPasswordMaxAgeAuthor(getMaxAge(maxAgeAuthorEl));
-		loginModule.setPasswordMaxAgeGroupManager(getMaxAge(maxAgeGroupManagerEl));
-		loginModule.setPasswordMaxAgePoolManager(getMaxAge(maxAgePoolManagerEl));
-		loginModule.setPasswordMaxAgeUserManager(getMaxAge(maxAgeUserManagerEl));
-		loginModule.setPasswordMaxAgeLearnResourceManager(getMaxAge(maxAgeLearnResourceManagerEl));
-		loginModule.setPasswordMaxAgeAdministrator(getMaxAge(maxAgeAdministratorEl));
+		loginModule.setPasswordMaxAgeFor(OrganisationRoles.author, getMaxAge(maxAgeAuthorEl));
+		loginModule.setPasswordMaxAgeFor(OrganisationRoles.groupmanager, getMaxAge(maxAgeGroupManagerEl));
+		loginModule.setPasswordMaxAgeFor(OrganisationRoles.poolmanager, getMaxAge(maxAgePoolManagerEl));
+		loginModule.setPasswordMaxAgeFor(OrganisationRoles.usermanager, getMaxAge(maxAgeUserManagerEl));
+		loginModule.setPasswordMaxAgeFor(OrganisationRoles.rolesmanager, getMaxAge(maxAgeRolesManagerEl));
+		loginModule.setPasswordMaxAgeFor(OrganisationRoles.learnresourcemanager, getMaxAge(maxAgeLearnResourceManagerEl));
+		loginModule.setPasswordMaxAgeFor(OrganisationRoles.curriculummanager, getMaxAge(maxAgeCurriculumnManagerEl));
+		loginModule.setPasswordMaxAgeFor(OrganisationRoles.lecturemanager, getMaxAge(maxAgeLectureManagerEl));
+		loginModule.setPasswordMaxAgeFor(OrganisationRoles.qualitymanager, getMaxAge(maxAgeQualityManagerEl));
+		loginModule.setPasswordMaxAgeFor(OrganisationRoles.linemanager, getMaxAge(maxAgeLineManagerEl));
+		loginModule.setPasswordMaxAgeFor(OrganisationRoles.principal, getMaxAge(maxAgePrincipalEl));
+		loginModule.setPasswordMaxAgeFor(OrganisationRoles.administrator, getMaxAge(maxAgeAdministratorEl));
+		loginModule.setPasswordMaxAgeFor(OrganisationRoles.sysadmin, getMaxAge(maxAgeSysAdminEl));
 	}
 	
 	private int getMaxAge(TextElement el) {
 		if(StringHelper.containsNonWhitespace(el.getValue())
 				&& StringHelper.isLong(el.getValue())) {
 			int ageInDay = Integer.parseInt(el.getValue());
-			return ageInDay * 24 * 60 * 60;//convert in seconds
+			return ageInDay * 24 * 60 * 60;//convert in hours
 		}
 		return 0;
 	}

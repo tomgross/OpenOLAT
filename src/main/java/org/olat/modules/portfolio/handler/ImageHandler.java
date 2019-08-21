@@ -26,9 +26,10 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 
-import org.olat.core.commons.modules.bc.meta.MetaInfo;
-import org.olat.core.commons.modules.bc.meta.tagged.MetaTagged;
+import org.olat.core.CoreSpringFactory;
 import org.olat.core.commons.services.image.Size;
+import org.olat.core.commons.services.vfs.VFSMetadata;
+import org.olat.core.commons.services.vfs.VFSRepositoryService;
 import org.olat.core.gui.UserRequest;
 import org.olat.core.gui.control.Controller;
 import org.olat.core.gui.control.WindowControl;
@@ -37,18 +38,29 @@ import org.olat.core.id.Identity;
 import org.olat.core.logging.activity.ThreadLocalUserActivityLogger;
 import org.olat.core.util.FileUtils;
 import org.olat.core.util.StringHelper;
+import org.olat.core.util.vfs.VFSConstants;
 import org.olat.core.util.vfs.VFSContainer;
 import org.olat.core.util.vfs.VFSItem;
 import org.olat.core.util.vfs.VFSLeaf;
+import org.olat.modules.ceditor.InteractiveAddPageElementHandler;
+import org.olat.modules.ceditor.PageElement;
+import org.olat.modules.ceditor.PageElementAddController;
+import org.olat.modules.ceditor.PageElementCategory;
+import org.olat.modules.ceditor.PageElementRenderingHints;
+import org.olat.modules.ceditor.PageElementStore;
+import org.olat.modules.ceditor.PageRunElement;
+import org.olat.modules.ceditor.model.ImageElement;
+import org.olat.modules.ceditor.ui.ImageEditorController;
 import org.olat.modules.portfolio.Media;
 import org.olat.modules.portfolio.MediaInformations;
 import org.olat.modules.portfolio.MediaLight;
 import org.olat.modules.portfolio.MediaRenderingHints;
 import org.olat.modules.portfolio.PortfolioLoggingAction;
+import org.olat.modules.portfolio.PortfolioService;
 import org.olat.modules.portfolio.manager.MediaDAO;
 import org.olat.modules.portfolio.manager.PortfolioFileStorage;
-import org.olat.modules.portfolio.ui.editor.InteractiveAddPageElementHandler;
-import org.olat.modules.portfolio.ui.editor.PageElementAddController;
+import org.olat.modules.portfolio.model.ExtendedMediaRenderingHints;
+import org.olat.modules.portfolio.model.MediaPart;
 import org.olat.modules.portfolio.ui.media.CollectImageMediaController;
 import org.olat.modules.portfolio.ui.media.ImageMediaController;
 import org.olat.modules.portfolio.ui.media.UploadMedia;
@@ -65,7 +77,7 @@ import org.springframework.stereotype.Service;
  *
  */
 @Service
-public class ImageHandler extends AbstractMediaHandler implements InteractiveAddPageElementHandler {
+public class ImageHandler extends AbstractMediaHandler implements PageElementStore<ImageElement>, InteractiveAddPageElementHandler {
 	
 	public static final String IMAGE_TYPE = "image";
 	public static final Set<String> mimeTypes = new HashSet<>();
@@ -80,6 +92,8 @@ public class ImageHandler extends AbstractMediaHandler implements InteractiveAdd
 	private MediaDAO mediaDao;
 	@Autowired
 	private PortfolioFileStorage fileStorage;
+	@Autowired
+	private VFSRepositoryService VFSRepositoryService;
 	
 	public ImageHandler() {
 		super(IMAGE_TYPE);
@@ -88,6 +102,11 @@ public class ImageHandler extends AbstractMediaHandler implements InteractiveAdd
 	@Override
 	public String getIconCssClass() {
 		return "o_icon_image";
+	}
+	
+	@Override
+	public PageElementCategory getCategory() {
+		return PageElementCategory.content;
 	}
 	
 	@Override
@@ -112,12 +131,8 @@ public class ImageHandler extends AbstractMediaHandler implements InteractiveAdd
 		if(StringHelper.containsNonWhitespace(storagePath)) {
 			VFSContainer storageContainer = fileStorage.getMediaContainer(media);
 			VFSItem item = storageContainer.resolve(media.getRootFilename());
-			if(item instanceof VFSLeaf) {
-				VFSLeaf leaf = (VFSLeaf)item;
-				if(leaf instanceof MetaTagged) {
-					MetaInfo metaInfo = ((MetaTagged)leaf).getMetaInfo();
-					thumbnail = metaInfo.getThumbnail(size.getHeight(), size.getWidth(), true);
-				}
+			if(item instanceof VFSLeaf && item.canMeta() == VFSConstants.YES) {
+				thumbnail = VFSRepositoryService.getThumbnail((VFSLeaf)item, size.getHeight(), size.getWidth(), true);
 			}
 		}
 		
@@ -133,8 +148,8 @@ public class ImageHandler extends AbstractMediaHandler implements InteractiveAdd
 	public MediaInformations getInformations(Object mediaObject) {
 		String title = null;
 		String description = null;
-		if (mediaObject instanceof MetaTagged) {
-			MetaInfo meta = ((MetaTagged)mediaObject).getMetaInfo();
+		if (mediaObject instanceof VFSLeaf && ((VFSLeaf)mediaObject).canMeta() == VFSConstants.YES) {
+			VFSMetadata meta = ((VFSLeaf)mediaObject).getMetaInfo();
 			title = meta.getTitle();
 			description = meta.getComment();
 		}
@@ -167,8 +182,25 @@ public class ImageHandler extends AbstractMediaHandler implements InteractiveAdd
 	}
 
 	@Override
+	public Controller getEditor(UserRequest ureq, WindowControl wControl, PageElement element) {
+		if(element instanceof MediaPart) {
+			MediaPart mediaPart = (MediaPart)element;
+			return new ImageEditorController(ureq, wControl, mediaPart, dataStorage, this);
+		}
+		return super.getEditor(ureq, wControl, element);
+	}
+
+	@Override
+	public PageRunElement getContent(UserRequest ureq, WindowControl wControl, PageElement element, PageElementRenderingHints options) {
+		if(element instanceof MediaPart) {
+			return new ImageMediaController(ureq, wControl, dataStorage, (MediaPart)element, options);
+		}
+		return super.getContent(ureq, wControl, element, options);
+	}
+
+	@Override
 	public Controller getMediaController(UserRequest ureq, WindowControl wControl, Media media, MediaRenderingHints hints) {
-		return new ImageMediaController(ureq, wControl, media, hints);
+		return new ImageMediaController(ureq, wControl, dataStorage, media, ExtendedMediaRenderingHints.valueOf(hints));
 	}
 
 	@Override
@@ -187,5 +219,10 @@ public class ImageHandler extends AbstractMediaHandler implements InteractiveAdd
 		File mediaDir = fileStorage.getMediaDirectory(media);
 		images.add(new File(mediaDir, media.getRootFilename()));
 		super.exportContent(media, null, images, mediaArchiveDirectory, locale);
+	}
+	
+	@Override
+	public ImageElement savePageElement(ImageElement element) {
+		return CoreSpringFactory.getImpl(PortfolioService.class).updatePart((MediaPart)element);
 	}
 }

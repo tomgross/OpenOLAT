@@ -43,7 +43,8 @@ import org.olat.core.gui.control.generic.messages.MessageUIFactory;
 import org.olat.core.gui.control.generic.tabbable.TabbableController;
 import org.olat.core.id.Identity;
 import org.olat.core.id.OLATResourceable;
-import org.olat.core.logging.OLog;
+import org.olat.core.id.Organisation;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.Formatter;
 import org.olat.core.util.StringHelper;
@@ -81,7 +82,7 @@ import org.olat.repository.handlers.RepositoryHandlerFactory;
 public class WikiCourseNode extends AbstractAccessableCourseNode {
 	private static final long serialVersionUID = -5800975339569440113L;
 
-	private static final OLog log = Tracing.createLoggerFor(WikiCourseNode.class);
+	private static final Logger log = Tracing.createLoggerFor(WikiCourseNode.class);
 
 	public static final String TYPE = "wiki";
 	private Condition preConditionEdit;
@@ -172,8 +173,7 @@ public class WikiCourseNode extends AbstractAccessableCourseNode {
 	public RepositoryEntry getReferencedRepositoryEntry() {
 		//"false" because we do not want to be strict, but just indicate whether
 		// the reference still exists or not
-		RepositoryEntry entry = WikiEditController.getWikiReference(getModuleConfiguration(), false);
-		return entry;
+		return WikiEditController.getWikiReference(getModuleConfiguration(), false);
 	}
 
 	@Override
@@ -193,12 +193,12 @@ public class WikiCourseNode extends AbstractAccessableCourseNode {
 	}
 
 	@Override
-	public void importNode(File importDirectory, ICourse course, Identity owner, Locale locale, boolean withReferences) {
+	public void importNode(File importDirectory, ICourse course, Identity owner, Organisation organisation, Locale locale, boolean withReferences) {
 		RepositoryEntryImportExport rie = new RepositoryEntryImportExport(importDirectory, getIdent());
 		if(withReferences && rie.anyExportedPropertiesAvailable()) {
 			RepositoryHandler handler = RepositoryHandlerFactory.getInstance().getRepositoryHandler(WikiResource.TYPE_NAME);
 			RepositoryEntry re = handler.importResource(owner, rie.getInitialAuthor(), rie.getDisplayName(),
-				rie.getDescription(), false, locale, rie.importGetExportedFile(), null);
+				rie.getDescription(), false, organisation, locale, rie.importGetExportedFile(), null);
 			WikiEditController.setWikiRepoReference(re, getModuleConfiguration());
 		} else {
 			WikiEditController.removeWikiReference(getModuleConfiguration());
@@ -206,7 +206,8 @@ public class WikiCourseNode extends AbstractAccessableCourseNode {
 	}
 
 	@Override
-	public boolean archiveNodeData(Locale locale, ICourse course, ArchiveOptions options, ZipOutputStream exportStream, String charset) {
+	public boolean archiveNodeData(Locale locale, ICourse course, ArchiveOptions options,
+			ZipOutputStream exportStream, String archivePath, String charset) {
 		String repoRef = (String)getModuleConfiguration().get("reporef");
 		OLATResourceable ores = RepositoryManager.getInstance().lookupRepositoryEntryBySoftkey(repoRef, true).getOlatResource();
 		
@@ -216,9 +217,14 @@ public class WikiCourseNode extends AbstractAccessableCourseNode {
 		}
 		 
 		//OK, there is something to archive 
-		String currentPath = "wiki_"
-				+ StringHelper.transformDisplayNameToFileSystemName(getShortName())
-				+ "_" + Formatter.formatDatetimeFilesystemSave(new Date(System.currentTimeMillis()));
+		String currentPath;
+		if(StringHelper.containsNonWhitespace(archivePath)) {
+			currentPath = archivePath;
+		} else {
+			currentPath = "wiki_"
+					+ StringHelper.transformDisplayNameToFileSystemName(getShortName())
+					+ "_" + Formatter.formatDatetimeFilesystemSave(new Date(System.currentTimeMillis()));
+		}
 		
 		VFSContainer container = WikiManager.getInstance().getWikiContainer(ores, WikiManager.WIKI_RESOURCE_FOLDER_NAME);
 		if(container != null) { //the container could be null if the wiki is an old empty one - so nothing to archive

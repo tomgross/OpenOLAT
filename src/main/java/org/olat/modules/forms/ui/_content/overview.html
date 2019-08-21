@@ -1,0 +1,24 @@
+<div class="o_eva_overview">
+<div class="panel panel-default">
+	<div class="panel-heading"><h4>$r.translate("report.overview.figures.title")</h4></div>
+	<table class="table"><tbody>
+		#foreach($figure in $figures)
+			<tr>
+				<th>$figure.getName()</th>
+				<td>$r.escapeHtml($figure.getValue())</td>
+			</tr>
+		#end
+	</tbody></table>
+</div>
+
+#if($r.available("report") && $r.visible("report"))
+	<div class="o_eva_rubric">$r.render("report")</div>
+#end
+#if($r.available("durationHistogram") && $r.visible("durationHistogram"))
+	<div class="o_evaluation_duration">
+		<h4>$r.translate("report.overview.duration.title")</h4>
+		<div class="col-xs-12 col-sm-9 col-md-9 col-lg-6">$r.render("durationHistogram")</div>
+	</div>
+#end
+<div class="clearfix"></div>
+</div>

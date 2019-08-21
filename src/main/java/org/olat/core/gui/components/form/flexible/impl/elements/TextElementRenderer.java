@@ -25,7 +25,6 @@
 */ 
 package org.olat.core.gui.components.form.flexible.impl.elements;
 
-import org.apache.commons.lang.StringEscapeUtils;
 import org.olat.core.gui.components.Component;
 import org.olat.core.gui.components.DefaultComponentRenderer;
 import org.olat.core.gui.components.form.flexible.impl.FormJSHelper;
@@ -34,25 +33,15 @@ import org.olat.core.gui.render.Renderer;
 import org.olat.core.gui.render.StringOutput;
 import org.olat.core.gui.render.URLBuilder;
 import org.olat.core.gui.translator.Translator;
+import org.olat.core.util.StringHelper;
 
 /**
- * Description:<br>
- * TODO: patrickb Class Description for TextElementRenderer
- * <P>
  * Initial Date: 08.12.2006 <br>
  * 
  * @author patrickb
  */
 class TextElementRenderer extends DefaultComponentRenderer {
 
-	/**
-	 * @see org.olat.core.gui.components.ComponentRenderer#render(org.olat.core.gui.render.Renderer,
-	 *      org.olat.core.gui.render.StringOutput,
-	 *      org.olat.core.gui.components.Component,
-	 *      org.olat.core.gui.render.URLBuilder,
-	 *      org.olat.core.gui.translator.Translator,
-	 *      org.olat.core.gui.render.RenderResult, java.lang.String[])
-	 */
 	@Override
 	public void render(Renderer renderer, StringOutput sb, Component source, URLBuilder ubu, Translator translator,
 			RenderResult renderResult, String[] args) {
@@ -66,12 +55,14 @@ class TextElementRenderer extends DefaultComponentRenderer {
 			value = "";
 		}
 		StringBuilder htmlVal = new StringBuilder();
-		htmlVal.append(StringEscapeUtils.escapeHtml(value));
+		htmlVal.append(StringHelper.escapeHtml(value));
+		String elementCSS = te.getElementCssClass();
 		if (source.isEnabled()) {
 			//read write view			
 			sb.append("<input type=\"").append(te.getHtmlInputType()).append("\" id=\"").append(id)
 			  .append("\" name=\"").append(id)
-			  .append("\" class='form-control' size=\"").append(te.displaySize);
+			  .append("\" class='form-control ").append(elementCSS, elementCSS != null)
+			  .append("' size=\"").append(te.displaySize);
 			if(te.maxlength > -1){
 				sb.append("\" maxlength=\"");
 				sb.append(te.maxlength);
@@ -104,8 +95,8 @@ class TextElementRenderer extends DefaultComponentRenderer {
 			// use the longer from display size or real value length
 			int size = (te.displaySize > value.length() ? te.displaySize : value.length());
 			sb.append("<input id=\"").append(id).append("\" type=\"").append(te.getHtmlInputType())
-			  .append("\" disabled=\"disabled\" class=\"form-control o_disabled\" size=\"")
-			  .append(size)
+			  .append("\" disabled=\"disabled\" class='form-control o_disabled ").append(elementCSS, elementCSS != null)
+			  .append("' size=\"").append(size)
 			  .append("\" value=\"").append(htmlVal).append("\" />")
 			  .append("</span>");
 		}

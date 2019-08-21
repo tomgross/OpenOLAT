@@ -47,6 +47,11 @@ public class VirtualContainer extends AbstractVirtualContainer {
 		return true;
 	}
 
+	@Override
+	public boolean isHidden() {
+		return false;
+	}
+
 	/**
 	 * Add a VFSItem to this CirtualContainer.
 	 * @param vfsItem
@@ -93,6 +98,11 @@ public class VirtualContainer extends AbstractVirtualContainer {
 	@Override
 	public boolean isSame(VFSItem vfsItem) {
 		return (this == vfsItem);
+	}
+
+	@Override
+	public String getRelPath() {
+		return null;
 	}
 
 	@Override

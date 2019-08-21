@@ -23,8 +23,8 @@ import java.io.File;
 import java.io.IOException;
 import java.util.Locale;
 
+import org.apache.logging.log4j.Logger;
 import org.olat.core.CoreSpringFactory;
-import org.olat.core.commons.modules.bc.vfs.OlatRootFolderImpl;
 import org.olat.core.commons.persistence.DBFactory;
 import org.olat.core.gui.UserRequest;
 import org.olat.core.gui.components.stack.TooledStackedPanel;
@@ -36,17 +36,17 @@ import org.olat.core.gui.media.MediaResource;
 import org.olat.core.gui.translator.Translator;
 import org.olat.core.id.Identity;
 import org.olat.core.id.OLATResourceable;
+import org.olat.core.id.Organisation;
 import org.olat.core.id.Roles;
 import org.olat.core.logging.AssertException;
-import org.olat.core.logging.OLog;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.FileUtils;
 import org.olat.core.util.StringHelper;
 import org.olat.core.util.Util;
 import org.olat.core.util.coordinate.CoordinatorManager;
 import org.olat.core.util.coordinate.LockResult;
+import org.olat.core.util.vfs.LocalFolderImpl;
 import org.olat.core.util.vfs.VFSContainer;
-import org.olat.course.assessment.AssessmentMode;
 import org.olat.course.assessment.manager.UserCourseInformationsManager;
 import org.olat.fileresource.FileResourceManager;
 import org.olat.fileresource.types.FileResource;
@@ -64,12 +64,12 @@ import org.olat.modules.portfolio.ui.PortfolioAssessmentDetailsController;
 import org.olat.repository.ErrorList;
 import org.olat.repository.RepositoryEntry;
 import org.olat.repository.RepositoryEntryImportExport;
+import org.olat.repository.RepositoryEntryStatusEnum;
 import org.olat.repository.RepositoryManager;
 import org.olat.repository.RepositoryService;
 import org.olat.repository.handlers.EditionSupport;
 import org.olat.repository.handlers.RepositoryHandler;
 import org.olat.repository.model.RepositoryEntrySecurity;
-import org.olat.repository.ui.RepositoryEntryRuntimeController.RuntimeControllerCreator;
 import org.olat.resource.OLATResource;
 import org.olat.resource.references.ReferenceManager;
 
@@ -85,10 +85,10 @@ import org.olat.resource.references.ReferenceManager;
 // Loads of parameters are unused
 public class BinderTemplateHandler implements RepositoryHandler {
 	
-	private static final OLog log = Tracing.createLoggerFor(BinderTemplateHandler.class);
+	private static final Logger log = Tracing.createLoggerFor(BinderTemplateHandler.class);
 
 	@Override
-	public boolean isCreate() {
+	public boolean supportCreate(Identity identity, Roles roles) {
 		return CoreSpringFactory.getImpl(PortfolioV2Module.class).isEnabled();
 	}
 	
@@ -98,11 +98,12 @@ public class BinderTemplateHandler implements RepositoryHandler {
 	}
 	
 	@Override
-	public RepositoryEntry createResource(Identity initialAuthor, String displayname, String description, Object createObject, Locale locale) {
+	public RepositoryEntry createResource(Identity initialAuthor, String displayname, String description, Object createObject, Organisation organisation, Locale locale) {
 		RepositoryService repositoryService = CoreSpringFactory.getImpl(RepositoryService.class);
 		PortfolioService portfolioService = CoreSpringFactory.getImpl(PortfolioService.class);
 		OLATResource resource = portfolioService.createBinderTemplateResource();
-		RepositoryEntry re = repositoryService.create(initialAuthor, null, "", displayname, description, resource, RepositoryEntry.ACC_OWNERS);
+		RepositoryEntry re = repositoryService.create(initialAuthor, null, "", displayname, description, resource,
+				RepositoryEntryStatusEnum.preparation, organisation);
 		portfolioService.createAndPersistBinderTemplate(initialAuthor, re, locale);
 		DBFactory.getInstance().commit();
 		return re;
@@ -112,28 +113,44 @@ public class BinderTemplateHandler implements RepositoryHandler {
 	public boolean isPostCreateWizardAvailable() {
 		return false;
 	}
+	
+	@Override
+	public boolean supportImport() {
+		return true;
+	}
 
 	@Override
 	public ResourceEvaluation acceptImport(File file, String filename) {
 		return BinderTemplateResource.evaluate(file, filename);
 	}
+
+	@Override
+	public boolean supportImportUrl() {
+		return false;
+	}
+	
+	@Override
+	public ResourceEvaluation acceptImport(String url) {
+		return ResourceEvaluation.notValid();
+	}
 	
 	@Override
 	public RepositoryEntry importResource(Identity initialAuthor, String initialAuthorAlt, String displayname, String description,
-			boolean withReferences, Locale locale, File file, String filename) {
+			boolean withReferences, Organisation organisation, Locale locale, File file, String filename) {
 		
 		RepositoryService repositoryService = CoreSpringFactory.getImpl(RepositoryService.class);
 		PortfolioService portfolioService = CoreSpringFactory.getImpl(PortfolioService.class);
 		try {
 			//create resource
 			OLATResource resource = portfolioService.createBinderTemplateResource();
-			OlatRootFolderImpl fResourceRootContainer = FileResourceManager.getInstance().getFileResourceRootImpl(resource);
+			LocalFolderImpl fResourceRootContainer = FileResourceManager.getInstance().getFileResourceRootImpl(resource);
 			File fResourceFileroot = fResourceRootContainer.getBasefile();
 			File zipRoot = new File(fResourceFileroot, FileResourceManager.ZIPDIR);
 			FileResource.copyResource(file, filename, zipRoot);
 
 			//create repository entry
-			RepositoryEntry re = repositoryService.create(initialAuthor, initialAuthorAlt, "", displayname, description, resource, RepositoryEntry.ACC_OWNERS);
+			RepositoryEntry re = repositoryService.create(initialAuthor, initialAuthorAlt, "", displayname, description, resource,
+					RepositoryEntryStatusEnum.preparation, organisation);
 			
 			//import binder
 			File binderFile = new File(zipRoot, BinderTemplateResource.BINDER_XML);
@@ -159,6 +176,13 @@ public class BinderTemplateHandler implements RepositoryHandler {
 	}
 	
 	@Override
+	public RepositoryEntry importResource(Identity initialAuthor, String initialAuthorAlt, String displayname,
+			String description, Organisation organisation, Locale locale, String url) {
+		//
+		return null;
+	}
+
+	@Override
 	public RepositoryEntry copy(Identity author, RepositoryEntry source, RepositoryEntry target) {
 		PortfolioService portfolioService = CoreSpringFactory.getImpl(PortfolioService.class);
 		Binder templateSource = portfolioService.getBinderByResource(source.getOlatResource());
@@ -172,7 +196,7 @@ public class BinderTemplateHandler implements RepositoryHandler {
 	}
 
 	@Override
-	public EditionSupport supportsEdit(OLATResourceable resource) {
+	public EditionSupport supportsEdit(OLATResourceable resource, Identity identity, Roles roles) {
 		return EditionSupport.embedded;
 	}
 	
@@ -189,15 +213,6 @@ public class BinderTemplateHandler implements RepositoryHandler {
 
 	@Override
 	public boolean readyToDelete(RepositoryEntry entry, Identity identity, Roles roles, Locale locale, ErrorList errors) {
-		/*PortfolioService portfolioService = CoreSpringFactory.getImpl(PortfolioService.class);
-		Binder template = portfolioService.getBinderByResource(entry.getOlatResource());
-		if(portfolioService.isTemplateInUse(template, null, null)) {
-			Translator translator = Util.createPackageTranslator(PortfolioHomeController.class, locale);
-			errors.setError(translator.translate("warning.template.in.use",
-					new String[] { template.getTitle(), entry.getDisplayname() }));
-			return false;
-		}*/
-		
 		String referencesSummary = CoreSpringFactory.getImpl(ReferenceManager.class)
 				.getReferencesToSummary(entry.getOlatResource(), locale);
 		if (referencesSummary != null) {
@@ -222,7 +237,7 @@ public class BinderTemplateHandler implements RepositoryHandler {
 	 * @see org.olat.repository.handlers.RepositoryHandler#getAsMediaResource(org.olat.core.id.OLATResourceable)
 	 */
 	@Override
-	public MediaResource getAsMediaResource(OLATResourceable res, boolean backwardsCompatible) {
+	public MediaResource getAsMediaResource(OLATResourceable res) {
 		RepositoryEntry templateEntry = RepositoryManager.getInstance().lookupRepositoryEntry(res, true);
 		Binder template = CoreSpringFactory.getImpl(PortfolioService.class)
 				.getBinderByResource(templateEntry.getOlatResource());
@@ -236,24 +251,19 @@ public class BinderTemplateHandler implements RepositoryHandler {
 
 	@Override
 	public MainLayoutController createLaunchController(RepositoryEntry re, RepositoryEntrySecurity reSecurity, UserRequest ureq, WindowControl wControl) {
-		return new BinderRuntimeController(ureq, wControl, re, reSecurity,
-			new RuntimeControllerCreator() {
-				@Override
-				public Controller create(UserRequest uureq, WindowControl wwControl, TooledStackedPanel toolbarPanel,
-						RepositoryEntry entry, RepositoryEntrySecurity security, AssessmentMode assessmentMode) {
-					PortfolioService portfolioService = CoreSpringFactory.getImpl(PortfolioService.class);
-					if(reSecurity.isGroupParticipant() || reSecurity.isCourseParticipant()) {
-						//pick up the template
-						
-						return new BinderPickerController(uureq, wwControl, entry);
-					} else {
-						Binder binder = portfolioService.getBinderByResource(entry.getOlatResource());
-						CoreSpringFactory.getImpl(UserCourseInformationsManager.class)
-							.updateUserCourseInformations(entry.getOlatResource(), uureq.getIdentity());
-						BinderConfiguration bConfig = BinderConfiguration.createTemplateConfig(reSecurity.isEntryAdmin());
-						BinderSecurityCallback secCallback = BinderSecurityCallbackFactory.getCallbackForTemplate(reSecurity);
-						return new BinderController(uureq, wwControl, toolbarPanel, secCallback, binder, bConfig);
-					}
+		return new BinderRuntimeController(ureq, wControl, re, reSecurity, (uureq, wwControl, toolbarPanel, entry, security, assessmentMode) -> {
+				PortfolioService portfolioService = CoreSpringFactory.getImpl(PortfolioService.class);
+				if(reSecurity.isParticipant()) {
+					//pick up the template
+					
+					return new BinderPickerController(uureq, wwControl, entry);
+				} else {
+					Binder binder = portfolioService.getBinderByResource(entry.getOlatResource());
+					CoreSpringFactory.getImpl(UserCourseInformationsManager.class)
+						.updateUserCourseInformations(entry.getOlatResource(), uureq.getIdentity());
+					BinderConfiguration bConfig = BinderConfiguration.createTemplateConfig(reSecurity.isEntryAdmin());
+					BinderSecurityCallback secCallback = BinderSecurityCallbackFactory.getCallbackForTemplate(reSecurity);
+					return new BinderController(uureq, wwControl, toolbarPanel, secCallback, binder, bConfig);
 				}
 			});
 	}

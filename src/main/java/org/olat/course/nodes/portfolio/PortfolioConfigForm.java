@@ -159,7 +159,6 @@ public class PortfolioConfigForm extends FormBasicController {
 			changeMapLink.setElementCssClass("o_sel_map_change_repofile");
 			editMapLink = uifactory.addFormLink("edit.map", buttonGroupLayout, Link.BUTTON);
 			editMapLink.setElementCssClass("o_sel_edit_map");
-			editMapLink.setTitle("Hello world edit");
 			
 			chooseMapLink.setVisible(map == null && binder == null);
 			chooseMapLink.setEnabled(!inUse);
@@ -248,7 +247,7 @@ public class PortfolioConfigForm extends FormBasicController {
 		
 		searchController = new ReferencableEntriesSearchController(getWindowControl(), ureq,
 				new String[]{ EPTemplateMapResource.TYPE_NAME, BinderTemplateResource.TYPE_NAME},
-				translate("select.map2"), false, true, false, false);			
+				translate("select.map2"), false, true, false, false, false);			
 		listenTo(searchController);
 		
 		cmc = new CloseableModalController(getWindowControl(), translate("close"), searchController.getInitialComponent(), true, translate("select.map"));

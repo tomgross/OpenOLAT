@@ -25,35 +25,36 @@
 */
 package org.olat.core.commons.modules.bc.commands;
 
-import org.olat.core.commons.editor.htmleditor.HTMLEditorController;
-import org.olat.core.commons.editor.htmleditor.WysiwygFactory;
-import org.olat.core.commons.editor.plaintexteditor.PlainTextEditorController;
+import java.util.List;
+
+import org.olat.core.commons.editor.htmleditor.HTMLEditorConfig;
 import org.olat.core.commons.modules.bc.FolderEvent;
-import org.olat.core.commons.modules.bc.FolderLicenseHandler;
 import org.olat.core.commons.modules.bc.components.FolderComponent;
-import org.olat.core.commons.modules.bc.meta.MetaInfo;
-import org.olat.core.commons.modules.bc.meta.tagged.MetaTagged;
-import org.olat.core.commons.services.license.License;
-import org.olat.core.commons.services.license.LicenseModule;
-import org.olat.core.commons.services.license.LicenseService;
-import org.olat.core.commons.services.license.ui.LicenseUIFactory;
+import org.olat.core.commons.services.doceditor.DocEditor;
+import org.olat.core.commons.services.doceditor.DocEditorConfigs;
+import org.olat.core.commons.services.doceditor.DocEditorSecurityCallback;
+import org.olat.core.commons.services.doceditor.DocEditorSecurityCallbackBuilder;
+import org.olat.core.commons.services.doceditor.DocTemplates;
+import org.olat.core.commons.services.doceditor.DocumentEditorService;
+import org.olat.core.commons.services.doceditor.ui.CreateDocumentController;
+import org.olat.core.commons.services.doceditor.ui.DocEditorFullscreenController;
 import org.olat.core.commons.services.notifications.NotificationsManager;
 import org.olat.core.commons.services.notifications.SubscriptionContext;
 import org.olat.core.gui.UserRequest;
-import org.olat.core.gui.components.form.flexible.FormItemContainer;
-import org.olat.core.gui.components.form.flexible.elements.TextElement;
-import org.olat.core.gui.components.form.flexible.impl.FormBasicController;
-import org.olat.core.gui.components.form.flexible.impl.FormLayoutContainer;
+import org.olat.core.gui.components.Component;
 import org.olat.core.gui.control.Controller;
 import org.olat.core.gui.control.Event;
 import org.olat.core.gui.control.WindowControl;
+import org.olat.core.gui.control.controller.BasicController;
+import org.olat.core.gui.control.generic.closablewrapper.CloseableModalController;
 import org.olat.core.gui.translator.Translator;
+import org.olat.core.id.Identity;
 import org.olat.core.logging.AssertException;
 import org.olat.core.util.FileUtils;
 import org.olat.core.util.WebappHelper;
+import org.olat.core.util.resource.OresHelper;
 import org.olat.core.util.vfs.VFSConstants;
 import org.olat.core.util.vfs.VFSContainer;
-import org.olat.core.util.vfs.VFSItem;
 import org.olat.core.util.vfs.VFSLeaf;
 import org.olat.core.util.vfs.VFSManager;
 import org.olat.core.util.vfs.callbacks.VFSSecurityCallback;
@@ -62,89 +63,87 @@ import org.springframework.beans.factory.annotation.Autowired;
 
 /**
  *
- * Description:
- * A panel with a FolderComponent and a CreateFileForm.
- * 
  * Initial Date:  13.12.2005
  * @author Florian Gnägi
+ * @author Urs Hensler
  */
-public class CmdCreateFile extends FormBasicController implements FolderCommand {
+public class CmdCreateFile extends BasicController implements FolderCommand {
 
 	private int status = FolderCommandStatus.STATUS_SUCCESS;
 	private String fileName;
-	private String target;
 	
+	private CloseableModalController cmc;
+	private CreateDocumentController createCtrl;
 	private Controller editorCtr;
-	private TextElement textElement;
 	private FolderComponent folderComponent;
 	
+	private VFSLeaf vfsLeaf;
+	
 	@Autowired
-	private LicenseService licenseService;
-	@Autowired
-	private LicenseModule licenseModule;
-	@Autowired
-	private FolderLicenseHandler licenseHandler;
+	private DocumentEditorService docEditorService;
 
 	protected CmdCreateFile(UserRequest ureq, WindowControl wControl) {
 		super(ureq, wControl);
 	}
 
 	@Override
-	public Controller execute(FolderComponent folderComponent, UserRequest ureq, WindowControl wControl, Translator translator) {
-		if (folderComponent.getCurrentContainer().canWrite() != VFSConstants.YES) {
-			throw new AssertException("Illegal attempt to create file in: " + folderComponent.getCurrentContainerPath());
+	public Controller execute(FolderComponent folderCmp, UserRequest ureq, WindowControl wControl, Translator translator) {
+		if (folderCmp.getCurrentContainer().canWrite() != VFSConstants.YES) {
+			throw new AssertException("Illegal attempt to create file in: " + folderCmp.getCurrentContainerPath());
 		}		
 		setTranslator(translator);
-		this.folderComponent = folderComponent;
+		this.folderComponent = folderCmp;
 
 		//check for quota
-		long quotaLeft = VFSManager.getQuotaLeftKB(folderComponent.getCurrentContainer());
+		long quotaLeft = VFSManager.getQuotaLeftKB(folderCmp.getCurrentContainer());
 		if (quotaLeft <= 0 && quotaLeft != -1 ) {
 			String supportAddr = WebappHelper.getMailConfig("mailQuota");
 			String msg = translate("QuotaExceededSupport", new String[] { supportAddr });
 			getWindowControl().setError(msg);
 			return null;
 		}
-		target = folderComponent.getRootContainer().getName() + folderComponent.getCurrentContainerPath();
-		target = target.replace("/", " / ");
-		initForm(ureq);
+		
+		boolean hasMeta = folderCmp.getCurrentContainer().canMeta() == VFSConstants.YES;
+		Identity identity = getIdentity();
+		DocTemplates docTemplates = DocTemplates.editables(identity, ureq.getUserSession().getRoles(), getLocale(), hasMeta).build();
+		createCtrl = new CreateDocumentController(ureq, wControl, folderCmp.getCurrentContainer(), docTemplates);
+		listenTo(createCtrl);
+		
+		cmc = new CloseableModalController(getWindowControl(), translate("close"), createCtrl.getInitialComponent(),
+				true, translate("cfile.header"));
+		cmc.activate();
+		listenTo(cmc);
 		return this;
 	}
 	
 	@Override
-	protected void initForm(FormItemContainer formLayout, Controller listener, UserRequest ureq) {
-		formLayout.setElementCssClass("o_sel_folder_new_file");
-		uifactory.addStaticTextElement("cf.createin", target, formLayout);
-		
-		textElement = uifactory.addTextElement("fileName", "cfile.name", -1, "", formLayout);
-		textElement.setExampleKey("cfile.name.example", null);
-		textElement.setDisplaySize(20);
-		textElement.setMandatory(true);
-		textElement.setElementCssClass("o_sel_folder_new_file_name");
-		
-		FormLayoutContainer formButtons = FormLayoutContainer.createButtonLayout("formButton", getTranslator());
-		formLayout.add(formButtons);
-		uifactory.addFormSubmitButton("submit", "cfile.create", formButtons);
-		uifactory.addFormCancelButton("cancel", formButtons, ureq, getWindowControl());		
+	protected void doDispose() {
+		//
 	}
 	
 	@Override
-	protected void doDispose() {
-				
-	}
-	
 	public void event(UserRequest ureq, Controller source, Event event) {
-		if (source == editorCtr) {
+		if (source == createCtrl) {
+			cmc.deactivate();
 			if (event == Event.DONE_EVENT) {
-				// we're done, notify listerers
-				fireEvent(ureq, new FolderEvent(FolderEvent.NEW_FILE_EVENT, fileName));	
-				notifyFinished(ureq);
-			} else if(event == Event.CANCELLED_EVENT){
+				vfsLeaf = createCtrl.getCreatedLeaf();
+				if (vfsLeaf == null) {
+					status = FolderCommandStatus.STATUS_FAILED;
+				} else {
+					fileName = vfsLeaf.getName();
+					doEdit(ureq);
+				}
+			} else {
 				fireEvent(ureq, FOLDERCOMMAND_FINISHED);
 			}
+		} else if (source == editorCtr) {
+			fireEvent(ureq, new FolderEvent(FolderEvent.NEW_FILE_EVENT, fileName));
+			fireEvent(ureq, FOLDERCOMMAND_FINISHED);
+			notifyFinished(ureq);
+			cleanUp();
 		}
 	}
-	
+
 	private void notifyFinished(UserRequest ureq) {
 		VFSContainer container = VFSManager.findInheritingSecurityCallbackContainer(folderComponent.getRootContainer());
 		VFSSecurityCallback secCallback = container.getLocalSecurityCallback();
@@ -154,7 +153,70 @@ public class CmdCreateFile extends FormBasicController implements FolderCommand 
 				NotificationsManager.getInstance().markPublisherNews(subsContext, ureq.getIdentity(), true);
 			}
 		}
-		fireEvent(ureq, FOLDERCOMMAND_FINISHED);
+	}
+	
+	private void doEdit(UserRequest ureq) {
+		VFSContainer currentContainer = folderComponent.getCurrentContainer();
+		boolean hasMeta = currentContainer.canMeta() == VFSConstants.YES;
+		
+		String suffix = FileUtils.getFileSuffix(vfsLeaf.getName());
+		List<DocEditor> editors = docEditorService.getEditors(getIdentity(), ureq.getUserSession().getRoles(), suffix,
+				DocEditor.Mode.EDIT, hasMeta);
+		// Not able to decide which editor to use -> show the folder list
+		if (editors.size() != 1) {
+			fireEvent(ureq, new FolderEvent(FolderEvent.NEW_FILE_EVENT, fileName));
+			fireEvent(ureq, FOLDERCOMMAND_FINISHED);
+			return;
+		}
+		
+		DocEditorSecurityCallback secCallback = DocEditorSecurityCallbackBuilder.builder()
+				.withMode(DocEditor.Mode.EDIT)
+				.withHasMeta(hasMeta)
+				.withVersionControlled(true)
+				.build();
+		HTMLEditorConfig htmlEditorConfig = getHtmlEditorConfig();
+		DocEditorConfigs configs = DocEditorConfigs.builder()
+				.addConfig(htmlEditorConfig)
+				.build();
+		WindowControl swb = addToHistory(ureq, OresHelper.createOLATResourceableType("DocEditor"), null);
+		editorCtr = new DocEditorFullscreenController(ureq, swb, vfsLeaf, secCallback, configs);
+		listenTo(editorCtr);
+	}
+
+	private HTMLEditorConfig getHtmlEditorConfig() {
+		// start HTML editor with the folders root folder as base and the file
+		// path as a relative path from the root directory. But first check if the 
+		// root directory is wirtable at all (e.g. not the case in users personal 
+		// briefcase), and seach for the next higher directory that is writable.
+		String relFilePath = "/" + vfsLeaf.getName();
+		// add current container path if not at root level
+		if (!folderComponent.getCurrentContainerPath().equals("/")) { 
+			relFilePath = folderComponent.getCurrentContainerPath() + relFilePath;
+		}
+		VFSContainer writableRootContainer = folderComponent.getRootContainer();
+		ContainerAndFile result = VFSManager.findWritableRootFolderFor(writableRootContainer, relFilePath);
+		if (result != null) {
+			if(vfsLeaf.getParentContainer() != null) {
+				writableRootContainer = vfsLeaf.getParentContainer();
+				relFilePath = vfsLeaf.getName();
+			} else {
+				writableRootContainer = result.getContainer();
+			}
+		} else {
+			// use fallback that always work: current directory and current file
+			relFilePath = vfsLeaf.getName();
+			writableRootContainer = folderComponent.getCurrentContainer(); 
+		}
+		return HTMLEditorConfig.builder(writableRootContainer, relFilePath)
+				.withCustomLinkTreeModel(folderComponent.getCustomLinkTreeModel())
+				.build();
+	}
+	
+	private void cleanUp() {
+		removeAsListenerAndDispose(createCtrl);
+		removeAsListenerAndDispose(editorCtr);
+		createCtrl = null;
+		editorCtr = null;
 	}
 
 	public String getFileName() {
@@ -162,113 +224,22 @@ public class CmdCreateFile extends FormBasicController implements FolderCommand 
 	}
 
 	@Override
-	public int getStatus() { 
-		return status; 
+	public int getStatus() {
+		return status;
 	}
 
 	@Override
 	public boolean runsModal() {
-		return false;
+		return true;
 	}
 		
 	@Override
 	public String getModalTitle() {
-		return translate("cfile.header");
+		return null;
 	}
 
 	@Override
-	protected void formCancelled(UserRequest ureq) {
-		fireEvent(ureq, FOLDERCOMMAND_FINISHED);
-	}
-
-	@Override
-	protected void formOK(UserRequest ureq) {			
-		//create the file
-		fileName = textElement.getValue();
-		VFSContainer currentContainer = folderComponent.getCurrentContainer();
-		VFSItem item = currentContainer.createChildLeaf(fileName);
-
-		if(item == null) {
-			status = FolderCommandStatus.STATUS_FAILED;
-			notifyFinished(ureq);
-		} else {
-			if(item instanceof MetaTagged) {
-				MetaInfo meta = ((MetaTagged)item).getMetaInfo();
-				meta.setAuthor(ureq.getIdentity());
-				if (licenseModule.isEnabled(licenseHandler)) {
-					License license = licenseService.createDefaultLicense(licenseHandler, getIdentity());
-					meta.setLicenseTypeKey(String.valueOf(license.getLicenseType().getKey()));
-					meta.setLicenseTypeName(license.getLicenseType().getName());
-					meta.setLicensor(license.getLicensor());
-					meta.setLicenseText(LicenseUIFactory.getLicenseText(license));
-				}
-				meta.write();
-			}
-
-			// start HTML editor with the folders root folder as base and the file
-			// path as a relative path from the root directory. But first check if the 
-			// root directory is wirtable at all (e.g. not the case in users personal 
-			// briefcase), and seach for the next higher directory that is writable.
-			String relFilePath = "/" + fileName;
-			// add current container path if not at root level
-			if (!folderComponent.getCurrentContainerPath().equals("/")) { 
-				relFilePath = folderComponent.getCurrentContainerPath() + relFilePath;
-			}
-			VFSContainer writableRootContainer = folderComponent.getRootContainer();
-			ContainerAndFile result = VFSManager.findWritableRootFolderFor(writableRootContainer, relFilePath);
-			if (result != null) {
-				writableRootContainer = result.getContainer();
-				relFilePath = result.getFileName();
-			} else {
-				// use fallback that always work: current directory and current file
-				relFilePath = fileName;
-				writableRootContainer = folderComponent.getCurrentContainer(); 
-			}
-			if (relFilePath.endsWith(".html") || relFilePath.endsWith(".htm")) {
-				editorCtr = WysiwygFactory.createWysiwygController(ureq, getWindowControl(), writableRootContainer, relFilePath, true, true);				
-				((HTMLEditorController)editorCtr).setNewFile(true);
-			} else {
-				editorCtr = new PlainTextEditorController(ureq, getWindowControl(), (VFSLeaf)writableRootContainer.resolve(relFilePath), "utf-8", true, true, null);
-			}
-
-			listenTo(editorCtr);
-			initialPanel.setContent(editorCtr.getInitialComponent());
-		}
-	}
-
-	@Override
-	protected boolean validateFormLogic(UserRequest ureq) {
-		boolean isInputValid = true;
-		String fileName = textElement.getValue();
-		if(fileName==null || fileName.trim().equals("")) {
-			textElement.setErrorKey("cfile.name.empty", new String[0]);
-			isInputValid = false;
-		} else {
-			fileName = fileName.toLowerCase();
-			// check if there are any unwanted path denominators in the name
-			if (!validateFileName(fileName)) {
-				textElement.setErrorKey("cfile.name.notvalid", new String[0]);
-				isInputValid = false;
-				return isInputValid;
-			} else if (!fileName.endsWith(".html") && !fileName.endsWith(".htm") && !fileName.endsWith(".txt") && !fileName.endsWith(".css")) {
-				//add html extension if missing
-				fileName = fileName + ".html";
-			}
-			//ok, file name is sanitized, let's see if a file with this name already exists
-			VFSContainer currentContainer = folderComponent.getCurrentContainer();
-			VFSItem item = currentContainer.resolve(fileName);
-			if (item != null) {
-				textElement.setErrorKey("cfile.already.exists", new String[] {fileName});
-				isInputValid = false;
-			} else {
-				isInputValid = true;
-				textElement.setValue(fileName);
-			}
-		}
-		return isInputValid;			
-	}
-	
-	private boolean validateFileName(String name) {		
-		return FileUtils.validateFilename(name);
+	protected void event(UserRequest ureq, Component source, Event event) {
+		//
 	}
 }

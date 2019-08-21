@@ -29,7 +29,7 @@ import javax.servlet.http.HttpSession;
 import org.olat.admin.user.delete.service.UserDeletionManager;
 import org.olat.basesecurity.AuthHelper;
 import org.olat.basesecurity.Authentication;
-import org.olat.basesecurity.BaseSecurityManager;
+import org.olat.basesecurity.BaseSecurity;
 import org.olat.core.CoreSpringFactory;
 import org.olat.core.commons.fullWebApp.MessageWindowController;
 import org.olat.core.dispatcher.Dispatcher;
@@ -41,7 +41,7 @@ import org.olat.core.gui.media.MediaResource;
 import org.olat.core.gui.media.RedirectMediaResource;
 import org.olat.core.gui.translator.Translator;
 import org.olat.core.id.Identity;
-import org.olat.core.logging.OLog;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
 import org.olat.core.logging.activity.ThreadLocalUserActivityLoggerInstaller;
 import org.olat.core.util.StringHelper;
@@ -50,13 +50,18 @@ import org.olat.core.util.WebappHelper;
 import org.olat.login.oauth.model.OAuthRegistration;
 import org.olat.login.oauth.model.OAuthUser;
 import org.olat.login.oauth.spi.OpenIDVerifier;
+import org.olat.login.oauth.spi.OpenIdConnectApi.OpenIdConnectService;
+import org.olat.login.oauth.spi.OpenIdConnectFullConfigurableApi.OpenIdConnectFullConfigurableService;
 import org.olat.login.oauth.ui.JSRedirectWindowController;
 import org.olat.login.oauth.ui.OAuthAuthenticationController;
 import org.olat.user.UserManager;
-import org.scribe.model.Token;
-import org.scribe.model.Verifier;
-import org.scribe.oauth.OAuthService;
 import org.springframework.beans.factory.annotation.Autowired;
+
+import com.github.scribejava.core.model.OAuth1RequestToken;
+import com.github.scribejava.core.model.Token;
+import com.github.scribejava.core.oauth.OAuth10aService;
+import com.github.scribejava.core.oauth.OAuth20Service;
+import com.github.scribejava.core.oauth.OAuthService;
 
 /**
  * Callback for OAuth 2
@@ -68,13 +73,15 @@ import org.springframework.beans.factory.annotation.Autowired;
  */
 public class OAuthDispatcher implements Dispatcher {
 	
-	private static final OLog log = Tracing.createLoggerFor(OAuthDispatcher.class);
+	private static final Logger log = Tracing.createLoggerFor(OAuthDispatcher.class);
 
 	
 	@Autowired
 	private UserManager userManager;
 	@Autowired
-	private BaseSecurityManager securityManager;
+	private BaseSecurity securityManager;
+	@Autowired
+	private UserDeletionManager userDeletionManager;
 
 	@Override
 	public void execute(HttpServletRequest request, HttpServletResponse response)
@@ -86,7 +93,7 @@ public class OAuthDispatcher implements Dispatcher {
 			//upon creation URL is checked for 
 			ureq = new UserRequestImpl(uriPrefix, request, response);
 		} catch(NumberFormatException nfe) {
-			if(log.isDebug()){
+			if(log.isDebugEnabled()){
 				log.debug("Bad Request "+request.getPathInfo());
 			}
 			DispatcherModule.sendBadRequest(request.getPathInfo(), response);
@@ -104,16 +111,16 @@ public class OAuthDispatcher implements Dispatcher {
 			return; 
 		}
 		
-		try {
-			HttpSession sess = request.getSession();
+		HttpSession sess = request.getSession();
+		try(OAuthService service = (OAuthService)sess.getAttribute(OAuthConstants.OAUTH_SERVICE)) {
+			
 			//OAuth 2.0 hasn't any request token
 			Token requestToken = (Token)sess.getAttribute(OAuthConstants.REQUEST_TOKEN);
-			OAuthService service = (OAuthService)sess.getAttribute(OAuthConstants.OAUTH_SERVICE);
 			OAuthSPI provider = (OAuthSPI)sess.getAttribute(OAuthConstants.OAUTH_SPI);
 
 			Token accessToken;
 			if(provider == null) {
-				log.audit("OAuth Login failed, no provider in request");
+				log.info(Tracing.M_AUDIT, "OAuth Login failed, no provider in request");
 				DispatcherModule.redirectToDefaultDispatcher(response);
 				return;
 			} else if(provider.isImplicitWorkflow()) {
@@ -121,16 +128,29 @@ public class OAuthDispatcher implements Dispatcher {
 				if(idToken == null) {
 					redirectImplicitWorkflow(ureq);
 					return;
+				} else if(service instanceof OpenIdConnectFullConfigurableService) {
+					OpenIDVerifier verifier = OpenIDVerifier.create(ureq, sess);
+					accessToken = ((OpenIdConnectFullConfigurableService)service).getAccessToken(verifier);
+				} else if(service instanceof OpenIdConnectService) {
+					OpenIDVerifier verifier = OpenIDVerifier.create(ureq, sess);
+					accessToken = ((OpenIdConnectService)service).getAccessToken(verifier);
 				} else {
-					Verifier verifier = OpenIDVerifier.create(ureq, sess);
-					accessToken = service.getAccessToken(requestToken, verifier);
+					return;
 				}
-			} else {
+			} else if(service instanceof OAuth10aService) {
 				String requestVerifier = request.getParameter("oauth_verifier"); 
 				if(requestVerifier == null) {//OAuth 2.0 as a code
 					requestVerifier = request.getParameter("code");
 				}
-				accessToken = service.getAccessToken(requestToken, new Verifier(requestVerifier));
+				accessToken = ((OAuth10aService)service).getAccessToken((OAuth1RequestToken)requestToken, requestVerifier);
+			} else if(service instanceof OAuth20Service) {
+				String requestVerifier = request.getParameter("oauth_verifier"); 
+				if(requestVerifier == null) {//OAuth 2.0 as a code
+					requestVerifier = request.getParameter("code");
+				}
+				accessToken = ((OAuth20Service)service).getAccessToken(requestVerifier);
+			} else {
+				return;
 			}
 
 			OAuthUser infos = provider.getUser(service, accessToken);
@@ -177,7 +197,7 @@ public class OAuthDispatcher implements Dispatcher {
 					}
 				} else {
 					//update last login date and register active user
-					UserDeletionManager.getInstance().setIdentityAsActiv(identity);
+					userDeletionManager.setIdentityAsActiv(identity);
 					MediaResource mr = ureq.getDispatchResult().getResultingMediaResource();
 					if (mr instanceof RedirectMediaResource) {
 						RedirectMediaResource rmr = (RedirectMediaResource)mr;

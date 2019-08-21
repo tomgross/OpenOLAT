@@ -19,16 +19,19 @@
  */
 package org.olat.course.nodes.gta.ui;
 
+import static org.olat.course.nodes.gta.ui.GTAUIFactory.getOpenMode;
+import static org.olat.course.nodes.gta.ui.GTAUIFactory.htmlOffice;
+
 import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
 
-import org.olat.core.commons.editor.htmleditor.HTMLEditorController;
-import org.olat.core.commons.editor.htmleditor.WysiwygFactory;
-import org.olat.core.commons.modules.bc.meta.MetaInfo;
-import org.olat.core.commons.modules.bc.meta.tagged.MetaTagged;
-import org.olat.core.commons.services.notifications.NotificationsManager;
-import org.olat.core.commons.services.notifications.SubscriptionContext;
+import org.olat.core.commons.services.doceditor.DocEditor.Mode;
+import org.olat.core.commons.services.doceditor.DocEditorConfigs;
+import org.olat.core.commons.services.doceditor.DocEditorSecurityCallback;
+import org.olat.core.commons.services.doceditor.DocEditorSecurityCallbackBuilder;
+import org.olat.core.commons.services.doceditor.ui.DocEditorFullscreenController;
+import org.olat.core.commons.services.vfs.VFSMetadata;
 import org.olat.core.gui.UserRequest;
 import org.olat.core.gui.components.form.flexible.FormItem;
 import org.olat.core.gui.components.form.flexible.FormItemContainer;
@@ -37,25 +40,28 @@ import org.olat.core.gui.components.form.flexible.elements.FlexiTableElement;
 import org.olat.core.gui.components.form.flexible.elements.FormLink;
 import org.olat.core.gui.components.form.flexible.impl.FormBasicController;
 import org.olat.core.gui.components.form.flexible.impl.FormEvent;
-import org.olat.core.gui.components.form.flexible.impl.elements.table.BooleanCellRenderer;
 import org.olat.core.gui.components.form.flexible.impl.elements.table.DefaultFlexiColumnModel;
 import org.olat.core.gui.components.form.flexible.impl.elements.table.FlexiTableColumnModel;
 import org.olat.core.gui.components.form.flexible.impl.elements.table.FlexiTableDataModelFactory;
 import org.olat.core.gui.components.form.flexible.impl.elements.table.SelectionEvent;
-import org.olat.core.gui.components.form.flexible.impl.elements.table.StaticFlexiCellRenderer;
 import org.olat.core.gui.components.link.Link;
 import org.olat.core.gui.control.Controller;
 import org.olat.core.gui.control.Event;
 import org.olat.core.gui.control.WindowControl;
 import org.olat.core.gui.control.generic.closablewrapper.CloseableModalController;
+import org.olat.core.gui.control.generic.dtabs.Activateable2;
+import org.olat.core.id.context.ContextEntry;
+import org.olat.core.id.context.StateEntry;
+import org.olat.core.util.resource.OresHelper;
+import org.olat.core.util.vfs.VFSConstants;
 import org.olat.core.util.vfs.VFSContainer;
 import org.olat.core.util.vfs.VFSItem;
 import org.olat.core.util.vfs.VFSLeaf;
-import org.olat.core.util.vfs.VFSManager;
 import org.olat.course.nodes.GTACourseNode;
 import org.olat.course.nodes.gta.GTAManager;
 import org.olat.course.nodes.gta.model.Solution;
 import org.olat.course.nodes.gta.ui.SolutionTableModel.SolCols;
+import org.olat.course.nodes.gta.ui.component.ModeCellRenderer;
 import org.olat.course.run.environment.CourseEnvironment;
 import org.olat.user.UserManager;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -66,9 +72,10 @@ import org.springframework.beans.factory.annotation.Autowired;
  * @author srosse, stephane.rosse@frentix.com, http://www.frentix.com
  *
  */
-public class GTASampleSolutionsEditController extends FormBasicController {
+public class GTASampleSolutionsEditController extends FormBasicController implements Activateable2 {
 	
-	private FormLink addSolutionLink, createSolutionLink;
+	private FormLink addSolutionLink;
+	private FormLink createSolutionLink;
 	private SolutionTableModel solutionModel;
 	private FlexiTableElement solutionTable;
 	
@@ -76,14 +83,14 @@ public class GTASampleSolutionsEditController extends FormBasicController {
 	private EditSolutionController addSolutionCtrl;
 	private EditSolutionController editSolutionCtrl;
 	private NewSolutionController newSolutionCtrl;
-	private HTMLEditorController newSolutionEditorCtrl, editSolutionEditorCtrl;
+	private DocEditorFullscreenController docEditorCtrl;
 	
 	private final File solutionDir;
 	private final boolean readOnly;
 	private final GTACourseNode gtaNode;
 	private final CourseEnvironment courseEnv;
 	private final VFSContainer solutionContainer;
-	private final SubscriptionContext subscriptionContext;
+	private final Long courseRepoKey;
 	
 	private int linkCounter = 0;
 	
@@ -91,8 +98,6 @@ public class GTASampleSolutionsEditController extends FormBasicController {
 	private UserManager userManager;
 	@Autowired
 	private GTAManager gtaManager;
-	@Autowired
-	private NotificationsManager notificationsManager;
 	
 	public GTASampleSolutionsEditController(UserRequest ureq, WindowControl wControl, GTACourseNode gtaNode,
 			CourseEnvironment courseEnv, boolean readOnly) {
@@ -100,9 +105,9 @@ public class GTASampleSolutionsEditController extends FormBasicController {
 		this.gtaNode = gtaNode;
 		this.readOnly = readOnly;
 		this.courseEnv = courseEnv;
+		this.courseRepoKey = courseEnv.getCourseGroupManager().getCourseEntry().getKey();
 		solutionDir = gtaManager.getSolutionsDirectory(courseEnv, gtaNode);
 		solutionContainer = gtaManager.getSolutionsContainer(courseEnv, gtaNode);
-		subscriptionContext = gtaManager.getSubscriptionContext(courseEnv.getCourseGroupManager().getCourseResource(), gtaNode);
 		initForm(ureq);
 	}
 
@@ -122,42 +127,45 @@ public class GTASampleSolutionsEditController extends FormBasicController {
 		columnsModel.addFlexiColumnModel(new DefaultFlexiColumnModel(SolCols.title.i18nKey(), SolCols.title.ordinal()));
 		columnsModel.addFlexiColumnModel(new DefaultFlexiColumnModel(SolCols.file.i18nKey(), SolCols.file.ordinal()));
 		columnsModel.addFlexiColumnModel(new DefaultFlexiColumnModel(SolCols.author.i18nKey(), SolCols.author.ordinal()));
+		
+		String openI18n = readOnly? "table.header.view": "table.header.edit";
+		columnsModel.addFlexiColumnModel(new DefaultFlexiColumnModel(openI18n, SolCols.mode.ordinal(), "open", new ModeCellRenderer("open")));
 		if(!readOnly) {
-			columnsModel.addFlexiColumnModel(new DefaultFlexiColumnModel("table.header.edit", SolCols.edit.ordinal(), "edit",
-					new BooleanCellRenderer(
-							new StaticFlexiCellRenderer(translate("edit"), "edit"),
-							new StaticFlexiCellRenderer(translate("replace"), "edit"))));
-			columnsModel.addFlexiColumnModel(new DefaultFlexiColumnModel("table.header.edit", translate("delete"), "delete"));
+			columnsModel.addFlexiColumnModel(new DefaultFlexiColumnModel("table.header.metadata", translate("table.header.metadata"), "metadata"));
+			columnsModel.addFlexiColumnModel(new DefaultFlexiColumnModel("table.header.delete", translate("table.header.delete"), "delete"));
 		}
 
 		solutionModel = new SolutionTableModel(columnsModel);
 		solutionTable = uifactory.addTableElement(getWindowControl(), "table", solutionModel, getTranslator(), formLayout);
 		solutionTable.setExportEnabled(true);
-		updateModel();
+		updateModel(ureq);
 	}
 	
-	private void updateModel() {
+	private void updateModel(UserRequest ureq) {
 		List<Solution> solutionList = gtaManager.getSolutions(courseEnv, gtaNode);
 		List<SolutionRow> rows = new ArrayList<>(solutionList.size());
 		for(Solution solution:solutionList) {
 			String filename = solution.getFilename();
 			String author = null;
+			Mode openMode = null;
 			
 			VFSItem item = solutionContainer.resolve(filename);
-			if(item instanceof MetaTagged) {
-				MetaInfo metaInfo = ((MetaTagged)item).getMetaInfo();
-				if(metaInfo != null && metaInfo.getAuthorIdentityKey() != null) {
-					author = userManager.getUserDisplayName(metaInfo.getAuthorIdentityKey());
+			if(item.canMeta() == VFSConstants.YES) {
+				VFSMetadata metaInfo = item.getMetaInfo();
+				if(metaInfo.getAuthor() != null) {
+					author = userManager.getUserDisplayName(metaInfo.getAuthor());
 				}
 			}
 			
 			DownloadLink downloadLink = null;
 			if(item instanceof VFSLeaf) {
+				VFSLeaf vfsLeaf = (VFSLeaf)item;
 				downloadLink = uifactory
-					.addDownloadLink("file_" + (++linkCounter), filename, null, (VFSLeaf)item, solutionTable);
+					.addDownloadLink("file_" + (++linkCounter), filename, null, vfsLeaf, solutionTable);
+				openMode = getOpenMode(getIdentity(), ureq.getUserSession().getRoles(), vfsLeaf, readOnly);
 			}
 
-			rows.add(new SolutionRow(solution, author, downloadLink));
+			rows.add(new SolutionRow(solution, author, downloadLink, openMode));
 		}
 		solutionModel.setObjects(rows);
 		solutionTable.reset();
@@ -175,8 +183,8 @@ public class GTASampleSolutionsEditController extends FormBasicController {
 				Solution newSolution = addSolutionCtrl.getSolution();
 				gtaManager.addSolution(newSolution, courseEnv, gtaNode);
 				fireEvent(ureq, Event.DONE_EVENT);
-				updateModel();
-				notificationsManager.markPublisherNews(subscriptionContext, null, false);
+				updateModel(ureq);
+				gtaManager.markNews(courseEnv, gtaNode);
 			}
 			cmc.deactivate();
 			cleanUp();
@@ -184,8 +192,8 @@ public class GTASampleSolutionsEditController extends FormBasicController {
 			if(event == Event.DONE_EVENT) {
 				gtaManager.updateSolution(editSolutionCtrl.getFilenameToReplace(), editSolutionCtrl.getSolution(), courseEnv, gtaNode);
 				fireEvent(ureq, Event.DONE_EVENT);
-				updateModel();
-				notificationsManager.markPublisherNews(subscriptionContext, null, false);
+				updateModel(ureq);
+				gtaManager.markNews(courseEnv, gtaNode);
 			}
 			cmc.deactivate();
 			cleanUp();
@@ -196,23 +204,16 @@ public class GTASampleSolutionsEditController extends FormBasicController {
 			
 			if(event == Event.DONE_EVENT) {
 				gtaManager.addSolution(newSolution, courseEnv, gtaNode);
-				doCreateSolutionEditor(ureq, newSolution);
-				updateModel();
-				notificationsManager.markPublisherNews(subscriptionContext, null, false);
+				doOpen(ureq, newSolution, Mode.EDIT);
+				updateModel(ureq);
+				gtaManager.markNews(courseEnv, gtaNode);
 			}
-		} else if(newSolutionEditorCtrl == source) {
+		} else if (source == docEditorCtrl) {
 			if(event == Event.DONE_EVENT) {
-				updateModel();
-				fireEvent(ureq, Event.DONE_EVENT);
-				notificationsManager.markPublisherNews(subscriptionContext, null, false);
+				gtaManager.markNews(courseEnv, gtaNode);
+				updateModel(ureq);
+				cleanUp();
 			}
-			cmc.deactivate();
-			cleanUp();
-		} else if(editSolutionEditorCtrl == source) {
-			// edit solution cannot update the title or the description
-			notificationsManager.markPublisherNews(subscriptionContext, null, false);
-			cmc.deactivate();
-			cleanUp();
 		} else if(cmc == source) {
 			cleanUp();
 		}
@@ -220,12 +221,21 @@ public class GTASampleSolutionsEditController extends FormBasicController {
 	}
 	
 	private void cleanUp() {
+		removeAsListenerAndDispose(docEditorCtrl);
 		removeAsListenerAndDispose(editSolutionCtrl);
 		removeAsListenerAndDispose(addSolutionCtrl);
 		removeAsListenerAndDispose(cmc);
+		docEditorCtrl = null;
 		editSolutionCtrl = null;
 		addSolutionCtrl = null;
 		cmc = null;
+	}
+
+	@Override
+	public void activate(UserRequest ureq, List<ContextEntry> entries, StateEntry state) {
+		if(entries == null || entries.isEmpty()) {
+			cleanUp();
+		}
 	}
 
 	@Override
@@ -238,8 +248,10 @@ public class GTASampleSolutionsEditController extends FormBasicController {
 			if(event instanceof SelectionEvent) {
 				SelectionEvent se = (SelectionEvent)event;
 				SolutionRow row = solutionModel.getObject(se.getIndex());
-				if("edit".equals(se.getCommand())) {
-					doEdit(ureq, row.getSolution());
+				if("open".equals(se.getCommand())) {
+					doOpen(ureq, row.getSolution(), row.getMode());
+				} else if("metadata".equals(se.getCommand())) {
+					doEditmetadata(ureq, row.getSolution());
 				} else if("delete".equals(se.getCommand())) {
 					doDelete(ureq, row);
 				}
@@ -253,13 +265,19 @@ public class GTASampleSolutionsEditController extends FormBasicController {
 		//
 	}
 	
-	private void doEdit(UserRequest ureq, Solution solution) {
-		if(solution.getFilename().endsWith(".html")) {
-			doEditSolutionEditor(ureq, solution);
+	private void doOpen(UserRequest ureq, Solution solution, Mode mode) {
+		VFSItem vfsItem = solutionContainer.resolve(solution.getFilename());
+		if(!(vfsItem instanceof VFSLeaf)) {
+			showError("error.missing.file");
 		} else {
-			doReplace(ureq, solution);
+			DocEditorSecurityCallback secCallback = DocEditorSecurityCallbackBuilder.builder()
+					.withMode(mode)
+					.build();
+			DocEditorConfigs configs = GTAUIFactory.getEditorConfig(solutionContainer, solution.getFilename(), courseRepoKey);
+			WindowControl swb = addToHistory(ureq, OresHelper.createOLATResourceableType("DocEditor"), null);
+			docEditorCtrl = new DocEditorFullscreenController(ureq, swb, (VFSLeaf)vfsItem, secCallback, configs);
+			listenTo(docEditorCtrl);
 		}
-		
 	}
 
 	private void doAddSolution(UserRequest ureq) {
@@ -272,7 +290,7 @@ public class GTASampleSolutionsEditController extends FormBasicController {
 		cmc.activate();
 	}
 	
-	private void doReplace(UserRequest ureq, Solution solution) {
+	private void doEditmetadata(UserRequest ureq, Solution solution) {
 		editSolutionCtrl = new EditSolutionController(ureq, getWindowControl(), solution, solutionDir, solutionContainer);
 		listenTo(editSolutionCtrl);
 
@@ -283,54 +301,11 @@ public class GTASampleSolutionsEditController extends FormBasicController {
 	}
 	
 	private void doCreateSolution(UserRequest ureq) {
-		newSolutionCtrl = new NewSolutionController(ureq, getWindowControl(), solutionContainer);
+		newSolutionCtrl = new NewSolutionController(ureq, getWindowControl(), solutionContainer,
+				htmlOffice(getIdentity(), ureq.getUserSession().getRoles(), getLocale()));
 		listenTo(newSolutionCtrl);
 		
 		cmc = new CloseableModalController(getWindowControl(), "close", newSolutionCtrl.getInitialComponent());
-		listenTo(cmc);
-		cmc.activate();
-	}
-	
-	private void doCreateSolutionEditor(UserRequest ureq, Solution solution) {
-		String documentName = solution.getFilename();
-		VFSItem item = solutionContainer.resolve(documentName);
-		if(item == null) {
-			item = solutionContainer.createChildLeaf(documentName);
-		} else {
-			documentName = VFSManager.rename(solutionContainer, documentName);
-			item = solutionContainer.createChildLeaf(documentName);
-		}
-		if(item instanceof MetaTagged) {
-			MetaInfo metaInfo = ((MetaTagged)item).getMetaInfo();
-			if(metaInfo != null ) {
-				metaInfo.setAuthor(getIdentity());
-			}
-			metaInfo.write();
-		}
-
-		newSolutionEditorCtrl = WysiwygFactory.createWysiwygController(ureq, getWindowControl(),
-				solutionContainer, documentName, "media", true, true);
-		newSolutionEditorCtrl.getRichTextConfiguration().disableMedia();
-		newSolutionEditorCtrl.getRichTextConfiguration().setAllowCustomMediaFactory(false);
-		newSolutionEditorCtrl.setNewFile(true);
-		newSolutionEditorCtrl.setUserObject(solution);
-		listenTo(newSolutionEditorCtrl);
-		
-		cmc = new CloseableModalController(getWindowControl(), "close", newSolutionEditorCtrl.getInitialComponent());
-		listenTo(cmc);
-		cmc.activate();
-	}
-	
-	private void doEditSolutionEditor(UserRequest ureq, Solution solution) {
-		String documentName = solution.getFilename();
-
-		editSolutionEditorCtrl = WysiwygFactory.createWysiwygController(ureq, getWindowControl(),
-				solutionContainer, documentName, "media", true, true);
-		editSolutionEditorCtrl.getRichTextConfiguration().disableMedia();
-		editSolutionEditorCtrl.getRichTextConfiguration().setAllowCustomMediaFactory(false);
-		listenTo(editSolutionEditorCtrl);
-		
-		cmc = new CloseableModalController(getWindowControl(), "close", editSolutionEditorCtrl.getInitialComponent());
 		listenTo(cmc);
 		cmc.activate();
 	}
@@ -343,6 +318,6 @@ public class GTASampleSolutionsEditController extends FormBasicController {
 		}
 		gtaManager.removeSolution(solution.getSolution(), courseEnv, gtaNode);
 		fireEvent(ureq, Event.DONE_EVENT);
-		updateModel();
+		updateModel(ureq);
 	}
 }

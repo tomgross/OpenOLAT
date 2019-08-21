@@ -20,15 +20,23 @@
 package org.olat.search.service.indexer.identity;
 
 import java.io.IOException;
+import java.util.Collections;
 import java.util.List;
 
 import org.olat.basesecurity.BaseSecurity;
 import org.olat.basesecurity.BaseSecurityManager;
+import org.olat.basesecurity.IdentityPowerSearchQueries;
+import org.olat.basesecurity.OrganisationRoles;
+import org.olat.basesecurity.SearchIdentityParams;
+import org.olat.core.CoreSpringFactory;
 import org.olat.core.commons.persistence.DBFactory;
 import org.olat.core.id.Identity;
+import org.olat.core.id.OrganisationRef;
 import org.olat.core.id.Roles;
 import org.olat.core.id.context.BusinessControl;
 import org.olat.core.id.context.ContextEntry;
+import org.apache.logging.log4j.Logger;
+import org.olat.core.logging.Tracing;
 import org.olat.core.util.resource.OresHelper;
 import org.olat.search.service.SearchResourceContext;
 import org.olat.search.service.indexer.AbstractHierarchicalIndexer;
@@ -46,11 +54,11 @@ import org.olat.search.service.indexer.OlatFullIndexer;
  * @author gnaegi, gnaegi@frentix.com, www.frentix.com
  */
 public class IdentityIndexer extends AbstractHierarchicalIndexer {
-	public final static String TYPE = "type.identity";
+	private static final Logger log = Tracing.createLoggerFor(IdentityIndexer.class);
+	
+	public static final String TYPE = "type.identity";
 
-	/**
-	 * @see org.olat.search.service.indexer.Indexer#getSupportedTypeName()
-	 */
+	@Override
 	public String getSupportedTypeName() {
 		return Identity.class.getSimpleName();	
 	}
@@ -62,7 +70,7 @@ public class IdentityIndexer extends AbstractHierarchicalIndexer {
 		int counter = 0;
 		BaseSecurity secMgr = BaseSecurityManager.getInstance();
 		List<Long> identityKeys = secMgr.loadVisibleIdentityKeys();
-		if (isLogDebugEnabled()) logDebug("Found " + identityKeys.size() + " active identities to index");
+		if (log.isDebugEnabled()) log.debug("Found " + identityKeys.size() + " active identities to index");
 		DBFactory.getInstance().commitAndCloseSession();
   	
 		for (Long identityKey : identityKeys) {
@@ -70,11 +78,11 @@ public class IdentityIndexer extends AbstractHierarchicalIndexer {
 				// reload the identity here before indexing it to make sure it has not been deleted in the meantime
 				Identity identity = secMgr.loadIdentityByKey(identityKey);
 				if (identity == null || (identity.getStatus()>=Identity.STATUS_VISIBLE_LIMIT)) {
-					logInfo("doIndex: identity was deleted while we were indexing. The deleted identity was: "+identity);
+					log.info("doIndex: identity was deleted while we were indexing. The deleted identity was: "+identity);
 					continue;
 				}
 
-				if (isLogDebugEnabled()) logDebug("Indexing identity::" + identity.getKey() + " and counter::" + counter);  	  	
+				if (log.isDebugEnabled()) log.debug("Indexing identity::" + identity.getKey() + " and counter::" + counter);  	  	
 				// Create a search context for this identity. The search context will open the users visiting card in a new tab
 				SearchResourceContext searchResourceContext = new SearchResourceContext(parentResourceContext);
 				searchResourceContext.setBusinessControlFor(OresHelper.createOLATResourceableInstance(Identity.class, identity.getKey()));
@@ -87,12 +95,12 @@ public class IdentityIndexer extends AbstractHierarchicalIndexer {
 				
 				counter++;
 			} catch (Exception ex) {
-				logWarn("Exception while indexing identity::" + identityKey + ". Skipping this user, try next one.", ex);
+				log.warn("Exception while indexing identity::" + identityKey + ". Skipping this user, try next one.", ex);
 				DBFactory.getInstance().rollbackAndCloseSession();
 			}
 			DBFactory.getInstance().commitAndCloseSession();
 		}
-		if (isLogDebugEnabled()) logDebug("IdentityIndexer finished with counter::" + counter);
+		if (log.isDebugEnabled()) log.debug("IdentityIndexer finished with counter::" + counter);
 	}
 	
 	@Override
@@ -100,6 +108,14 @@ public class IdentityIndexer extends AbstractHierarchicalIndexer {
 		if(roles.isGuestOnly()) {
 			return false;
 		}
-		return true;
+		
+		Long identityKey = contextEntry.getOLATResourceable().getResourceableId();
+		List<OrganisationRef> organisations = roles.getOrganisationsWithRoles(OrganisationRoles.valuesWithoutGuestAndInvitee());
+		SearchIdentityParams params = new SearchIdentityParams(null, null, false, null, 
+				null, null, null, null, null, Identity.STATUS_VISIBLE_LIMIT);
+		params.setOrganisations(organisations);
+		params.setIdentityKeys(Collections.singletonList(identityKey));
+		List<Identity> ids = CoreSpringFactory.getImpl(IdentityPowerSearchQueries.class).getIdentitiesByPowerSearch(params, 0, 1);
+		return !ids.isEmpty();
 	}
 }

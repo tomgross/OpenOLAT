@@ -25,6 +25,8 @@ import org.olat.core.id.CreateInfo;
 import org.olat.core.id.Identity;
 import org.olat.core.id.ModifiedInfo;
 import org.olat.modules.portfolio.PageBody;
+import org.olat.modules.portfolio.PortfolioService;
+import org.olat.repository.RepositoryEntry;
 
 /**
  * 
@@ -32,9 +34,7 @@ import org.olat.modules.portfolio.PageBody;
  * @author srosse, stephane.rosse@frentix.com, http://www.frentix.com
  *
  */
-public interface EvaluationFormSession extends CreateInfo, ModifiedInfo {
-	
-	public Long getKey();
+public interface EvaluationFormSession extends EvaluationFormSessionRef, CreateInfo, ModifiedInfo{
 	
 	public Date getSubmissionDate();
 	
@@ -42,20 +42,46 @@ public interface EvaluationFormSession extends CreateInfo, ModifiedInfo {
 
 	public EvaluationFormSessionStatus getEvaluationFormSessionStatus();
 	
-	public void setEvaluationFormSessionStatus(EvaluationFormSessionStatus sessionStatus);
+	public String getEmail();
+	
+	public String getFirstname();
+	
+	public String getLastname();
+	
+	public String getAge();
+	
+	public String getGender();
+	
+	public String getOrgUnit();
+	
+	public String getStudySubject();
 	
 	/**
-	 * The author of the evaluation
-	 * 
-	 * @return
+	 * Returns the participation of the session. The session does not know the
+	 * participation if it is an anonymous participation.
+	 *
+	 * @return the participation or null
 	 */
+	public EvaluationFormParticipation getParticipation();
+	
+	public EvaluationFormSurvey getSurvey();
+	
+	/**
+	 * @deprecated Use getParticipation().getExecutor()
+	 */
+	@Deprecated
 	public Identity getIdentity();
 	
 	/**
-	 * The anchor for portfolio evaluation
-	 * 
-	 * @return
+	 * @deprecated Use the survey for the PageBody. See {@link PortfolioService#loadOrCreateSurvey(PageBody)}.
 	 */
+	@Deprecated
 	public PageBody getPageBody();
+	
+	/**
+	 * @deprecated Use getSurvey().getFormEntry()
+	 */
+	@Deprecated
+	public RepositoryEntry getFormEntry();
 
 }

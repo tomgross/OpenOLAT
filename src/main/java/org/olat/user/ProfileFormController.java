@@ -30,9 +30,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-import org.olat.basesecurity.BaseSecurityManager;
-import org.olat.basesecurity.BaseSecurityModule;
-import org.olat.core.commons.persistence.DBFactory;
+import org.olat.basesecurity.BaseSecurity;
+import org.olat.basesecurity.OrganisationRoles;
 import org.olat.core.gui.UserRequest;
 import org.olat.core.gui.components.form.flexible.FormItem;
 import org.olat.core.gui.components.form.flexible.FormItemContainer;
@@ -52,6 +51,7 @@ import org.olat.core.gui.control.generic.modal.DialogBoxUIFactory;
 import org.olat.core.helpers.Settings;
 import org.olat.core.id.Identity;
 import org.olat.core.id.OLATResourceable;
+import org.olat.core.id.Roles;
 import org.olat.core.id.User;
 import org.olat.core.util.StringHelper;
 import org.olat.core.util.WebappHelper;
@@ -94,6 +94,7 @@ public class ProfileFormController extends FormBasicController {
 	private FileElement logoUpload;
 	private FileElement portraitUpload;
 	
+	private final boolean canModify;
 	private final boolean logoEnabled;
 	private final boolean isAdministrativeUser;
 	private final List<UserPropertyHandler> userPropertyHandlers;
@@ -109,7 +110,7 @@ public class ProfileFormController extends FormBasicController {
 	@Autowired
 	private UserManager userManager;
 	@Autowired
-	private BaseSecurityManager securityManager;
+	private BaseSecurity securityManager;
 	@Autowired
 	private RegistrationManager rm;
 	@Autowired
@@ -127,7 +128,7 @@ public class ProfileFormController extends FormBasicController {
 	 * @param wControl
 	 */
 	public ProfileFormController(UserRequest ureq, WindowControl wControl) {
-		this(ureq, wControl, ureq.getIdentity(), false);
+		this(ureq, wControl, ureq.getIdentity(), false, true);
 	}
 
 	/**
@@ -142,16 +143,17 @@ public class ProfileFormController extends FormBasicController {
 	 *          user manager; false: use is editing his own profile
 	 */
 	public ProfileFormController(UserRequest ureq, WindowControl wControl,
-			Identity identityToModify, boolean isAdministrativeUser) {
+			Identity identityToModify, boolean isAdministrativeUser, boolean canModify) {
 		super(ureq, wControl, LAYOUT_BAREBONE);
 		setTranslator(userManager.getPropertyHandlerTranslator(getTranslator()));
 		setFormStyle("o_user_profile_form");
-		
+		this.canModify = canModify;
 		this.identityToModify = identityToModify;
-		this.isAdministrativeUser = isAdministrativeUser;
-		this.logoEnabled = userModule.isLogoByProfileEnabled();
+		logoEnabled = userModule.isLogoByProfileEnabled();
 		
+		this.isAdministrativeUser = isAdministrativeUser;
 		userPropertyHandlers = userManager.getUserPropertyHandlersFor(usageIdentifier, isAdministrativeUser);
+		
 		initForm(ureq);
 	}
 	
@@ -166,7 +168,6 @@ public class ProfileFormController extends FormBasicController {
 
 	@Override
 	protected void initForm(FormItemContainer formLayout, Controller listener, UserRequest ureq) {
-
 		User user = identityToModify.getUser();
 
 		// show a form element for each property handler 
@@ -193,6 +194,10 @@ public class ProfileFormController extends FormBasicController {
 			
 			// add input field to container
 			FormItem formItem = userPropertyHandler.addFormItem(getLocale(), user, usageIdentifier, isAdministrativeUser, groupContainer);
+			if(formItem.isEnabled() && !canModify) {
+				formItem.setEnabled(canModify);
+			}
+			
 			String propertyName = userPropertyHandler.getName();
 			formItems.put(propertyName, formItem);
 			
@@ -238,6 +243,7 @@ public class ProfileFormController extends FormBasicController {
 		textAboutMe = uifactory.addRichTextElementForStringData("form.text", "form.text",
 				conf.getTextAboutMe(), 10, -1, false, null, null, groupContainer,
 				ureq.getUserSession(), getWindowControl());
+		textAboutMe.setEnabled(canModify);
 		textAboutMe.setMaxLength(10000);
 		
 		//upload image
@@ -253,12 +259,15 @@ public class ProfileFormController extends FormBasicController {
 		mimeTypes.add("image/jpeg");
 		mimeTypes.add("image/png");
 
+		boolean portraitEnable = isAdministrativeUser 
+				|| (canModify && !userModule.isPortraitManaged());
 		portraitUpload = uifactory.addFileElement(getWindowControl(), "ul.select", "ul.select", groupContainer);
 		portraitUpload.setMaxUploadSizeKB(10000, null, null);
 		portraitUpload.setPreview(ureq.getUserSession(), true);
 		portraitUpload.addActionListener(FormEvent.ONCHANGE);
 		portraitUpload.setHelpTextKey("ul.select.fhelp", null);
 		portraitUpload.setDeleteEnabled(true);
+		portraitUpload.setEnabled(portraitEnable);
 		if(portraitFile != null) {
 			portraitUpload.setInitialFile(portraitFile);
 		}
@@ -277,6 +286,7 @@ public class ProfileFormController extends FormBasicController {
 			logoUpload.addActionListener(FormEvent.ONCHANGE);
 			logoUpload.setHelpTextKey("ul.select.fhelp", null);
 			logoUpload.setDeleteEnabled(true);
+			logoUpload.setEnabled(canModify);
 			if(logoFile != null) {
 				logoUpload.setInitialFile(logoFile);
 			}
@@ -288,7 +298,9 @@ public class ProfileFormController extends FormBasicController {
 		formLayout.add(buttonLayoutWrappper);
 		FormLayoutContainer buttonLayout = FormLayoutContainer.createButtonLayout("buttonLayoutInner", getTranslator());
 		buttonLayoutWrappper.add(buttonLayout);
-		uifactory.addFormSubmitButton("save", buttonLayout);
+		if(canModify) {
+			uifactory.addFormSubmitButton("save", buttonLayout);
+		}
 		uifactory.addFormCancelButton("cancel", buttonLayout, ureq, getWindowControl());
 	}
 
@@ -331,7 +343,7 @@ public class ProfileFormController extends FormBasicController {
 
 	@Override
 	protected boolean validateFormLogic(UserRequest ureq) {
-		boolean allOk = true;
+		boolean allOk = super.validateFormLogic(ureq);
 		formContext.put("username", identityToModify.getName());
 		
 		User user = identityToModify.getUser();
@@ -355,7 +367,7 @@ public class ProfileFormController extends FormBasicController {
 			textAboutMe.setErrorKey("input.toolong", new String[] {"10000"});
 			allOk = false;
 		}
-		return allOk & super.validateFormLogic(ureq);
+		return allOk;
 	}
 
 	@Override
@@ -478,8 +490,7 @@ public class ProfileFormController extends FormBasicController {
 			OresHelper.createOLATResourceableInstance(Identity.class, identityToModify.getKey()), new SyncerExecutor() {
 			@Override
 			public void execute() {
-				UserManager um = UserManager.getInstance();
-				identityToModify = (Identity) DBFactory.getInstance().loadObject(identityToModify);
+				identityToModify = securityManager.loadIdentityByKey(identityToModify.getKey());
 				currentEmail = identityToModify.getUser().getProperty("email", null);
 
 				identityToModify = updateIdentityFromFormData(identityToModify);
@@ -500,10 +511,10 @@ public class ProfileFormController extends FormBasicController {
 						identityToModify.getUser().setProperty("email", currentEmail);
 					}
 				}
-				if (!um.updateUserFromIdentity(identityToModify)) {
+				if (!userManager.updateUserFromIdentity(identityToModify)) {
 					getWindowControl().setInfo(translate("profile.unsuccessful"));
 					// reload user data from db
-					identityToModify = BaseSecurityManager.getInstance().loadIdentityByKey(identityToModify.getKey());
+					identityToModify = securityManager.loadIdentityByKey(identityToModify.getKey());
 				}
 				
 				OLATResourceable modRes = OresHelper.createOLATResourceableInstance(Identity.class, identityToModify.getKey());
@@ -543,7 +554,7 @@ public class ProfileFormController extends FormBasicController {
 		String serverpath = Settings.getServerContextPathURI();
 		String servername = ureq.getHttpReq().getServerName();
 
-		logDebug("this servername is " + servername + " and serverpath is " + serverpath, null);
+		logDebug("this servername is " + servername + " and serverpath is " + serverpath);
 		// load or create temporary key
 		Map<String, String> mailMap = new HashMap<>();
 		mailMap.put("currentEMail", currentEmail);
@@ -552,7 +563,7 @@ public class ProfileFormController extends FormBasicController {
 		XStream xml = XStreamHelper.createXStreamInstance();
 		String serMailMap = xml.toXML(mailMap);
 		
-		TemporaryKey tk = rm.createAndDeleteOldTemporaryKey(identityToModify.getKey(), serMailMap, ip, RegistrationManager.EMAIL_CHANGE);
+		TemporaryKey tk = rm.createAndDeleteOldTemporaryKey(identityToModify.getKey(), serMailMap, ip, RegistrationManager.EMAIL_CHANGE, null);
 		
 		// create date, time string
 		Calendar cal = Calendar.getInstance();
@@ -562,12 +573,12 @@ public class ProfileFormController extends FormBasicController {
 		// create body and subject for email
 		String link = serverpath + "/dmz/emchange/index.html?key=" + tk.getRegistrationKey() + "&language=" + ureq.getLocale().getLanguage();
 		if(Settings.isDebuging()) {
-			logInfo(link, null);
+			logInfo(link);
 		}
 		String currentEmailDisplay = userManager.getUserDisplayEmail(currentEmail, getLocale());
 		String changedEmaildisplay = userManager.getUserDisplayEmail(changedEmail, getLocale());
 		body = translate("email.change.body", new String[] { link, time, currentEmailDisplay, changedEmaildisplay })
-				+ SEPARATOR + translate("email.change.wherefrom", new String[] { serverpath, today, ip });
+				+ SEPARATOR + translate("email.change.wherefrom", new String[] { serverpath, today });
 		subject = translate("email.change.subject");
 		// send email
 		try {
@@ -606,10 +617,11 @@ public class ProfileFormController extends FormBasicController {
 		mainForm.setDirtyMarking(isDirtyMarking);
 	}
 
-	private boolean isAllowedToChangeEmailWithoutVerification(final UserRequest ureq) {
-		boolean isOLATAdmin = ureq.getUserSession().getRoles().isOLATAdmin();
-		boolean isUserManagerAndBypassVerification = BaseSecurityModule.USERMANAGER_CAN_BYPASS_EMAILVERIFICATION
-				&& ureq.getUserSession().getRoles().isUserManager();
-		return isOLATAdmin || isUserManagerAndBypassVerification;
+	private boolean isAllowedToChangeEmailWithoutVerification(UserRequest ureq) {
+		Roles managerRoles = ureq.getUserSession().getRoles();
+		Roles identityToModifyRoles  = securityManager.getRoles(identityToModify);
+		return managerRoles.isManagerOf(OrganisationRoles.administrator, identityToModifyRoles)
+				|| managerRoles.isManagerOf(OrganisationRoles.usermanager, identityToModifyRoles)
+				|| managerRoles.isManagerOf(OrganisationRoles.rolesmanager, identityToModifyRoles);
 	}
 }

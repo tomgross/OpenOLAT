@@ -40,7 +40,7 @@ import javax.xml.bind.JAXBContext;
 import javax.xml.bind.JAXBException;
 import javax.xml.bind.Marshaller;
 
-import org.cyberneko.html.parsers.SAXParser;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.CoreSpringFactory;
 import org.olat.core.commons.services.commentAndRating.CommentAndRatingSecurityCallback;
 import org.olat.core.commons.services.commentAndRating.ui.UserCommentsController;
@@ -63,7 +63,6 @@ import org.olat.core.gui.util.SyntheticUserRequest;
 import org.olat.core.gui.util.WindowControlMocker;
 import org.olat.core.helpers.Settings;
 import org.olat.core.id.OLATResourceable;
-import org.olat.core.logging.OLog;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.FileUtils;
 import org.olat.core.util.StringHelper;
@@ -79,6 +78,10 @@ import org.olat.imscp.xml.manifest.OrganizationType;
 import org.olat.imscp.xml.manifest.OrganizationsType;
 import org.olat.imscp.xml.manifest.ResourceType;
 import org.olat.imscp.xml.manifest.ResourcesType;
+import org.olat.modules.ceditor.PageElement;
+import org.olat.modules.ceditor.PageElementHandler;
+import org.olat.modules.ceditor.PageProvider;
+import org.olat.modules.ceditor.ui.PageController;
 import org.olat.modules.cp.CPOfflineReadableManager;
 import org.olat.modules.portfolio.AssessmentSection;
 import org.olat.modules.portfolio.Binder;
@@ -89,23 +92,25 @@ import org.olat.modules.portfolio.MediaHandler;
 import org.olat.modules.portfolio.Page;
 import org.olat.modules.portfolio.PortfolioService;
 import org.olat.modules.portfolio.Section;
+import org.olat.modules.portfolio.handler.ContainerHandler;
 import org.olat.modules.portfolio.handler.EvaluationFormHandler;
+import org.olat.modules.portfolio.handler.HTMLRawPageElementHandler;
+import org.olat.modules.portfolio.handler.ParagraphPageElementHandler;
+import org.olat.modules.portfolio.handler.SpacerElementHandler;
+import org.olat.modules.portfolio.handler.TablePageElementHandler;
+import org.olat.modules.portfolio.handler.TitlePageElementHandler;
 import org.olat.modules.portfolio.model.ExtendedMediaRenderingHints;
 import org.olat.modules.portfolio.ui.AbstractPageListController;
 import org.olat.modules.portfolio.ui.PageMetadataController;
-import org.olat.modules.portfolio.ui.editor.PageController;
-import org.olat.modules.portfolio.ui.editor.PageElement;
-import org.olat.modules.portfolio.ui.editor.PageElementHandler;
-import org.olat.modules.portfolio.ui.editor.PageProvider;
-import org.olat.modules.portfolio.ui.editor.handler.HTMLRawPageElementHandler;
-import org.olat.modules.portfolio.ui.editor.handler.SpacerElementHandler;
-import org.olat.modules.portfolio.ui.editor.handler.TitlePageElementHandler;
 import org.olat.modules.portfolio.ui.model.PortfolioElementRow;
 import org.olat.modules.portfolio.ui.model.ReadOnlyCommentsSecurityCallback;
 import org.xml.sax.Attributes;
 import org.xml.sax.InputSource;
 import org.xml.sax.SAXException;
 import org.xml.sax.helpers.DefaultHandler;
+
+import nu.validator.htmlparser.common.XmlViolationPolicy;
+import nu.validator.htmlparser.sax.HtmlParser;
 
 /**
  * 
@@ -115,7 +120,7 @@ import org.xml.sax.helpers.DefaultHandler;
  */
 public class ExportBinderAsCPResource implements MediaResource {
 	
-	private static final OLog log = Tracing.createLoggerFor(ExportBinderAsCPResource.class);
+	private static final Logger log = Tracing.createLoggerFor(ExportBinderAsCPResource.class);
 	
 	private static final String SCHEMA_LOCATIONS = "http://www.imsglobal.org/xsd/imscp_v1p1 http://www.imsglobal.org/xsd/imscp_v1p2.xsd";
 	private static final org.olat.imscp.xml.manifest.ObjectFactory cpObjectFactory = new org.olat.imscp.xml.manifest.ObjectFactory();
@@ -209,7 +214,7 @@ public class ExportBinderAsCPResource implements MediaResource {
 			//manifest
 			ManifestType manifest = createImsManifest(binder, sections, pages);
 			zout.putNextEntry(new ZipEntry("imsmanifest.xml"));
-			write(manifest, new ShieldOutputStream(zout));
+			writeManifest(manifest, zout);
 			zout.closeEntry();
 			
 			//write pages
@@ -231,6 +236,14 @@ public class ExportBinderAsCPResource implements MediaResource {
 			String indexSrc = sectionFilename(sections.get(0));
 			CPOfflineReadableManager.getInstance().makeCPOfflineReadable(manifestXml, indexSrc, zout);
 		} catch (Exception e) {
+			log.error("", e);
+		}
+	}
+	
+	private void writeManifest(ManifestType manifest, ZipOutputStream zout) {
+		try(OutputStream out=new ShieldOutputStream(zout)) {
+			write(manifest, out);
+		} catch(IOException e) {
 			log.error("", e);
 		}
 	}
@@ -336,7 +349,7 @@ public class ExportBinderAsCPResource implements MediaResource {
 	private void exportPage(Page page, ZipOutputStream zout) throws IOException {
 		WindowControl mockwControl = new WindowControlMocker();
 		BinderSecurityCallback secCallback = BinderSecurityCallbackFactory.getReadOnlyCallback();
-		PageMetadataController metadatCtrl = new PageMetadataController(ureq, mockwControl, secCallback, page);
+		PageMetadataController metadatCtrl = new PageMetadataController(ureq, mockwControl, secCallback, page, false);
 
 		PageController pageCtrl = new PageController(ureq, mockwControl, new PortfolioPageProvider(page), ExtendedMediaRenderingHints.toPrint());
 		pageCtrl.loadElements(ureq);
@@ -372,13 +385,17 @@ public class ExportBinderAsCPResource implements MediaResource {
 	}
 	
 	private String renderVelocityContainer(VelocityContainer mainVC) {
-		StringOutput sb = new StringOutput(32000);
 		URLBuilder ubu = new URLBuilder("auth", "1", "0");
 		Renderer renderer = Renderer.getInstance(mainVC, translator, ubu, new RenderResult(), new DefaultGlobalSettings());
-		VelocityRenderDecorator vrdec = new VelocityRenderDecorator(renderer, mainVC, sb);
-		mainVC.contextPut("r", vrdec);
-		renderer.render(sb, mainVC, null);
-		return sb.toString();
+		try(StringOutput sb = new StringOutput(32000);
+				VelocityRenderDecorator vrdec = new VelocityRenderDecorator(renderer, mainVC, sb)) {
+			mainVC.contextPut("r", vrdec);
+			renderer.render(sb, mainVC, null);
+			return sb.toString();
+		} catch(IOException e) {
+			log.error("", e);
+			return null;
+		}
 	}
 	
 	private void convertToZipEntry(ZipOutputStream zout, String link, String content) throws IOException {
@@ -406,7 +423,7 @@ public class ExportBinderAsCPResource implements MediaResource {
 	
 	public String exportMedia(String html, ZipOutputStream zout) {
 		try {
-			SAXParser parser = new SAXParser();
+			HtmlParser parser = new HtmlParser(XmlViolationPolicy.ALTER_INFOSET);
 			ExportMedia contentHandler = new ExportMedia(zout);
 			parser.setContentHandler(contentHandler);
 			parser.parse(new InputSource(new StringReader(html)));
@@ -546,16 +563,24 @@ public class ExportBinderAsCPResource implements MediaResource {
 			//handler for title
 			TitlePageElementHandler titleRawHandler = new TitlePageElementHandler();
 			handlers.add(titleRawHandler);
-			//handler for HTML code
-			HTMLRawPageElementHandler htlmRawHandler = new HTMLRawPageElementHandler();
-			handlers.add(htlmRawHandler);
-			//handler for HTML code
+			//handler simple HTML
+			ParagraphPageElementHandler paragraphHandler = new ParagraphPageElementHandler();
+			handlers.add(paragraphHandler);
+			//handler for spacer
 			SpacerElementHandler hrHandler = new SpacerElementHandler();
 			handlers.add(hrHandler);
+			//handler for container
+			ContainerHandler containerHandler = new ContainerHandler();
+			handlers.add(containerHandler);
 			//handler for form
 			EvaluationFormHandler formHandler = new EvaluationFormHandler();
 			handlers.add(formHandler);
-			
+			//handler for HTML code
+			HTMLRawPageElementHandler htlmRawHandler = new HTMLRawPageElementHandler();
+			handlers.add(htlmRawHandler);
+			//handler for table
+			TablePageElementHandler tableHandler = new TablePageElementHandler();
+			handlers.add(tableHandler);
 			
 			List<MediaHandler> mediaHandlers = portfolioService.getMediaHandlers();
 			for(MediaHandler mediaHandler:mediaHandlers) {

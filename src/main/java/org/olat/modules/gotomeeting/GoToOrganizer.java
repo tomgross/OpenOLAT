@@ -48,9 +48,13 @@ public interface GoToOrganizer extends CreateInfo {
 	
 	public String getAccessToken();
 	
+	public String getRefreshToken();
+	
 	public String getOrganizerKey();
 	
 	public Date getRenewDate();
+	
+	public Date getRenewRefreshDate();
 	
 	/**
 	 * Return the owner of this organizer configuration, or null for 

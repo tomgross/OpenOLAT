@@ -26,6 +26,7 @@ import org.olat.selenium.page.graphene.OOGraphene;
 import org.openqa.selenium.By;
 import org.openqa.selenium.WebDriver;
 import org.openqa.selenium.WebElement;
+import org.openqa.selenium.firefox.FirefoxDriver;
 
 /**
  * 
@@ -67,7 +68,7 @@ public class CourseWizardPage {
 	public CourseWizardPage nextCatalog() {
 		OOGraphene.nextStep(browser);
 		OOGraphene.closeBlueMessageWindow(browser);
-		OOGraphene.waitElement(By.cssSelector("fieldset.o_sel_repositoryentry_access"), 5, browser);
+		OOGraphene.waitElement(By.cssSelector("fieldset.o_sel_repo_access_configuration"), browser);
 		return this;
 	}
 	
@@ -76,6 +77,10 @@ public class CourseWizardPage {
 	 * @return this
 	 */
 	public CourseWizardPage finish() {
+		if(browser instanceof FirefoxDriver) {
+			OOGraphene.waitingALittleLonger();
+			OOGraphene.scrollTo(OOGraphene.wizardFooterBy, browser);
+		}
 		OOGraphene.finishStep(browser);
 		return this;
 	}
@@ -84,11 +89,13 @@ public class CourseWizardPage {
 		By checkAllBy = By.cssSelector("div.modal div.form-group input[type='checkbox']");
 		List<WebElement> checkAll = browser.findElements(checkAllBy);
 		Assert.assertFalse(checkAll.isEmpty());
-		for(WebElement check:checkAll) {
-			check.click();
+		int numOfCheckbox = checkAll.size();
+		for(int i=0;i<numOfCheckbox; i++) {
+			By checkbox = By.xpath("//div[contains(@class,'modal')]//div[contains(@class,'form-group')]//div[" + (i+1) + "]/div/label/input[@type='checkbox']");
+			OOGraphene.waitElement(checkbox, browser);
+			browser.findElement(checkbox).click();
 			OOGraphene.waitBusy(browser);
 		}
-		
 		return this;
 	}
 }

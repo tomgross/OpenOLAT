@@ -1,0 +1,9 @@
+<fieldset>
+	<legend>$r.translate("details.options.title")</legend>
+	$r.render("glossary")
+	$r.render("sharedfolder")
+	#if($r.available("buttons"))
+		$r.render("buttons")
+	#end
+</fieldset>
+

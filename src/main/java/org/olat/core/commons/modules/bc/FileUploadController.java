@@ -40,13 +40,14 @@ import java.util.Set;
 import java.util.regex.Pattern;
 
 import org.olat.core.commons.modules.bc.commands.FolderCommandStatus;
-import org.olat.core.commons.modules.bc.meta.MetaInfo;
-import org.olat.core.commons.modules.bc.meta.MetaInfoFactory;
 import org.olat.core.commons.modules.bc.meta.MetaInfoFormController;
-import org.olat.core.commons.modules.bc.version.RevisionListController;
-import org.olat.core.commons.modules.bc.version.VersionCommentController;
-import org.olat.core.commons.modules.bc.vfs.OlatRootFileImpl;
 import org.olat.core.commons.services.image.ImageService;
+import org.olat.core.commons.services.vfs.VFSMetadata;
+import org.olat.core.commons.services.vfs.VFSRepositoryService;
+import org.olat.core.commons.services.vfs.VFSRevision;
+import org.olat.core.commons.services.vfs.VFSVersionModule;
+import org.olat.core.commons.services.vfs.ui.version.RevisionListController;
+import org.olat.core.commons.services.vfs.ui.version.VersionCommentController;
 import org.olat.core.gui.UserRequest;
 import org.olat.core.gui.components.form.flexible.FormItem;
 import org.olat.core.gui.components.form.flexible.FormItemContainer;
@@ -76,13 +77,13 @@ import org.olat.core.util.StringHelper;
 import org.olat.core.util.ValidationStatus;
 import org.olat.core.util.WebappHelper;
 import org.olat.core.util.vfs.LocalImpl;
+import org.olat.core.util.vfs.VFSConstants;
 import org.olat.core.util.vfs.VFSContainer;
 import org.olat.core.util.vfs.VFSItem;
 import org.olat.core.util.vfs.VFSLeaf;
+import org.olat.core.util.vfs.VFSLockApplicationType;
 import org.olat.core.util.vfs.VFSLockManager;
 import org.olat.core.util.vfs.VFSManager;
-import org.olat.core.util.vfs.version.Versionable;
-import org.olat.core.util.vfs.version.Versions;
 import org.springframework.beans.factory.annotation.Autowired;
 
 /**
@@ -116,7 +117,9 @@ public class FileUploadController extends FormBasicController {
 	private VFSContainer uploadVFSContainer;
 	private String uploadRelPath = null;
 	private RevisionListController revisionListCtr;
-	private CloseableModalController revisionListDialogBox, commentVersionDialogBox, unlockDialogBox;
+	private CloseableModalController unlockDialogBox;
+	private CloseableModalController revisionListDialogBox;
+	private CloseableModalController commentVersionDialogBox;
 	private VersionCommentController commentVersionCtr;
 	private VersionCommentController unlockCtr;
 	private DialogBoxController overwriteDialog;
@@ -153,7 +156,9 @@ public class FileUploadController extends FormBasicController {
 	@Autowired
 	private VFSLockManager vfsLockManager;
 	@Autowired
-	private MetaInfoFactory metaInfoFactory;
+	private VFSVersionModule versionsModule;
+	@Autowired
+	private VFSRepositoryService vfsRepositoryService;
 
 	private String subfolderPath;
 	private TextElement targetSubPath ;
@@ -281,8 +286,7 @@ public class FileUploadController extends FormBasicController {
 		
 		
 		if (showMetadata) {
-			metaDataCtr = new MetaInfoFormController(ureq, getWindowControl(),
-					mainForm);
+			metaDataCtr = new MetaInfoFormController(ureq, getWindowControl(), mainForm, true);
 			formLayout.add("metadata", metaDataCtr.getFormItem());
 			listenTo(metaDataCtr);
 		}
@@ -405,7 +409,7 @@ public class FileUploadController extends FormBasicController {
 			// Overwrite...
 			String fileName = existingVFSItem.getName();
 			if(!unlockCtr.keepLocked()) {
-				vfsLockManager.unlock(existingVFSItem, getIdentity(), ureq.getUserSession().getRoles());
+				vfsLockManager.unlock(existingVFSItem, VFSLockApplicationType.vfs);
 			}
 			unlockDialogBox.deactivate();
 			
@@ -428,7 +432,7 @@ public class FileUploadController extends FormBasicController {
 			if(FolderCommandStatus.STATUS_CANCELED == revisionListCtr.getStatus()) {
 				//don't want to delete revisions, clean the temporary file
 				doCancel(ureq);
-			} else if (existingVFSItem instanceof Versionable && ((Versionable)existingVFSItem).getVersions().isVersioned()) {
+			} else if (existingVFSItem.canVersion() == VFSConstants.YES) {
 				doFinishRevisionList(ureq);
 			}
 		}
@@ -446,7 +450,7 @@ public class FileUploadController extends FormBasicController {
 	}
 	
 	private void doFinishOverwrite(UserRequest ureq) {
-		if (existingVFSItem instanceof Versionable && ((Versionable)existingVFSItem).getVersions().isVersioned()) {
+		if (existingVFSItem.canVersion() == VFSConstants.YES) {
 			//new version
 			int maxNumOfRevisions = getMaxNumOfRevisionsOfExistingVFSItem();
 			if(maxNumOfRevisions == 0) {
@@ -463,7 +467,7 @@ public class FileUploadController extends FormBasicController {
 			}
 		} else {
 			//if the file is locked, ask for unlocking it
-			if(vfsLockManager.isLocked(existingVFSItem)) {
+			if(vfsLockManager.isLocked(existingVFSItem, VFSLockApplicationType.vfs, null)) {
 				askForUnlock(ureq);
 				
 			} else {
@@ -482,9 +486,9 @@ public class FileUploadController extends FormBasicController {
 		String comment = commentVersionCtr.getComment();
 		
 		Roles roles = ureq.getUserSession().getRoles();
-		boolean locked = vfsLockManager.isLocked(existingVFSItem);
+		boolean locked = vfsLockManager.isLocked(existingVFSItem, VFSLockApplicationType.vfs, null);
 		if(locked && !commentVersionCtr.keepLocked()) {
-			vfsLockManager.unlock(existingVFSItem, getIdentity(), roles);
+			vfsLockManager.unlock(existingVFSItem, VFSLockApplicationType.vfs);
 		}
 		
 		commentVersionDialogBox.deactivate();
@@ -493,12 +497,11 @@ public class FileUploadController extends FormBasicController {
 		}
 		
 		//ok, new version of the file
-		Versionable existingVersionableItem = (Versionable)existingVFSItem;
-		boolean ok = existingVersionableItem.getVersions().addVersion(ureq.getIdentity(), comment, newFile.getInputStream());
-		if(ok) {
-			newFile.deleteSilently();
-			//what can i do if existingVFSItem is a container
-			if(existingVFSItem instanceof VFSLeaf) {
+		if(existingVFSItem instanceof VFSLeaf && existingVFSItem.canVersion() == VFSConstants.YES) {
+			boolean ok = vfsRepositoryService.addVersion((VFSLeaf)existingVFSItem, ureq.getIdentity(), comment, newFile.getInputStream());
+			if(ok) {
+				newFile.deleteSilently();
+				//what can i do if existingVFSItem is a container
 				newFile = (VFSLeaf)existingVFSItem;
 			}
 		}
@@ -510,31 +513,30 @@ public class FileUploadController extends FormBasicController {
 			existingVFSItem = existingVFSItem.getParentContainer().resolve(existingVFSItem.getName());
 		}
 		
-		Versionable versionable = (Versionable)existingVFSItem;
-		Versions versions = versionable.getVersions();
+		VFSMetadata metadata = vfsRepositoryService.getMetadataFor(existingVFSItem);
+		List<VFSRevision> revisions = vfsRepositoryService.getRevisions(metadata);
 		int maxNumOfRevisions = getMaxNumOfRevisionsOfExistingVFSItem();
-		if(maxNumOfRevisions < 0 || maxNumOfRevisions > versions.getRevisions().size()) {
+		if(maxNumOfRevisions < 0 || maxNumOfRevisions > revisions.size()) {
 			askForComment(ureq);
 		} else {
-			askToReduceRevisionList(ureq, versionable);
+			askToReduceRevisionList(ureq, (VFSLeaf)existingVFSItem);
 		}
 	}
 	
 	private int getMaxNumOfRevisionsOfExistingVFSItem() {
-		String relPath = null;
-		if(existingVFSItem instanceof OlatRootFileImpl) {
-			relPath = ((OlatRootFileImpl)existingVFSItem).getRelPath();
-		}
-		return FolderConfig.versionsAllowed(relPath);
+		return versionsModule.getMaxNumberOfVersions();
 	}
 	
-	private void askToReduceRevisionList(UserRequest ureq, Versionable versionable) {
+	private void askToReduceRevisionList(UserRequest ureq, VFSLeaf versionable) {
 		removeAsListenerAndDispose(revisionListCtr);
 		removeAsListenerAndDispose(revisionListDialogBox);
 		
-		Versions versions = versionable.getVersions();
 		int maxNumOfRevisions = getMaxNumOfRevisionsOfExistingVFSItem();
-		String[] params = new String[]{ Integer.toString(maxNumOfRevisions), Integer.toString(versions.getRevisions().size()) };
+		VFSMetadata metadata = vfsRepositoryService.getMetadataFor(versionable);
+		List<VFSRevision> revisions = vfsRepositoryService.getRevisions(metadata);
+		
+		int numOfRevisions = revisions.size();
+		String[] params = new String[]{ Integer.toString(maxNumOfRevisions), Integer.toString(numOfRevisions) };
 		String title = translate("ul.tooManyRevisions.title", params);
 		String description = translate("ul.tooManyRevisions.description", params);
 		
@@ -562,7 +564,7 @@ public class FileUploadController extends FormBasicController {
 		removeAsListenerAndDispose(commentVersionCtr);
 		removeAsListenerAndDispose(commentVersionDialogBox);
 
-		boolean locked = vfsLockManager.isLocked(existingVFSItem);
+		boolean locked = vfsLockManager.isLocked(existingVFSItem, VFSLockApplicationType.vfs, null);
 		commentVersionCtr = new VersionCommentController(ureq, getWindowControl(), locked, true);
 		listenTo(commentVersionCtr);
 		String title = commentVersionCtr.getAndRemoveFormTitle();
@@ -615,18 +617,19 @@ public class FileUploadController extends FormBasicController {
 			boolean success = false;
 			try(InputStream in = new FileInputStream(uploadedFile);
 					BufferedOutputStream out = new BufferedOutputStream(newFile.getOutputStream(false)))  {
-				success = FileUtils.copy(in, out);					
-				uploadedFile.delete();
+				FileUtils.cpio(in, out, "");
+				success = true;
 			} catch (IOException e) {
 				success = false;
-			}
+			}				
+			FileUtils.deleteFile(uploadedFile);
 			
 			if (success) {
-				boolean locked = vfsLockManager.isLockedForMe(existingVFSItem, getIdentity(), ureq.getUserSession().getRoles());
+				boolean locked = vfsLockManager.isLockedForMe(existingVFSItem, getIdentity(), VFSLockApplicationType.vfs, null);
 				if (locked) {
 					//the file is locked and cannot be overwritten
 					lockedFileDialog(ureq, renamedFilename);
-				} else if (existingVFSItem instanceof Versionable && ((Versionable)existingVFSItem).getVersions().isVersioned()) {
+				} else if (existingVFSItem.canVersion() == VFSConstants.YES) {
 					uploadVersionedFile(ureq, renamedFilename);
 				} else {
 					askOverwriteOrRename(ureq, renamedFilename);
@@ -650,19 +653,19 @@ public class FileUploadController extends FormBasicController {
 	}
 	
 	private void uploadVersionedFile(UserRequest ureq, String renamedFilename) {
-		Versionable versionable = (Versionable)existingVFSItem;
-		Versions versions = versionable.getVersions();
+		VFSMetadata metadata = vfsRepositoryService.getMetadataFor(existingVFSItem);
+		List<VFSRevision> revisions = vfsRepositoryService.getRevisions(metadata);
 		int maxNumOfRevisions = getMaxNumOfRevisionsOfExistingVFSItem();
 		if(maxNumOfRevisions == 0) {
 			//it's possible if someone change the configuration
 			// let calling method decide what to do.
 			askOverwriteOrRename(ureq, renamedFilename);
-		} else if(versions.getRevisions().isEmpty() || maxNumOfRevisions < 0 || maxNumOfRevisions > versions.getRevisions().size()) {
+		} else if(revisions.isEmpty() || maxNumOfRevisions < 0 || maxNumOfRevisions > revisions.size()) {
 			// let calling method decide what to do.
 			askNewVersionOrRename(ureq, renamedFilename);
 		} else {
 			//too many revisions
-			askToReduceRevisionList(ureq, versionable);
+			askToReduceRevisionList(ureq, (VFSLeaf)existingVFSItem);
 		}
 	}
 	
@@ -698,11 +701,11 @@ public class FileUploadController extends FormBasicController {
 		} else {
 			try(InputStream in = new FileInputStream(uploadedFile);
 				OutputStream out = newFile.getOutputStream(false)) {
-				FileUtils.bcopy(in, out, "uploadTmpFileToDestFile");
-				uploadedFile.delete();
+				FileUtils.cpio(in, out, "uploadTmpFileToDestFile");
 			} catch (IOException e) {
 				success = false;
 			}
+			FileUtils.deleteFile(uploadedFile);
 		}
 		
 		if (success) {
@@ -732,16 +735,16 @@ public class FileUploadController extends FormBasicController {
 	 * Internal helper to finish the upload and add metadata
 	 */
 	private void finishSuccessfullUpload(String filePath, VFSItem item, UserRequest ureq) {
-		if (item instanceof OlatRootFileImpl) {
-			OlatRootFileImpl relPathItem = (OlatRootFileImpl) item;
+		if (item instanceof VFSLeaf && item.canMeta() == VFSConstants.YES) {
 			// create meta data
-			MetaInfo meta = metaInfoFactory.createMetaInfoFor(relPathItem);
+			VFSMetadata meta = item.getMetaInfo();
 			if (metaDataCtr != null) {
 				meta = metaDataCtr.getMetaInfo(meta);
 			}
 			meta.setAuthor(getIdentity());
-			meta.clearThumbnails();//if overwrite an older file
-			meta.write();
+			//clear write the meta
+			vfsRepositoryService.updateMetadata(meta);
+			vfsRepositoryService.resetThumbnails((VFSLeaf)item);
 		}
 		
 		if(item == null) {
@@ -892,8 +895,7 @@ public class FileUploadController extends FormBasicController {
 			return validateFilename(metaDataCtr.getFilename(), metaDataCtr.getFilenameEl());
 		}
 
-		boolean allOk = validateFilename(fileEl);
-		return allOk;
+		return validateFilename(fileEl);
 	}
 	
 	private boolean validateFilename(FileElement itemEl) {
@@ -908,19 +910,11 @@ public class FileUploadController extends FormBasicController {
 			if (!StringHelper.containsNonWhitespace(filename)) {
 				itemEl.setErrorKey("NoFileChosen", null);
 				allOk &= false;
-			}
-			
-			if(uriValidation) {
-				try {
-					new URI(filename);
-				} catch(Exception e) {
-					itemEl.setErrorKey("cfile.name.notvalid.uri", null);
-					allOk &= false;
-				}
-			}	
-			if(!FileUtils.validateFilename(filename)) {
+			} else if(!FileUtils.validateFilename(filename)) {
 				itemEl.setErrorKey("cfile.name.notvalid", null);
 				allOk &= false;
+			} else {
+				allOk &= validateUri(filename, itemEl);
 			}
 			allOk &= validateQuota(itemEl);
 		}
@@ -936,22 +930,30 @@ public class FileUploadController extends FormBasicController {
 		if (!StringHelper.containsNonWhitespace(filename)) {
 			itemEl.setErrorKey("NoFileChosen", null);
 			allOk &= false;
+		} else if(!FileUtils.validateFilename(filename)) {
+			itemEl.setErrorKey("cfile.name.notvalid", null);
+			allOk &= false;
+		} else {
+			allOk &= validateUri(filename, itemEl);
 		}
+		
+		allOk &= validateQuota(fileEl);
+		return allOk;
+	}
+	
+	private boolean validateUri(String filename, FormItem itemEl) {
+		boolean allOk = true;
 		
 		if(uriValidation) {
 			try {
-				new URI(filename);
+				URI uri = new URI(filename);
+				uri.normalize();
 			} catch(Exception e) {
 				itemEl.setErrorKey("cfile.name.notvalid.uri", null);
 				allOk &= false;
 			}
-		}	
-		if(!FileUtils.validateFilename(filename)) {
-			itemEl.setErrorKey("cfile.name.notvalid", null);
-			allOk &= false;
 		}
 		
-		allOk &= validateQuota(fileEl);
 		return allOk;
 	}
 	

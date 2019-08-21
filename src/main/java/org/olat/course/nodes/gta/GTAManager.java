@@ -140,7 +140,7 @@ public interface GTAManager {
 	 * @param cNode The course element
 	 * @return The subscription context for this course and course element.
 	 */
-	public SubscriptionContext getSubscriptionContext(CourseEnvironment courseEnv, GTACourseNode cNode);
+	public SubscriptionContext getSubscriptionContext(CourseEnvironment courseEnv, GTACourseNode cNode, boolean markedOnly);
 	
 	/**
 	 * Create a subscription context.
@@ -148,9 +148,17 @@ public interface GTAManager {
 	 * @param cNode The course element
 	 * @return The subscription context for this course and course element.
 	 */
-	public SubscriptionContext getSubscriptionContext(OLATResource courseRes, GTACourseNode cNode);
+	public SubscriptionContext getSubscriptionContext(OLATResource courseRes, GTACourseNode cNode, boolean markedOnly);
 	
-	public PublisherData getPublisherData(CourseEnvironment courseEnv, GTACourseNode cNode);
+	public PublisherData getPublisherData(CourseEnvironment courseEnv, GTACourseNode cNode, boolean markedOnly);
+	
+	/**
+	 * Set the news on the publishers for standard and marked tasks.
+	 * 
+	 * @param courseEnv The course environment
+	 * @param cNode The course node
+	 */
+	public void markNews(CourseEnvironment courseEnv, GTACourseNode cNode);
 	
 	/**
 	 * Return the list of business groups configured in the course element
@@ -267,6 +275,14 @@ public interface GTAManager {
 	public Task createTask(String taskName, TaskList taskList, TaskProcess status, BusinessGroup assessedGroup, Identity assessedIdentity, GTACourseNode cNode);
 	
 	public Task createAndPersistTask(String taskName, TaskList taskList, TaskProcess status, BusinessGroup assessedGroup, Identity assessedIdentity, GTACourseNode cNode);
+	
+	/**
+	 * If a temporary transient task created for coaching purpose need to be persisted,
+	 * 
+	 * @param task The transient task
+	 * @return The persisted task
+	 */
+	public Task persistTask(Task task);
 	
 	public Task nextStep(Task task, GTACourseNode cNode, Role by);
 	

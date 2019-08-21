@@ -19,8 +19,15 @@
  */
 package org.olat.course.nodes.gta.ui;
 
+import java.util.List;
+
+import org.olat.core.commons.services.doceditor.DocTemplate;
+import org.olat.core.commons.services.doceditor.DocTemplates;
+import org.olat.core.commons.services.vfs.VFSMetadata;
+import org.olat.core.commons.services.vfs.VFSRepositoryService;
 import org.olat.core.gui.UserRequest;
 import org.olat.core.gui.components.form.flexible.FormItemContainer;
+import org.olat.core.gui.components.form.flexible.elements.SingleSelection;
 import org.olat.core.gui.components.form.flexible.elements.TextElement;
 import org.olat.core.gui.components.form.flexible.impl.FormBasicController;
 import org.olat.core.gui.components.form.flexible.impl.FormLayoutContainer;
@@ -29,7 +36,12 @@ import org.olat.core.gui.control.Event;
 import org.olat.core.gui.control.WindowControl;
 import org.olat.core.util.FileUtils;
 import org.olat.core.util.StringHelper;
+import org.olat.core.util.vfs.VFSConstants;
 import org.olat.core.util.vfs.VFSContainer;
+import org.olat.core.util.vfs.VFSItem;
+import org.olat.core.util.vfs.VFSLeaf;
+import org.olat.core.util.vfs.VFSManager;
+import org.springframework.beans.factory.annotation.Autowired;
 
 /**
  * 
@@ -40,17 +52,42 @@ import org.olat.core.util.vfs.VFSContainer;
 public class NewDocumentController extends FormBasicController {
 	
 	private TextElement filenameEl;
+	private SingleSelection docTypeEl;
 	private final VFSContainer documentContainer;
+	private final List<DocTemplate> templates;
 	
-	public NewDocumentController(UserRequest ureq, WindowControl wControl, VFSContainer documentContainer) {
+	@Autowired
+	private VFSRepositoryService vfsService;
+	
+	public NewDocumentController(UserRequest ureq, WindowControl wControl, VFSContainer documentContainer,
+			DocTemplates templates) {
 		super(ureq, wControl);
 		this.documentContainer = documentContainer;
+		this.templates = templates.getTemplates();
 		initForm(ureq);
 	}
 
 	@Override
 	protected void initForm(FormItemContainer formLayout, Controller listener, UserRequest ureq) {
 		formLayout.setElementCssClass("o_sel_course_gta_new_doc_form");
+		
+		String[] fileTypeKeys = new String[templates.size()];
+		String[] fileTypeValues = new String[templates.size()];
+		String[] fileTypeSuffix = new String[templates.size()];
+		for (int i = 0; i < templates.size(); i++) {
+			DocTemplate docTemplate = templates.get(i);
+			String name = docTemplate.getName() + " (." + docTemplate.getSuffix() + ")";
+			fileTypeKeys[i] = String.valueOf(i);
+			fileTypeValues[i] = name;
+			fileTypeSuffix[i] = docTemplate.getSuffix();
+		}
+		docTypeEl = uifactory.addDropdownSingleselect("file.type", formLayout, fileTypeKeys, fileTypeValues, fileTypeSuffix);
+		docTypeEl.setElementCssClass("o_sel_course_gta_doc_filetype");
+		docTypeEl.setMandatory(true);
+		if (templates.size() == 1) {
+			docTypeEl.setVisible(false);
+		}
+		
 		filenameEl = uifactory.addTextElement("fileName", "file.name", -1, "", formLayout);
 		filenameEl.setElementCssClass("o_sel_course_gta_doc_filename");
 		filenameEl.setExampleKey("file.name.example", null);
@@ -69,14 +106,17 @@ public class NewDocumentController extends FormBasicController {
 	}
 	
 	public String getFilename() {
-		String value = filenameEl.getValue();
-		String lowerCased = value.toLowerCase();
-		if(!lowerCased.endsWith(".xhtm")
-				&& !lowerCased.endsWith(".html")
-				&& !lowerCased.endsWith(".htm")) {
-			value += ".html";
-		}
-		return value;
+		String fileName = filenameEl.getValue().toLowerCase();
+		DocTemplate docTemplate = getSelectedTemplate();
+		String suffix = docTemplate != null? docTemplate.getSuffix(): "";
+		return fileName.endsWith("." + suffix)
+				? fileName
+				: fileName + "." + suffix;
+	}
+
+	private DocTemplate getSelectedTemplate() {
+		int index = docTypeEl.getSelected();
+		return index >= 0? templates.get(index): templates.get(0);
 	}
 
 	@Override
@@ -104,6 +144,24 @@ public class NewDocumentController extends FormBasicController {
 
 	@Override
 	protected void formOK(UserRequest ureq) {
+		String documentName = getFilename();
+		VFSItem item = documentContainer.resolve(documentName);
+		VFSLeaf vfsLeaf = null;
+		if(item == null) {
+			vfsLeaf = documentContainer.createChildLeaf(documentName);
+		} else {
+			documentName = VFSManager.rename(documentContainer, documentName);
+			vfsLeaf = documentContainer.createChildLeaf(documentName);
+		}
+		DocTemplate docTemplate = getSelectedTemplate();
+		if (docTemplate != null) {
+			VFSManager.copyContent(docTemplate.getContentProvider().getContent(), vfsLeaf);
+		}
+		if(vfsLeaf.canMeta() == VFSConstants.YES) {
+			VFSMetadata metaInfo = vfsLeaf.getMetaInfo();
+			metaInfo.setAuthor(getIdentity());
+			vfsService.updateMetadata(metaInfo);
+		}
 		fireEvent(ureq, Event.DONE_EVENT);
 	}
 

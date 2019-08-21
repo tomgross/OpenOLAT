@@ -27,10 +27,10 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
+import org.apache.logging.log4j.Logger;
 import org.olat.basesecurity.model.IdentityRefImpl;
 import org.olat.core.commons.persistence.DB;
 import org.olat.core.gui.control.Event;
-import org.olat.core.logging.OLog;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.coordinate.CoordinatorManager;
 import org.olat.core.util.event.GenericEventListener;
@@ -46,6 +46,7 @@ import org.olat.course.assessment.model.CoordinatedAssessmentMode;
 import org.olat.course.assessment.model.TransientAssessmentMode;
 import org.olat.group.ui.edit.BusinessGroupModifiedEvent;
 import org.olat.repository.RepositoryEntry;
+import org.olat.repository.RepositoryEntryStatusEnum;
 import org.olat.repository.manager.RepositoryEntryDAO;
 import org.olat.repository.model.RepositoryEntryStatusChangedEvent;
 import org.springframework.beans.factory.InitializingBean;
@@ -61,7 +62,7 @@ import org.springframework.stereotype.Service;
 @Service
 public class AssessmentModeCoordinationServiceImpl implements AssessmentModeCoordinationService, GenericEventListener, InitializingBean {
 	
-	private static final OLog log = Tracing.createLoggerFor(AssessmentModeCoordinationServiceImpl.class);
+	private static final Logger log = Tracing.createLoggerFor(AssessmentModeCoordinationServiceImpl.class);
 	
 	@Autowired
 	private DB dbInstance;
@@ -178,7 +179,9 @@ public class AssessmentModeCoordinationServiceImpl implements AssessmentModeCoor
 	
 	@Override
 	public void processRepositoryEntryChangedStatus(RepositoryEntry entry) {
-		if(entry != null && (entry.getAccess() == RepositoryEntry.DELETED || entry.getRepositoryEntryStatus().isClosed())) {
+		if(entry != null && (entry.getEntryStatus() == RepositoryEntryStatusEnum.closed
+				|| entry.getEntryStatus() == RepositoryEntryStatusEnum.trash
+				|| entry.getEntryStatus() == RepositoryEntryStatusEnum.deleted)) {
 			try {
 				List<AssessmentMode> modes = assessmentModeManager.getAssessmentModeFor(entry);
 				for(AssessmentMode mode:modes) {
@@ -246,6 +249,13 @@ public class AssessmentModeCoordinationServiceImpl implements AssessmentModeCoor
 				mode = ensureStatusOfMode(mode, Status.none);
 				sendEvent(AssessmentModeNotificationEvent.BEFORE, mode,
 						assessmentModeManager.getAssessedIdentityKeys(mode));
+			} else if(mode.getStatus() == Status.followup && mode.isManualBeginEnd() && !forceStatus) {
+				// close manual assessment mode in the follow-up time but started before the begin date
+				if(mode.getEndWithFollowupTime().compareTo(now) < 0) {
+					mode = ensureStatusOfMode(mode, Status.end);
+					sendEvent(AssessmentModeNotificationEvent.END, mode,
+							assessmentModeManager.getAssessedIdentityKeys(mode));
+				}
 			}
 		} else if(mode.getBeginWithLeadTime().compareTo(now) <= 0 && mode.getBegin().compareTo(now) > 0
 				&& mode.getBeginWithLeadTime().compareTo(mode.getBegin()) != 0) {

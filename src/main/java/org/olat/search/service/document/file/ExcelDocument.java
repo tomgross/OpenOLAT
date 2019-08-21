@@ -28,6 +28,7 @@ package org.olat.search.service.document.file;
 import java.io.BufferedInputStream;
 import java.io.IOException;
 
+import org.apache.logging.log4j.Logger;
 import org.apache.lucene.document.Document;
 import org.apache.poi.hssf.usermodel.HSSFCell;
 import org.apache.poi.hssf.usermodel.HSSFRow;
@@ -36,7 +37,6 @@ import org.apache.poi.hssf.usermodel.HSSFWorkbook;
 import org.apache.poi.poifs.filesystem.POIFSFileSystem;
 import org.apache.poi.ss.usermodel.CellType;
 import org.olat.core.gui.util.CSSHelper;
-import org.olat.core.logging.OLog;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.io.LimitedContentWriter;
 import org.olat.core.util.vfs.VFSLeaf;
@@ -49,7 +49,7 @@ import org.olat.search.service.SearchResourceContext;
  */
 public class ExcelDocument extends FileDocument {
 	private static final long serialVersionUID = 1592080527374169362L;
-	private static final OLog log = Tracing.createLoggerFor(ExcelDocument.class);
+	private static final Logger log = Tracing.createLoggerFor(ExcelDocument.class);
 
 	public final static String FILE_TYPE = "type.file.excel";
 
@@ -63,7 +63,7 @@ public class ExcelDocument extends FileDocument {
 		excelDocument.init(leafResourceContext, leaf);
 		excelDocument.setFileType(FILE_TYPE);
 		excelDocument.setCssIcon(CSSHelper.createFiletypeIconCssClassFor(leaf.getName()));
-		if (log.isDebug()) log.debug(excelDocument.toString());
+		if (log.isDebugEnabled()) log.debug(excelDocument.toString());
 		return excelDocument.getLuceneDocument();
 	}
 
@@ -75,9 +75,8 @@ public class ExcelDocument extends FileDocument {
 		int sheetNullCounter = 0;
 
 		try(BufferedInputStream bis = new BufferedInputStream(leaf.getInputStream());
-				HSSFWorkbook workbook = new HSSFWorkbook(new POIFSFileSystem(bis));) {
-
-			LimitedContentWriter content = new LimitedContentWriter((int)leaf.getSize(), FileDocumentFactory.getMaxFileSize());
+				HSSFWorkbook workbook = new HSSFWorkbook(new POIFSFileSystem(bis));
+				LimitedContentWriter content = new LimitedContentWriter((int)leaf.getSize(), FileDocumentFactory.getMaxFileSize())) {
 			for (int sheetNumber = 0; sheetNumber < workbook.getNumberOfSheets(); sheetNumber++) {
 				HSSFSheet sheet = workbook.getSheetAt(sheetNumber);
 				if (sheet != null) {
@@ -87,7 +86,7 @@ public class ExcelDocument extends FileDocument {
 							for (int cellNumber = row.getFirstCellNum(); cellNumber <= row.getLastCellNum(); cellNumber++) {
 								HSSFCell cell = row.getCell(cellNumber);
 								if (cell != null) {
-									if (cell.getCellTypeEnum() == CellType.STRING) {
+									if (cell.getCellType() == CellType.STRING) {
 										content.append(cell.getStringCellValue()).append(' ');
 									}
 								} else {
@@ -102,13 +101,12 @@ public class ExcelDocument extends FileDocument {
 					sheetNullCounter++;
 				}
 			}
-			if (log.isDebug()) {
+			if (log.isDebugEnabled()) {
 				if ((cellNullCounter > 0) || (rowNullCounter > 0) || (sheetNullCounter > 0)) {
 					log.debug("Read Excel content cell=null #:" + cellNullCounter + ", row=null #:" + rowNullCounter + ", sheet=null #:"
 							+ sheetNullCounter);
 				}
 			}
-			content.close();
 			return new FileContent(content.toString());
 		} catch (Exception ex) {
 			throw new DocumentException("Can not read XLS Content. File=" + leaf.getName(), ex);

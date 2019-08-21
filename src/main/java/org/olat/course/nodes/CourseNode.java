@@ -37,6 +37,7 @@ import org.olat.core.gui.control.Controller;
 import org.olat.core.gui.control.WindowControl;
 import org.olat.core.gui.control.generic.tabbable.TabbableController;
 import org.olat.core.id.Identity;
+import org.olat.core.id.Organisation;
 import org.olat.core.util.nodes.INode;
 import org.olat.course.ICourse;
 import org.olat.course.condition.Condition;
@@ -53,7 +54,7 @@ import org.olat.course.run.userview.TreeFilter;
 import org.olat.course.run.userview.UserCourseEnvironment;
 import org.olat.course.statistic.StatisticResourceOption;
 import org.olat.course.statistic.StatisticResourceResult;
-import org.olat.ims.qti.statistics.QTIType;
+import org.olat.course.statistic.StatisticType;
 import org.olat.modules.ModuleConfiguration;
 import org.olat.repository.RepositoryEntry;
 
@@ -263,9 +264,9 @@ public interface CourseNode extends INode, ShortName {
 	 * @return
 	 */
 	public StatisticResourceResult createStatisticNodeResult(UserRequest ureq, WindowControl wControl,
-			UserCourseEnvironment userCourseEnv, StatisticResourceOption options, QTIType... type);
+			UserCourseEnvironment userCourseEnv, StatisticResourceOption options, StatisticType type);
 	
-	public boolean isStatisticNodeResultAvailable(UserCourseEnvironment userCourseEnv, QTIType... type);
+	public boolean isStatisticNodeResultAvailable(UserCourseEnvironment userCourseEnv, StatisticType type);
 	
 	/**
 	 * this method must generate a nodeevaluation and take care of (if any) child
@@ -322,12 +323,14 @@ public interface CourseNode extends INode, ShortName {
 	 * 
 	 * @param locale The users locale
 	 * @param course The course
+	 * @param options The options to generate the archive
 	 * @param exportStream The directory where the exported files should be
 	 *          put. This directory must exist prior to calling this method.
-	 * @param value of charset property of current user
-	 * @return true if any data to be archived was found, false otherwise.
+	 * @param path The path in the zip archive (without trailing /) or an empty string
+	 * @param charset The charset property of current user
+	 * @return true If any data to be archived was found, false otherwise.
 	 */
-	public boolean archiveNodeData(Locale locale, ICourse course, ArchiveOptions options, ZipOutputStream out, String charset);
+	public boolean archiveNodeData(Locale locale, ICourse course, ArchiveOptions options, ZipOutputStream exportStream, String path, String charset);
 
 	/**
 	 * Export all node user data to the given directory. This might be one file or
@@ -359,7 +362,7 @@ public interface CourseNode extends INode, ShortName {
 	 * @return Controller for user driven import, or null after all import tasks
 	 *         have finished.
 	 */
-	public void importNode(File importDirectory, ICourse course, Identity owner, Locale locale, boolean withReferences);
+	public void importNode(File importDirectory, ICourse course, Identity owner, Organisation organisation, Locale locale, boolean withReferences);
 	
 	/**
 	 * Remap the node to the context of the course after import.

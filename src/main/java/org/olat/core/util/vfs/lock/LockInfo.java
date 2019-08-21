@@ -21,42 +21,63 @@ package org.olat.core.util.vfs.lock;
 
 import java.util.ArrayList;
 import java.util.Date;
-import java.util.Enumeration;
 import java.util.Iterator;
 import java.util.List;
-import java.util.Vector;
 
 import org.olat.core.commons.services.webdav.servlets.FastHttpDateFormat;
 import org.olat.core.commons.services.webdav.servlets.WebDAVDispatcherImpl;
 import org.olat.core.commons.services.webdav.servlets.WebResource;
 import org.olat.core.commons.services.webdav.servlets.XMLWriter;
+import org.olat.core.id.Identity;
+import org.olat.core.util.vfs.VFSLockApplicationType;
 
 /**
  * Holds a lock information.
  */
 public class LockInfo {
 
-	//ten years is enough for a long loc
-    private static final long vfsExpireAt = (System.currentTimeMillis() + (10 *365 * 24 * 60 * 60 * 1000));
-
 	private String path = "/";
 	private String type = "write";
     private String scope = "exclusive";
     private int depth = 0;
     private String owner = "";
-    private Vector<String> tokens = new Vector<String>();
+    private List<String> tokens = new ArrayList<>();
     private long expiresAt = 0;
     private Date creationDate = new Date();
     
-    private boolean webdavLock;
+    private String appName;
     private boolean vfsLock;
+    private boolean webdavLock;
+    private boolean collaborationLock;
+    
+    private boolean locked;
     
     private final Long lockedBy;
+    
+    public LockInfo() {
+    	locked = false;
+    	lockedBy = null;
+    }
 
-    public LockInfo(Long lockedBy, boolean webdavLock, boolean vfsLock) {
+    public LockInfo(Long lockedBy, VFSLockApplicationType type, String appName) {
+    	locked = true;
     	this.lockedBy = lockedBy;
-    	this.vfsLock = vfsLock;
-    	this.webdavLock = webdavLock;
+    	this.appName = appName;
+    	vfsLock = type == VFSLockApplicationType.vfs;
+    	webdavLock = type == VFSLockApplicationType.webdav;
+    	collaborationLock = type == VFSLockApplicationType.collaboration;
+    }
+    
+    public LockInfo(Identity lockedBy, VFSLockApplicationType appType) {
+    	this(lockedBy == null ? null : lockedBy.getKey(), appType, null);
+    }
+    
+    public LockInfo(Identity lockedBy, VFSLockApplicationType type, String appName) {
+    	this(lockedBy == null ? null : lockedBy.getKey(), type, appName);
+    } 
+    
+    public boolean isLocked() {
+    	return locked;
     }
 
     public Long getLockedBy() {
@@ -114,6 +135,14 @@ public class LockInfo {
 	public boolean isWebDAVLock() {
 		return webdavLock;
 	}
+	
+	public String getAppName() {
+		return appName;
+	}
+	
+	public void setAppName(String appName) {
+		this.appName = appName;
+	}
 
 	public void setWebDAVLock(boolean webdavLock) {
 		this.webdavLock = webdavLock;
@@ -127,10 +156,15 @@ public class LockInfo {
 		this.vfsLock = vfsLock;
 	}
 
+	public boolean isCollaborationLock() {
+		return collaborationLock;
+	}
+
+	public void setCollaborationLock(boolean collaborationLock) {
+		this.collaborationLock = collaborationLock;
+	}
+
 	public long getExpiresAt() {
-		if(vfsLock) {
-			return vfsExpireAt;
-		}
 		return expiresAt;
 	}
 
@@ -138,24 +172,30 @@ public class LockInfo {
 		this.expiresAt = expiresAt;
 	}
 	
-	public int getTokensSize() {
+	public synchronized int getTokensSize() {
 		return tokens.size();
 	}
 	
-	public List<String> getTokens() {
+	public synchronized List<String> getTokens() {
 		return tokens;
 	}
 	
-	public Iterator<String> tokens() {
+	public synchronized Iterator<String> tokens() {
 		return new ArrayList<String>(tokens).iterator();
 	}
 	
-	public void addToken(String token) {
-		tokens.add(token);
+	public synchronized void addToken(String token) {
+		if(!tokens.contains(token)) {
+			tokens.add(token);
+		}
 	}
 	
-	public void removeToken(String token) {
+	public synchronized void removeToken(String token) {
 		tokens.remove(token);
+	}
+	
+	public synchronized void clearTokens() {
+		tokens.clear();
 	}
 
 	/**
@@ -177,7 +217,7 @@ public class LockInfo {
      * Get an XML representation of this lock token. This method will
      * append an XML fragment to the given XML writer.
      */
-    public void toXML(XMLWriter generatedXML) {
+    public synchronized void toXML(XMLWriter generatedXML) {
 
         generatedXML.writeElement("D", "activelock", XMLWriter.OPENING);
 
@@ -207,10 +247,9 @@ public class LockInfo {
         generatedXML.writeElement("D", "timeout", XMLWriter.CLOSING);
 
         generatedXML.writeElement("D", "locktoken", XMLWriter.OPENING);
-        Enumeration<String> tokensList = tokens.elements();
-        while (tokensList.hasMoreElements()) {
+        for (String token: tokens) {
             generatedXML.writeElement("D", "href", XMLWriter.OPENING);
-            generatedXML.writeText("opaquelocktoken:" + tokensList.nextElement());
+            generatedXML.writeText("opaquelocktoken:" + token);
             generatedXML.writeElement("D", "href", XMLWriter.CLOSING);
         }
         generatedXML.writeElement("D", "locktoken", XMLWriter.CLOSING);
@@ -223,7 +262,7 @@ public class LockInfo {
      * Get a String representation of this lock token.
      */
     @Override
-    public String toString() {
+    public synchronized String toString() {
         StringBuilder result =  new StringBuilder("Type:");
         result.append(type);
         result.append("\nScope:");
@@ -234,10 +273,8 @@ public class LockInfo {
         result.append(owner);
         result.append("\nExpiration:");
         result.append(FastHttpDateFormat.formatDate(expiresAt, null));
-        Enumeration<String> tokensList = tokens.elements();
-        while (tokensList.hasMoreElements()) {
-            result.append("\nToken:");
-            result.append(tokensList.nextElement());
+        for (String token:tokens) {
+            result.append("\nToken:").append(token);
         }
         result.append("\n");
         return result.toString();

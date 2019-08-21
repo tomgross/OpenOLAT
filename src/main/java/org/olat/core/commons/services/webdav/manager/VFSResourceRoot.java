@@ -27,18 +27,18 @@ import java.util.Collections;
 
 import org.olat.core.CoreSpringFactory;
 import org.olat.core.commons.modules.bc.FolderLicenseHandler;
-import org.olat.core.commons.modules.bc.meta.MetaInfo;
-import org.olat.core.commons.modules.bc.meta.tagged.MetaTagged;
 import org.olat.core.commons.services.license.License;
 import org.olat.core.commons.services.license.LicenseModule;
 import org.olat.core.commons.services.license.LicenseService;
 import org.olat.core.commons.services.license.ui.LicenseUIFactory;
 import org.olat.core.commons.services.notifications.NotificationsManager;
 import org.olat.core.commons.services.notifications.SubscriptionContext;
+import org.olat.core.commons.services.vfs.VFSMetadata;
+import org.olat.core.commons.services.vfs.VFSRepositoryService;
 import org.olat.core.commons.services.webdav.servlets.WebResource;
 import org.olat.core.commons.services.webdav.servlets.WebResourceRoot;
 import org.olat.core.id.Identity;
-import org.olat.core.logging.OLog;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.vfs.Quota;
 import org.olat.core.util.vfs.QuotaExceededException;
@@ -49,8 +49,7 @@ import org.olat.core.util.vfs.VFSLeaf;
 import org.olat.core.util.vfs.VFSManager;
 import org.olat.core.util.vfs.VFSStatus;
 import org.olat.core.util.vfs.callbacks.VFSSecurityCallback;
-import org.olat.core.util.vfs.version.Versionable;
-import org.olat.core.util.vfs.version.VersionsManager;
+import org.olat.core.util.vfs.filters.VFSItemFilter;
 
 
 /**
@@ -60,7 +59,7 @@ import org.olat.core.util.vfs.version.VersionsManager;
  */
 public class VFSResourceRoot implements WebResourceRoot  {
 	
-	private static final OLog log = Tracing.createLoggerFor(VFSResourceRoot.class);
+	private static final Logger log = Tracing.createLoggerFor(VFSResourceRoot.class);
 	private static final int BUFFER_SIZE = 2048;
 	
 	private final Identity identity;
@@ -85,7 +84,7 @@ public class VFSResourceRoot implements WebResourceRoot  {
 		VFSItem item = resolveFile(name);
 		if (item == null) {
 			// try to resolve parent in case the item does not yet exist
-			int lastSlash = name.lastIndexOf("/");
+			int lastSlash = name.lastIndexOf('/');
 			if (lastSlash > 0) {
 				String containerName = name.substring(0, lastSlash);
 				item = resolveFile(containerName);
@@ -108,21 +107,13 @@ public class VFSResourceRoot implements WebResourceRoot  {
 	@Override
 	public boolean canRename(String name) {
 		VFSItem item = resolveFile(name);
-		if (item != null && VFSConstants.YES.equals(item.canRename())) {
-			return true;
-		} else {
-			return false;
-		}
+		return item != null && VFSConstants.YES.equals(item.canRename());
 	}	
 
 	@Override
 	public boolean canDelete(String path) {
 		VFSItem item = resolveFile(path);
-		if (item != null && VFSConstants.YES.equals(item.canDelete())) {
-			return true;
-		} else {
-			return false;
-		}
+		return item != null && VFSConstants.YES.equals(item.canDelete());
 	}
 
 	@Override
@@ -139,7 +130,7 @@ public class VFSResourceRoot implements WebResourceRoot  {
 		VFSItem file = resolveFile(path);
 		if(file instanceof VFSContainer) {
 			VFSContainer container = (VFSContainer)file;
-			return container.getItems();
+			return container.getItems(new WebDAVFileSystemFilter());
 		} else {
 			return Collections.emptyList();
 		}
@@ -181,11 +172,11 @@ public class VFSResourceRoot implements WebResourceRoot  {
 				childLeaf = (VFSLeaf)file;
 				
 				//versioning
-				if(childLeaf instanceof Versionable && ((Versionable)childLeaf).getVersions().isVersioned()) {
-					if(childLeaf.getSize() == 0) {
-						VersionsManager.getInstance().createVersionsFor(childLeaf, true);
-					} else {
-						VersionsManager.getInstance().addToRevisions((Versionable)childLeaf, identity, "");
+				if(childLeaf.canVersion() == VFSConstants.YES) {
+					try(InputStream in=childLeaf.getInputStream()) {
+						CoreSpringFactory.getImpl(VFSRepositoryService.class).addVersion(childLeaf, identity, "", in);
+					} catch(IOException e) {
+						log.error("", e);
 					}
 				}
 			} else {
@@ -230,35 +221,30 @@ public class VFSResourceRoot implements WebResourceRoot  {
 			}
 		}
 		
-		if(childLeaf instanceof MetaTagged && identity != null) {
-			MetaInfo infos = ((MetaTagged)childLeaf).getMetaInfo();
-			if(infos != null && !infos.hasAuthorIdentity()) {
-				infos.setAuthor(identity);
-				addLicense(infos, identity);
-				infos.clearThumbnails();
-				//infos.write(); the clearThumbnails call write()
+		if(identity != null && childLeaf.canMeta() == VFSConstants.YES) {
+			VFSRepositoryService vfsRepositoryService = CoreSpringFactory.getImpl(VFSRepositoryService.class);
+			VFSMetadata metadata;
+			if(movedFrom instanceof VFSResource && ((VFSResource)movedFrom).getItem() instanceof VFSLeaf) {
+				VFSLeaf from = (VFSLeaf)((VFSResource)movedFrom).getItem();
+				metadata = CoreSpringFactory.getImpl(VFSRepositoryService.class).move(from, childLeaf, identity);
+			} else {
+				metadata = vfsRepositoryService.getMetadataFor(childLeaf);
+				metadata.setAuthor(identity);
+				metadata = vfsRepositoryService.updateMetadata(metadata);
 			}
+			addLicense(metadata, identity);
+			vfsRepositoryService.resetThumbnails(childLeaf);
 		}
-		
-		if(movedFrom instanceof VFSResource) {
-			VFSResource vfsResource = (VFSResource)movedFrom;
-			if(vfsResource.getItem() instanceof Versionable
-					&& ((Versionable)vfsResource.getItem()).getVersions().isVersioned()) {
-				VFSLeaf currentVersion = (VFSLeaf)vfsResource.getItem();
-				VersionsManager.getInstance().move(currentVersion, childLeaf, identity);
-			}
-		}
-		
 		return true;
 	}
 
-	private void addLicense(MetaInfo meta, Identity identity) {
+	private void addLicense(VFSMetadata meta, Identity id) {
 		LicenseService licenseService = CoreSpringFactory.getImpl(LicenseService.class);
 		LicenseModule licenseModule = CoreSpringFactory.getImpl(LicenseModule.class);
 		FolderLicenseHandler licenseHandler = CoreSpringFactory.getImpl(FolderLicenseHandler.class);
 		if (licenseModule.isEnabled(licenseHandler)) {
-			License license = licenseService.createDefaultLicense(licenseHandler, identity);
-			meta.setLicenseTypeKey(String.valueOf(license.getLicenseType().getKey()));
+			License license = licenseService.createDefaultLicense(licenseHandler, id);
+			meta.setLicenseType(license.getLicenseType());
 			meta.setLicenseTypeName(license.getLicenseType().getName());
 			meta.setLicensor(license.getLicensor());
 			meta.setLicenseText(LicenseUIFactory.getLicenseText(license));
@@ -331,5 +317,13 @@ public class VFSResourceRoot implements WebResourceRoot  {
 		if (name == null) name = "";
 		if (name.length() > 0 && name.charAt(0) == '/') name = name.substring(1);
 		return base.resolve(name);
+	}
+	
+	private static class WebDAVFileSystemFilter implements VFSItemFilter {
+		@Override
+		public boolean accept(VFSItem vfsItem) {
+			String name = vfsItem.getName();
+			return !name.startsWith("._oo_");
+		}
 	}
 }

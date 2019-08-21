@@ -34,36 +34,42 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Locale;
 
+import org.olat.core.CoreSpringFactory;
 import org.olat.core.commons.controllers.linkchooser.CustomLinkTreeModel;
 import org.olat.core.commons.modules.bc.FolderLoggingAction;
 import org.olat.core.commons.modules.bc.FolderRunController;
 import org.olat.core.commons.modules.bc.commands.FolderCommandFactory;
-import org.olat.core.commons.modules.bc.meta.tagged.LockComparator;
+import org.olat.core.commons.modules.bc.comparators.LockComparator;
+import org.olat.core.commons.services.analytics.AnalyticsModule;
+import org.olat.core.commons.services.analytics.AnalyticsSPI;
+import org.olat.core.commons.services.vfs.VFSMetadata;
+import org.olat.core.commons.services.vfs.VFSRepositoryService;
 import org.olat.core.gui.UserRequest;
 import org.olat.core.gui.components.AbstractComponent;
 import org.olat.core.gui.components.ComponentRenderer;
 import org.olat.core.gui.control.Event;
 import org.olat.core.gui.translator.Translator;
 import org.olat.core.id.IdentityEnvironment;
-import org.olat.core.logging.OLog;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
 import org.olat.core.logging.activity.CoreLoggingResourceable;
 import org.olat.core.logging.activity.ThreadLocalUserActivityLogger;
 import org.olat.core.util.Util;
+import org.olat.core.util.vfs.VFSConstants;
 import org.olat.core.util.vfs.VFSContainer;
 import org.olat.core.util.vfs.VFSItem;
 import org.olat.core.util.vfs.VFSLeaf;
-import org.olat.core.util.vfs.filters.VFSItemExcludePrefixFilter;
 import org.olat.core.util.vfs.filters.VFSItemFilter;
 import org.olat.core.util.vfs.version.Versionable;
 import org.olat.user.UserManager;
+import org.olat.core.util.vfs.filters.VFSSystemItemFilter;
 
 /**
  * Initial Date:  Feb 11, 2004
  * @author Mike Stock
  */
 public class FolderComponent extends AbstractComponent {
-	private static final OLog log = Tracing.createLoggerFor(FolderComponent.class);
+	private static final Logger log = Tracing.createLoggerFor(FolderComponent.class);
  	private static final ComponentRenderer RENDERER = new FolderComponentRenderer();
  	
 	public static final String SORT_NAME = "name";
@@ -88,6 +94,7 @@ public class FolderComponent extends AbstractComponent {
 	private IdentityEnvironment identityEnv;
 	private VFSContainer rootContainer;
 	private VFSContainer currentContainer;
+	private VFSMetadata currentMetadata;
 	private String currentContainerPath;
 	private String currentSortOrder;
 	// need to know our children in advance in order to be able to identify them later...
@@ -97,9 +104,12 @@ public class FolderComponent extends AbstractComponent {
 	protected Translator translator;
 	private VFSItemFilter filter;
 	private final DateFormat dateTimeFormat;
-	private VFSItemExcludePrefixFilter exclFilter;
+	private VFSItemFilter exclFilter;
 	private CustomLinkTreeModel customLinkTreeModel;
 	private final VFSContainer externContainerForCopy;
+	
+	private final AnalyticsSPI analyticsSpi;
+	private final VFSRepositoryService vfsRepositoryService;
 
 	/**
 	 * Wraps the folder module as a component.
@@ -134,14 +144,14 @@ public class FolderComponent extends AbstractComponent {
 			VFSContainer rootContainer, VFSItemFilter filter,
 			CustomLinkTreeModel customLinkTreeModel, VFSContainer externContainerForCopy) {
 		super(name);
+		analyticsSpi = CoreSpringFactory.getImpl(AnalyticsModule.class).getAnalyticsProvider();
+		vfsRepositoryService = CoreSpringFactory.getImpl(VFSRepositoryService.class);
+		
 		this.identityEnv = ureq.getUserSession().getIdentityEnvironment();
 		this.filter = filter;
 		this.customLinkTreeModel = customLinkTreeModel;
 		this.externContainerForCopy = externContainerForCopy;
-
-		boolean showHiddenFiles = UserManager.getInstance().getShowHiddenFiles(ureq.getIdentity());
-		exclFilter = getExcludeFilter(showHiddenFiles);
-
+		exclFilter = new VFSSystemItemFilter();
 		Locale locale = ureq.getLocale();
 		collator = Collator.getInstance(locale);
 		translator = Util.createPackageTranslator(FolderRunController.class, locale);
@@ -150,6 +160,7 @@ public class FolderComponent extends AbstractComponent {
 		setCurrentContainerPath("/");
 		
 		dateTimeFormat = DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT, locale);
+		
 	}
 	
 	@Override
@@ -157,7 +168,7 @@ public class FolderComponent extends AbstractComponent {
 		if (ureq.getParameter(ListRenderer.PARAM_EDTID) != null) {
 			fireEvent(ureq, new Event(FolderCommandFactory.COMMAND_EDIT));
 			return;
-		} else if (ureq.getParameter(ListRenderer.PARAM_CONTENTEDITID) != null) {
+		} else if (ureq.getParameter(ListRenderer.PARAM_CONTENT_EDIT_ID) != null) {
 			fireEvent(ureq, new Event(FolderCommandFactory.COMMAND_EDIT_CONTENT));
 			return;
 		} else if (ureq.getParameter(ListRenderer.PARAM_SERV) != null) {
@@ -211,6 +222,10 @@ public class FolderComponent extends AbstractComponent {
 	
 	public void setCanMail(boolean canMail) {
 		this.canMail = canMail;
+	}
+	
+	public AnalyticsSPI getAnalyticsSPI() {
+		return analyticsSpi;
 	}
 
 	/**
@@ -287,6 +302,8 @@ public class FolderComponent extends AbstractComponent {
 			comparator = new Comparator<VFSItem>() {
 				@Override
 				public int compare(VFSItem o1, VFSItem o2) {
+					return o1.getName().compareTo(o2.getName());
+					/*
 					Versionable v1 = null;
 					Versionable v2 = null;
 					if (o1 instanceof Versionable) {
@@ -309,6 +326,7 @@ public class FolderComponent extends AbstractComponent {
 						return 1;
 					}
 					return (sortAsc) ? collator.compare(r1, r2) : collator.compare(r2, r1);
+					*/
 				}
 			};
 		}  else if (col.equals(SORT_LOCK)) {																							// sort after modification date (if same, then name)
@@ -365,7 +383,7 @@ public class FolderComponent extends AbstractComponent {
 		if (filter != null) {
 			children = currentContainer.getItems(filter);
 		} else {
-			children = currentContainer.getItems();			
+			children = currentContainer.getItems(new VFSSystemItemFilter());			
 		}
 		// OLAT-5256: filter .nfs files
 		for(Iterator<VFSItem> it = children.iterator(); it.hasNext(); ) {
@@ -385,18 +403,27 @@ public class FolderComponent extends AbstractComponent {
 	public boolean setCurrentContainerPath(String relPath) {
 		// get the container
 		setDirty(true);
+		currentMetadata = null;
+		
 		if (relPath == null) relPath = "/";
 		if (!(relPath.charAt(0) == '/')) relPath = "/" + relPath;
 		VFSItem vfsItem = rootContainer.resolve(relPath);
-		if (vfsItem == null || !(vfsItem instanceof VFSContainer)) {
+		if (!(vfsItem instanceof VFSContainer)) {
 			// unknown path, reset to root contaner...
 			currentContainer = rootContainer;
 			relPath = "";
 			return false;
 		}
 		
-		this.currentContainer = (VFSContainer)vfsItem;
-		this.currentContainerPath = relPath;
+		currentContainer = (VFSContainer)vfsItem;
+		if(currentContainer.canMeta() == VFSConstants.YES) {
+			currentMetadata = vfsRepositoryService.getMetadataFor(currentContainer);
+			if(currentMetadata != null && !"migrated".equals(currentMetadata.getMigrated())) {
+				vfsRepositoryService.migrate(currentContainer, currentMetadata);
+			}
+		}
+		
+		currentContainerPath = relPath;
 		updateChildren();
 		return true;
 	}

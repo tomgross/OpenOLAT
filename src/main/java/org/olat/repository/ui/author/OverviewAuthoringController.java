@@ -35,11 +35,11 @@ import org.olat.core.gui.control.WindowControl;
 import org.olat.core.gui.control.controller.BasicController;
 import org.olat.core.gui.control.generic.dtabs.Activateable2;
 import org.olat.core.id.OLATResourceable;
+import org.olat.core.id.Roles;
 import org.olat.core.id.context.BusinessControlFactory;
 import org.olat.core.id.context.ContextEntry;
 import org.olat.core.id.context.StateEntry;
 import org.olat.core.logging.activity.ThreadLocalUserActivityLogger;
-import org.olat.core.util.UserSession;
 import org.olat.core.util.Util;
 import org.olat.core.util.coordinate.CoordinatorManager;
 import org.olat.core.util.event.EventBus;
@@ -63,12 +63,14 @@ public class OverviewAuthoringController extends BasicController implements Acti
 	private MainPanel mainPanel;
 	private final VelocityContainer mainVC;
 	private final SegmentViewComponent segmentView;
+	private Link deletedLink;
 	private Link favoriteLink;
-	private final Link myEntriesLink, searchLink, deletedLink;
+	private final Link searchLink;
+	private final Link myEntriesLink;
 	private AuthorListController currentCtrl, markedCtrl, myEntriesCtrl, searchEntriesCtrl;
 	private AuthorDeletedListController deletedEntriesCtrl;
 
-	private final boolean isOlatAdmin;
+	private final boolean isAdministrator;
 	private final boolean isGuestOnly;
 	private boolean favoritDirty, myDirty, deletedDirty;
 	private final EventBus eventBus;
@@ -77,9 +79,9 @@ public class OverviewAuthoringController extends BasicController implements Acti
 		super(ureq, wControl);
 		setTranslator(Util.createPackageTranslator(RepositoryManager.class, getLocale(), getTranslator()));
 		
-		UserSession usess = ureq.getUserSession();
-		isGuestOnly = usess.getRoles().isGuestOnly();
-		isOlatAdmin = usess.getRoles().isOLATAdmin();
+		Roles roles = ureq.getUserSession().getRoles();
+		isGuestOnly = roles.isGuestOnly();
+		isAdministrator = roles.isAdministrator() || roles.isLearnResourceManager();
 		
 		mainPanel = new MainPanel("authoringMainPanel");
 		mainPanel.setDomReplaceable(false);
@@ -97,8 +99,10 @@ public class OverviewAuthoringController extends BasicController implements Acti
 		segmentView.addSegment(myEntriesLink, false);
 		searchLink = LinkFactory.createLink("search.generic", mainVC, this);
 		segmentView.addSegment(searchLink, false);
-		deletedLink = LinkFactory.createLink("search.deleted", mainVC, this);
-		segmentView.addSegment(deletedLink, false);
+		if(roles.isAuthor() || isAdministrator) {
+			deletedLink = LinkFactory.createLink("search.deleted", mainVC, this);
+			segmentView.addSegment(deletedLink, false);
+		}
 
 		eventBus = ureq.getUserSession().getSingleUserEventCenter();
 		eventBus.registerFor(this, getIdentity(), RepositoryService.REPOSITORY_EVENT_ORES);
@@ -192,7 +196,7 @@ public class OverviewAuthoringController extends BasicController implements Acti
 			} else if("Search".equals(segment)) {
 				doSearchEntries(ureq).activate(ureq, subEntries, entry.getTransientState());
 				segmentView.select(searchLink);
-			} else if("Deleted".equals(segment)) {
+			} else if("Deleted".equals(segment) && deletedLink != null) {
 				doOpenDeletedEntries(ureq).activate(ureq, subEntries, entry.getTransientState());
 				segmentView.select(deletedLink);
 			} else {
@@ -294,7 +298,7 @@ public class OverviewAuthoringController extends BasicController implements Acti
 		if(deletedEntriesCtrl == null) {
 			SearchAuthorRepositoryEntryViewParams searchParams
 				= new SearchAuthorRepositoryEntryViewParams(getIdentity(), ureq.getUserSession().getRoles());
-			if(!isOlatAdmin) {
+			if(!isAdministrator) {
 				searchParams.setOwnedResourcesOnly(true);
 			}
 			searchParams.setDeleted(true);

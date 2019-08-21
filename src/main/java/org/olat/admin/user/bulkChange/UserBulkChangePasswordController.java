@@ -25,7 +25,6 @@
 package org.olat.admin.user.bulkChange;
 
 import org.olat.basesecurity.BaseSecurity;
-import org.olat.basesecurity.BaseSecurityManager;
 import org.olat.core.CoreSpringFactory;
 import org.olat.core.gui.UserRequest;
 import org.olat.core.gui.components.Component;
@@ -42,7 +41,7 @@ import org.olat.core.gui.control.Event;
 import org.olat.core.gui.control.WindowControl;
 import org.olat.core.gui.control.controller.BasicController;
 import org.olat.core.id.Identity;
-import org.olat.core.logging.OLog;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
 import org.olat.login.auth.OLATAuthManager;
 import org.olat.registration.RegistrationManager;
@@ -61,11 +60,13 @@ import org.springframework.beans.factory.annotation.Autowired;
  */
 public class UserBulkChangePasswordController extends BasicController {
 	
-	private static final OLog log = Tracing.createLoggerFor(UserBulkChangePasswordController.class);
+	private static final Logger log = Tracing.createLoggerFor(UserBulkChangePasswordController.class);
 	
 	private ChangePasswordForm changePasswordForm;
 	private final OLATAuthManager olatAuthenticationSpi;
 	
+	@Autowired
+	private BaseSecurity securityManager;
 	@Autowired
 	private RegistrationManager registrationManager;
 
@@ -102,16 +103,13 @@ public class UserBulkChangePasswordController extends BasicController {
 			String password = changePasswordForm.getPassword();
 			boolean autodisc = changePasswordForm.getDisclaimerAccept();
 			boolean langGerman = changePasswordForm.getLangGerman();
-
-			BaseSecurity identityManager = BaseSecurityManager.getInstance();
 			
 			int c = 0;
 			
 			for(String username:usernames) {
 				if (username.length()==0) continue;
-			
 				try {
-					Identity identity = identityManager.findIdentityByName(username);
+					Identity identity = securityManager.findIdentityByName(username);
 					if(identity!=null) {
 						if (password!=null && password.trim().length()>0) {
 							olatAuthenticationSpi.changePassword(ureq.getIdentity(), identity, password);	
@@ -139,9 +137,6 @@ public class UserBulkChangePasswordController extends BasicController {
 			
 			//notify done
 			getWindowControl().setInfo(translate("bulk.psw.done", ""+c));
-
-			//TODO: clear the form
-			//changePasswordForm.clearForm(); //???
 		}
 	}
 

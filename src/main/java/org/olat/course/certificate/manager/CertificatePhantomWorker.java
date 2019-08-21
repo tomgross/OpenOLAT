@@ -37,11 +37,11 @@ import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
+import org.apache.logging.log4j.Logger;
 import org.apache.velocity.VelocityContext;
 import org.olat.core.id.Identity;
 import org.olat.core.id.User;
 import org.olat.core.id.UserConstants;
-import org.olat.core.logging.OLog;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.Formatter;
 import org.olat.core.util.StringHelper;
@@ -59,7 +59,7 @@ import org.olat.user.propertyhandlers.UserPropertyHandler;
  *
  */
 public class CertificatePhantomWorker {
-	private static final OLog log = Tracing
+	private static final Logger log = Tracing
 			.createLoggerFor(CertificatePDFFormWorker.class);
 	
 	private final Float score;
@@ -68,20 +68,26 @@ public class CertificatePhantomWorker {
 	private final RepositoryEntry entry;
 	private final String certificateURL;
 
-	private Date dateCertification;
-	private Date dateFirstCertification;
-	private Date dateNextRecertification;
+	private final Date dateCertification;
+	private final Date dateFirstCertification;
+	private final Date dateNextRecertification;
+	private final String custom1;
+	private final String custom2;
+	private final String custom3;
 
 	private final Locale locale;
 	private final UserManager userManager;
 	private final CertificatesManagerImpl certificatesManager;
 
-	public CertificatePhantomWorker(Identity identity, RepositoryEntry entry,
-			Float score, Boolean passed, Date dateCertification,
-			Date dateFirstCertification, Date nextRecertificationDate, String certificateURL, Locale locale,
-			UserManager userManager, CertificatesManagerImpl certificatesManager) {
+	public CertificatePhantomWorker(Identity identity, RepositoryEntry entry, Float score, Boolean passed,
+			Date dateCertification, Date dateFirstCertification, Date nextRecertificationDate, String custom1,
+			String custom2, String custom3, String certificateURL, Locale locale, UserManager userManager,
+			CertificatesManagerImpl certificatesManager) {
 		this.entry = entry;
 		this.score = score;
+		this.custom1 = custom1;
+		this.custom2 = custom2;
+		this.custom3 = custom3;
 		this.locale = locale;
 		this.passed = passed;
 		this.identity = identity;
@@ -98,7 +104,7 @@ public class CertificatePhantomWorker {
 		File templateFile = certificatesManager.getTemplateFile(template);
 		File htmlCertificateFile = copyAndEnrichTemplate(templateFile);
 
-		List<String> cmds = new ArrayList<String>();
+		List<String> cmds = new ArrayList<>();
 		cmds.add("phantomjs");
 		cmds.add(certificatesManager.getRasterizePath().toFile().getAbsolutePath());
 		cmds.add(htmlCertificateFile.getAbsolutePath());
@@ -205,6 +211,8 @@ public class CertificatePhantomWorker {
 		context.put("expenditureOfWorks", expenditureOfWorks);
 		String mainLanguage = entry.getMainLanguage();
 		context.put("mainLanguage", mainLanguage);
+		String location = entry.getLocation();
+		context.put("location", location);
 		
 		if (entry.getLifecycle() != null) {
 			Formatter format = Formatter.getInstance(locale);
@@ -267,11 +275,14 @@ public class CertificatePhantomWorker {
 	}
 	
 	private void fillMetaInfos(VelocityContext context) {
+		context.put("custom1", custom1);
+		context.put("custom2", custom2);
+		context.put("custom3", custom3);
 		context.put("certificateVerificationUrl", certificateURL);
 	}
 	
 	public static boolean checkPhantomJSAvailabilty() {
-		List<String> cmds = new ArrayList<String>();
+		List<String> cmds = new ArrayList<>();
 		cmds.add("phantomjs");
 		cmds.add("--help");
 		
@@ -333,7 +344,7 @@ public class CertificatePhantomWorker {
 		@Override
 		public void run() {
 			try {
-				if(log.isDebug()) {
+				if(log.isDebugEnabled()) {
 					log.debug(cmd.toString());
 				}
 				
@@ -380,7 +391,7 @@ public class CertificatePhantomWorker {
 				//
 			}
 			
-			if(log.isDebug()) {
+			if(log.isDebugEnabled()) {
 				log.debug("Error: " + errors.toString());
 				log.debug("Output: " + output.toString());
 			}

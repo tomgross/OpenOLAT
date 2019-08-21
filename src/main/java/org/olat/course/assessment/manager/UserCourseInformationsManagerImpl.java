@@ -36,7 +36,7 @@ import org.olat.core.commons.persistence.DB;
 import org.olat.core.commons.persistence.PersistenceHelper;
 import org.olat.core.id.Identity;
 import org.olat.core.id.OLATResourceable;
-import org.olat.core.logging.OLog;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.coordinate.CoordinatorManager;
 import org.olat.core.util.coordinate.SyncerExecutor;
@@ -59,7 +59,7 @@ import org.springframework.stereotype.Service;
 @Service("userCourseInformationsManager")
 public class UserCourseInformationsManagerImpl implements UserCourseInformationsManager {
 	
-	private static final OLog log = Tracing.createLoggerFor(UserCourseInformationsManagerImpl.class);
+	private static final Logger log = Tracing.createLoggerFor(UserCourseInformationsManagerImpl.class);
 
 	@Autowired
 	private DB dbInstance;
@@ -90,6 +90,29 @@ public class UserCourseInformationsManagerImpl implements UserCourseInformations
 	}
 	
 	@Override
+	public List<UserCourseInformations> getUserCourseInformations(IdentityRef identity) {
+		if(identity == null) {
+			return Collections.emptyList();
+		}
+
+		try {
+			StringBuilder sb = new StringBuilder();
+			sb.append("select infos from ").append(UserCourseInfosImpl.class.getName()).append(" as infos ")
+			  .append(" inner join fetch infos.resource as resource")
+			  .append(" inner join infos.identity as identity")
+			  .append(" where identity.key=:identityKey");
+
+			return dbInstance.getCurrentEntityManager()
+					.createQuery(sb.toString(), UserCourseInformations.class)
+					.setParameter("identityKey", identity.getKey())
+					.getResultList();
+		} catch (Exception e) {
+			log.error("Cannot retrieve course informations for: " + identity + " from " + identity, e);
+			return null;
+		}
+	}
+	
+	@Override
 	public List<UserCourseInformations> getUserCourseInformations(IdentityRef identity, List<OLATResource> resources) {
 		if(resources == null || resources.isEmpty()) {
 			return Collections.emptyList();
@@ -108,8 +131,7 @@ public class UserCourseInformationsManagerImpl implements UserCourseInformations
 					.setParameter("identityKey", identity.getKey())
 					.setParameter("resKeys", resourceKeys);
 
-			List<UserCourseInformations> infoList = query.getResultList();
-			return infoList;
+			return query.getResultList();
 		} catch (Exception e) {
 			log.error("Cannot retrieve course informations for: " + identity + " from " + identity, e);
 			return null;

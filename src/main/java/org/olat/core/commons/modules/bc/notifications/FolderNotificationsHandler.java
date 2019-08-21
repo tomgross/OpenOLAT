@@ -34,7 +34,6 @@ import java.util.Locale;
 import org.olat.core.CoreSpringFactory;
 import org.olat.core.commons.modules.bc.FileInfo;
 import org.olat.core.commons.modules.bc.FolderManager;
-import org.olat.core.commons.modules.bc.meta.MetaInfo;
 import org.olat.core.commons.services.notifications.NotificationHelper;
 import org.olat.core.commons.services.notifications.NotificationsHandler;
 import org.olat.core.commons.services.notifications.NotificationsManager;
@@ -44,11 +43,11 @@ import org.olat.core.commons.services.notifications.SubscriptionInfo;
 import org.olat.core.commons.services.notifications.manager.NotificationsUpgradeHelper;
 import org.olat.core.commons.services.notifications.model.SubscriptionListItem;
 import org.olat.core.commons.services.notifications.model.TitleItem;
+import org.olat.core.commons.services.vfs.VFSMetadata;
 import org.olat.core.gui.translator.Translator;
 import org.olat.core.gui.util.CSSHelper;
-import org.olat.core.id.Identity;
 import org.olat.core.id.context.BusinessControlFactory;
-import org.olat.core.logging.OLog;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.FileUtils;
 import org.olat.core.util.Util;
@@ -70,7 +69,7 @@ import org.olat.repository.RepositoryManager;
  * @author Felix Jost
  */
 public class FolderNotificationsHandler implements NotificationsHandler {
-	private static final OLog log = Tracing.createLoggerFor(FolderNotificationsHandler.class);
+	private static final Logger log = Tracing.createLoggerFor(FolderNotificationsHandler.class);
 	
 	/**
 	 * 
@@ -96,7 +95,7 @@ public class FolderNotificationsHandler implements NotificationsHandler {
 			if (NotificationsManager.getInstance().isPublisherValid(p) && compareDate.before(latestNews)) {
 				if("CourseModule".equals(p.getResName())) {
 					RepositoryEntry re = RepositoryManager.getInstance().lookupRepositoryEntry(OresHelper.createOLATResourceableInstance(p.getResName(), p.getResId()), false);
-					if(re.getRepositoryEntryStatus().isClosed() || re.getRepositoryEntryStatus().isUnpublished()) {
+					if(re == null || re.getEntryStatus().decommissioned()) {
 						return NotificationsManager.getInstance().getNoSubscriptionInfo();
 					}
 				}
@@ -118,7 +117,7 @@ public class FolderNotificationsHandler implements NotificationsHandler {
 						// skip this file, continue with next item in folder
 						continue;
 					}						
-					MetaInfo metaInfo = fi.getMetaInfo();
+					VFSMetadata metaInfo = fi.getMetaInfo();
 					String iconCssClass =  null;
 					if (metaInfo != null) {
 						if (metaInfo.getTitle() != null) {
@@ -126,10 +125,10 @@ public class FolderNotificationsHandler implements NotificationsHandler {
 						}
 						iconCssClass = metaInfo.getIconCssClass();
 					}
-					Identity ident = fi.getAuthor();
+					Long identityKey = fi.getAuthorIdentityKey();
 					Date modDate = fi.getLastModified();
 
-					String desc = translator.translate("notifications.entry", new String[] { title, NotificationHelper.getFormatedName(ident) });
+					String desc = translator.translate("notifications.entry", new String[] { title, NotificationHelper.getFormatedName(identityKey) });
 					String urlToSend = null;
 					String businessPath = null;
 					if(p.getBusinessPath() != null) {
@@ -155,12 +154,12 @@ public class FolderNotificationsHandler implements NotificationsHandler {
 			if("BusinessGroup".equals(p.getResName())) {
 				BusinessGroup bg = CoreSpringFactory.getImpl(BusinessGroupService.class).loadBusinessGroup(p.getResId());
 				if(bg == null) {
-					log.info("deactivating publisher with key; " + p.getKey(), null);
+					log.info("deactivating publisher with key; " + p.getKey());
 					NotificationsManager.getInstance().deactivate(p);
 				}
 			} else if ("CourseModule".equals(p.getResName())) {
 				if(!NotificationsUpgradeHelper.checkCourse(p)) {
-					log.info("deactivating publisher with key; " + p.getKey(), null);
+					log.info("deactivating publisher with key; " + p.getKey());
 					NotificationsManager.getInstance().deactivate(p);
 				}
 			}

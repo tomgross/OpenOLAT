@@ -38,12 +38,11 @@ import java.util.zip.ZipOutputStream;
 
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.IOUtils;
-import org.apache.commons.lang.StringEscapeUtils;
 import org.olat.core.CoreSpringFactory;
 import org.olat.core.id.Identity;
 import org.olat.core.id.UserConstants;
 import org.olat.core.logging.AssertException;
-import org.olat.core.logging.OLog;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.StringHelper;
 import org.olat.core.util.WebappHelper;
@@ -52,6 +51,7 @@ import org.olat.core.util.filter.FilterFactory;
 import org.olat.core.util.nodes.INode;
 import org.olat.core.util.vfs.VFSContainer;
 import org.olat.core.util.vfs.VFSItem;
+import org.olat.core.util.vfs.filters.VFSSystemItemFilter;
 import org.olat.modules.fo.archiver.MessageNode;
 import org.olat.modules.fo.manager.ForumManager;
 
@@ -63,7 +63,7 @@ import org.olat.modules.fo.manager.ForumManager;
  */
 public class ForumStreamedRTFFormatter extends ForumFormatter {
 	
-	private static final OLog log = Tracing.createLoggerFor(ForumStreamedRTFFormatter.class);
+	private static final Logger log = Tracing.createLoggerFor(ForumStreamedRTFFormatter.class);
 
 	private ZipOutputStream exportStream;
 	
@@ -106,9 +106,7 @@ public class ForumStreamedRTFFormatter extends ForumFormatter {
 	
 	private String fileName;
 
-	/**
-	 * @see org.olat.core.util.tree.Visitor#visit(org.olat.core.util.nodes.INode)
-	 */
+	@Override
 	public void visit(INode node) {
 		MessageNode mn = (MessageNode)node;
 		if (isTopThread) {
@@ -158,8 +156,8 @@ public class ForumStreamedRTFFormatter extends ForumFormatter {
 		sb.append(" \\par}");
 		// attachment(s)
 		VFSContainer msgContainer = forumManager.getMessageContainer(getForumKey(), mn.getKey());
-		List<VFSItem> attachments = msgContainer.getItems();
-		if (attachments != null && attachments.size() > 0){
+		List<VFSItem> attachments = msgContainer.getItems(new VFSSystemItemFilter());
+		if (attachments != null && !attachments.isEmpty()){
 			sb.append("{\\pard \\f0\\fs15 Attachment(s): ");
 			boolean commaFlag = false;
 			for (VFSItem attachment: attachments) {
@@ -193,10 +191,6 @@ public class ForumStreamedRTFFormatter extends ForumFormatter {
 		}
 	}
 
-	/**
-	 * 
-	 * @see org.olat.modules.fo.archiver.formatters.ForumFormatter#openThread()
-	 */
 	@Override
 	public void openThread() {
 		super.openThread();
@@ -208,10 +202,6 @@ public class ForumStreamedRTFFormatter extends ForumFormatter {
 		sb.append("{\\pard \\brdrb \\brdrs \\brdrdb \\brsp20 \\par}{\\pard\\par}");
 	}
 
-	/**
-	 * 
-	 * @see org.olat.modules.fo.archiver.formatters.ForumFormatter#getThreadResult()
-	 */
 	@Override
 	public StringBuilder closeThread() {
 		String footerThread = "{\\pard \\brdrb \\brdrs \\brdrw20 \\brsp20 \\par}{\\pard\\par}";
@@ -224,10 +214,7 @@ public class ForumStreamedRTFFormatter extends ForumFormatter {
 		return sb;
 	}
 	
-	/**
-	 * 
-	 * @see org.olat.modules.fo.archiver.formatters.ForumFormatter#openForum()
-	 */
+	@Override
 	public void openForum(){
 		if(!filePerThread){
 			//make one ForumFile
@@ -239,10 +226,7 @@ public class ForumStreamedRTFFormatter extends ForumFormatter {
 		}
 	}
 
-	/**
-	 * 
-	 * @see org.olat.modules.fo.archiver.formatters.ForumFormatter#closeForum()
-	 */
+	@Override
 	public StringBuilder closeForum(){
 		if(!filePerThread){
 			String footerForum = "}";
@@ -358,7 +342,7 @@ public class ForumStreamedRTFFormatter extends ForumFormatter {
 		// Remove all &nbsp;
 		Matcher tmp = HTML_SPACE_PATTERN.matcher(htmlText);
 		htmlText = tmp.replaceAll(" ");
-		htmlText = StringEscapeUtils.unescapeHtml(htmlText);
+		htmlText = StringHelper.unescapeHtml(htmlText);
 
 		return htmlText;
 	}

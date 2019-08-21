@@ -27,8 +27,6 @@ import java.util.UUID;
 
 import org.jboss.arquillian.container.test.api.RunAsClient;
 import org.jboss.arquillian.drone.api.annotation.Drone;
-import org.jboss.arquillian.graphene.page.InitialPage;
-import org.jboss.arquillian.graphene.page.Page;
 import org.jboss.arquillian.junit.Arquillian;
 import org.jboss.arquillian.test.api.ArquillianResource;
 import org.junit.Assert;
@@ -72,9 +70,7 @@ public class UserTest extends Deployments {
 	private WebDriver browser;
 	@ArquillianResource
 	private URL deploymentUrl;
-	
-	@Page
-	private NavigationPage navBar;
+
 	
 	/**
 	 * Set the resume preferences to automatically resume the session,
@@ -85,7 +81,7 @@ public class UserTest extends Deployments {
 	 * @throws URISyntaxException
 	 */
 	@Test
-	public void resumeCourseAutomatically(@InitialPage LoginPage loginPage)
+	public void resumeCourseAutomatically()
 	throws IOException, URISyntaxException {
 		//create a random user
 		UserVO user = new UserRestClient(deploymentUrl).createRandomUser();
@@ -93,6 +89,7 @@ public class UserTest extends Deployments {
 		CourseVO course = new RepositoryRestClient(deploymentUrl).deployDemoCourse();
 
 		//login
+		LoginPage loginPage = LoginPage.load(browser, deploymentUrl);
 		loginPage
 			.assertOnLoginPage()
 			.loginAs(user.getLogin(), user.getPassword());
@@ -138,7 +135,7 @@ public class UserTest extends Deployments {
 	 * @throws URISyntaxException
 	 */
 	@Test
-	public void resumeCourseOnDemand(@InitialPage LoginPage loginPage)
+	public void resumeCourseOnDemand()
 	throws IOException, URISyntaxException {
 		//create a random user
 		UserVO user = new UserRestClient(deploymentUrl).createRandomUser();
@@ -146,7 +143,8 @@ public class UserTest extends Deployments {
 		CourseVO course = new RepositoryRestClient(deploymentUrl).deployDemoCourse();
 
 		//login
-		loginPage.loginAs(user.getLogin(), user.getPassword());
+		LoginPage loginPage = LoginPage.load(browser, deploymentUrl)
+				.loginAs(user.getLogin(), user.getPassword());
 		
 		//set the preferences to resume automatically
 		UserToolsPage userTools = new UserToolsPage(browser);
@@ -186,11 +184,11 @@ public class UserTest extends Deployments {
 	 */
 	@Test
 	@RunAsClient
-	public void resumeDisabled(@InitialPage LoginPage loginPage)
+	public void resumeDisabled()
 	throws IOException, URISyntaxException {
 		
 		UserVO user = new UserRestClient(deploymentUrl).createRandomUser();
-		loginPage
+		LoginPage loginPage = LoginPage.load(browser, deploymentUrl)
 			.loginAs(user.getLogin(), user.getPassword())
 			.resume();
 		
@@ -229,13 +227,13 @@ public class UserTest extends Deployments {
 	 */
 	@Test
 	@RunAsClient
-	public void loginInHomeWithLandingPage(@InitialPage LoginPage loginPage)
+	public void loginInHomeWithLandingPage()
 	throws IOException, URISyntaxException {
 		//create a random user
 		UserRestClient userClient = new UserRestClient(deploymentUrl);
 		UserVO user = userClient.createAuthor();
 
-		loginPage
+		LoginPage loginPage = LoginPage.load(browser, deploymentUrl)
 			.assertOnLoginPage()
 			.loginAs(user.getLogin(), user.getPassword());
 
@@ -268,14 +266,15 @@ public class UserTest extends Deployments {
 	 */
 	@Test
 	@RunAsClient
-	public void loginInHomeWithRestUrl(@InitialPage LoginPage loginPage)
+	public void loginInHomeWithRestUrl()
 	throws IOException, URISyntaxException {
 		//create a random user
 		UserRestClient userClient = new UserRestClient(deploymentUrl);
 		UserVO user = userClient.createRandomUser();
 
 		//load dmz
-		loginPage.assertOnLoginPage();
+		LoginPage loginPage = LoginPage.load(browser, deploymentUrl)
+				.assertOnLoginPage();
 		
 		String jumpToNotificationsUrl = deploymentUrl.toString() + "url/HomeSite/" + user.getKey() + "/notifications/0";
 		browser.get(jumpToNotificationsUrl);
@@ -284,7 +283,8 @@ public class UserTest extends Deployments {
 		new UserToolsPage(browser).assertOnNotifications();
 		
 		//go to courses
-		navBar.openMyCourses();
+		NavigationPage.load(browser)
+			.openMyCourses();
 		
 		//use url to go to notifications
 		String goToNotificationsUrl = deploymentUrl.toString() + "auth/HomeSite/" + user.getKey() + "/notifications/0";
@@ -307,7 +307,7 @@ public class UserTest extends Deployments {
 	 */
 	@Test
 	@RunAsClient
-	public void restUrlAfterLogin(@InitialPage LoginPage loginPage)
+	public void restUrlAfterLogin()
 	throws IOException, URISyntaxException {
 		//create a random user
 		UserRestClient userClient = new UserRestClient(deploymentUrl);
@@ -315,11 +315,13 @@ public class UserTest extends Deployments {
 		UserVO ryomou = userClient.createRandomUser("Ryomou");
 
 		//load dmz
+		LoginPage loginPage = LoginPage.load(browser, deploymentUrl);
 		loginPage
 			.assertOnLoginPage()
 			.loginAs(user.getLogin(), user.getPassword());
 		
 		//go to courses
+		NavigationPage navBar = NavigationPage.load(browser);
 		navBar.openMyCourses();
 		
 		//use url to go to the other users business card
@@ -369,10 +371,11 @@ public class UserTest extends Deployments {
 	 */
 	@Test
 	@RunAsClient
-	public void userSwitchLanguageSwitchToEnglish(@InitialPage LoginPage loginPage)
+	public void userSwitchLanguageSwitchToEnglish()
 	throws IOException, URISyntaxException {
 		
 		UserVO user = new UserRestClient(deploymentUrl).createRandomUser();
+		LoginPage loginPage = LoginPage.load(browser, deploymentUrl);
 		loginPage
 			.loginAs(user.getLogin(), user.getPassword())
 			.resume();
@@ -429,10 +432,11 @@ public class UserTest extends Deployments {
 	 */
 	@Test
 	@RunAsClient
-	public void userChangeItsPassword(@InitialPage LoginPage loginPage)
+	public void userChangeItsPassword()
 	throws IOException, URISyntaxException {
 		
 		UserVO user = new UserRestClient(deploymentUrl).createRandomUser();
+		LoginPage loginPage = LoginPage.load(browser, deploymentUrl);
 		loginPage
 			.loginAs(user.getLogin(), user.getPassword())
 			.resume();
@@ -463,10 +467,11 @@ public class UserTest extends Deployments {
 	 */
 	@Test
 	@RunAsClient
-	public void userResetItsPreferences(@InitialPage LoginPage loginPage)
+	public void userResetItsPreferences()
 	throws IOException, URISyntaxException {
 		
 		UserVO user = new UserRestClient(deploymentUrl).createRandomUser();
+		LoginPage loginPage = LoginPage.load(browser, deploymentUrl);
 		loginPage
 			.loginAs(user.getLogin(), user.getPassword())
 			.resume();
@@ -493,13 +498,15 @@ public class UserTest extends Deployments {
 	 */
 	@Test
 	@RunAsClient
-	public void portletDeactivateActivate(@InitialPage LoginPage loginPage)
+	public void portletDeactivateActivate()
 	throws IOException, URISyntaxException {
 		
 		UserVO user = new UserRestClient(deploymentUrl).createRandomUser();
+		LoginPage loginPage = LoginPage.load(browser, deploymentUrl);
 		loginPage
 			.loginAs(user.getLogin(), user.getPassword());
 		
+		NavigationPage navBar = NavigationPage.load(browser);
 		PortalPage portal = navBar.openPortal()
 			.assertPortlet(PortalPage.quickStartBy)
 			.edit()
@@ -528,13 +535,15 @@ public class UserTest extends Deployments {
 	 */
 	@Test
 	@RunAsClient
-	public void movePortletToTheTop(@InitialPage LoginPage loginPage)
+	public void movePortletToTheTop()
 	throws IOException, URISyntaxException {
 		
 		UserVO user = new UserRestClient(deploymentUrl).createRandomUser();
+		LoginPage loginPage = LoginPage.load(browser, deploymentUrl);
 		loginPage
 			.loginAs(user.getLogin(), user.getPassword());
-		
+
+		NavigationPage navBar = NavigationPage.load(browser);
 		PortalPage portal = navBar.openPortal()
 			.assertPortlet(PortalPage.notesBy)
 			.edit()
@@ -569,12 +578,14 @@ public class UserTest extends Deployments {
 	 */
 	@Test
 	@RunAsClient
-	public void browserBack(@InitialPage LoginPage loginPage)
+	public void browserBack()
 	throws IOException, URISyntaxException {
+		LoginPage loginPage = LoginPage.load(browser, deploymentUrl);
 		loginPage
 			.loginAs("administrator", "openolat")
 			.resume();
-		
+
+		NavigationPage navBar = NavigationPage.load(browser);
 		navBar
 			.openPortal()
 			.assertPortlet(PortalPage.quickStartBy);
@@ -601,19 +612,22 @@ public class UserTest extends Deployments {
 	 */
 	@Test
 	@RunAsClient
-	public void createUser(@InitialPage LoginPage loginPage,
-			@Drone @User WebDriver userBrowser)
+	public void createUser(@Drone @User WebDriver userBrowser)
 	throws IOException, URISyntaxException {
 		
 		//login
+		LoginPage loginPage = LoginPage.load(browser, deploymentUrl);
 		loginPage
 			.assertOnLoginPage()
 			.loginAs("administrator", "openolat")
 			.resume();
 		
 		String uuid = UUID.randomUUID().toString();
-		String username = "miku-" + uuid;
-		UserVO userVo = UserAdminPage.createUserVO(username, "Miku", "Hatsune", "miku-" + uuid + "@openolat.com", "miku01");
+		String username = ("miku-" + uuid).substring(0, 32);
+		String password = "Miku#hatsune#01";
+		UserVO userVo = UserAdminPage.createUserVO(username, "Miku", "Hatsune", username + "@openolat.com", password);
+
+		NavigationPage navBar = NavigationPage.load(browser);
 		UserAdminPage userAdminPage = navBar
 			.openUserManagement()
 			.openCreateUser()
@@ -628,10 +642,10 @@ public class UserTest extends Deployments {
 			.assertOnUserEditView(username);
 		
 		//user log in
-		LoginPage userLoginPage = LoginPage.getLoginPage(userBrowser, deploymentUrl);
+		LoginPage userLoginPage = LoginPage.load(userBrowser, deploymentUrl);
 		//tools
 		userLoginPage
-			.loginAs(username, "miku01")
+			.loginAs(username, password)
 			.resume()
 			.assertLoggedIn(userVo);
 	}
@@ -648,19 +662,22 @@ public class UserTest extends Deployments {
 	 */
 	@Test
 	@RunAsClient
-	public void deleteUser(@InitialPage LoginPage loginPage,
-			@Drone @User WebDriver userBrowser) {
+	public void deleteUser(@Drone @User WebDriver userBrowser) {
 		
 		//login
+		LoginPage loginPage = LoginPage.load(browser, deploymentUrl);
 		loginPage
 			.assertOnLoginPage()
 			.loginAs("administrator", "openolat")
 			.resume();
 		
 		String uuid = UUID.randomUUID().toString();
-		String username = "miku-" + uuid;
+		String username = ("miku-" + uuid).substring(0, 32);
 		String lastName = "Hatsune" + uuid;
-		UserVO userVo = UserAdminPage.createUserVO(username, "Miku", lastName, "miku-" + uuid + "@openolat.com", "miku01");
+		String password = "Miku#hatsune#02";
+		UserVO userVo = UserAdminPage.createUserVO(username, "Miku", lastName, username + "@openolat.com", password);
+
+		NavigationPage navBar = NavigationPage.load(browser);
 		UserAdminPage userAdminPage = navBar
 			.openUserManagement()
 			.openCreateUser()
@@ -668,10 +685,10 @@ public class UserTest extends Deployments {
 			.assertOnUserEditView(username);
 		
 		//user log in
-		LoginPage userLoginPage = LoginPage.getLoginPage(userBrowser, deploymentUrl);
+		LoginPage userLoginPage = LoginPage.load(userBrowser, deploymentUrl);
 		//tools
 		userLoginPage
-			.loginAs(username, "miku01")
+			.loginAs(username, password)
 			.resume()
 			.assertLoggedIn(userVo);
 		//log out
@@ -679,14 +696,15 @@ public class UserTest extends Deployments {
 		
 		//admin delete
 		userAdminPage
+			.openSearchUser()
 			.openDirectDeleteUser()
 			.searchUserToDelete(username)
 			.selectAndDeleteUser(lastName);
 		
 		//user try the login
-		userLoginPage = LoginPage.getLoginPage(userBrowser, deploymentUrl);
+		userLoginPage = LoginPage.load(userBrowser, deploymentUrl);
 		userLoginPage
-			.loginDenied(username, "miku01");
+			.loginDenied(username, password);
 		//assert on error message
 		By errorMessageby = By.cssSelector("div.modal-body.alert.alert-danger");
 		OOGraphene.waitElement(errorMessageby, 2, userBrowser);
@@ -706,17 +724,18 @@ public class UserTest extends Deployments {
 	 * @throws IOException
 	 * @throws URISyntaxException
 	 */
-	@Test 
+	@Test
 	@RunAsClient
-	public void importUsers(@InitialPage LoginPage loginPage,
-			@Drone @User WebDriver userBrowser)
+	public void importUsers(@Drone @User WebDriver userBrowser)
 	throws IOException, URISyntaxException {
 		//login
+		LoginPage loginPage = LoginPage.load(browser, deploymentUrl);
 		loginPage
 			.assertOnLoginPage()
 			.loginAs("administrator", "openolat")
 			.resume();
-		
+
+		NavigationPage navBar = NavigationPage.load(browser);
 		UserAdminPage userAdminPage = navBar
 			.openUserManagement()
 			.openImportUsers();
@@ -724,8 +743,8 @@ public class UserTest extends Deployments {
 		ImportUserPage importWizard = userAdminPage.startImport();
 		
 		String uuid = UUID.randomUUID().toString();
-		String username1 = "moka-" + uuid;
-		String username2 = "mizore-" + uuid;
+		String username1 = ("moka-" + uuid).substring(0, 32);
+		String username2 = ("mizore-" + uuid).substring(0, 32);
 		
 		StringBuilder csv = new StringBuilder();
 		UserVO user1 = importWizard.append(username1, "rosario01", "Moka", "Akashiya", csv);
@@ -741,7 +760,7 @@ public class UserTest extends Deployments {
 		OOGraphene.waitAndCloseBlueMessageWindow(browser);
 		
 		//user log in
-		LoginPage userLoginPage = LoginPage.getLoginPage(userBrowser, deploymentUrl);
+		LoginPage userLoginPage = LoginPage.load(userBrowser, deploymentUrl);
 		//tools
 		userLoginPage
 			.loginAs(username1, "rosario01")
@@ -760,8 +779,7 @@ public class UserTest extends Deployments {
 	 */
 	@Test 
 	@RunAsClient
-	public void importExistingUsers(@InitialPage LoginPage loginPage,
-			@Drone @User WebDriver existingUserBrowser,
+	public void importExistingUsers(@Drone @User WebDriver existingUserBrowser,
 			@Drone @Student WebDriver newUserBrowser)
 	throws IOException, URISyntaxException {
 
@@ -769,11 +787,13 @@ public class UserTest extends Deployments {
 			.createRandomUser("tsukune");
 		
 		//login
+		LoginPage loginPage = LoginPage.load(browser, deploymentUrl);
 		loginPage
 			.assertOnLoginPage()
 			.loginAs("administrator", "openolat")
 			.resume();
-		
+
+		NavigationPage navBar = NavigationPage.load(browser);
 		UserAdminPage userAdminPage = navBar
 			.openUserManagement()
 			.openImportUsers();
@@ -781,11 +801,13 @@ public class UserTest extends Deployments {
 		ImportUserPage importWizard = userAdminPage.startImport();
 		
 		String uuid = UUID.randomUUID().toString();
-		String username1 = "moka-" + uuid;
+		String username1 = ("moka-" + uuid).substring(0, 32);
+		String password1 = "Rosario#02";
+		String password2 = "Openolat#2";
 
 		StringBuilder csv = new StringBuilder();
-		UserVO newUser = importWizard.append(username1, "rosario02", "Moka", "Akashiya", csv);
-		user1 = importWizard.append(user1, "Aono", "openolat2", csv);
+		UserVO newUser = importWizard.append(username1, password1, "Moka", "Akashiya", csv);
+		user1 = importWizard.append(user1, "Aono", password2, csv);
 		importWizard
 			.fill(csv.toString())
 			.nextData() // -> preview
@@ -800,18 +822,18 @@ public class UserTest extends Deployments {
 		OOGraphene.waitAndCloseBlueMessageWindow(browser);
 		
 		//existing user log in with its new password and check if its name was updated
-		LoginPage userLoginPage = LoginPage.getLoginPage(existingUserBrowser, deploymentUrl);
+		LoginPage userLoginPage = LoginPage.load(existingUserBrowser, deploymentUrl);
 		//tools
 		userLoginPage
-			.loginAs(user1.getLogin(), "openolat2")
+			.loginAs(user1.getLogin(), password2)
 			.resume()
 			.assertLoggedInByLastName("Aono");
 		
 		//new user log in
-		LoginPage newLoginPage = LoginPage.getLoginPage(newUserBrowser, deploymentUrl);
+		LoginPage newLoginPage = LoginPage.load(newUserBrowser, deploymentUrl);
 		//tools
 		newLoginPage
-			.loginAs(newUser.getLogin(), "rosario02")
+			.loginAs(newUser.getLogin(), password1)
 			.resume()
 			.assertLoggedInByLastName("Akashiya");
 	}

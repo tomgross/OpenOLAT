@@ -27,6 +27,7 @@ import org.olat.selenium.page.graphene.OOGraphene;
 import org.openqa.selenium.By;
 import org.openqa.selenium.WebDriver;
 import org.openqa.selenium.WebElement;
+import org.openqa.selenium.firefox.FirefoxDriver;
 
 /**
  * Drive the group task course element.
@@ -67,6 +68,19 @@ public class GroupTaskPage {
 		return this;
 	}
 	
+	public GroupTaskPage confirmOptionalTask() {
+		OOGraphene.waitBusy(browser);
+		OOGraphene.waitModalDialog(browser);
+		
+		By confirmBy = By.cssSelector("div.o_sel_course_gta_confirm_optional_task button.btn-primary");
+		OOGraphene.waitElement(confirmBy, browser);
+		browser.findElement(confirmBy).click();
+		OOGraphene.waitBusy(browser);
+		OOGraphene.waitModalDialogDisappears(browser);
+		OOGraphene.waitAndCloseBlueMessageWindow(browser);
+		return this;
+	}
+	
 	public GroupTaskPage selectTask(int pos) {
 		By taskBy = By.xpath("//div[@id='o_step_assignement_content']//table//td//a[contains(@href,'select')]");
 		List<WebElement> assignementEls = browser.findElements(taskBy);
@@ -84,16 +98,32 @@ public class GroupTaskPage {
 	}
 	
 	public GroupTaskPage submitFile(File file) {
+		moveToSubmit(By.id("o_step_submit_content"));
 		return uploadFile("o_step_submit_content", file);
 	}
 	
 	public GroupTaskPage submitRevisedFile(File file) {
+		moveToSubmit(By.id("o_step_revision_content"));
 		return uploadFile("o_step_revision_content", file);
+	}
+	
+	/**
+	 * Firefox need to wait a little longer, but why?
+	 * 
+	 * @param submitBy The step to move by
+	 */
+	private void moveToSubmit(By submitBy) {
+		if(browser instanceof FirefoxDriver) {
+			OOGraphene.waitElement(submitBy, browser);
+			OOGraphene.waitingALittleLonger();
+			OOGraphene.moveTo(submitBy, browser);
+		}
 	}
 	
 	private GroupTaskPage uploadFile(String stepId, File file) {
 		By uploadButtonBy = By.cssSelector("#" + stepId + " .o_sel_course_gta_submit_file");
-		OOGraphene.clickAndWait(uploadButtonBy, browser);//TODO sel clickAndWait
+		OOGraphene.moveAndClick(uploadButtonBy, browser);
+		OOGraphene.waitBusyAndScrollTop(browser);
 		OOGraphene.waitModalDialog(browser);
 		
 		By inputBy = By.cssSelector(".o_fileinput input[type='file']");
@@ -108,8 +138,8 @@ public class GroupTaskPage {
 	}
 	
 	public GroupTaskPage submitText(String filename, String text) {
-		By uploadButtonBy = By.cssSelector("#o_step_submit_content .o_sel_course_gta_create_doc");
-		OOGraphene.clickAndWait(uploadButtonBy, browser);//TODO sel clickAndWait
+		By createButtonBy = By.cssSelector("#o_step_submit_content .o_sel_course_gta_create_doc");
+		OOGraphene.clickAndWait(createButtonBy, browser);
 		OOGraphene.waitModalDialog(browser);
 		
 		By filenameBy = By.cssSelector(".o_sel_course_gta_doc_filename input[type='text']");
@@ -118,16 +148,12 @@ public class GroupTaskPage {
 		browser.findElement(saveBy).click();
 		OOGraphene.waitBusy(browser);
 		
-		By saveAndCloseBy = By.cssSelector(".modal-body #o_button_saveclose a.btn");
-		OOGraphene.waitElement(saveAndCloseBy, browser);
-		
 		OOGraphene.tinymceExec(text, browser);
 
-		By saveAndCloseDirtyBy = By.cssSelector(".modal-body #o_button_saveclose a.btn.o_button_dirty");
+		By saveAndCloseDirtyBy = By.cssSelector(".o_htmleditor #o_button_saveclose a.btn.o_button_dirty");
 		OOGraphene.waitElement(saveAndCloseDirtyBy, browser);
-		browser.findElement(saveAndCloseBy).click();
+		browser.findElement(saveAndCloseDirtyBy).click();
 		OOGraphene.waitBusy(browser);
-		OOGraphene.waitModalDialogDisappears(browser);
 		return this;
 	}
 	
@@ -145,6 +171,24 @@ public class GroupTaskPage {
 		By submitBy = By.cssSelector("#o_step_revision_content .o_sel_course_gta_submit_revisions");
 		browser.findElement(submitBy).click();
 		return confirmDialog();
+	}
+	
+	public GroupTaskPage openSolutions() {
+		By solutionLinkBy = By.cssSelector("#o_step_solution_content ul>li>a");
+		List<WebElement> buttons = browser.findElements(solutionLinkBy);
+		if(buttons.isEmpty() || !buttons.get(0).isDisplayed()) {
+			//open grading tab
+			By collpaseBy = By.xpath("//a[@href='#o_step_solution_content']");
+			browser.findElement(collpaseBy).click();
+		}
+		OOGraphene.waitElement(solutionLinkBy, browser);
+		return this;
+	}
+	
+	public GroupTaskPage assertSolution(String solution) {
+		By solutionLinkBy = By.xpath("//div[@id='o_step_solution_content']//ul/li/a/span[contains(text(),'" + solution + "')]");
+		OOGraphene.waitElement(solutionLinkBy, browser);
+		return this;
 	}
 	
 	/**

@@ -20,16 +20,18 @@
 package org.olat.modules.portfolio.handler;
 
 import java.io.File;
+import java.io.IOException;
 import java.io.InputStream;
+import java.io.OutputStream;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
 import javax.servlet.http.HttpServletResponse;
 
 import org.apache.commons.io.FileUtils;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.CoreSpringFactory;
 import org.olat.core.gui.media.MediaResource;
-import org.olat.core.logging.OLog;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.StringHelper;
 import org.olat.core.util.io.ShieldOutputStream;
@@ -49,7 +51,7 @@ import org.olat.resource.OLATResource;
  */
 public class BinderTemplateMediaResource implements MediaResource {
 	
-	private static final OLog log = Tracing.createLoggerFor(BinderTemplateMediaResource.class);
+	private static final Logger log = Tracing.createLoggerFor(BinderTemplateMediaResource.class);
 	
 	private final BinderRef template;
 	private final RepositoryEntry templateEntry;
@@ -121,7 +123,7 @@ public class BinderTemplateMediaResource implements MediaResource {
 				File posterImage = portfolioService.getPosterImageFile(loadedTemplate);
 				if(posterImage.exists()) {
 					zout.putNextEntry(new ZipEntry(loadedTemplate.getImagePath()));
-					FileUtils.copyFile(posterImage, new ShieldOutputStream(zout));
+					copy(posterImage, zout);
 					zout.closeEntry();
 				}
 			}
@@ -131,6 +133,14 @@ public class BinderTemplateMediaResource implements MediaResource {
 			RepositoryEntryImportExport importExport = new RepositoryEntryImportExport(templateEntry, baseContainer);
 			importExport.exportDoExportProperties(zout);
 		} catch (Exception e) {
+			log.error("", e);
+		}
+	}
+	
+	private void copy(File file, ZipOutputStream zout) {
+		try(OutputStream out=new ShieldOutputStream(zout)) {
+			FileUtils.copyFile(file, out);
+		} catch(IOException e) {
 			log.error("", e);
 		}
 	}

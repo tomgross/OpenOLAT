@@ -22,6 +22,7 @@ package org.olat.commons.memberlist.ui;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -33,7 +34,11 @@ import org.olat.NewControllerFactory;
 import org.olat.basesecurity.BaseSecurity;
 import org.olat.basesecurity.BaseSecurityModule;
 import org.olat.commons.memberlist.manager.MembersExportManager;
+import org.olat.commons.memberlist.model.CurriculumElementInfos;
+import org.olat.commons.memberlist.model.CurriculumMemberInfos;
 import org.olat.core.commons.fullWebApp.popup.BaseFullWebappPopupLayoutFactory;
+import org.olat.core.commons.services.pdf.PdfModule;
+import org.olat.core.commons.services.pdf.PdfService;
 import org.olat.core.gui.UserRequest;
 import org.olat.core.gui.components.Component;
 import org.olat.core.gui.components.form.flexible.FormItem;
@@ -54,17 +59,18 @@ import org.olat.core.gui.media.MediaResource;
 import org.olat.core.gui.translator.Translator;
 import org.olat.core.helpers.Settings;
 import org.olat.core.id.Identity;
-import org.olat.core.id.IdentityEnvironment;
 import org.olat.core.id.Roles;
 import org.olat.core.id.UserConstants;
 import org.olat.core.id.context.BusinessControl;
 import org.olat.core.id.context.BusinessControlFactory;
+import org.olat.core.util.Formatter;
 import org.olat.core.util.StringHelper;
 import org.olat.core.util.mail.ContactList;
 import org.olat.core.util.mail.ContactMessage;
 import org.olat.core.util.session.UserSessionManager;
 import org.olat.course.nodes.members.Member;
 import org.olat.course.run.environment.CourseEnvironment;
+import org.olat.course.run.userview.UserCourseEnvironment;
 import org.olat.group.BusinessGroup;
 import org.olat.instantMessaging.InstantMessagingModule;
 import org.olat.instantMessaging.InstantMessagingService;
@@ -94,9 +100,9 @@ public class MembersAvatarDisplayRunController extends FormBasicController {
 	private final List<UserPropertyHandler> userPropertyHandlers;
 	private final List<UserPropertyHandler> userPropertyAvatarHandlers;
 
-	private final CourseEnvironment courseEnv;
 	private final String avatarBaseURL;
-	
+
+	private Link pdfLink;
 	private Link printLink;
 	private FormLink allEmailLink;
 	private FormLink downloadLink;
@@ -110,6 +116,7 @@ public class MembersAvatarDisplayRunController extends FormBasicController {
 	private List<Identity> coaches;
 	private List<Identity> participants;
 	private List<Identity> waiting;
+	private final Map<Long,CurriculumMemberInfos> curriculumInfos;
 
 	private final boolean canEmail;
 	private final boolean canDownload;
@@ -120,6 +127,9 @@ public class MembersAvatarDisplayRunController extends FormBasicController {
 	private final boolean chatEnabled;
 	private final boolean editable;
 
+	private final RepositoryEntry repoEntry;
+	private final BusinessGroup businessGroup;
+	private final UserCourseEnvironment userCourseEnv;
 	
 	private FormBasicController mailCtrl;
 	private ContactFormController emailController;
@@ -128,6 +138,10 @@ public class MembersAvatarDisplayRunController extends FormBasicController {
 	private int count = 0;
 	private final boolean deduplicateList;
 	
+	@Autowired
+	private PdfModule pdfModule;
+	@Autowired
+	private PdfService pdfService;
 	@Autowired
 	private UserManager userManager;
 	@Autowired
@@ -144,20 +158,19 @@ public class MembersAvatarDisplayRunController extends FormBasicController {
 	private MembersExportManager exportManager;
 	@Autowired
 	private DisplayPortraitManager portraitManager;
-
-	private BusinessGroup businessGroup;
-	private RepositoryEntry repoEntry;
 	
 	
-	public MembersAvatarDisplayRunController(UserRequest ureq, WindowControl wControl, Translator translator, CourseEnvironment courseEnv, BusinessGroup businessGroup,
-			List<Identity> owners, List<Identity> coaches, List<Identity> participants, List<Identity> waiting, boolean canEmail, boolean canDownload, 
-			  boolean deduplicateList, boolean showOwners, boolean showCoaches, boolean showParticipants, boolean showWaiting, boolean editable) {
+	public MembersAvatarDisplayRunController(UserRequest ureq, WindowControl wControl, Translator translator, UserCourseEnvironment userCourseEnv, BusinessGroup businessGroup,
+			List<Identity> owners, List<Identity> coaches, List<Identity> participants, List<Identity> waiting, Map<Long,CurriculumMemberInfos> curriculumInfos,
+			boolean canEmail, boolean canDownload,  boolean deduplicateList,
+			boolean showOwners, boolean showCoaches, boolean showParticipants, boolean showWaiting, boolean editable) {
 		super(ureq, wControl, "members", translator);
 		setTranslator(translator);
 		
-		this.courseEnv = courseEnv;
+		this.userCourseEnv = userCourseEnv;
 		this.businessGroup = businessGroup;
-		this.repoEntry = courseEnv != null ? courseEnv.getCourseGroupManager().getCourseEntry() : null;
+		this.curriculumInfos = curriculumInfos;
+		this.repoEntry = userCourseEnv != null ? userCourseEnv.getCourseEnvironment().getCourseGroupManager().getCourseEntry() : null;
 
 		Roles roles = ureq.getUserSession().getRoles();
 		boolean isAdministrativeUser = securityModule.isUserAllowedAdminProps(roles);
@@ -191,16 +204,14 @@ public class MembersAvatarDisplayRunController extends FormBasicController {
 		Collections.sort(coaches, idComparator);
 		Collections.sort(participants, idComparator);
 		Collections.sort(waiting, idComparator);
-		
+
 		if(canEmail) {
 			allEmailLink = uifactory.addFormLink("email", "members.email.title", null, formLayout, Link.BUTTON);
 			allEmailLink.setIconLeftCSS("o_icon o_icon_mail");
 		}
 		
-		IdentityEnvironment idEnv = ureq.getUserSession().getIdentityEnvironment();
-		Identity ownId = idEnv.getIdentity();
-		Roles roles = idEnv.getRoles();
-		if (editable && (roles.isOLATAdmin() || roles.isGroupManager() || owners.contains(ownId) || coaches.contains(ownId)
+		Identity ownId = getIdentity();
+		if (editable && (isManager(ureq) || owners.contains(ownId) || coaches.contains(ownId)
 				|| (canDownload && !waiting.contains(ownId)))) {
 			downloadLink = uifactory.addFormLink("download", "members.download", null, formLayout, Link.BUTTON);
 			downloadLink.setIconLeftCSS("o_icon o_icon_download");
@@ -209,10 +220,17 @@ public class MembersAvatarDisplayRunController extends FormBasicController {
 				printLink.setIconLeftCSS("o_icon o_icon_print o_icon-lg");
 				printLink.setPopup(new LinkPopupSettings(700, 500, "print-members"));
 				((FormLayoutContainer)formLayout).getFormItemComponent().put("print", printLink);
+				
+				if(pdfModule.isEnabled()) {
+					pdfLink = LinkFactory.createButton("pdf", ((FormLayoutContainer)formLayout).getFormItemComponent(), this);
+					pdfLink.setIconLeftCSS("o_icon o_icon_print o_icon-lg o_filetype_pdf");
+					pdfLink.setTarget("_blank");
+					((FormLayoutContainer)formLayout).getFormItemComponent().put("pdf", pdfLink);
+				}
 			}
 		}
 
-		Set<Long> duplicateCatcher = deduplicateList ? new HashSet<Long>() : null;
+		Set<Long> duplicateCatcher = deduplicateList ? new HashSet<>() : null;
 		ownerList = initFormMemberList("owners", owners, duplicateCatcher, formLayout, canEmail);
 		coachList = initFormMemberList("coaches", coaches, duplicateCatcher, formLayout, canEmail);
 		participantList = initFormMemberList("participants", participants, duplicateCatcher, formLayout, canEmail);
@@ -229,6 +247,14 @@ public class MembersAvatarDisplayRunController extends FormBasicController {
 			layoutCont.contextPut("showWaiting", showWaiting);
 			layoutCont.contextPut("hasWaiting", Boolean.valueOf(!waitingtList.isEmpty()));
 		}
+	}
+	
+	private boolean isManager(UserRequest ureq) {
+		if(businessGroup != null) {
+			Roles roles = ureq.getUserSession().getRoles();
+			return roles.isAdministrator() || roles.isGroupManager();
+		}
+		return userCourseEnv != null && userCourseEnv.isAdmin();
 	}
 	
 	private List<Member> initFormMemberList(String name, List<Identity> ids, Set<Long> duplicateCatcher, FormItemContainer formLayout, boolean withEmail) {
@@ -351,7 +377,15 @@ public class MembersAvatarDisplayRunController extends FormBasicController {
 			portraitCssClass = DisplayPortraitManager.DUMMY_BIG_CSS_CLASS;
 		}
 		String fullname = userManager.getUserDisplayName(identity);
-		return new Member(identity, fullname, userPropertyHandlers, getLocale(), hasPortrait, portraitCssClass);
+		
+		CurriculumElementInfos curriculumElementInfos = null;
+		if(curriculumInfos != null) {
+			CurriculumMemberInfos infos = curriculumInfos.get(identity.getKey());
+			if(infos != null && !infos.getCurriculumInfos().isEmpty()) {
+				curriculumElementInfos = infos.getCurriculumInfos().get(0);
+			}
+		}
+		return new Member(identity, fullname, curriculumElementInfos, userPropertyHandlers, getLocale(), hasPortrait, portraitCssClass);
 	}
 	
 	@Override
@@ -368,6 +402,8 @@ public class MembersAvatarDisplayRunController extends FormBasicController {
 	public void event(UserRequest ureq, Component source, Event event) {
 		if(source == printLink) {
 			doPrint(ureq);
+		} else if(source == pdfLink) {
+			doPdf(ureq);
 		}
 		super.event(ureq, source, event);
 	}
@@ -400,10 +436,7 @@ public class MembersAvatarDisplayRunController extends FormBasicController {
 	protected void event(UserRequest ureq, Controller source, Event event) {
 		if(source == cmc) {
 			cleanUp();
-		} else if (source == emailController) {
-			cmc.deactivate();
-			cleanUp();
-		} else if(source == mailCtrl) {
+		} else if (source == emailController || source == mailCtrl) {
 			cmc.deactivate();
 			cleanUp();
 		}
@@ -423,6 +456,8 @@ public class MembersAvatarDisplayRunController extends FormBasicController {
 		if(mailCtrl != null || cmc != null) return;
 		removeAsListenerAndDispose(cmc);
 		removeAsListenerAndDispose(mailCtrl);
+		
+		CourseEnvironment courseEnv = (userCourseEnv == null ? null : userCourseEnv.getCourseEnvironment());
 		mailCtrl = new MembersMailController(ureq, getWindowControl(), getTranslator(), courseEnv,
 				ownerList, coachList, participantList, waitingtList, createBodyTemplate());
 		listenTo(mailCtrl);
@@ -436,7 +471,7 @@ public class MembersAvatarDisplayRunController extends FormBasicController {
 	
 	private void doExport(UserRequest ureq) {
 		MediaResource resource = exportManager.getXlsMediaResource(showOwners, showCoaches, showParticipants, showWaiting, 
-				owners, coaches, participants, waiting, getTranslator(), userPropertyHandlers, repoEntry, businessGroup);
+				owners, coaches, participants, waiting, curriculumInfos, getTranslator(), userPropertyHandlers, repoEntry, businessGroup);
 		
 		ureq.getDispatchResult().setResultingMediaResource(resource);	
 	}
@@ -450,10 +485,10 @@ public class MembersAvatarDisplayRunController extends FormBasicController {
 	private void doSendEmailToMember(Member member, UserRequest ureq) {
 		if (!editable) return;
 		ContactList memberList;
-		if (courseEnv == null) {
+		if (userCourseEnv == null) {
 			memberList = new ContactList(translate("members.to", new String[]{ member.getFullName(), businessGroup.getName() }));
 		} else {
-			memberList = new ContactList(translate("members.to", new String[]{ member.getFullName(), courseEnv.getCourseTitle() }));
+			memberList = new ContactList(translate("members.to", new String[]{ member.getFullName(), userCourseEnv.getCourseEnvironment().getCourseTitle() }));
 		}
 		Identity identity = securityManager.loadIdentityByKey(member.getKey());
 		memberList.add(identity);
@@ -469,7 +504,7 @@ public class MembersAvatarDisplayRunController extends FormBasicController {
 			cmsg.addEmailTo(contactList);
 			// preset body template from i18n
 			cmsg.setBodyText(createBodyTemplate());
-			emailController = new ContactFormController(ureq, getWindowControl(), true, false, false, cmsg);
+			emailController = new ContactFormController(ureq, getWindowControl(), true, false, false, cmsg, null);
 			listenTo(emailController);
 			
 			String title = translate("members.email.title");
@@ -480,7 +515,7 @@ public class MembersAvatarDisplayRunController extends FormBasicController {
 	}
 	
 	private String createBodyTemplate() {
-		if (courseEnv == null) {
+		if (userCourseEnv == null) {
 			String groupName = businessGroup.getName();
 			// Build REST URL to business group,
 			StringBuilder groupLink = new StringBuilder();
@@ -488,6 +523,7 @@ public class MembersAvatarDisplayRunController extends FormBasicController {
 				.append("/url/BusinessGroup/").append(businessGroup.getKey());
 			return translate("email.body.template", new String[]{groupName, groupLink.toString()});	
 		} else {
+			CourseEnvironment courseEnv = userCourseEnv.getCourseEnvironment();
 			String courseName = courseEnv.getCourseTitle();
 			// Build REST URL to course element, use hack via group manager to access repo entry
 			StringBuilder courseLink = new StringBuilder();
@@ -507,17 +543,30 @@ public class MembersAvatarDisplayRunController extends FormBasicController {
 	}
 	
 	private void doPrint(UserRequest ureq) {
-		ControllerCreator printControllerCreator = new ControllerCreator() {
-			@Override
-			public Controller createController(UserRequest lureq, WindowControl lwControl) {
-				lwControl.getWindowBackOffice().getChiefController().addBodyCssClass("o_cmembers_print");
-				return new MembersPrintController(lureq, lwControl, getTranslator(), owners, coaches,
-						participants, waiting, showOwners, showCoaches, showParticipants, showWaiting, 
-						courseEnv != null ? courseEnv.getCourseTitle() : businessGroup.getName());
-			}					
-		};
+		ControllerCreator printControllerCreator = getPrintControllerCreator();
 		ControllerCreator layoutCtrlr = BaseFullWebappPopupLayoutFactory.createPrintPopupLayout(printControllerCreator);
 		openInNewBrowserWindow(ureq, layoutCtrlr);
+	}
+	
+	private void doPdf(UserRequest ureq) {
+		ControllerCreator printControllerCreator = getPrintControllerCreator();
+		
+		final String title = (businessGroup != null
+				? businessGroup.getName() : userCourseEnv.getCourseEnvironment().getCourseTitle())
+				+ "_" + Formatter.formatShortDateFilesystem(new Date());
+		MediaResource resource = pdfService.convert(title, getIdentity(), printControllerCreator, getWindowControl());
+		ureq.getDispatchResult().setResultingMediaResource(resource);
+	}
+	
+	private ControllerCreator getPrintControllerCreator() {
+		final String title = businessGroup != null
+				? businessGroup.getName() : userCourseEnv.getCourseEnvironment().getCourseTitle();
+		return (lureq, lwControl) -> {
+			lwControl.getWindowBackOffice().getChiefController().addBodyCssClass("o_cmembers_print");
+			return new MembersPrintController(lureq, lwControl, getTranslator(), owners, coaches,
+					participants, waiting, curriculumInfos, showOwners, showCoaches, showParticipants, showWaiting, 
+					deduplicateList, title);
+		};
 	}
 	
 	public static class IdentityComparator implements Comparator<Identity> {

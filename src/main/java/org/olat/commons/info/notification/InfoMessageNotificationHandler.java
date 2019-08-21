@@ -26,7 +26,6 @@ import java.util.Locale;
 
 import org.olat.commons.info.InfoMessage;
 import org.olat.commons.info.InfoMessageManager;
-import org.olat.core.CoreSpringFactory;
 import org.olat.core.commons.services.notifications.NotificationHelper;
 import org.olat.core.commons.services.notifications.NotificationsHandler;
 import org.olat.core.commons.services.notifications.NotificationsManager;
@@ -39,7 +38,7 @@ import org.olat.core.gui.translator.Translator;
 import org.olat.core.id.Identity;
 import org.olat.core.id.OLATResourceable;
 import org.olat.core.id.context.BusinessControlFactory;
-import org.olat.core.logging.OLog;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.Util;
 import org.olat.core.util.resource.OresHelper;
@@ -64,12 +63,18 @@ import org.springframework.stereotype.Service;
 @Service("org.olat.commons.info.notification.InfoMessageNotificationHandler")
 public class InfoMessageNotificationHandler implements NotificationsHandler {
 	
-	private static final OLog log = Tracing.createLoggerFor(InfoMessageNotificationHandler.class);
+	private static final Logger log = Tracing.createLoggerFor(InfoMessageNotificationHandler.class);
 
 	private static final String CSS_CLASS_ICON = "o_infomsg_icon";
 	
 	@Autowired
+	private RepositoryManager repositoryManager;
+	@Autowired
 	private InfoMessageManager infoMessageManager;
+	@Autowired
+	private NotificationsManager notificationsManager;
+	@Autowired
+	private BusinessGroupService businessGroupService;
 	
 	@Override
 	public SubscriptionInfo createSubscriptionInfo(Subscriber subscriber, Locale locale, Date compareDate) {
@@ -87,16 +92,16 @@ public class InfoMessageNotificationHandler implements NotificationsHandler {
 				final String resName = subscriber.getPublisher().getResName();
 				String resSubPath = subscriber.getPublisher().getSubidentifier();
 				
-				String displayName, notificationtitle;
+				String displayName;
+				String notificationtitle;
 				if ("BusinessGroup".equals(resName)) {
-					BusinessGroupService groupService = CoreSpringFactory.getImpl(BusinessGroupService.class);
-					BusinessGroup group = groupService.loadBusinessGroup(resId);
+					BusinessGroup group = businessGroupService.loadBusinessGroup(resId);
 					displayName = group.getName();
 					notificationtitle = "notification.title.group";
 				} else {
-					RepositoryEntry re = RepositoryManager.getInstance().lookupRepositoryEntry(OresHelper.createOLATResourceableInstance(resName, resId), false);
-					if(re.getRepositoryEntryStatus().isClosed() || re.getRepositoryEntryStatus().isUnpublished()) {
-						return NotificationsManager.getInstance().getNoSubscriptionInfo();
+					RepositoryEntry re = repositoryManager.lookupRepositoryEntry(OresHelper.createOLATResourceableInstance(resName, resId), false);
+					if(re== null || re.getEntryStatus().decommissioned()) {
+						return notificationsManager.getNoSubscriptionInfo();
 					}					
 					displayName = re.getDisplayname();	
 					notificationtitle = "notification.title";
@@ -120,10 +125,10 @@ public class InfoMessageNotificationHandler implements NotificationsHandler {
 				}
 			} catch (Exception e) {
 				log.error("Unexpected exception", e);
-				si = NotificationsManager.getInstance().getNoSubscriptionInfo();
+				si = notificationsManager.getNoSubscriptionInfo();
 			}
 		} else {
-			si = NotificationsManager.getInstance().getNoSubscriptionInfo();
+			si = notificationsManager.getNoSubscriptionInfo();
 		}
 		return si;
 	}
@@ -131,8 +136,8 @@ public class InfoMessageNotificationHandler implements NotificationsHandler {
 	@Override
 	public String createTitleInfo(Subscriber subscriber, Locale locale) {
 		Translator translator = Util.createPackageTranslator(this.getClass(), locale);
-		String displayName = RepositoryManager.getInstance().lookupDisplayNameByOLATResourceableId(subscriber.getPublisher().getResId());
 		Publisher p = subscriber.getPublisher();
+		String displayName = RepositoryManager.getInstance().lookupDisplayNameByOLATResourceableId(p.getResId());
 		CourseNode node = CourseFactory.loadCourse(p.getResId()).getRunStructure().getNode(getNodeId(p.getBusinessPath()));
 		String shortName = (node != null ? node.getShortName() : "");
 		return translator.translate("notification.title", new String[]{displayName, shortName});

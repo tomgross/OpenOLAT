@@ -1,5 +1,4 @@
 /**
-
  * <a href="http://www.openolat.org">
  * OpenOLAT - Online Learning and Training</a><br>
  * <p>
@@ -22,6 +21,7 @@ package org.olat.modules.lecture.manager;
 
 import java.util.ArrayList;
 import java.util.Calendar;
+import java.util.Collections;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -35,18 +35,20 @@ import java.util.stream.Collectors;
 
 import org.apache.velocity.VelocityContext;
 import org.olat.basesecurity.Group;
+import org.olat.basesecurity.GroupRoles;
 import org.olat.basesecurity.IdentityImpl;
 import org.olat.basesecurity.IdentityRef;
 import org.olat.basesecurity.manager.GroupDAO;
 import org.olat.commons.calendar.CalendarManagedFlag;
 import org.olat.commons.calendar.CalendarManager;
+import org.olat.commons.calendar.CalendarUtils;
 import org.olat.commons.calendar.model.Kalendar;
 import org.olat.commons.calendar.model.KalendarEvent;
 import org.olat.core.commons.persistence.DB;
 import org.olat.core.gui.translator.Translator;
 import org.olat.core.helpers.Settings;
 import org.olat.core.id.Identity;
-import org.olat.core.logging.OLog;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.Formatter;
 import org.olat.core.util.StringHelper;
@@ -60,6 +62,7 @@ import org.olat.core.util.mail.MailTemplate;
 import org.olat.core.util.mail.MailerResult;
 import org.olat.group.BusinessGroup;
 import org.olat.group.DeletableGroupData;
+import org.olat.modules.coach.model.IdentityRepositoryEntryKey;
 import org.olat.modules.lecture.LectureBlock;
 import org.olat.modules.lecture.LectureBlockAuditLog;
 import org.olat.modules.lecture.LectureBlockAuditLog.Action;
@@ -71,25 +74,34 @@ import org.olat.modules.lecture.LectureBlockStatus;
 import org.olat.modules.lecture.LectureBlockToGroup;
 import org.olat.modules.lecture.LectureModule;
 import org.olat.modules.lecture.LectureParticipantSummary;
+import org.olat.modules.lecture.LectureRateWarning;
 import org.olat.modules.lecture.LectureRollCallStatus;
 import org.olat.modules.lecture.LectureService;
 import org.olat.modules.lecture.Reason;
 import org.olat.modules.lecture.RepositoryEntryLectureConfiguration;
 import org.olat.modules.lecture.model.AggregatedLectureBlocksStatistics;
+import org.olat.modules.lecture.model.IdentityRateWarning;
 import org.olat.modules.lecture.model.LectureBlockAndRollCall;
 import org.olat.modules.lecture.model.LectureBlockIdentityStatistics;
 import org.olat.modules.lecture.model.LectureBlockImpl;
+import org.olat.modules.lecture.model.LectureBlockRollCallAndCoach;
 import org.olat.modules.lecture.model.LectureBlockStatistics;
 import org.olat.modules.lecture.model.LectureBlockToTeacher;
 import org.olat.modules.lecture.model.LectureBlockWithTeachers;
+import org.olat.modules.lecture.model.LectureReportRow;
 import org.olat.modules.lecture.model.LectureStatisticsSearchParameters;
 import org.olat.modules.lecture.model.LecturesBlockSearchParameters;
 import org.olat.modules.lecture.model.ParticipantAndLectureSummary;
 import org.olat.modules.lecture.ui.ConfigurationHelper;
 import org.olat.modules.lecture.ui.LectureAdminController;
+import org.olat.modules.taxonomy.TaxonomyLevel;
+import org.olat.modules.taxonomy.TaxonomyLevelRef;
 import org.olat.repository.RepositoryEntry;
 import org.olat.repository.RepositoryEntryRef;
+import org.olat.repository.RepositoryEntryRelationType;
+import org.olat.repository.RepositoryEntryStatusEnum;
 import org.olat.repository.manager.RepositoryEntryDAO;
+import org.olat.repository.manager.RepositoryEntryRelationDAO;
 import org.olat.user.UserDataDeletable;
 import org.olat.user.UserManager;
 import org.olat.user.propertyhandlers.UserPropertyHandler;
@@ -104,7 +116,7 @@ import org.springframework.stereotype.Service;
  */
 @Service
 public class LectureServiceImpl implements LectureService, UserDataDeletable, DeletableGroupData {
-	private static final OLog log = Tracing.createLoggerFor(LectureServiceImpl.class);
+	private static final Logger log = Tracing.createLoggerFor(LectureServiceImpl.class);
 	private static final CalendarManagedFlag[] CAL_MANAGED_FLAGS = new CalendarManagedFlag[] { CalendarManagedFlag.all };
 
 	@Autowired
@@ -136,7 +148,11 @@ public class LectureServiceImpl implements LectureService, UserDataDeletable, De
 	@Autowired
 	private LectureBlockReminderDAO lectureBlockReminderDao;
 	@Autowired
+	private RepositoryEntryRelationDAO repositoryEntryRelationDao;
+	@Autowired
 	private LectureParticipantSummaryDAO lectureParticipantSummaryDao;
+	@Autowired
+	private LectureBlockToTaxonomyLevelDAO lectureBlockToTaxonomyLevelDao;
 	@Autowired
 	private RepositoryEntryLectureConfigurationDAO lectureConfigurationDao;
 	
@@ -301,6 +317,55 @@ public class LectureServiceImpl implements LectureService, UserDataDeletable, De
 	}
 
 	@Override
+	public LectureBlock moveLectureBlock(LectureBlockRef block, RepositoryEntry newEntry) {
+		LectureBlockImpl blockToMove = (LectureBlockImpl)lectureBlockDao.loadByKey(block.getKey());
+		blockToMove.setEntry(newEntry);
+		LectureBlock mergedBlock = lectureBlockDao.update(blockToMove);
+		dbInstance.commit();
+		recalculateSummary(mergedBlock.getEntry());
+		return mergedBlock;
+	}
+
+	public int healMovedLectureBlocks(RepositoryEntry entry, RepositoryEntry originEntry) {
+		int rows = 0;
+		// move log if necessary
+		List<LectureBlockAuditLog> auditLogs = getAuditLog(originEntry);
+		if(!auditLogs.isEmpty()) {
+			List<LectureBlock> blocks = getLectureBlocks(entry);
+			Set<Long> blockKeys = blocks.stream().map(LectureBlock::getKey).collect(Collectors.toSet());
+			for(LectureBlockAuditLog auditLog:auditLogs) {
+				if(auditLog.getLectureBlockKey() != null && blockKeys.contains(auditLog.getLectureBlockKey())) {
+					rows += auditLogDao.moveAudit(auditLog.getLectureBlockKey(), originEntry.getKey(), entry.getKey());
+					blockKeys.remove(auditLog.getLectureBlockKey());// move all log of the lecture block
+					dbInstance.commit();
+				}
+			}
+		}
+		
+		//check summary
+		List<LectureParticipantSummary> originSummaries = lectureParticipantSummaryDao.getSummary(originEntry);
+		if(!originSummaries.isEmpty()) {	
+			Map<Identity, LectureParticipantSummary> originSummariesMap = new HashMap<>();
+			for(LectureParticipantSummary originSummary:originSummaries) {
+				originSummariesMap.put(originSummary.getIdentity(), originSummary);
+			}
+		
+			List<LectureParticipantSummary> summaries = lectureParticipantSummaryDao.getSummary(entry);
+			for(LectureParticipantSummary summary:summaries) {
+				LectureParticipantSummary originSummary = originSummariesMap.get(summary.getIdentity());
+				if(originSummary != null && originSummary.getFirstAdmissionDate() != null && summary.getFirstAdmissionDate() != null
+						&& originSummary.getFirstAdmissionDate().before(summary.getFirstAdmissionDate())) {
+					summary.setFirstAdmissionDate(originSummary.getFirstAdmissionDate());
+					lectureParticipantSummaryDao.update(summary);
+					rows++;
+				}
+			}
+		}
+		dbInstance.commit();
+		return rows;
+	}
+
+	@Override
 	public LectureBlock copyLectureBlock(String newTitle, LectureBlock block) {
 		LectureBlock copy = lectureBlockDao.createLectureBlock(block.getEntry());
 		copy.setTitle(newTitle);
@@ -449,6 +514,49 @@ public class LectureServiceImpl implements LectureService, UserDataDeletable, De
 		}
 		return new ArrayList<>(participants);
 	}
+	
+	@Override
+	public List<Identity> syncParticipantSummariesAndRollCalls(LectureBlock lectureBlock, LectureBlockAuditLog.Action action) {
+		RepositoryEntry entry = lectureBlock.getEntry();
+		Date firstAdmission = lectureBlock.getStartDate();
+		firstAdmission = CalendarUtils.removeTime(firstAdmission);
+
+		//load data
+		List<LectureBlockRollCall> rollCalls = lectureBlockRollCallDao.getRollCalls(lectureBlock);
+		Map<Identity,LectureBlockRollCall> rollCallMap = rollCalls.stream().collect(Collectors.toMap(r -> r.getIdentity(), r -> r));
+		List<ParticipantAndLectureSummary> participantsAndSummaries = lectureParticipantSummaryDao.getLectureParticipantSummaries(lectureBlock);
+		
+		Set<Identity> participants = new HashSet<>();
+		for(ParticipantAndLectureSummary participantAndSummary:participantsAndSummaries) {
+			if(participants.contains(participantAndSummary.getIdentity())) {
+				continue;
+			}
+			
+			// update or create summary
+			if(participantAndSummary.getSummary() == null) {
+				lectureParticipantSummaryDao.createSummary(entry, participantAndSummary.getIdentity(), firstAdmission);
+			} else if(participantAndSummary.getSummary().getFirstAdmissionDate() == null || participantAndSummary.getSummary().getFirstAdmissionDate().after(firstAdmission)) {
+				participantAndSummary.getSummary().setFirstAdmissionDate(firstAdmission);
+				lectureParticipantSummaryDao.update(participantAndSummary.getSummary());
+			}
+
+			LectureBlockRollCall rollCall = rollCallMap.get(participantAndSummary.getIdentity());
+			String before = auditLogDao.toXml(rollCall);
+			if(rollCall == null) {
+				rollCall = lectureBlockRollCallDao.createAndPersistRollCall(lectureBlock, participantAndSummary.getIdentity(), null, null, null, new ArrayList<>());
+			} else if(rollCall.getLecturesAbsentList().isEmpty() && rollCall.getLecturesAttendedList().isEmpty()) {
+				rollCall = lectureBlockRollCallDao.addLecture(lectureBlock, rollCall, new ArrayList<>());
+			}
+
+			String after = auditLogDao.toXml(rollCall);
+			auditLogDao.auditLog(action, before, after, null,
+					lectureBlock, rollCall, lectureBlock.getEntry(), participantAndSummary.getIdentity(), null);
+
+			participants.add(participantAndSummary.getIdentity());
+		}
+		
+		return new ArrayList<>(participants);
+	}
 
 	@Override
 	public List<LectureBlockRollCall> getRollCalls(LectureBlockRef block) {
@@ -458,6 +566,11 @@ public class LectureServiceImpl implements LectureService, UserDataDeletable, De
 	@Override
 	public List<LectureBlockRollCall> getRollCalls(LectureBlockRollCallSearchParameters searchParams) {
 		return lectureBlockRollCallDao.getRollCalls(searchParams);
+	}
+
+	@Override
+	public List<LectureBlockRollCallAndCoach> getLectureBlockAndRollCalls(LectureBlockRollCallSearchParameters searchParams) {
+		return lectureBlockRollCallDao.getLectureBlockAndRollCalls(searchParams);
 	}
 
 	@Override
@@ -665,6 +778,30 @@ public class LectureServiceImpl implements LectureService, UserDataDeletable, De
 		dbInstance.commit();
 		
 		recalculateSummary(lectureBlock.getEntry());
+		dbInstance.commit();
+		
+		//send email
+		sendAutoCloseNotifications(lectureBlock);
+	}
+	
+	private void sendAutoCloseNotifications(LectureBlock lectureBlock) {
+		RepositoryEntry entry = lectureBlock.getEntry();
+		RepositoryEntryLectureConfiguration config = getRepositoryEntryLectureConfiguration(entry);
+		if(config.isLectureEnabled()) {
+			List<Identity> owners = repositoryEntryRelationDao
+					.getMembers(entry, RepositoryEntryRelationType.all, GroupRoles.owner.name());
+			List<Identity> teachers = getTeachers(lectureBlock);
+			
+			for(Identity owner:owners) {
+				MailerResult result = sendMail("lecture.autoclose.notification.subject", "lecture.autoclose.notification.body",
+						owner, teachers, lectureBlock);
+				if(result.getReturnCode() == MailerResult.OK) {
+					log.info(Tracing.M_AUDIT, "Notification of lecture auto-close: " + lectureBlock.getKey() + " in course: " + entry.getKey());
+				} else {
+					log.error("Notification of lecture auto-close cannot be send: " + lectureBlock.getKey() + " in course: " + entry.getKey());
+				}
+			}
+		}
 	}
 
 	@Override
@@ -690,31 +827,8 @@ public class LectureServiceImpl implements LectureService, UserDataDeletable, De
 	}
 	
 	private void sendReminder(Identity teacher, LectureBlock lectureBlock) {
-		RepositoryEntry entry = lectureBlock.getEntry();
-		String language = teacher.getUser().getPreferences().getLanguage();
-		Locale locale = i18nManager.getLocaleOrDefault(language);
-		String startDate = Formatter.getInstance(locale).formatDate(lectureBlock.getStartDate());
-		
-		MailContext context = new MailContextImpl("[RepositoryEntry:" + entry.getKey() + "]");
-		String url = Settings.getServerContextPathURI() + "/url/RepositoryEntry/" + entry.getKey() + "/LectureBlock/" + lectureBlock.getKey();
-		String[] args = new String[]{
-				lectureBlock.getTitle(),					//{0}
-				startDate,									//{1}
-				entry.getDisplayname(),						//{2}
-				url,										//{3}
-				userManager.getUserDisplayName(teacher) 	//{4}	
-		};
-		
-		Translator trans = Util.createPackageTranslator(LectureAdminController.class, locale);
-		String subject = trans.translate("lecture.teacher.reminder.subject", args);
-		String body = trans.translate("lecture.teacher.reminder.body", args);
-
-		LectureReminderTemplate template = new LectureReminderTemplate(subject, body);
-		MailerResult result = new MailerResult();
-		MailBundle bundle = mailManager.makeMailBundle(context, teacher, template, null, null, result);
-		MailerResult sendResult = mailManager.sendMessage(bundle);
-		result.append(sendResult);
-
+		MailerResult result = sendMail("lecture.teacher.reminder.subject", "lecture.teacher.reminder.body",
+				teacher, Collections.singletonList(teacher), lectureBlock);
 		String status;
 		List<Identity> failedIdentities = result.getFailedIdentites();
 		if(failedIdentities != null && failedIdentities.contains(teacher)) {
@@ -724,6 +838,45 @@ public class LectureServiceImpl implements LectureService, UserDataDeletable, De
 		}
 		
 		lectureBlockReminderDao.createReminder(lectureBlock, teacher, status);
+	}
+	
+	private MailerResult sendMail(String subjectI18nKey, String bodyI18nKey,
+			Identity recipient, List<Identity> teachers, LectureBlock lectureBlock) {
+		
+		RepositoryEntry entry = lectureBlock.getEntry();
+		String language = recipient.getUser().getPreferences().getLanguage();
+		Locale locale = i18nManager.getLocaleOrDefault(language);
+		String startDate = Formatter.getInstance(locale).formatDate(lectureBlock.getStartDate());
+		
+		StringBuilder sb = new StringBuilder();
+		if(teachers != null && !teachers.isEmpty()) {
+			for(Identity teacher:teachers) {
+				if(sb.length() > 0) sb.append(",");
+				sb.append(userManager.getUserDisplayName(teacher));
+			}
+		}
+		
+		MailContext context = new MailContextImpl("[RepositoryEntry:" + entry.getKey() + "]");
+		String url = Settings.getServerContextPathURI() + "/url/RepositoryEntry/" + entry.getKey() + "/LectureBlock/" + lectureBlock.getKey();
+		String[] args = new String[]{
+				lectureBlock.getTitle(),						//{0}
+				startDate,									//{1}
+				entry.getDisplayname(),						//{2}
+				url,											//{3}
+				userManager.getUserDisplayName(recipient), 	//{4} The recipient
+				sb.toString()								//{5} The teachers
+		};
+		
+		Translator trans = Util.createPackageTranslator(LectureAdminController.class, locale);
+		String subject = trans.translate(subjectI18nKey, args);
+		String body = trans.translate(bodyI18nKey, args);
+
+		LectureReminderTemplate template = new LectureReminderTemplate(subject, body);
+		MailerResult result = new MailerResult();
+		MailBundle bundle = mailManager.makeMailBundle(context, recipient, template, null, null, result);
+		MailerResult sendResult = mailManager.sendMessage(bundle);
+		result.append(sendResult);
+		return sendResult;
 	}
 
 	@Override
@@ -742,8 +895,17 @@ public class LectureServiceImpl implements LectureService, UserDataDeletable, De
 	}
 
 	@Override
+	public List<LectureBlockRef> getAssessedLectureBlocks(IdentityRef teacher, LecturesBlockSearchParameters searchParams) {
+		return lectureBlockDao.loadAssessedByTeacher(teacher, searchParams);
+	}
+
+	@Override
 	public List<LectureBlockWithTeachers> getLectureBlocksWithTeachers(RepositoryEntryRef entry) {
 		return lectureBlockDao.getLecturesBlockWithTeachers(entry);
+	}
+	@Override
+	public List<LectureReportRow> getLectureBlocksReport(Date from, Date to, List<LectureRollCallStatus> status) {
+		return lectureBlockDao.getLecturesBlocksReport(from, to, status);
 	}
 
 	/**
@@ -794,6 +956,17 @@ public class LectureServiceImpl implements LectureService, UserDataDeletable, De
 		LectureBlockImpl block = (LectureBlockImpl)lectureBlock;
 		groupDao.removeMembership(block.getTeacherGroup(), teacher);
 	}
+	
+	@Override
+	public List<TaxonomyLevel> getTaxonomy(LectureBlockRef lectureBlock) {
+		if(lectureBlock == null || lectureBlock.getKey() == null) return Collections.emptyList();
+		return lectureBlockToTaxonomyLevelDao.getTaxonomyLevels(lectureBlock);
+	}
+
+	@Override
+	public List<LectureBlock> getLectureBlocks(TaxonomyLevelRef level) {
+		return lectureBlockToTaxonomyLevelDao.getLectureBlocks(level);
+	}
 
 	@Override
 	public LectureParticipantSummary getOrCreateParticipantSummary(RepositoryEntry entry, Identity identity) {
@@ -829,14 +1002,62 @@ public class LectureServiceImpl implements LectureService, UserDataDeletable, De
 	}
 
 	@Override
+	public List<IdentityRateWarning> groupRateWarning(List<LectureBlockIdentityStatistics> statistics) {
+		Map<IdentityRepositoryEntryKey,LectureBlockIdentityStatistics> groupBy = new HashMap<>();
+		for(LectureBlockIdentityStatistics statistic:statistics) {
+			IdentityRepositoryEntryKey key = new IdentityRepositoryEntryKey(statistic.getIdentityKey(), statistic.getRepoKey());
+			if(groupBy.containsKey(key)){
+				groupBy.get(key).aggregate(statistic);
+			} else {
+				groupBy.put(key, statistic.cloneAll());
+			}
+		}
+
+		boolean countAuthorizedAbsenceAsAttendant = lectureModule.isCountAuthorizedAbsenceAsAttendant();
+		List<LectureBlockIdentityStatistics> aggregatedStatistics = new ArrayList<>(groupBy.values());
+		for(LectureBlockIdentityStatistics statistic:aggregatedStatistics) {
+			lectureBlockRollCallDao.calculateAttendanceRate(statistic, countAuthorizedAbsenceAsAttendant);
+		}
+		
+		Map<Long,IdentityRateWarning> warnings = new HashMap<>();
+		for(LectureBlockIdentityStatistics aggregatedStatistic:aggregatedStatistics) {
+			LectureRateWarning warning = calculateWarning(aggregatedStatistic);
+			if(warning == LectureRateWarning.error || warning == LectureRateWarning.warning) {
+				Long identityKey = aggregatedStatistic.getIdentityKey();
+				if(warnings.containsKey(identityKey)) {
+					warnings.get(identityKey).updateWarning(warning);
+				} else {
+					warnings.put(identityKey, new IdentityRateWarning(identityKey, warning));
+				}
+			}
+		}
+		return new ArrayList<>(warnings.values());
+	}
+	
+	private LectureRateWarning calculateWarning(LectureBlockIdentityStatistics stats) {
+		if(stats.isCalculateRate() && stats.getTotalPersonalPlannedLectures() > 0 &&
+				(stats.getTotalAbsentLectures() > 0 || stats.getTotalAttendedLectures() > 0 || stats.getTotalAuthorizedAbsentLectures() > 0)) {
+			double attendanceRate = stats.getAttendanceRate();
+			double requiredRate = stats.getRequiredRate();
+			
+			if(requiredRate > attendanceRate) {
+				return LectureRateWarning.error;
+			} else if(attendanceRate - requiredRate < 0.05) {// less than 5%
+				return LectureRateWarning.warning;
+			}
+		}
+		return LectureRateWarning.none;
+	}
+
+	@Override
 	public List<LectureBlockStatistics> getParticipantLecturesStatistics(IdentityRef identity) {
 		boolean authorizedAbsenceEnabled = lectureModule.isAuthorizedAbsenceEnabled();
 		boolean calculateAttendanceRate = lectureModule.isRollCallCalculateAttendanceRateDefaultEnabled();
 		boolean absenceDefaultAuthorized = lectureModule.isAbsenceDefaultAuthorized();
 		boolean countAuthorizedAbsenceAsAttendant = lectureModule.isCountAuthorizedAbsenceAsAttendant();
 		double defaultRequiredAttendanceRate = lectureModule.getRequiredAttendanceRateDefault();
-		return lectureBlockRollCallDao.getStatistics(identity, authorizedAbsenceEnabled,
-				absenceDefaultAuthorized, countAuthorizedAbsenceAsAttendant,
+		return lectureBlockRollCallDao.getStatistics(identity, RepositoryEntryStatusEnum.publishedAndClosed(),
+				authorizedAbsenceEnabled, absenceDefaultAuthorized, countAuthorizedAbsenceAsAttendant,
 				calculateAttendanceRate, defaultRequiredAttendanceRate);
 	}
 
@@ -855,13 +1076,13 @@ public class LectureServiceImpl implements LectureService, UserDataDeletable, De
 	
 	@Override
 	public List<LectureBlockIdentityStatistics> getLecturesStatistics(LectureStatisticsSearchParameters params,
-			List<UserPropertyHandler> userPropertyHandlers, Identity identity, boolean admin) {
+			List<UserPropertyHandler> userPropertyHandlers, Identity identity) {
 		boolean authorizedAbsenceEnabled = lectureModule.isAuthorizedAbsenceEnabled();
 		boolean calculateAttendanceRate = lectureModule.isRollCallCalculateAttendanceRateDefaultEnabled();
 		boolean absenceDefaultAuthorized = lectureModule.isAbsenceDefaultAuthorized();
 		boolean countAuthorizedAbsenceAsAttendant = lectureModule.isCountAuthorizedAbsenceAsAttendant();
 		double defaultRequiredAttendanceRate = lectureModule.getRequiredAttendanceRateDefault();
-		return lectureBlockRollCallDao.getStatistics(params, userPropertyHandlers, identity, admin, 
+		return lectureBlockRollCallDao.getStatistics(params, userPropertyHandlers, identity, 
 				authorizedAbsenceEnabled, absenceDefaultAuthorized, countAuthorizedAbsenceAsAttendant,
 				calculateAttendanceRate, defaultRequiredAttendanceRate);
 	}
@@ -896,16 +1117,6 @@ public class LectureServiceImpl implements LectureService, UserDataDeletable, De
 		} else {
 			unsyncInternalCalendar(config.getEntry());
 		}
-		
-		/*if(ConfigurationHelper.isSyncParticipantCalendarEnabled(config, lectureModule)) {
-			List<LectureBlock> blocks = getLectureBlocks(entry);
-			for(LectureBlock block:blocks) {
-				List<Identity> participants = getParticipants(block);
-				syncInternalCalendar(block, participants);
-			}
-		} else {
-			unsyncParticipantsCalendar(entry);
-		}*/
 	}
 
 	@Override
@@ -924,16 +1135,7 @@ public class LectureServiceImpl implements LectureService, UserDataDeletable, De
 		} else {
 			unsyncCourseCalendar(lectureBlock, config.getEntry());
 		}
-		
-		/*if(ConfigurationHelper.isSyncParticipantCalendarEnabled(config, lectureModule)) {
-			List<Identity> participants = getParticipants(lectureBlock);
-			syncInternalCalendar(lectureBlock, participants);
-		} else {
-			List<Identity> participants = getParticipants(lectureBlock);
-			unsyncInternalCalendar(lectureBlock, participants);
-		}*/
 	}
-	
 
 	private void syncCourseCalendar(LectureBlock lectureBlock, RepositoryEntry entry) {
 		Kalendar cal = calendarMgr.getCalendar(CalendarManager.TYPE_COURSE, entry.getOlatResource().getResourceableId().toString());
@@ -1053,13 +1255,6 @@ public class LectureServiceImpl implements LectureService, UserDataDeletable, De
 		unsyncInternalCalendar(entry, teachers);
 	}
 	
-	/*
-	private void unsyncParticipantsCalendar(RepositoryEntry entry) {
-		List<Identity> participants = getParticipants(entry);
-		unsyncInternalCalendar(entry, participants);
-	}
-	*/
-	
 	private void unsyncInternalCalendar(RepositoryEntry entry, List<Identity> identities) {
 		String prefix = generateExternalIdPrefix(entry);
 		for(Identity identity:identities) {
@@ -1130,4 +1325,5 @@ public class LectureServiceImpl implements LectureService, UserDataDeletable, De
 			//
 		}
 	}
+
 }

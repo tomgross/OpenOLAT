@@ -43,12 +43,11 @@ import org.junit.Before;
 import org.junit.Test;
 import org.olat.admin.user.delete.service.UserDeletionManager;
 import org.olat.basesecurity.BaseSecurity;
-import org.olat.basesecurity.BaseSecurityManager;
 import org.olat.core.commons.persistence.DB;
 import org.olat.core.id.Identity;
 import org.olat.core.id.User;
 import org.olat.core.id.UserConstants;
-import org.olat.core.logging.OLog;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.WebappHelper;
 import org.olat.test.OlatTestCase;
@@ -63,7 +62,8 @@ import org.springframework.beans.factory.annotation.Autowired;
  */
 public class UserTest extends OlatTestCase {
 
-	private static OLog log = Tracing.createLoggerFor(UserTest.class);
+	private static final Logger log = Tracing.createLoggerFor(UserTest.class);
+	
 	// variables for test fixture
 	private User u1, u2, u3;
 	private Identity i1, i2, i3;
@@ -74,48 +74,49 @@ public class UserTest extends OlatTestCase {
 	private UserManager userManager;
 	@Autowired
 	private BaseSecurity securityManager;
+	@Autowired
+	private UserDeletionManager userDeletionManager;
 
 	/**
 	 * @see junit.framework.TestCase#setUp()
 	 */
-	@Before public void setup()throws Exception {
-		System.out.println("running before...: "+this.hashCode());
+	@Before
+	public void setup()throws Exception {
+		log.info("running before...: "+this.hashCode());
 		// create some users with user manager
 		// set up fixture using the user manager
-		UserManager um = UserManager.getInstance();
 		
-		BaseSecurity sm = BaseSecurityManager.getInstance();
-		if (sm.findIdentityByName("judihui") == null) {
-			u1 = um.createUser("judihui", "judihui", "judihui@id.uzh.ch");
+		if (securityManager.findIdentityByName("judihui") == null) {
+			u1 = userManager.createUser("judihui", "judihui", "judihui@id.uzh.ch");
 			u1.setProperty(UserConstants.INSTITUTIONALEMAIL, "instjudihui@id.uzh.ch");
 			u1.setProperty(UserConstants.INSTITUTIONALNAME, "id.uzh.ch");
 			u1.setProperty(UserConstants.INSTITUTIONALUSERIDENTIFIER, "id.uzh.ch");
-			i1 = sm.createAndPersistIdentityAndUser(u1.getProperty(UserConstants.LASTNAME, new Locale("en")), null, u1, "OLAT", u1.getProperty(UserConstants.LASTNAME, new Locale("en")),"");
+			i1 = securityManager.createAndPersistIdentityAndUser(u1.getProperty(UserConstants.LASTNAME, new Locale("en")), null, u1, "OLAT", u1.getProperty(UserConstants.LASTNAME, new Locale("en")),"");
 		} else {
-			System.out.println("Does not create user, found 'judihui' already in db");
-			i1 = sm.findIdentityByName("judihui");
+			log.info("Does not create user, found 'judihui' already in db");
+			i1 = securityManager.findIdentityByName("judihui");
 			u1 = i1.getUser();
 		}
-		if (sm.findIdentityByName("migros") == null) {
-			u2 = um.createUser("migros", "migros", "migros@id.migros.uzh.ch");
+		if (securityManager.findIdentityByName("migros") == null) {
+			u2 = userManager.createUser("migros", "migros", "migros@id.migros.uzh.ch");
 			u2.setProperty(UserConstants.INSTITUTIONALEMAIL, "instmigros@id.migros.uzh.ch");
 			u2.setProperty(UserConstants.INSTITUTIONALNAME, "id.migros.uzh.ch");
 			u2.setProperty(UserConstants.INSTITUTIONALUSERIDENTIFIER, "id.uzh.ch");
-			i2 = sm.createAndPersistIdentityAndUser(u2.getProperty(UserConstants.LASTNAME, new Locale("en")), null, u2, "OLAT", u2.getProperty(UserConstants.LASTNAME, new Locale("en")),"");
+			i2 = securityManager.createAndPersistIdentityAndUser(u2.getProperty(UserConstants.LASTNAME, new Locale("en")), null, u2, "OLAT", u2.getProperty(UserConstants.LASTNAME, new Locale("en")),"");
 		} else {
-			System.out.println("Does not create user, found 'migros' already in db");
-			i2 = sm.findIdentityByName("migros");
+			log.info("Does not create user, found 'migros' already in db");
+			i2 = securityManager.findIdentityByName("migros");
 			u2 = i2.getUser();
 		}
-		if (sm.findIdentityByName("salat") == null) {
-			u3 = um.createUser("salat", "salat", "salat@id.salat.uzh.ch");
+		if (securityManager.findIdentityByName("salat") == null) {
+			u3 = userManager.createUser("salat", "salat", "salat@id.salat.uzh.ch");
 			u3.setProperty(UserConstants.INSTITUTIONALEMAIL,"instsalat@id.salat.uzh.ch");
 			u3.setProperty(UserConstants.INSTITUTIONALNAME, "id.salat.uzh.ch");
 			u3.setProperty(UserConstants.INSTITUTIONALUSERIDENTIFIER, "id.uzh.ch");
-			i3 = sm.createAndPersistIdentityAndUser(u3.getProperty(UserConstants.LASTNAME, new Locale("en")), null, u3," OLAT", u3.getProperty(UserConstants.LASTNAME, new Locale("en")),"");
+			i3 = securityManager.createAndPersistIdentityAndUser(u3.getProperty(UserConstants.LASTNAME, new Locale("en")), null, u3," OLAT", u3.getProperty(UserConstants.LASTNAME, new Locale("en")),"");
 		} else {
-			System.out.println("Does not create user, found 'salat' already in db");
-			i3 = sm.findIdentityByName("salat");
+			log.info("Does not create user, found 'salat' already in db");
+			i3 = securityManager.findIdentityByName("salat");
 			u3 = i3.getUser();
 		}
 	}
@@ -186,7 +187,7 @@ public class UserTest extends OlatTestCase {
 	public void testUmFindUserByInstitutionalUserIdentifier() throws Exception {
 		Map<String, String> searchValue = new HashMap<>();
 		searchValue.put(UserConstants.INSTITUTIONALUSERIDENTIFIER, "id.uzh.ch");
-		List<Identity> result = securityManager.getIdentitiesByPowerSearch(null, searchValue, true, null, null, null, null, null, null, null, null);
+		List<Identity> result = securityManager.getIdentitiesByPowerSearch(null, searchValue, true, null, null, null, null, null, null, null);
 		assertTrue("must have elements", result != null);
 		assertEquals("at least three elements", 3, result.size());
 
@@ -275,7 +276,7 @@ public class UserTest extends OlatTestCase {
 		Map<String, String> searchValue = new HashMap<>();
 		searchValue.put(UserConstants.INSTITUTIONALEMAIL, institutionalEmail);
 		// find identity 1
-		List<Identity> result = securityManager.getIdentitiesByPowerSearch(null, searchValue, true, null, null, null, null, null, null, null, null);
+		List<Identity> result = securityManager.getIdentitiesByPowerSearch(null, searchValue, true, null, null, null, null, null, null, null);
 		assertEquals(1, result.size());
 		// setting null should remove this property but first reload user
 		User user = userManager.loadUserByKey(identity.getUser().getKey());
@@ -287,7 +288,7 @@ public class UserTest extends OlatTestCase {
 		searchValue = new HashMap<>();
 		searchValue.put(UserConstants.INSTITUTIONALEMAIL, institutionalEmail);
 		// find identity 1
-		result = securityManager.getIdentitiesByPowerSearch(null, searchValue, true, null, null, null, null, null, null, null, null);
+		result = securityManager.getIdentitiesByPowerSearch(null, searchValue, true, null, null, null, null, null, null, null);
 		assertEquals(0, result.size());
 
 		//2. begin the tests: update the first name
@@ -295,7 +296,7 @@ public class UserTest extends OlatTestCase {
 		searchValue = new HashMap<>();
 		searchValue.put(UserConstants.FIRSTNAME, login);
 		// find identity 1
-		result = securityManager.getIdentitiesByPowerSearch(null, searchValue, true, null, null, null, null, null, null, null, null);
+		result = securityManager.getIdentitiesByPowerSearch(null, searchValue, true, null, null, null, null, null, null, null);
 		assertEquals(1, result.size());
 		
 		//update user first name
@@ -308,13 +309,13 @@ public class UserTest extends OlatTestCase {
 		searchValue = new HashMap<>();
 		searchValue.put(UserConstants.FIRSTNAME, login);
 		// find identity 1
-		result = securityManager.getIdentitiesByPowerSearch(null, searchValue, true, null, null, null, null, null, null, null, null);
+		result = securityManager.getIdentitiesByPowerSearch(null, searchValue, true, null, null, null, null, null, null, null);
 		assertEquals(0, result.size());
 		// try to find it via updated property
 		Map<String,String> searchRotweinValue = new HashMap<>();
 		searchRotweinValue.put(UserConstants.FIRSTNAME, "rotwein");
 		// find identity 1
-		List<Identity> rotweinList = securityManager.getIdentitiesByPowerSearch(null, searchRotweinValue, true, null, null, null, null, null, null, null, null);
+		List<Identity> rotweinList = securityManager.getIdentitiesByPowerSearch(null, searchRotweinValue, true, null, null, null, null, null, null, null);
 		assertFalse(rotweinList.isEmpty());
 		for(Identity id:result) {
 			Assert.assertEquals("rotwein", id.getUser().getProperty(UserConstants.FIRSTNAME, null));
@@ -336,9 +337,9 @@ public class UserTest extends OlatTestCase {
 		//test user deletion
 	
 		// user still exists
-		List<Identity> result = securityManager.getVisibleIdentitiesByPowerSearch(login, null, true, null, null, null, null, null);
+		List<Identity> result = securityManager.getVisibleIdentitiesByPowerSearch(login, null, true, null, null, null, null);
 		assertEquals(1, result.size());
-		result = securityManager.getIdentitiesByPowerSearch(login, null, true, null, null, null, null, null, null, null, null);
+		result = securityManager.getIdentitiesByPowerSearch(login, null, true, null, null, null, null, null, null, null);
 		assertEquals(1, result.size());
 		// search with power search (to compare result later on with same search)
 		Map<String, String> searchValue = new HashMap<>();
@@ -349,22 +350,22 @@ public class UserTest extends OlatTestCase {
 		searchValue.put(UserConstants.INSTITUTIONALNAME, institutionName);
 		searchValue.put(UserConstants.INSTITUTIONALUSERIDENTIFIER, institutionName);
 		// find identity
-		result = securityManager.getIdentitiesByPowerSearch(null, searchValue, true, null, null, null, null, null, null, null, null);
+		result = securityManager.getIdentitiesByPowerSearch(null, searchValue, true, null, null, null, null, null, null, null);
 		assertEquals(1, result.size());
 		// find identity via institutional id
-		result = securityManager.getIdentitiesByPowerSearch(null, searchValue, false, null, null, null, null, null, null, null, null);
+		result = securityManager.getIdentitiesByPowerSearch(null, searchValue, false, null, null, null, null, null, null, null);
 		assertEquals(1, result.size());
 		// delete user now
-		UserDeletionManager.getInstance().deleteIdentity(identity, null);
+		userDeletionManager.deleteIdentity(identity, null);
 		dbInstance.commitAndCloseSession();
 		
 		// check if deleted successfully
-		result = securityManager.getVisibleIdentitiesByPowerSearch(login, null, true, null, null, null, null, null);
+		result = securityManager.getVisibleIdentitiesByPowerSearch(login, null, true, null, null, null, null);
 		assertEquals(0, result.size());
 		// not visible, but still there when using power search
-		result = securityManager.getIdentitiesByPowerSearch(login, null, true, null, null, null, null, null, null, null, null);
+		result = securityManager.getIdentitiesByPowerSearch(login, null, true, null, null, null, null, null, null, null);
 		
-		List<Identity> deletedIdentities = securityManager.getIdentitiesByPowerSearch(null, null, true, null, null, null, null, null, null, null, Identity.STATUS_DELETED);
+		List<Identity> deletedIdentities = securityManager.getIdentitiesByPowerSearch(null, null, true, null, null, null, null, null, null, Identity.STATUS_DELETED);
 		boolean deleted = false;
 		for(Identity deletedIdentity:deletedIdentities) {
 			if(identity.getKey().equals(deletedIdentity.getKey())) {
@@ -373,10 +374,10 @@ public class UserTest extends OlatTestCase {
 		}
 		Assert.assertTrue(deleted);
 
-		List<Identity> activeIdentities = securityManager.getIdentitiesByPowerSearch(login, null, true, null, null, null, null, null, null, null, Identity.STATUS_ACTIV);
+		List<Identity> activeIdentities = securityManager.getIdentitiesByPowerSearch(login, null, true, null, null, null, null, null, null, Identity.STATUS_ACTIV);
 		Assert.assertEquals(0, activeIdentities.size());
 		
-		List<Identity> allActiveIdentities = securityManager.getIdentitiesByPowerSearch(null, null, true, null, null, null, null, null, null, null, Identity.STATUS_ACTIV);
+		List<Identity> allActiveIdentities = securityManager.getIdentitiesByPowerSearch(null, null, true, null, null, null, null, null, null, Identity.STATUS_ACTIV);
 		boolean active = false;
 		for(Identity activeIdentity:allActiveIdentities) {
 			if(identity.getKey().equals(activeIdentity.getKey())) {
@@ -387,10 +388,10 @@ public class UserTest extends OlatTestCase {
 
 		// test if user attributes have been deleted successfully
 		// find identity 1 not anymore
-		List<Identity> searchResult_10 = securityManager.getIdentitiesByPowerSearch(null, searchValue, true, null, null, null, null, null, null, null, null);
+		List<Identity> searchResult_10 = securityManager.getIdentitiesByPowerSearch(null, searchValue, true, null, null, null, null, null, null, null);
 		Assert.assertEquals(0, searchResult_10.size());
-		// find identity via first, last and instuser id (fields as 12.5 deeleted too)
-		List<Identity> searchResult_11 = securityManager.getIdentitiesByPowerSearch(null, searchValue, false, null, null, null, null, null, null, null, null);
+		// find identity via first, last and instuser id (fields as 12.5 deleted too)
+		List<Identity> searchResult_11 = securityManager.getIdentitiesByPowerSearch(null, searchValue, false, null, null, null, null, null, null, null);
 		Assert.assertEquals(0, searchResult_11.size());
 		
 		// check using other methods

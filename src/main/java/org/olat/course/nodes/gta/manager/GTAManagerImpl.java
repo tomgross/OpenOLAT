@@ -41,13 +41,12 @@ import org.hibernate.LazyInitializationException;
 import org.olat.basesecurity.GroupRoles;
 import org.olat.basesecurity.IdentityRef;
 import org.olat.core.commons.modules.bc.FolderConfig;
-import org.olat.core.commons.modules.bc.vfs.OlatRootFolderImpl;
 import org.olat.core.commons.persistence.DB;
 import org.olat.core.commons.services.notifications.NotificationsManager;
 import org.olat.core.commons.services.notifications.PublisherData;
 import org.olat.core.commons.services.notifications.SubscriptionContext;
 import org.olat.core.id.Identity;
-import org.olat.core.logging.OLog;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.FileUtils;
 import org.olat.core.util.StringHelper;
@@ -97,12 +96,14 @@ import org.olat.modules.ModuleConfiguration;
 import org.olat.modules.assessment.AssessmentService;
 import org.olat.modules.assessment.Role;
 import org.olat.modules.assessment.model.AssessmentEntryStatus;
+import org.olat.modules.edusharing.EdusharingService;
 import org.olat.repository.RepositoryEntry;
 import org.olat.repository.RepositoryEntryRef;
 import org.olat.repository.RepositoryService;
 import org.olat.repository.manager.RepositoryEntryLifecycleDAO;
 import org.olat.repository.manager.RepositoryEntryRelationDAO;
 import org.olat.repository.model.RepositoryEntryLifecycle;
+import org.olat.repository.ui.settings.LazyRepositoryEdusharingProvider;
 import org.olat.resource.OLATResource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -118,7 +119,7 @@ import com.thoughtworks.xstream.XStream;
 @Service
 public class GTAManagerImpl implements GTAManager {
 	
-	private static final OLog log = Tracing.createLoggerFor(GTAManagerImpl.class);
+	private static final Logger log = Tracing.createLoggerFor(GTAManagerImpl.class);
 	
 	private static final XStream taskDefinitionsXstream = XStreamHelper.createXStreamInstance();
 	
@@ -130,6 +131,8 @@ public class GTAManagerImpl implements GTAManager {
 	private BGAreaManager areaManager;
 	@Autowired
 	private AssessmentService assessmentService;
+	@Autowired
+	private EdusharingService edusharingService;
 	@Autowired
 	private RepositoryService repositoryService;
 	@Autowired
@@ -225,6 +228,7 @@ public class GTAManagerImpl implements GTAManager {
 				if(deleteFile) {
 					VFSContainer tasksContainer = getTasksContainer(courseEnv, cNode);
 					VFSItem item = tasksContainer.resolve(removedTask.getFilename());
+					deleteEdusharingUsages(courseEnv, item);
 					if(item != null) {
 						item.delete();
 					}
@@ -233,6 +237,13 @@ public class GTAManagerImpl implements GTAManager {
 			}
 		});
 		
+	}
+	
+	private void deleteEdusharingUsages(CourseEnvironment courseEnv, VFSItem item) {
+		Long repositoryEntryKey = courseEnv.getCourseGroupManager().getCourseEntry().getKey();
+		LazyRepositoryEdusharingProvider edusharingProvider = new LazyRepositoryEdusharingProvider(repositoryEntryKey);
+		edusharingProvider.setSubPath(item);
+		edusharingService.deleteUsages(edusharingProvider);
 	}
 
 	@Override
@@ -513,28 +524,38 @@ public class GTAManagerImpl implements GTAManager {
 	}
 
 	private VFSContainer getContainer(CourseEnvironment courseEnv, String folderName, GTACourseNode cNode) {
-		OlatRootFolderImpl courseContainer = courseEnv.getCourseBaseContainer();
+		VFSContainer courseContainer = courseEnv.getCourseBaseContainer();
 		VFSContainer nodesContainer = VFSManager.getOrCreateContainer(courseContainer, "gtasks");
 		VFSContainer nodeContainer = VFSManager.getOrCreateContainer(nodesContainer, cNode.getIdent());
 		return VFSManager.getOrCreateContainer(nodeContainer, folderName);
 	}
 
 	@Override
-	public PublisherData getPublisherData(CourseEnvironment courseEnv, GTACourseNode cNode) {
+	public PublisherData getPublisherData(CourseEnvironment courseEnv, GTACourseNode cNode, boolean markedOnly) {
 		RepositoryEntry re = courseEnv.getCourseGroupManager().getCourseEntry();
 		String businessPath = "[RepositoryEntry:" + re.getKey() + "][CourseNode:" + cNode.getIdent() + "]";
-		return new PublisherData("GroupTask", "", businessPath);
+		String publisherType = markedOnly ? "MarkedGroupTask" : "GroupTask";
+		return new PublisherData(publisherType, "", businessPath);
 	}
 
 	@Override
-	public SubscriptionContext getSubscriptionContext(CourseEnvironment courseEnv, GTACourseNode cNode) {
-		return new SubscriptionContext("CourseModule", courseEnv.getCourseResourceableId(), cNode.getIdent());
+	public SubscriptionContext getSubscriptionContext(CourseEnvironment courseEnv, GTACourseNode cNode, boolean markedOnly) {
+		return getSubscriptionContext(courseEnv.getCourseGroupManager().getCourseResource(), cNode, markedOnly);
 	}
 
 	@Override
-	public SubscriptionContext getSubscriptionContext(OLATResource courseResource, GTACourseNode cNode) {
+	public SubscriptionContext getSubscriptionContext(OLATResource courseResource, GTACourseNode cNode, boolean markedOnly) {
 		Long courseResourceableId = courseResource.getResourceableId();
-		return new SubscriptionContext("CourseModule", courseResourceableId, cNode.getIdent());
+		String subIdentifier = (markedOnly ? "Marked::" : "") + cNode.getIdent();
+		return new SubscriptionContext("CourseModule", courseResourceableId, subIdentifier);
+	}
+
+	@Override
+	public void markNews(CourseEnvironment courseEnv, GTACourseNode cNode) {
+		SubscriptionContext markedCtxt = getSubscriptionContext(courseEnv, cNode, true);
+		notificationsManager.markPublisherNews(markedCtxt, null, false);
+		SubscriptionContext ctxt = getSubscriptionContext(courseEnv, cNode, false);
+		notificationsManager.markPublisherNews(ctxt, null, false);
 	}
 
 	@Override
@@ -644,7 +665,7 @@ public class GTAManagerImpl implements GTAManager {
 			List<Long> areaKeys = config.getList(GTACourseNode.GTASK_AREAS, Long.class);
 
 			List<Long> consolidatedGroupKeys = new ArrayList<>();
-			if(groupKeys != null && groupKeys.size() > 0) {
+			if(groupKeys != null && !groupKeys.isEmpty()) {
 				consolidatedGroupKeys.addAll(groupKeys);
 			}
 			consolidatedGroupKeys.addAll(areaManager.findBusinessGroupKeysOfAreaKeys(areaKeys));
@@ -1105,6 +1126,20 @@ public class GTAManagerImpl implements GTAManager {
 	}
 
 	@Override
+	public Task persistTask(Task task) {
+		if(task.getKey() == null) {
+			if(task.getCreationDate() == null) {
+				((TaskImpl)task).setCreationDate(new Date());
+				((TaskImpl)task).setLastModified(task.getCreationDate());
+			} else {
+				((TaskImpl)task).setLastModified(new Date());
+			}
+			dbInstance.getCurrentEntityManager().persist(task);
+		}
+		return task;
+	}
+
+	@Override
 	public Task createAndPersistTask(String taskName, TaskList taskList, TaskProcess status,
 			BusinessGroup assessedGroup, Identity assessedIdentity, GTACourseNode cNode) {
 		Task task = createTask(taskName, taskList, status, assessedGroup, assessedIdentity, cNode);
@@ -1553,10 +1588,10 @@ public class GTAManagerImpl implements GTAManager {
 		taskImpl = dbInstance.getCurrentEntityManager().merge(taskImpl);
 		syncAssessmentEntry(taskImpl, cNode, by);
 		
-		//update
+		// mark the publishers
 		OLATResource resource = taskImpl.getTaskList().getEntry().getOlatResource();
-		notificationsManager.markPublisherNews(getSubscriptionContext(resource, cNode), null, false);
-		
+		notificationsManager.markPublisherNews(getSubscriptionContext(resource, cNode, true), null, false);
+		notificationsManager.markPublisherNews(getSubscriptionContext(resource, cNode, false), null, false);
 		return taskImpl;
 	}
 	
@@ -1689,11 +1724,11 @@ public class GTAManagerImpl implements GTAManager {
 		String taskName = taskToString(assignedTask);
 		String msg = step + " of " + taskName + ": " + operation;
 		if(GTAType.group.name().equals(cNode.getModuleConfiguration().getStringValue(GTACourseNode.GTASK_TYPE))) {
-			log.audit(msg + " to business group: " + assessedGroup.getName(), null);
+			log.info(Tracing.M_AUDIT, msg + " to business group: " + assessedGroup.getName());
 			courseEnv.getAuditManager()
 				.appendToUserNodeLog(cNode, actor, assessedGroup, msg, by);
 		} else {
-			log.audit(msg, null);
+			log.info(Tracing.M_AUDIT, msg);
 			courseEnv.getAuditManager()
 				.appendToUserNodeLog(cNode, actor, assessedIdentity, msg, by);
 		}
@@ -1708,11 +1743,11 @@ public class GTAManagerImpl implements GTAManager {
 		String taskName = taskToString(assignedTask);
 		String msg = step + " of " + taskName + ": " + operation + " " + file;
 		if(GTAType.group.name().equals(cNode.getModuleConfiguration().getStringValue(GTACourseNode.GTASK_TYPE))) {
-			log.audit(msg + " to business group: " + assessedGroup.getName(), null);
+			log.info(Tracing.M_AUDIT, msg + " to business group: " + assessedGroup.getName());
 			courseEnv.getAuditManager()
 				.appendToUserNodeLog(cNode, actor, assessedGroup, msg, by);
 		} else {
-			log.audit(msg, null);
+			log.info(Tracing.M_AUDIT, msg);
 			courseEnv.getAuditManager()
 				.appendToUserNodeLog(cNode, actor, assessedIdentity, msg, by);
 		}

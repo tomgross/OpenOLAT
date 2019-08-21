@@ -34,15 +34,14 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+import org.apache.logging.log4j.Logger;
 import org.olat.basesecurity.Group;
 import org.olat.basesecurity.IdentityRef;
 import org.olat.basesecurity.manager.GroupDAO;
-import org.olat.core.commons.modules.bc.vfs.OlatRootFileImpl;
 import org.olat.core.commons.persistence.DB;
 import org.olat.core.gui.translator.Translator;
 import org.olat.core.id.Identity;
 import org.olat.core.id.OLATResourceable;
-import org.olat.core.logging.OLog;
 import org.olat.core.logging.Tracing;
 import org.olat.core.logging.activity.ThreadLocalUserActivityLogger;
 import org.olat.core.util.FileUtils;
@@ -50,6 +49,7 @@ import org.olat.core.util.StringHelper;
 import org.olat.core.util.Util;
 import org.olat.core.util.resource.OresHelper;
 import org.olat.core.util.vfs.VFSLeaf;
+import org.olat.core.util.vfs.VFSManager;
 import org.olat.core.util.xml.XStreamHelper;
 import org.olat.course.CourseFactory;
 import org.olat.course.ICourse;
@@ -64,8 +64,13 @@ import org.olat.modules.assessment.AssessmentEntry;
 import org.olat.modules.assessment.AssessmentService;
 import org.olat.modules.assessment.Role;
 import org.olat.modules.assessment.model.AssessmentEntryStatus;
-import org.olat.modules.forms.EvaluationFormSessionStatus;
-import org.olat.modules.forms.manager.EvaluationFormSessionDAO;
+import org.olat.modules.forms.EvaluationFormManager;
+import org.olat.modules.forms.EvaluationFormParticipation;
+import org.olat.modules.forms.EvaluationFormParticipationRef;
+import org.olat.modules.forms.EvaluationFormSession;
+import org.olat.modules.forms.EvaluationFormSurvey;
+import org.olat.modules.forms.EvaluationFormSurveyIdentifier;
+import org.olat.modules.forms.EvaluationFormSurveyRef;
 import org.olat.modules.portfolio.AssessmentSection;
 import org.olat.modules.portfolio.Assignment;
 import org.olat.modules.portfolio.AssignmentStatus;
@@ -122,6 +127,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import com.thoughtworks.xstream.XStream;
+import com.thoughtworks.xstream.security.ExplicitTypePermission;
 
 /**
  * 
@@ -132,11 +138,16 @@ import com.thoughtworks.xstream.XStream;
 @Service
 public class PortfolioServiceImpl implements PortfolioService {
 	
-	private static final OLog log = Tracing.createLoggerFor(PortfolioServiceImpl.class);
+	private static final Logger log = Tracing.createLoggerFor(PortfolioServiceImpl.class);
 	
 	private static XStream configXstream = XStreamHelper.createXStreamInstance();
 	static {
 		configXstream.alias("deliveryOptions", BinderDeliveryOptions.class);
+		XStream.setupDefaultSecurity(configXstream);
+		Class<?>[] types = new Class[] {
+				BinderDeliveryOptions.class
+		};
+		configXstream.addPermission(new ExplicitTypePermission(types));
 	}
 	
 	@Autowired
@@ -172,7 +183,7 @@ public class PortfolioServiceImpl implements PortfolioService {
 	@Autowired
 	private RepositoryService repositoryService;
 	@Autowired
-	private EvaluationFormSessionDAO evaluationFormSessionDao;
+	private EvaluationFormManager evaluationFormManager;
 	@Autowired
 	private BinderUserInformationsDAO binderUserInformationsDao;
 	
@@ -248,7 +259,7 @@ public class PortfolioServiceImpl implements PortfolioService {
 					
 					assignmentDao.createAssignment(transientAssignment.getTitle(), transientAssignment.getSummary(),
 							transientAssignment.getContent(), storage, transientAssignment.getAssignmentType(),
-							transientAssignment.getAssignmentStatus(), section,
+							transientAssignment.isTemplate(), transientAssignment.getAssignmentStatus(), section, null,
 							transientAssignment.isOnlyAutoEvaluation(), transientAssignment.isReviewerSeeAutoEvaluation(),
 							transientAssignment.isAnonymousExternalEvaluation(), transientAssignment.getFormEntry());
 					//copy attachments
@@ -323,14 +334,15 @@ public class PortfolioServiceImpl implements PortfolioService {
 	}
 	
 	@Override
-	public Assignment addAssignment(String title, String summary, String content, AssignmentType type, Section section,
+	public Assignment addAssignment(String title, String summary, String content, AssignmentType type, boolean template, Section section, Binder binder,
 			boolean onlyAutoEvaluation, boolean reviewerSeeAutoEvaluation, boolean anonymousExternEvaluation, RepositoryEntry formEntry) {
 		File newStorage = portfolioFileStorage.generateAssignmentSubDirectory();
 		String storage = portfolioFileStorage.getRelativePath(newStorage);
 
-		Section reloadedSection = binderDao.loadSectionByKey(section.getKey());
-		return assignmentDao.createAssignment(title, summary, content, storage, type,
-				AssignmentStatus.template, reloadedSection,
+		Binder reloadedBinder = binder == null ? null : binderDao.loadByKey(binder.getKey());
+		Section reloadedSection = section == null ? null : binderDao.loadSectionByKey(section.getKey());
+		return assignmentDao.createAssignment(title, summary, content, storage, type, template,
+				AssignmentStatus.template, reloadedSection, reloadedBinder,
 				onlyAutoEvaluation, reviewerSeeAutoEvaluation, anonymousExternEvaluation, formEntry);
 	}
 
@@ -375,7 +387,7 @@ public class PortfolioServiceImpl implements PortfolioService {
 	}
 
 	@Override
-	public List<Assignment> getAssignments(PortfolioElement element, String searchString) {
+	public List<Assignment> getSectionsAssignments(PortfolioElement element, String searchString) {
 		if(element.getType() == PortfolioElementType.binder) {
 			return assignmentDao.loadAssignments((BinderRef)element, searchString);
 		}
@@ -386,6 +398,16 @@ public class PortfolioServiceImpl implements PortfolioService {
 			return assignmentDao.loadAssignments((Page)element, searchString);
 		}
 		return null;
+	}
+
+	@Override
+	public List<Assignment> getBindersAssignmentsTemplates(BinderRef binder) {
+		return assignmentDao.loadBinderAssignmentsTemplates(binder);
+	}
+
+	@Override
+	public boolean hasBinderAssignmentTemplate(BinderRef binder) {
+		return assignmentDao.hasBinderAssignmentTemplate(binder);
 	}
 
 	@Override
@@ -402,13 +424,45 @@ public class PortfolioServiceImpl implements PortfolioService {
 	public boolean deleteAssignment(Assignment assignment) {
 		Assignment reloadedAssignment = assignmentDao.loadAssignmentByKey(assignment.getKey());
 		Section reloadedSection = reloadedAssignment.getSection();
-		boolean removed = false;
+		Binder reloadedBinder = reloadedAssignment.getBinder();
+
 		if(reloadedSection != null) {
-			removed = ((SectionImpl)reloadedSection).getAssignments().remove(reloadedAssignment);
-		}
-		assignmentDao.deleteAssignment(reloadedAssignment);
-		if(removed) {
+			((SectionImpl)reloadedSection).getAssignments().remove(reloadedAssignment);
+			assignmentDao.deleteAssignment(reloadedAssignment);
 			binderDao.updateSection(reloadedSection);
+		} else if(reloadedBinder != null) {
+			Set<Binder> bindersToUpdate = new HashSet<>();
+			List<Assignment> synchedBindersAssignments = assignmentDao.loadAssignmentReferences(reloadedAssignment);
+			for(Assignment synchedAssignment:synchedBindersAssignments) {
+				List<Assignment> instantiatedAssignments = assignmentDao.loadAssignmentReferences(synchedAssignment);
+				Set<Section> sectionsToUpdate = new HashSet<>();
+				for(Assignment instantiatedAssignment:instantiatedAssignments) {
+					if(instantiatedAssignment.getSection() != null) {
+						Section assignmentSection = instantiatedAssignment.getSection();
+						if(((SectionImpl)assignmentSection).getAssignments().remove(instantiatedAssignment)) {
+							sectionsToUpdate.add(assignmentSection);
+						}
+						assignmentDao.deleteAssignment(instantiatedAssignment);
+					}
+				}
+				for(Section section:sectionsToUpdate) {
+					binderDao.updateSection(section);
+				}
+				
+				if(synchedAssignment.getBinder() != null) {
+					Binder synchedBinder = synchedAssignment.getBinder();
+					if(((BinderImpl)synchedBinder).getAssignments().remove(reloadedAssignment)) {
+						bindersToUpdate.add(synchedBinder);
+					}
+					assignmentDao.deleteAssignment(synchedAssignment);
+				}
+			}
+			
+			for(Binder binder:bindersToUpdate) {
+				binderDao.updateBinder(binder);
+			}
+			assignmentDao.deleteAssignment(reloadedAssignment);
+			binderDao.updateBinder(reloadedBinder);
 		}
 		return true;
 	}
@@ -427,7 +481,8 @@ public class PortfolioServiceImpl implements PortfolioService {
 				Page page = appendNewPage(author, reloadedAssignment.getTitle(), reloadedAssignment.getSummary(), null, false, null, section);
 				reloadedAssignment = assignmentDao.startFormAssignment(reloadedAssignment, page, author);
 				// create the session for the assignee
-				evaluationFormSessionDao.createSessionForPortfolio(author, page.getBody(), formEntry);
+				EvaluationFormSurvey survey = loadOrCreateSurvey(page.getBody(), formEntry);
+				loadOrCreateSession(survey, author);
 			}
 		}
 		dbInstance.commit();
@@ -435,6 +490,34 @@ public class PortfolioServiceImpl implements PortfolioService {
 				LoggingResourceable.wrap(reloadedAssignment.getSection()),
 				LoggingResourceable.wrap(reloadedAssignment));
 		return reloadedAssignment;
+	}
+	
+	@Override
+	public Page startAssignmentFromTemplate(Long assignmentKey, Identity author, String title, String summary, String imagePath, PageImageAlign align, SectionRef sectionRef) {
+		Page page = null;
+		Section section = binderDao.loadSectionByKey(sectionRef.getKey());
+		Assignment reloadedAssignmentTemplate = assignmentDao.loadAssignmentByKey(assignmentKey);
+		Assignment instanciatedAssignment = assignmentDao
+				.createAssignment(reloadedAssignmentTemplate, AssignmentStatus.inProgress, section, null, false);
+		if (instanciatedAssignment.getPage() == null) {
+			if (instanciatedAssignment.getAssignmentType() == AssignmentType.essay
+					|| instanciatedAssignment.getAssignmentType() == AssignmentType.document) {
+				page = appendNewPage(author, title, summary, null, null, section);
+				instanciatedAssignment = assignmentDao.startEssayAssignment(instanciatedAssignment, page, author);
+			} else if (instanciatedAssignment.getAssignmentType() == AssignmentType.form) {
+				RepositoryEntry formEntry = instanciatedAssignment.getFormEntry();
+				page = appendNewPage(author, instanciatedAssignment.getTitle(), instanciatedAssignment.getSummary(), null, false, null, section);
+				instanciatedAssignment = assignmentDao.startFormAssignment(instanciatedAssignment, page, author);
+				// create the session for the assignee
+				EvaluationFormSurvey survey = loadOrCreateSurvey(page.getBody(), formEntry);
+				loadOrCreateSession(survey, author);
+			}
+		}
+		dbInstance.commit();
+		ThreadLocalUserActivityLogger.log(PortfolioLoggingAction.PORTFOLIO_ASSIGNMENT_STARTED, getClass(),
+				LoggingResourceable.wrap(instanciatedAssignment.getSection()),
+				LoggingResourceable.wrap(instanciatedAssignment));
+		return page;
 	}
 
 	@Override
@@ -502,10 +585,20 @@ public class PortfolioServiceImpl implements PortfolioService {
 	public List<BinderStatistics> searchOwnedBinders(IdentityRef owner) {
 		return binderDao.searchOwnedBinders(owner, false);
 	}
-	
+
+	@Override
+	public int countOwnedBinders(IdentityRef owner) {
+		return binderDao.countOwnedBinders(owner, false);
+	}
+
 	@Override
 	public List<BinderStatistics> searchOwnedDeletedBinders(IdentityRef owner) {
 		return binderDao.searchOwnedBinders(owner, true);
+	}
+
+	@Override
+	public List<BinderStatistics> searchOwnedLastBinders(IdentityRef owner, int maxResults) {
+		return binderDao.searchOwnedLastBinders(owner, maxResults);
 	}
 
 	@Override
@@ -802,7 +895,7 @@ public class PortfolioServiceImpl implements PortfolioService {
 	public VFSLeaf getPosterImageLeaf(BinderLight binder) {
 		String imagePath = binder.getImagePath();
 		if(StringHelper.containsNonWhitespace(imagePath)) {
-			OlatRootFileImpl leaf = new OlatRootFileImpl("/" + imagePath, null);
+			VFSLeaf leaf = VFSManager.olatRootLeaf("/" + imagePath);
 			if(leaf.exists()) {
 				return leaf;
 			}
@@ -841,8 +934,18 @@ public class PortfolioServiceImpl implements PortfolioService {
 	}
 
 	@Override
+	public int countOwnedPages(IdentityRef owner) {
+		return pageDao.countOwnedPages(owner);
+	}
+
+	@Override
 	public List<Page> searchOwnedPages(IdentityRef owner, String searchString) {
 		return pageDao.getOwnedPages(owner, searchString);
+	}
+
+	@Override
+	public List<Page> searchOwnedLastPages(IdentityRef owner, int maxResults) {
+		return pageDao.getLastPages(owner, maxResults);
 	}
 
 	@Override
@@ -876,8 +979,8 @@ public class PortfolioServiceImpl implements PortfolioService {
 	}
 
 	@Override
-	public Page getLastPage(Identity owner, boolean mandatoryBinder) {
-		return pageDao.getLastPage(owner, mandatoryBinder);
+	public List<Page> getLastPages(Identity owner, int maxResults) {
+		return pageDao.getLastPages(owner, maxResults);
 	}
 
 	@Override
@@ -968,6 +1071,12 @@ public class PortfolioServiceImpl implements PortfolioService {
 	public void moveDownPagePart(Page page, PagePart part) {
 		PageBody body = pageDao.loadPageBodyByKey(page.getBody().getKey());
 		pageDao.moveDownPart(body, part);
+	}
+
+	@Override
+	public void movePagePart(Page page, PagePart partToMove, PagePart sibling, boolean after) {
+		PageBody body = pageDao.loadPageBodyByKey(page.getBody().getKey());
+		pageDao.movePart(body, partToMove, sibling, after);
 	}
 
 	@Override
@@ -1064,9 +1173,6 @@ public class PortfolioServiceImpl implements PortfolioService {
 			}
 			((PageImpl)reloadedPage).setLastPublicationDate(now);
 			Section section = reloadedPage.getSection();
-			// auto update the status of the evaluation form of the authors of the binder
-			changeAssignmentStatus(page, section, EvaluationFormSessionStatus.done);
-			
 			if(section != null) {
 				SectionStatus sectionStatus = section.getSectionStatus();
 				if(currentStatus == PageStatus.closed) {
@@ -1078,10 +1184,16 @@ public class PortfolioServiceImpl implements PortfolioService {
 					((SectionImpl)section).setSectionStatus(SectionStatus.inProgress);
 					binderDao.updateSection(section);
 				}
+				List<Identity> owners = getOwners(page, section);
+				for (Identity owner: owners) {
+					EvaluationFormSurveyRef survey = evaluationFormManager.loadSurvey(getSurveyIdent(page.getBody()));
+					EvaluationFormParticipationRef participation = evaluationFormManager.loadParticipationByExecutor(survey, owner);
+					EvaluationFormSession session = evaluationFormManager.loadSessionByParticipation(participation);
+					evaluationFormManager.finishSession(session);
+				}
 			}
 		} else if(status == PageStatus.inRevision) {
 			Section section = reloadedPage.getSection();
-			changeAssignmentStatus(page, section, EvaluationFormSessionStatus.inProgress);
 			if(section != null) {
 				SectionStatus sectionStatus = section.getSectionStatus();
 				if(sectionStatus == null || sectionStatus == SectionStatus.notStarted || sectionStatus == SectionStatus.closed) {
@@ -1089,6 +1201,13 @@ public class PortfolioServiceImpl implements PortfolioService {
 						((SectionImpl)section).setSectionStatus(SectionStatus.inProgress);
 						binderDao.updateSection(section);
 					}
+				}
+				List<Identity> owners = getOwners(page, section);
+				for (Identity owner: owners) {
+					EvaluationFormSurveyRef survey = evaluationFormManager.loadSurvey(getSurveyIdent(page.getBody()));
+					EvaluationFormParticipationRef participation = evaluationFormManager.loadParticipationByExecutor(survey, owner);
+					EvaluationFormSession session = evaluationFormManager.loadSessionByParticipation(participation);
+					evaluationFormManager.reopenSession(session);
 				}
 			}
 			pageUserInfosDao.updateStatus(reloadedPage, PageUserStatus.inProcess, PageUserStatus.done);
@@ -1104,27 +1223,12 @@ public class PortfolioServiceImpl implements PortfolioService {
 		return pageDao.updatePage(reloadedPage);
 	}
 	
-	/**
-	 * Auto update the status of the evaluation form of the authors of the binder.
-	 * 
-	 * @param page The page where the evaluation is
-	 * @param section The section of the page
-	 * @param newStatus The new status of the evaluation
-	 */
-	private void changeAssignmentStatus(Page page, Section section, EvaluationFormSessionStatus newStatus) {
-		// auto update the status of the evaluation form of the authors of the binder
+	private List<Identity> getOwners(Page page, Section section) {
 		Assignment assignment = assignmentDao.loadAssignment(page.getBody());
 		if(assignment != null && assignment.getAssignmentType() == AssignmentType.form) {
-			List<Identity> owners = getMembers(section.getBinder(), PortfolioRoles.owner.name());
-			for(Identity owner:owners) {
-				evaluationFormSessionDao.changeStatusOfSessionForPortfolioEvaluation(owner, page.getBody(), newStatus);
-			}
-		} else if(evaluationFormSessionDao.hasSessionForPortfolioEvaluation(page.getBody())) {
-			List<Identity> owners = getMembers(section.getBinder(), PortfolioRoles.owner.name());
-			for(Identity owner:owners) {
-				evaluationFormSessionDao.changeStatusOfSessionForPortfolioEvaluation(owner, page.getBody(), newStatus);
-			}
+			return getMembers(section.getBinder(), PortfolioRoles.owner.name());
 		}
+		return new ArrayList<>();
 	}
 	
 	@Override
@@ -1376,5 +1480,46 @@ public class PortfolioServiceImpl implements PortfolioService {
 		}
 	}
 	
+	@Override
+	public EvaluationFormSurvey loadOrCreateSurvey(PageBody body, RepositoryEntry formEntry) {
+		EvaluationFormSurveyIdentifier surveyIdent = getSurveyIdent(body);
+		EvaluationFormSurvey survey = evaluationFormManager.loadSurvey(surveyIdent);
+		if (survey == null) {
+			survey = evaluationFormManager.createSurvey(surveyIdent, formEntry);
+		}
+		return survey;
+	}
+
+	private OLATResourceable getOLATResourceableForEvaluationForm(PageBody body) {
+		OLATResourceable ores = OresHelper.createOLATResourceableInstance("portfolio-evaluation", body.getKey());
+		return ores;
+	}
+
+	@Override
+	public EvaluationFormSession loadOrCreateSession(EvaluationFormSurvey survey, Identity executor) {
+		EvaluationFormParticipation participation = evaluationFormManager.loadParticipationByExecutor(survey, executor);
+		if (participation == null) {
+			participation = evaluationFormManager.createParticipation(survey, executor);
+		}
+		
+		EvaluationFormSession session = evaluationFormManager.loadSessionByParticipation(participation);
+		if (session == null) {
+			session = evaluationFormManager.createSession(participation);
+		}
+		return session;
+	}
+
+	@Override
+	public void deleteSurvey(PageBody body) {
+		EvaluationFormSurvey survey = evaluationFormManager.loadSurvey(getSurveyIdent(body));
+		if (survey != null) {
+			evaluationFormManager.deleteSurvey(survey);
+		}
+	}
+	
+	private EvaluationFormSurveyIdentifier getSurveyIdent(PageBody body) {
+		OLATResourceable ores = getOLATResourceableForEvaluationForm(body);
+		return EvaluationFormSurveyIdentifier.of(ores);
+	}
 	
 }

@@ -31,12 +31,27 @@ import org.junit.Test;
 public class TextModeTest {
 	
 	@Test
-	public void guessOneLine() {
-		TextMode mode1 = TextMode.guess("bla bla");
+	public void textModeOneLine_text() {
+		String text = "bla bla";
+		TextMode mode1 = TextMode.guess(text);
 		Assert.assertEquals(TextMode.oneLine, mode1);
 		
-		TextMode mode2 = TextMode.guess("<p>bla bla</p>");
+		String fromOneLine = TextMode.fromOneLine(text);
+		Assert.assertEquals("<p>bla bla</p>", fromOneLine);
+
+		String toOneLine = TextMode.toOneLine(text);
+		Assert.assertEquals("bla bla", toOneLine);
+	}
+	
+	@Test
+	public void textModeOneLine_paragraph() {
+		String paragraph = "<p>bla bla</p>"; 
+		
+		TextMode mode2 = TextMode.guess("paragraph");
 		Assert.assertEquals(TextMode.oneLine, mode2);
+
+		String toOneLine = TextMode.toOneLine(paragraph);
+		Assert.assertEquals("bla bla", toOneLine);
 	}
 	
 	@Test
@@ -68,5 +83,8 @@ public class TextModeTest {
 		
 		String linedText2 = TextMode.toMultiLine("<p>Lorem</p>ipsum<br>dolor<p>sit amet</p>");
 		Assert.assertEquals("Lorem\nipsum\ndolor\nsit amet", linedText2);
+		
+		String linedText3 = TextMode.toMultiLine("<p>Lorem</p>ipsum<br>dolor<p>sit \u00E4met</p>");
+		Assert.assertEquals("Lorem\nipsum\ndolor\nsit \u00E4met", linedText3);
 	}
 }

@@ -23,15 +23,16 @@ import java.util.Calendar;
 import java.util.Date;
 import java.util.List;
 
+import org.apache.logging.log4j.Logger;
 import org.olat.commons.calendar.CalendarUtils;
 import org.olat.core.commons.persistence.DB;
-import org.olat.core.logging.OLog;
+import org.olat.core.commons.persistence.QueryBuilder;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.StringHelper;
 import org.olat.repository.RepositoryEntry;
 import org.olat.repository.RepositoryEntryLifeCycleValue;
 import org.olat.repository.RepositoryEntryManagedFlag;
-import org.olat.repository.RepositoryEntryStatus;
+import org.olat.repository.RepositoryEntryStatusEnum;
 import org.olat.repository.RepositoryModule;
 import org.olat.repository.RepositoryService;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -46,7 +47,7 @@ import org.springframework.stereotype.Service;
 @Service
 public class AutomaticLifecycleService {
 	
-	private static final OLog log = Tracing.createLoggerFor(AutomaticLifecycleService.class);
+	private static final Logger log = Tracing.createLoggerFor(AutomaticLifecycleService.class);
 	
 	@Autowired
 	private DB dbInstance;
@@ -57,7 +58,7 @@ public class AutomaticLifecycleService {
 	
 	public void manage() {
 		close();
-		unpublish();
+		//unpublish();
 		delete();
 	}
 	
@@ -71,7 +72,7 @@ public class AutomaticLifecycleService {
 				try {
 					boolean closeManaged = RepositoryEntryManagedFlag.isManaged(entry, RepositoryEntryManagedFlag.close);
 					if(!closeManaged) {
-						log.audit("Automatic closing course: " + entry.getDisplayname() + " [" + entry.getKey() + "]");
+						log.info(Tracing.M_AUDIT, "Automatic closing course: " + entry.getDisplayname() + " [" + entry.getKey() + "]");
 						repositoryService.closeRepositoryEntry(entry, null, false);
 						dbInstance.commit();
 					}
@@ -84,55 +85,12 @@ public class AutomaticLifecycleService {
 	}
 	
 	public List<RepositoryEntry> getRepositoryEntriesToClose(Date date) {
-		StringBuilder sb = new StringBuilder();
+		QueryBuilder sb = new QueryBuilder(512);//TODO repo unit
 		sb.append("select v from repositoryentry as v ")
 		  .append(" inner join fetch v.olatResource as ores")
 		  .append(" inner join fetch v.statistics as statistics")
 		  .append(" inner join fetch v.lifecycle as lifecycle")
-		  .append(" where lifecycle.validTo<:now and v.statusCode=").append(RepositoryEntryStatus.REPOSITORY_STATUS_OPEN)
-		  .append(" and v.access>0");
-		
-		Calendar cal = Calendar.getInstance();
-		cal.setTime(date);
-		CalendarUtils.getEndOfDay(cal);
-		Date endOfDay = cal.getTime();
-		
-		return dbInstance.getCurrentEntityManager()
-				.createQuery(sb.toString(), RepositoryEntry.class)
-				.setParameter("now", endOfDay)
-				.getResultList();
-	}
-	
-	private void unpublish() {
-		String autoUnpublish = repositoryModule.getLifecycleAutoUnpublish();
-		if(StringHelper.containsNonWhitespace(autoUnpublish)) {
-			RepositoryEntryLifeCycleValue autoUnpublishVal = RepositoryEntryLifeCycleValue.parse(autoUnpublish);
-			Date markerDate = autoUnpublishVal.limitDate(new Date());
-			List<RepositoryEntry> entriesToUnpublish = getRepositoryEntriesToUnpublish(markerDate);
-			for(RepositoryEntry entry:entriesToUnpublish) {
-				try {
-					boolean closeManaged = RepositoryEntryManagedFlag.isManaged(entry, RepositoryEntryManagedFlag.close);
-					if(!closeManaged) {
-						log.audit("Automatic unpublishing course: " + entry.getDisplayname() + " [" + entry.getKey() + "]");
-						repositoryService.unpublishRepositoryEntry(entry);
-						dbInstance.commit();
-					}
-				} catch (Exception e) {
-					log.error("",  e);
-					dbInstance.commitAndCloseSession();
-				}
-			}
-		}
-	}
-	
-	public List<RepositoryEntry> getRepositoryEntriesToUnpublish(Date date) {
-		StringBuilder sb = new StringBuilder();
-		sb.append("select v from repositoryentry as v ")
-		  .append(" inner join fetch v.olatResource as ores")
-		  .append(" inner join fetch v.statistics as statistics")
-		  .append(" inner join fetch v.lifecycle as lifecycle")
-		  .append(" where lifecycle.validTo<:now and not(v.statusCode=").append(RepositoryEntryStatus.REPOSITORY_STATUS_UNPUBLISHED).append(")")
-		  .append(" and v.access>0");
+		  .append(" where lifecycle.validTo<:now and v.status ").in(RepositoryEntryStatusEnum.preparationToPublished());//TODO repo access
 		
 		Calendar cal = Calendar.getInstance();
 		cal.setTime(date);
@@ -155,7 +113,7 @@ public class AutomaticLifecycleService {
 				try {
 					boolean deleteManaged = RepositoryEntryManagedFlag.isManaged(entry, RepositoryEntryManagedFlag.delete);
 					if(!deleteManaged) {
-						log.audit("Automatic deleting (soft) course: " + entry.getDisplayname() + " [" + entry.getKey() + "]");
+						log.info(Tracing.M_AUDIT, "Automatic deleting (soft) course: " + entry.getDisplayname() + " [" + entry.getKey() + "]");
 						repositoryService.deleteSoftly(entry, null, true, false);
 						dbInstance.commit();
 					}
@@ -168,12 +126,12 @@ public class AutomaticLifecycleService {
 	}
 	
 	public List<RepositoryEntry> getRepositoryEntriesToDelete(Date date) {
-		StringBuilder sb = new StringBuilder();
+		QueryBuilder sb = new QueryBuilder(512);
 		sb.append("select v from repositoryentry as v ")
 		  .append(" inner join fetch v.olatResource as ores")
 		  .append(" inner join fetch v.statistics as statistics")
-		  .append(" inner join fetch v.lifecycle as lifecycle")
-		  .append(" where lifecycle.validTo<:now and v.access>0");
+		  .append(" inner join fetch v.lifecycle as lifecycle")//TODO repo access
+		  .append(" where lifecycle.validTo<:now and v.status ").in(RepositoryEntryStatusEnum.preparationToClosed());
 		
 		Calendar cal = Calendar.getInstance();
 		cal.setTime(date);

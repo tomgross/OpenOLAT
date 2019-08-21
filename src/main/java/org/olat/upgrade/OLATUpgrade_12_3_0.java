@@ -24,11 +24,12 @@ import java.net.URI;
 import java.util.Date;
 import java.util.List;
 
+import org.apache.logging.log4j.Logger;
 import org.olat.basesecurity.BaseSecurity;
-import org.olat.core.commons.modules.bc.vfs.OlatRootFolderImpl;
 import org.olat.core.commons.persistence.DB;
 import org.olat.core.id.Identity;
 import org.olat.core.id.OLATResourceable;
+import org.olat.core.logging.Tracing;
 import org.olat.core.util.StringHelper;
 import org.olat.core.util.resource.OresHelper;
 import org.olat.core.util.vfs.VFSContainer;
@@ -70,6 +71,8 @@ import uk.ac.ed.ph.jqtiplus.resolution.ResolvedAssessmentItem;
  */
 public class OLATUpgrade_12_3_0 extends OLATUpgrade {
 
+	private static final Logger log = Tracing.createLoggerFor(OLATUpgrade_12_3_0.class);
+
 	private static final int BATCH_SIZE = 500;
 	
 	private static final String VERSION = "OLAT_12.3.0";
@@ -104,11 +107,6 @@ public class OLATUpgrade_12_3_0 extends OLATUpgrade {
 	}
 
 	@Override
-	public boolean doPreSystemInitUpgrade(UpgradeManager upgradeManager) {
-		return false;
-	}
-
-	@Override
 	public boolean doPostSystemInitUpgrade(UpgradeManager upgradeManager) {
 		UpgradeHistoryData uhd = upgradeManager.getUpgradesHistory(VERSION);
 		if (uhd == null) {
@@ -128,9 +126,9 @@ public class OLATUpgrade_12_3_0 extends OLATUpgrade {
 		uhd.setInstallationComplete(allOk);
 		upgradeManager.setUpgradesHistory(uhd, VERSION);
 		if(allOk) {
-			log.audit("Finished OLATUpgrade_12_3_0 successfully!");
+			log.info(Tracing.M_AUDIT, "Finished OLATUpgrade_12_3_0 successfully!");
 		} else {
-			log.audit("OLATUpgrade_12_3_0 not finished, try to restart OpenOLAT!");
+			log.info(Tracing.M_AUDIT, "OLATUpgrade_12_3_0 not finished, try to restart OpenOLAT!");
 		}
 		return allOk;
 	}
@@ -307,7 +305,7 @@ public class OLATUpgrade_12_3_0 extends OLATUpgrade {
 			
 			Forum forum = forumManager.loadForum(element.getForumKey());
 			if(forum == null) {
-				log.error("Missing forum", null);
+				log.error("Missing forum");
 				return;
 			}
 			
@@ -335,7 +333,7 @@ public class OLATUpgrade_12_3_0 extends OLATUpgrade {
 	public Long getFileSize(Long forumKey) {
 		StringBuilder sb = new StringBuilder();
 		sb.append("/forum/").append(forumKey).append("/");
-		OlatRootFolderImpl forumContainer = new OlatRootFolderImpl(sb.toString(), null);
+		VFSContainer forumContainer = VFSManager.olatRootContainer(sb.toString(), null);
 		if(forumContainer.exists() && !forumContainer.getItems().isEmpty()) {
 			VFSItem vl = forumContainer.getItems().get(0);
 			if(vl instanceof VFSLeaf) {
@@ -359,7 +357,7 @@ public class OLATUpgrade_12_3_0 extends OLATUpgrade {
 		boolean allOk = true;
 		if (!uhd.getBooleanDataValue(MOVE_DOC_POOL_INFOS_PAGE)) {
 			String path = "/" + TaxonomyService.DIRECTORY + "/" + DocumentPoolModule.INFOS_PAGE_DIRECTORY;
-			VFSContainer taxonomyContainer =  new OlatRootFolderImpl(path, null);
+			VFSContainer taxonomyContainer =  VFSManager.olatRootContainer(path, null);
 			VFSContainer documentPoolContainer = documentPoolModule.getInfoPageContainer();
 			if(taxonomyContainer.exists()
 					&& documentPoolContainer.getItems(new VFSLeafButSystemFilter()).isEmpty()

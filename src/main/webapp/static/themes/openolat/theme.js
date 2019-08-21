@@ -15,7 +15,7 @@
 		 */
 		ThemeJS.prototype.addClientLinks = function(){
 			var logoElement = $(".o_navbar-brand");
-			if (logoElement && logoElement.size() > 0 && !logoElement.hasClass('o_clickable')) {
+			if (logoElement && logoElement.length > 0 && !logoElement.hasClass('o_clickable')) {
 				// add marker css to remember this link is already ok, add link reference
 				logoElement.addClass('o_clickable');					
 				logoElement.prop('href', "http://www.openolat.org");
@@ -43,8 +43,8 @@
 			this.dmzCarrousel = jQuery().ooBgCarrousel();
 			this.dmzCarrousel.initCarrousel({
 				query: "#o_body.o_dmz #o_bg", 
-				images: ['learn-bg.jpg', 'christian-bg.jpg', 'classroom-bg.jpg', 'holger-bg.jpg', 'oo-bg.jpg', 'florian-bg.jpg' ], 
-				shuffle: false,
+				images: ['infinite.jpg', 'holger.jpg', 'marco.jpg', 'openolat_award.jpg', 'weg.jpg', 'christian.jpg'], 
+				shuffle: true,
 				shuffleFirst: false,
 				durationshow: 5000,
 				durationout: 500,

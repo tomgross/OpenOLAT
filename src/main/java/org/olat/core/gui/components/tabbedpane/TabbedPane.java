@@ -42,7 +42,7 @@ import org.olat.core.id.OLATResourceable;
 import org.olat.core.id.context.BusinessControlFactory;
 import org.olat.core.id.context.ContextEntry;
 import org.olat.core.id.context.StateEntry;
-import org.olat.core.logging.OLog;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.Util;
 import org.olat.core.util.resource.OresHelper;
@@ -53,7 +53,7 @@ import org.olat.core.util.resource.OresHelper;
  * @author Felix Jost
  */
 public class TabbedPane extends Container implements Activateable2 {
-	private static final OLog log = Tracing.createLoggerFor(TabbedPane.class);
+	private static final Logger log = Tracing.createLoggerFor(TabbedPane.class);
 	private static final ComponentRenderer RENDERER = new TabbedPaneRenderer();
 
 	/**
@@ -170,6 +170,18 @@ public class TabbedPane extends Container implements Activateable2 {
 			super.put("atp", tab.getComponent()); 
 		}
 		return tabPanes.size() - 1;
+	}
+	
+	public int addTab(int pos, String displayName, Controller controller) {
+		TabPane tab = new TabPane(displayName, controller);
+		tabPanes.add(pos, tab);
+		if (selectedPane == -1) {
+			selectedPane = 0; // if no pane has been selected, select the first one
+			super.put("atp", tab.getComponent()); 
+		} else if(selectedPane == pos) {
+			super.put("atp", tab.getComponent());
+		}
+		return pos;
 	}
 	
 	public boolean containsTab(Component component) {

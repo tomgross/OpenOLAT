@@ -35,6 +35,7 @@ import java.util.Locale;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 
+import org.apache.logging.log4j.Logger;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -70,7 +71,6 @@ import org.olat.core.id.context.BusinessControlFactory;
 import org.olat.core.id.context.ContextEntry;
 import org.olat.core.id.context.HistoryPoint;
 import org.olat.core.logging.AssertException;
-import org.olat.core.logging.OLog;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.FileUtils;
 import org.olat.core.util.StringHelper;
@@ -89,13 +89,13 @@ import org.springframework.beans.factory.annotation.Autowired;
  */
 public class AjaxController extends DefaultController {
 	private static final String VELOCITY_ROOT = Util.getPackageVelocityRoot(AjaxController.class);
-	private static final OLog log = Tracing.createLoggerFor(AjaxController.class);
+	private static final Logger log = Tracing.createLoggerFor(AjaxController.class);
 	private final VelocityContainer myContent;
 	private final VelocityContainer pollPeriodContent;
 	private final Panel mainP;
 	private final Panel pollperiodPanel;
 	// protected only for performance improvement
-	protected List<WindowCommand> windowcommands = new ArrayList<WindowCommand>(3);
+	protected List<WindowCommand> windowcommands = new ArrayList<>(3);
 	private final Mapper m, sbm;
 	private final  MapperKey mKey, sbmKey;
 	
@@ -120,9 +120,6 @@ public class AjaxController extends DefaultController {
 		
 		myContent = new VelocityContainer("jsserverpart", VELOCITY_ROOT + "/serverpart.html", null, this);
 		myContent.contextPut("pollperiod", Integer.valueOf(pollperiod));
-		
-		//more debug information: OLAT-3529
-		if (ajaxEnabled) myContent.contextPut("isAdmin", Boolean.valueOf(ureq.getUserSession().getRoles().isOLATAdmin()));
 		
 		// create a mapper to not block main traffic when polling (or vica versa)
 		final Window window = wboImpl.getWindow();
@@ -311,7 +308,6 @@ public class AjaxController extends DefaultController {
 			      .append("\",\"cmd\":").append(Integer.toString(c.getCommand()))
 			      .append(",\"cda\":");
 			c.getSubJSON().write(writer);
-			c.getSubJSON().toString(2);
 			writer.append("}");
 		} catch (JSONException e) {
 			throw new AssertException("json exception:", e);

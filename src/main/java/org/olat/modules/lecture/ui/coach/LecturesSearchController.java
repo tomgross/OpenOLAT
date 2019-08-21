@@ -31,7 +31,6 @@ import org.olat.core.gui.control.Event;
 import org.olat.core.gui.control.WindowControl;
 import org.olat.core.gui.control.controller.BasicController;
 import org.olat.core.gui.control.generic.dtabs.Activateable2;
-import org.olat.core.id.Roles;
 import org.olat.core.id.context.ContextEntry;
 import org.olat.core.id.context.StateEntry;
 import org.olat.core.util.Util;
@@ -56,18 +55,14 @@ public class LecturesSearchController extends BasicController implements Activat
 	private LecturesSearchFormController searchForm;
 	private LecturesListSegmentController multipleUsersCtrl;
 	
-	private final boolean admin;
-	
 	@Autowired
 	private LectureService lectureService;
 	
 	public LecturesSearchController(UserRequest ureq, WindowControl wControl, TooledStackedPanel stackPanel) {
 		super(ureq, wControl, Util.createPackageTranslator(LectureRepositoryAdminController.class, ureq.getLocale()));
 		this.stackPanel = stackPanel;
-		Roles roles = ureq.getUserSession().getRoles();
-		admin = (roles.isUserManager() || roles.isOLATAdmin());
-		
-		searchForm = new LecturesSearchFormController(ureq, getWindowControl(), admin);
+
+		searchForm = new LecturesSearchFormController(ureq, getWindowControl());
 		listenTo(searchForm);
 		putInitialPanel(searchForm.getInitialComponent());
 	}
@@ -110,7 +105,7 @@ public class LecturesSearchController extends BasicController implements Activat
 		LectureStatisticsSearchParameters params = searchForm.getSearchParameters();
 		List<UserPropertyHandler> userPropertyHandlers = searchForm.getUserPropertyHandlers();
 		List<LectureBlockIdentityStatistics> statistics = lectureService
-				.getLecturesStatistics(params, userPropertyHandlers, getIdentity(), admin);
+				.getLecturesStatistics(params, userPropertyHandlers, getIdentity());
 		
 		Set<Long> identities = statistics.stream().map(LectureBlockIdentityStatistics::getIdentityKey)
 			     .collect(Collectors.toSet());

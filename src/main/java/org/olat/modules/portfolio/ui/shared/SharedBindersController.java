@@ -28,6 +28,7 @@ import java.util.List;
 import org.olat.basesecurity.BaseSecurityModule;
 import org.olat.core.commons.persistence.SortKey;
 import org.olat.core.gui.UserRequest;
+import org.olat.core.gui.components.Component;
 import org.olat.core.gui.components.form.flexible.FormItem;
 import org.olat.core.gui.components.form.flexible.FormItemContainer;
 import org.olat.core.gui.components.form.flexible.elements.FlexiTableElement;
@@ -42,6 +43,7 @@ import org.olat.core.gui.components.form.flexible.impl.elements.table.FlexiTable
 import org.olat.core.gui.components.form.flexible.impl.elements.table.FlexiTableSearchEvent;
 import org.olat.core.gui.components.form.flexible.impl.elements.table.SelectionEvent;
 import org.olat.core.gui.components.form.flexible.impl.elements.table.StaticFlexiCellRenderer;
+import org.olat.core.gui.components.stack.PopEvent;
 import org.olat.core.gui.components.stack.TooledStackedPanel;
 import org.olat.core.gui.control.Controller;
 import org.olat.core.gui.control.Event;
@@ -109,6 +111,7 @@ public class SharedBindersController extends FormBasicController implements Acti
 		setTranslator(Util.createPackageTranslator(PortfolioHomeController.class, getLocale(), getTranslator()));
 		
 		this.stackPanel = stackPanel;
+		stackPanel.addListener(this);
 		setTranslator(userManager.getPropertyHandlerTranslator(getTranslator()));
 		
 		isAdministrativeUser = securityModule.isUserAllowedAdminProps(ureq.getUserSession().getRoles());
@@ -159,11 +162,11 @@ public class SharedBindersController extends FormBasicController implements Acti
 				new AssessmentEntryCellRenderer(getTranslator())));
 		StaticFlexiCellRenderer selectRenderer = new StaticFlexiCellRenderer(translate("select"), "select");
 		selectRenderer.setIconRightCSS("o_icon-sw o_icon_start");
-		columnsModel.addFlexiColumnModel(new DefaultFlexiColumnModel(true, true, "select", -1, "select", false, null,
+		columnsModel.addFlexiColumnModel(new DefaultFlexiColumnModel(true, true, "select", null, -1, "select", false, null,
 				FlexiColumnModel.ALIGNMENT_LEFT, selectRenderer));
 		StaticFlexiCellRenderer leaveRenderer = new StaticFlexiCellRenderer(translate("leave"), "leave");
 		leaveRenderer.setIconRightCSS("o_icon-sw o_icon_delete");
-		columnsModel.addFlexiColumnModel(new DefaultFlexiColumnModel(false, false, "leave", -2, "leave", false, null,
+		columnsModel.addFlexiColumnModel(new DefaultFlexiColumnModel(false, false, "leave", null, -2, "leave", false, null,
 				FlexiColumnModel.ALIGNMENT_LEFT, leaveRenderer));
 		
 		model = new SharedBindersDataModel(columnsModel, getLocale());
@@ -220,7 +223,9 @@ public class SharedBindersController extends FormBasicController implements Acti
 	
 	@Override
 	protected void doDispose() {
-		//
+		if(stackPanel != null) {
+			stackPanel.removeListener(this);
+		}
 	}
 	
 	@Override
@@ -247,6 +252,19 @@ public class SharedBindersController extends FormBasicController implements Acti
 				}
 			}
 		}
+	}
+
+	@Override
+	public void event(UserRequest ureq, Component source, Event event) {
+		if(stackPanel == source) {
+			if(event instanceof PopEvent) {
+				PopEvent pe = (PopEvent)event;
+				if(pe.getController() == binderCtrl && binderCtrl != null) {
+					stackPanel.popUserObject(new SharedBinderAuthor(binderCtrl.getBinder().getKey()));
+				}
+			}
+		}
+		super.event(ureq, source, event);
 	}
 
 	@Override
@@ -351,6 +369,11 @@ public class SharedBindersController extends FormBasicController implements Acti
 			BinderConfiguration config = BinderConfiguration.createConfig(binder);
 			binderCtrl = new BinderController(ureq, swControl, stackPanel, secCallback, binder, config);
 			String displayName = StringHelper.escapeHtml(binder.getTitle());
+			
+			if(row.getIdentityKey() != null) {
+				String author = userManager.getUserDisplayName(row.getIdentityKey());
+				stackPanel.pushController(author, null, new SharedBinderAuthor(row.getBinderKey()));
+			}
 			stackPanel.pushController(displayName, binderCtrl);
 			return binderCtrl;
 		}
@@ -383,6 +406,32 @@ public class SharedBindersController extends FormBasicController implements Acti
 				c = Integer.compare(p1, p2);
 			}
 			return c;
+		}
+	}
+	
+	private static final class SharedBinderAuthor {
+		
+		private final Long binderKey;
+		
+		public SharedBinderAuthor(Long binderKey) {
+			this.binderKey = binderKey;
+		}
+
+		@Override
+		public int hashCode() {
+			return binderKey.hashCode();
+		}
+
+		@Override
+		public boolean equals(Object obj) {
+			if(this == obj) {
+				return true;
+			}
+			if(obj instanceof SharedBinderAuthor) {
+				SharedBinderAuthor spa = (SharedBinderAuthor)obj;
+				return binderKey.equals(spa.binderKey);
+			}
+			return false;
 		}
 	}
 }

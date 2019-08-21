@@ -19,14 +19,22 @@
  */
 package org.olat.repository.ui;
 
+import static org.olat.core.commons.services.doceditor.DocEditorConfigs.none;
+
 import javax.servlet.http.HttpServletRequest;
 
+import org.olat.core.commons.services.doceditor.DocEditor.Mode;
+import org.olat.core.commons.services.doceditor.DocEditorSecurityCallback;
+import org.olat.core.commons.services.doceditor.DocEditorSecurityCallbackBuilder;
+import org.olat.core.commons.services.doceditor.DocumentEditorService;
+import org.olat.core.commons.services.doceditor.ui.DocEditorController;
 import org.olat.core.commons.services.image.Size;
 import org.olat.core.commons.services.video.MovieService;
 import org.olat.core.dispatcher.mapper.Mapper;
 import org.olat.core.gui.UserRequest;
 import org.olat.core.gui.components.Component;
 import org.olat.core.gui.components.velocity.VelocityContainer;
+import org.olat.core.gui.control.Controller;
 import org.olat.core.gui.control.Event;
 import org.olat.core.gui.control.WindowControl;
 import org.olat.core.gui.control.controller.BasicController;
@@ -41,6 +49,7 @@ import org.olat.core.util.vfs.VFSContainer;
 import org.olat.core.util.vfs.VFSItem;
 import org.olat.core.util.vfs.VFSLeaf;
 import org.olat.core.util.vfs.VFSMediaResource;
+import org.olat.core.util.vfs.filters.VFSSystemItemFilter;
 import org.olat.fileresource.FileResourceManager;
 import org.olat.repository.RepositoryEntry;
 import org.olat.resource.OLATResource;
@@ -54,6 +63,8 @@ import org.springframework.beans.factory.annotation.Autowired;
  */
 public class WebDocumentRunController extends BasicController {
 
+	@Autowired
+	private DocumentEditorService docEditorService;
 	@Autowired
 	private MovieService movieService;
 
@@ -89,6 +100,14 @@ public class WebDocumentRunController extends BasicController {
 					mainVC.contextPut("height", 480);
 					mainVC.contextPut("width", 640);
 				}
+			} else if (docEditorService.hasEditor(getIdentity(), ureq.getUserSession().getRoles(), extension, Mode.VIEW, true)) {
+				DocEditorSecurityCallback secCallback = DocEditorSecurityCallbackBuilder.builder()
+						.withMode(Mode.VIEW)
+						.canClose(false)
+						.build();
+				Controller editCtrl = new DocEditorController(ureq, wControl, document, secCallback, none(), "o_web_document");
+				listenTo(editCtrl);
+				mainVC.put("content", editCtrl.getInitialComponent());
 			} else {
 				IFrameDisplayController idc = new IFrameDisplayController(ureq, getWindowControl(), document.getParentContainer(), null, null);
 				listenTo(idc);	
@@ -114,12 +133,9 @@ public class WebDocumentRunController extends BasicController {
 				.getFileResourceRootImpl(resource);
 		
 		LocalFileImpl document = null;
-		for(VFSItem item:fResourceFileroot.getItems()) {
+		for(VFSItem item:fResourceFileroot.getItems(new VFSSystemItemFilter())) {
 			if(item instanceof VFSLeaf && item instanceof LocalImpl) {
-				LocalFileImpl localItem = (LocalFileImpl)item;
-				if(localItem != null && !localItem.getBasefile().isHidden()) {
-					document = (LocalFileImpl)item;
-				}
+				document = (LocalFileImpl)item;
 			}	
 		}
 		return document;

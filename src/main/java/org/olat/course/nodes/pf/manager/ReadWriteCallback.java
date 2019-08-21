@@ -20,6 +20,7 @@
 package org.olat.course.nodes.pf.manager;
 
 import org.olat.admin.quota.QuotaConstants;
+import org.olat.core.CoreSpringFactory;
 import org.olat.core.commons.services.notifications.SubscriptionContext;
 import org.olat.core.util.vfs.Quota;
 import org.olat.core.util.vfs.QuotaManager;
@@ -81,11 +82,11 @@ public class ReadWriteCallback implements VFSSecurityCallback {
 	@Override
 	public Quota getQuota() {
 		if(quota == null) {
-			QuotaManager qm = QuotaManager.getInstance();
+			QuotaManager qm = CoreSpringFactory.getImpl(QuotaManager.class);
 			Quota q = qm.getCustomQuota(folderPath);
 			if (q == null) {
 				Quota defQuota = qm.getDefaultQuota(defaultQuota);
-				q = QuotaManager.getInstance().createQuota(folderPath, defQuota.getQuotaKB(), defQuota.getUlLimitKB());
+				q = qm.createQuota(folderPath, defQuota.getQuotaKB(), defQuota.getUlLimitKB());
 			}
 			setQuota(q);
 		}

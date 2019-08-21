@@ -71,9 +71,8 @@ public class RemindersPage {
 	 */
 	public RemindersPage openActionMenu(String title) {
 		By rowBy = By.xpath("//fieldset[contains(@class,'o_sel_course_reminder_list')]//table//tr[//td//a[contains(text(), '" + title + "')]]//td//a[contains(@class,'o_sel_course_reminder_tools')]");
-		List<WebElement> reminderListEls = browser.findElements(rowBy);
-		Assert.assertEquals(1, reminderListEls.size());
-		reminderListEls.get(0).click();
+		OOGraphene.waitElement(rowBy, browser);
+		browser.findElement(rowBy).click();
 		OOGraphene.waitBusy(browser);
 		return this;
 	}
@@ -85,6 +84,7 @@ public class RemindersPage {
 	 */
 	public RemindersPage sendReminders() {
 		By sendBy = By.cssSelector("div.o_callout_content ul.o_dropdown a.o_sel_course_reminder_send");
+		OOGraphene.waitElement(sendBy, browser);
 		browser.findElement(sendBy).click();
 		OOGraphene.waitBusy(browser);
 		return this;

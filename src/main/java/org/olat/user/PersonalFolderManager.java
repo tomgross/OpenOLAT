@@ -28,13 +28,13 @@ package org.olat.user;
 import java.io.File;
 import java.util.Locale;
 
+import org.apache.logging.log4j.Logger;
 import org.olat.core.commons.modules.bc.BriefcaseWebDAVProvider;
 import org.olat.core.commons.modules.bc.FolderConfig;
-import org.olat.core.commons.modules.bc.vfs.OlatRootFolderImpl;
 import org.olat.core.id.Identity;
-import org.olat.core.logging.OLog;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.FileUtils;
+import org.olat.core.util.vfs.VFSManager;
 import org.olat.user.manager.ManifestBuilder;
 
 /**
@@ -42,7 +42,7 @@ import org.olat.user.manager.ManifestBuilder;
  */
 public class PersonalFolderManager extends BriefcaseWebDAVProvider implements UserDataDeletable, UserDataExportable {
 	
-	private static final OLog log = Tracing.createLoggerFor(PersonalFolderManager.class);
+	private static final Logger log = Tracing.createLoggerFor(PersonalFolderManager.class);
 
 	@Override
 	public String getExporterID() {
@@ -82,24 +82,7 @@ public class PersonalFolderManager extends BriefcaseWebDAVProvider implements Us
 	 */
 	@Override
 	public void deleteUserData(Identity identity, String newDeletedUserName) {
-		new OlatRootFolderImpl(getRootPathFor(identity), null).deleteSilently();
-		log.audit("Personal-folder deleted for identity=" + identity.getKey());
-		
-		String userHome =  FolderConfig.getUserHomes().substring(1);
-		File metaHomeDir = new File(FolderConfig.getCanonicalMetaRoot(), userHome);
-		File metaHomeUserDir = new File(metaHomeDir, identity.getName());
-		if(metaHomeUserDir.exists()) {
-			// the meta-data under home/<USER> can be deleted and must not be renamed
-			FileUtils.deleteDirsAndFiles(metaHomeUserDir, true, true); 			
-			log.audit("User-Deletion: Delete meta-data homes directory for identity=" + identity.getKey() + " directory=" + metaHomeUserDir.getAbsolutePath());
-		}
-
-		File versionHomeDir = new File(FolderConfig.getCanonicalVersionRoot(), userHome);
-		File versionHomeUserDir = new File(versionHomeDir, identity.getName());
-		if(versionHomeUserDir.exists()) {
-			// the meta-data under home/<USER> can be deleted and must not be renamed
-			FileUtils.deleteDirsAndFiles(versionHomeUserDir, true, true); 			
-			log.audit("User-Deletion: Delete meta-data homes directory for identity=" + identity.getKey() + " directory=" + metaHomeUserDir.getAbsolutePath());
-		}
+		VFSManager.olatRootContainer(getRootPathFor(identity), null).deleteSilently();// will delete meta and version informations
+		log.info(Tracing.M_AUDIT, "Personal-folder deleted for identity=" + identity.getKey());
 	}
 }

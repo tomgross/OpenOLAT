@@ -19,12 +19,8 @@
  */
 package org.olat.portfolio.ui.artefacts.view.details;
 
-import javax.servlet.http.HttpServletRequest;
-
-import org.olat.core.CoreSpringFactory;
-import org.olat.core.commons.modules.bc.meta.MetaInfo;
-import org.olat.core.commons.modules.bc.meta.tagged.MetaTagged;
-import org.olat.core.dispatcher.mapper.Mapper;
+import org.olat.core.commons.services.vfs.VFSMetadata;
+import org.olat.core.commons.services.vfs.VFSRepositoryService;
 import org.olat.core.gui.UserRequest;
 import org.olat.core.gui.components.Component;
 import org.olat.core.gui.components.download.DownloadComponent;
@@ -40,6 +36,7 @@ import org.olat.core.gui.control.generic.closablewrapper.CloseableCalloutWindowC
 import org.olat.core.gui.control.generic.modal.DialogBoxController;
 import org.olat.core.gui.control.generic.modal.DialogBoxUIFactory;
 import org.olat.core.gui.media.MediaResource;
+import org.olat.core.util.vfs.VFSConstants;
 import org.olat.core.util.vfs.VFSItem;
 import org.olat.core.util.vfs.VFSLeaf;
 import org.olat.core.util.vfs.VFSMediaResource;
@@ -47,6 +44,7 @@ import org.olat.portfolio.manager.EPFrontendManager;
 import org.olat.portfolio.model.artefacts.AbstractArtefact;
 import org.olat.portfolio.model.artefacts.FileArtefact;
 import org.olat.portfolio.ui.artefacts.collect.EPCreateFileArtefactStepForm00;
+import org.springframework.beans.factory.annotation.Autowired;
 
 /**
  * Description:<br>
@@ -66,16 +64,19 @@ public class FileArtefactDetailsController extends BasicController {
 	private DialogBoxController delDialog;
 	private FileArtefact fArtefact;
 	private Controller fileUploadCtrl;
-	private EPFrontendManager ePFMgr;
 	private Link uploadLink;
 	private CloseableCalloutWindowController calloutCtrl;
 	private Panel viewPanel;
+	
+	@Autowired
+	private EPFrontendManager ePFMgr;
+	@Autowired
+	private VFSRepositoryService vfsRepositoryService;
 
 	public FileArtefactDetailsController(UserRequest ureq, WindowControl wControl, AbstractArtefact artefact, boolean readOnlyMode) {
 		super(ureq, wControl);
 		this.readOnlyMode = readOnlyMode;
 		fArtefact = (FileArtefact)artefact;
-		ePFMgr = (EPFrontendManager) CoreSpringFactory.getBean("epFrontendManager");
 		
 		viewPanel = new Panel("empty");
 		initViewDependingOnFileExistance(ureq);
@@ -98,22 +99,17 @@ public class FileArtefactDetailsController extends BasicController {
 		vC.put("download", downlC);	
 		vC.contextPut("filename", fArtefact.getFilename());
 		
-		if(file instanceof MetaTagged) {
-			MetaInfo meta = ((MetaTagged)file).getMetaInfo();
+		if(file.canMeta() == VFSConstants.YES) {
+			VFSMetadata meta = file.getMetaInfo();
 			vC.contextPut("meta", meta);
 			// show a preview thumbnail if possible
-			if (meta.isThumbnailAvailable()) {
-				VFSLeaf thumb = meta.getThumbnail(200, 200, false);
+			if(file instanceof VFSLeaf) {
+				VFSLeaf thumb = vfsRepositoryService.getThumbnail((VFSLeaf)file, meta, 200, 200, false);
 				if(thumb != null) {
 					mr = new VFSMediaResource(thumb);
 				}
 				if(mr != null) {
-					String thumbMapper = registerMapper(ureq, new Mapper() {
-						@Override
-						public MediaResource handle(String relPath, HttpServletRequest request) {
-							return mr;
-						}
-					});					
+					String thumbMapper = registerMapper(ureq, (relPath, request) ->  mr);					
 					vC.contextPut("thumbMapper", thumbMapper);
 				}
 			}

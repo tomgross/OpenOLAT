@@ -38,7 +38,8 @@ import org.olat.core.id.Identity;
 import org.olat.core.commons.persistence.DB;
 import org.olat.core.id.OLATResourceable;
 import org.olat.core.logging.AssertException;
-import org.olat.core.manager.BasicManager;
+import org.apache.logging.log4j.Logger;
+import org.olat.core.logging.Tracing;
 import org.olat.core.util.StringHelper;
 import org.olat.group.BusinessGroup;
 import org.olat.group.BusinessGroupRef;
@@ -53,10 +54,9 @@ import org.springframework.beans.factory.annotation.Autowired;
  * Comment:  
  * 
  */
-public class PropertyManager extends BasicManager implements UserDataDeletable {
+public class PropertyManager implements UserDataDeletable {
 
-	private final DB dbInstance;
-
+	private static final Logger log = Tracing.createLoggerFor(PropertyManager.class);
 	private static PropertyManager INSTANCE;
 
 	@Autowired
@@ -167,7 +167,7 @@ public class PropertyManager extends BasicManager implements UserDataDeletable {
 				.getResultList();
 
 		if (props == null || props.size() != 1) {
-			if(isLogDebugEnabled()) logDebug("Could not find property: " + name);
+			if(log.isDebugEnabled()) log.debug("Could not find property: " + name);
 			return null;
 		}
 		return props.get(0);
@@ -594,7 +594,7 @@ public class PropertyManager extends BasicManager implements UserDataDeletable {
 		
 		List<Property> props = findProperties(identity, grp, resourceable, category, name);
 		if (props == null || props.size() == 0) {
-			if(isLogDebugEnabled()) logDebug("Could not find property: " + name);
+			if(log.isDebugEnabled()) log.debug("Could not find property: " + name);
 			return null;
 		}
 		else if (props.size() > 1) {
@@ -767,8 +767,8 @@ public class PropertyManager extends BasicManager implements UserDataDeletable {
 	@Override
 	public void deleteUserData(Identity identity, String newDeletedUserName) {
 		deleteProperties(identity, null, null, null, null);
-		if(isLogDebugEnabled()) {
-			logDebug("All properties deleted for identity=" + identity);
+		if(log.isDebugEnabled()) {
+			log.debug("All properties deleted for identity=" + identity);
 		}
 	}
 

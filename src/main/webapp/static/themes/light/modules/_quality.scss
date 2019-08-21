@@ -1,0 +1,300 @@
+.o_qual_main {
+
+	/* --- Data collection dc_status in configuration view --- */
+	.o_labeled,
+	.o_toolbar .o_tools_container a.o_labeled {
+		&.o_qual_dc_status_preparation {
+			background-color: 	$o-qual-dc-preparation-color;
+			border-color: 		$o-qual-dc-preparation-color;
+			color: 				$o-qual-status-color-bright;
+		}
+		&.o_qual_dc_status_ready {
+			background-color: 	$o-qual-dc-ready-color;
+			border-color: 		$o-qual-dc-ready-color;
+			color: 				$o-qual-status-color-bright;
+		}
+		&.o_qual_dc_status_running {
+			background-color: 	$o-qual-dc-running-color;
+			border-color: 		$o-qual-dc-running-color;
+			color: 				$o-qual-status-color-bright;
+		}
+		&.o_qual_dc_status_finished {
+			background-color: 	$o-qual-dc-finished-color;
+			border-color: 		$o-qual-dc-finished-color;
+			color: 				$o-qual-status-color-bright;
+		}
+	}	
+	.o_toolbar .o_tools_container a.o_labeled:hover {
+		&.o_qual_dc_status_preparation {
+			background-color: 	darken($o-qual-dc-preparation-color,10%);
+		}
+		&.o_qual_dc_status_ready {
+			background-color: 	darken($o-qual-dc-ready-color,10%);
+		}
+		&.o_qual_dc_status_running {
+			background-color: 	darken($o-qual-dc-running-color,10%);
+		}
+		&.o_qual_dc_status_finished {
+			background-color: 	darken($o-qual-dc-finished-color,10%);
+		}
+	}
+	
+	/* --- Data collection status in data collection list --- */
+
+	.o_qual_dc_list {
+		tbody {
+			tr {
+				// status
+				td:nth-child(1) {
+					padding-top: 3px;
+				}
+			}
+		}
+	}
+	.o_labeled_light,
+	.o_toolbar .o_tools_container a.o_labeled_light {		
+		&.o_qual_dc_status_preparation_light {
+			border-color: 		$o-qual-dc-preparation-color;
+			color: 				$o-qual-dc-preparation-color;
+		}
+		&.o_qual_dc_status_ready_light {
+			border-color: 		$o-qual-dc-ready-color;
+			color: 				$o-qual-dc-ready-color-dark;
+		}
+		&.o_qual_dc_status_running_light {
+			border-color: 		$o-qual-dc-running-color;
+			color: 				$o-qual-dc-running-color;
+		}
+		&.o_qual_dc_status_finished_light {
+			border-color: 		$o-qual-dc-finished-color;
+			color: 				$o-qual-dc-finished-color;
+		}
+	}
+	
+	
+	/* --- Status in executor participation list --- */
+
+	.o_qual_exec_list {
+		tbody {
+			tr {
+				// status
+				td:nth-child(1) {
+					padding-top: 3px;
+				}
+			}
+		}
+	}
+
+	.o_qual_exec_status_future_light {
+		border-color: 		$o-qual-exec-future-color;
+		color: 				$o-qual-exec-future-color;
+	}
+	.o_qual_exec_status_ready_light {
+		border-color: 		$o-qual-exec-ready-color;
+		color: 				$o-qual-exec-ready-color-dark;
+	}
+	.o_qual_exec_status_participating_light {
+		border-color: 		$o-qual-exec-participating-color;
+		color: 				$o-qual-exec-participating-color;
+	}
+	.o_qual_exec_status_participated_light {
+		border-color: 		$o-qual-exec-participated-color;
+		color: 				$o-qual-exec-participated-color;
+	}
+	.o_qual_exec_status_over_light {
+		border-color: 		$o-qual-exec-over-color;
+		color: 				$o-qual-exec-over-color;
+	}
+	
+}
+
+
+.o_qual_execute_header, .o_qual_report_header {
+	.o_qual_context_table {
+		margin-bottom: 0;
+		
+		th {
+			width: 40%;
+			border-top: none;
+			padding: 4px 8px;
+		}
+		td {
+			width: 60%;
+			border-top: none;
+			padding: 4px 8px;
+		}
+	}
+}
+
+.o_qual_ana_table {
+	.o_table_body {
+		padding: 0;
+	}
+}
+
+.o_qual_ana_filter {
+	.o_date_range {
+		margin-bottom: 0px;
+		
+		.control-label {
+			margin-bottom: 5px;
+		}
+		.o_date {
+			margin-bottom: 15px;
+			padding-right: 12px;
+		}
+		.o_date_range_from {
+			padding-right: 12px;
+		}
+		.o_date_range_to {
+			padding-right: 0px;
+		}
+	}
+}
+
+.o_qual_hm_basecolor {
+	background-color: $o-qual-hm-base-background-color;
+}
+.o_qual_hm {
+	.o_circle_container {
+		display: flex;
+	}
+	.o_circle_box {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+	}
+	.o_circle {
+		border-radius: 50%;
+		
+		&.o_rubric_insufficient {
+			background-color: $o-evaluation-insufficient-color !important;
+		}
+		&.o_rubric_neutral {
+			background-color: $o-evaluation-neutral-color !important;
+		}
+		&.o_rubric_sufficient {
+			background-color: $o-evaluation-sufficient-color !important;
+		}
+	}
+	.o_avg {
+		display: flex;
+		align-items: center;
+		margin-left: 5px;
+	}
+}
+
+.o_qual_trend_invisible {
+	visibility: hidden;
+}
+
+.o_qual_trend {
+	.o_qual_ana_trend_up {
+		transform: rotate(315deg);
+		-webkit-transform: rotate(315deg);
+		-moz-transform: rotate(315deg);
+		-ms-transform: rotate(315deg);
+		-o-transform: rotate(315deg);
+	}
+	.o_qual_ana_trend_down {
+		transform: rotate(45deg);
+		-webkit-transform: rotate(45deg);
+		-moz-transform: rotate(45deg);
+		-ms-transform: rotate(45deg);
+		-o-transform: rotate(45deg);
+	}
+	.o_rubric_insufficient {
+		color: $o-evaluation-insufficient-color;
+	}
+	.o_rubric_neutral {
+		color: $o-evaluation-neutral-color;
+	}
+	.o_rubric_sufficient {
+		color: $o-evaluation-sufficient-color;
+	}
+	.o_qual_ana_unrated {
+		color: $o-qual-hm-base-background-color;
+	}
+}
+	
+.o_qual_filtered_print {
+	#o_print_brand {
+		position: absolute;
+		top: 1cm;	
+		right: 1cm;
+		width: 5cm;
+		height: 4cm;
+		img {
+			width: 100%;
+		}
+	}
+	.o_qual_content {
+		margin-top: 4em;
+	}
+	.o_groupby_config,
+	.o_slider_trend_config,
+	.o_qual_hm tr td:last-child,
+	.o_qual_hm tr th:last-child {
+		display:none;
+	}
+}
+
+.o_evaluation_bar_chart_legend {
+	padding: 5px;
+	
+	li {
+		font-size: 90%;
+	}
+	.ident {
+		font-weight: bold;
+	}
+}
+
+@media (max-width: $screen-sm-min) {
+	.o_hm_group_select {
+		padding-bottom: 12px;
+	}
+	.o_hm_panel_body {
+		margin-bottom: -12px;
+	}
+}
+@media (min-width: $screen-sm-min) {
+	.o_hm_trend_row {
+		padding-top: 12px;
+	}
+}
+
+@media print {
+	.o_qual_hm .o_circle {
+		-webkit-print-color-adjust: exact;
+		color-adjust: exact;
+		&.o_rubric_insufficient {
+			background-color: $o-evaluation-insufficient-color !important;
+		}
+		&.o_rubric_neutral {
+			background-color: $o-evaluation-neutral-color !important;
+		}
+		&.o_rubric_sufficient {
+			background-color: $o-evaluation-sufficient-color !important;
+		}
+		&.o_qual_hm_basecolor {
+			background-color: $o-qual-hm-base-background-color !important;
+		}
+	}
+	.o_qual_trend {
+		-webkit-print-color-adjust: exact;
+		color-adjust: exact;
+		.o_rubric_insufficient::before {
+			color: $o-evaluation-insufficient-color !important;
+		}
+		.o_rubric_neutral::before {
+			color: $o-evaluation-neutral-color !important;
+		}
+		.o_rubric_sufficient::before {
+			color: $o-evaluation-sufficient-color !important;
+		}
+		.o_qual_ana_unrated::before {
+			color: $o-qual-hm-base-background-color !important;
+		}
+	}
+}

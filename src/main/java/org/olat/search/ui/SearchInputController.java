@@ -52,7 +52,7 @@ import org.olat.core.gui.control.generic.closablewrapper.CloseableModalControlle
 import org.olat.core.id.OLATResourceable;
 import org.olat.core.id.context.BusinessControl;
 import org.olat.core.id.context.BusinessControlFactory;
-import org.olat.core.logging.OLog;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.StringHelper;
 import org.olat.core.util.event.EventBus;
@@ -81,7 +81,7 @@ import org.olat.search.service.searcher.SearchClient;
  */
 public class SearchInputController extends FormBasicController implements GenericEventListener {
 	
-	private static final OLog log = Tracing.createLoggerFor(SearchInputController.class);
+	private static final Logger log = Tracing.createLoggerFor(SearchInputController.class);
 	
 	private static final String FUZZY_SEARCH = "~0.7";
 	private static final String CMD_DID_YOU_MEAN_LINK = "didYouMeanLink-";
@@ -469,9 +469,12 @@ public class SearchInputController extends FormBasicController implements Generi
 
 			query = getQueryString(searchString, false);
 			condQueries = getCondQueryStrings(condSearchStrings, parentCtxt, docType, rsrcUrl);
-			SearchResults searchResults = searchClient.doSearch(query, condQueries, ureq.getIdentity(), ureq.getUserSession().getRoles(), firstResult, maxReturns, true);
+			SearchResults searchResults = searchClient.doSearch(query, condQueries,
+					getIdentity(), ureq.getUserSession().getRoles(), getLocale(), firstResult, maxReturns, true);
 
-			if(searchResults == null) {
+			if(searchResults != null && searchResults.getException() instanceof ParseException) {
+				getWindowControl().setWarning(translate("invalid.search.query"));
+			} else if(searchResults == null || searchResults.getException() != null) {
 				getWindowControl().setWarning(translate("search.service.unexpected.error"));
 			} else if (firstResult == 0 && searchResults.size() == 0 && StringHelper.containsNonWhitespace(query) && !query.endsWith(FUZZY_SEARCH)) {
 				// result-list was empty => first try to find word via spell-checker
@@ -487,12 +490,12 @@ public class SearchInputController extends FormBasicController implements Generi
 				}
 			}
 			
-			if(firstResult == 0 && searchResults != null && searchResults.getList().isEmpty()) {
+			if(firstResult == 0 && searchResults != null && searchResults.getException() == null && searchResults.getList().isEmpty()) {
 				showInfo("found.no.result.try.fuzzy.search");
 			}
 			return searchResults;
 		} catch (ParseException e) {
-			if(log.isDebug()) log.debug("Query cannot be parsed: " + query);
+			if(log.isDebugEnabled()) log.debug("Query cannot be parsed: " + query);
 			getWindowControl().setWarning(translate("invalid.search.query"));
 		} catch (QueryException e) {
 			getWindowControl().setWarning(translate("invalid.search.query.with.wildcard"));
@@ -510,7 +513,8 @@ public class SearchInputController extends FormBasicController implements Generi
 		hideDidYouMeanWords();
 		String query = getQueryString(searchString, true);
 		List<String> condQueries = getCondQueryStrings(condSearchStrings, parentCtxt, docType, rsrcUrl);
-		return searchClient.doSearch(query, condQueries, ureq.getIdentity(), ureq.getUserSession().getRoles(), firstResult, maxReturns, true);
+		return searchClient.doSearch(query, condQueries,
+				getIdentity(), ureq.getUserSession().getRoles(), getLocale(), firstResult, maxReturns, true);
 	}
 	
 	public Set<String> getDidYouMeanWords() {

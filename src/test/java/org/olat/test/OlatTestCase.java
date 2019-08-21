@@ -40,13 +40,16 @@ import org.junit.Rule;
 import org.junit.rules.TestName;
 import org.olat.core.commons.persistence.DBFactory;
 import org.olat.core.helpers.Settings;
-import org.olat.core.logging.OLog;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
+import org.olat.core.util.WebappHelper;
 import org.olat.core.util.event.FrameworkStartupEventChannel;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.core.io.Resource;
 import org.springframework.test.context.ContextConfiguration;
 import org.springframework.test.context.junit4.AbstractJUnit4SpringContextTests;
+
+import com.dumbster.smtp.SimpleSmtpServer;
 
 /**
  * Initial Date:  25.10.2002
@@ -60,13 +63,14 @@ import org.springframework.test.context.junit4.AbstractJUnit4SpringContextTests;
 	"classpath:/org/olat/_spring/mainContext.xml"
 })
 public abstract class OlatTestCase extends AbstractJUnit4SpringContextTests {
-	private static final OLog log = Tracing.createLoggerFor(OlatTestCase.class);
+	private static final Logger log = Tracing.createLoggerFor(OlatTestCase.class);
 	
 	private static boolean postgresqlConfigured = false;
 	private static boolean oracleConfigured = false;
 	private static boolean started = false;
+	private static SimpleSmtpServer dumbster;
 	
-	 @Rule public TestName name = new TestName();
+	 @Rule public TestName currentTestName = new TestName();
 	
 	/**
 	 * If you like to disable a test method for some time just add the
@@ -84,11 +88,20 @@ public abstract class OlatTestCase extends AbstractJUnit4SpringContextTests {
 	}
 	
 	@Before
-	public void printBanner(){
-		log.info("Method run: " + name.getMethodName() + "(" + this.getClass().getCanonicalName() + ")");
+	public void printBanner() {
+		log.info("Method run: " + currentTestName.getMethodName() + "(" + this.getClass().getCanonicalName() + ")");
 		
 		if(started) {
 			return;
+		}
+		
+		try {
+			dumbster = SimpleSmtpServer.start(SimpleSmtpServer.AUTO_SMTP_PORT);
+			log.info("Simple smtp server started on port: " + dumbster.getPort());
+			WebappHelper.setMailConfig("mailport", String.valueOf(dumbster.getPort()));
+			WebappHelper.setMailConfig("mailhost", "localhost");
+		} catch (IOException e) {
+			log.error("", e);
 		}
 		
 		FrameworkStartupEventChannel.fireEvent();
@@ -108,7 +121,7 @@ public abstract class OlatTestCase extends AbstractJUnit4SpringContextTests {
 	
 	@After
 	public void closeConnectionAfter() {
-		log.info("Method test finished: " + name.getMethodName() + "(" + this.getClass().getCanonicalName() + ")");
+		log.info("Method test finished: " + currentTestName.getMethodName() + "(" + this.getClass().getCanonicalName() + ")");
 		try {
 			DBFactory.getInstance().commitAndCloseSession();
 		} catch (Exception e) {
@@ -119,6 +132,10 @@ public abstract class OlatTestCase extends AbstractJUnit4SpringContextTests {
 			} catch (Exception e1) {
 				e1.printStackTrace();
 			}
+		}
+		
+		if(dumbster != null) {
+			dumbster.reset();
 		}
 	}
 	
@@ -159,7 +176,7 @@ public abstract class OlatTestCase extends AbstractJUnit4SpringContextTests {
 							result.set(false);
 						}
 						DBFactory.getInstance().commitAndCloseSession();
-						Thread.sleep(100);
+						sleep(100);
 					}
 				} catch (Exception e) {
 					log.error("", e);
@@ -185,6 +202,10 @@ public abstract class OlatTestCase extends AbstractJUnit4SpringContextTests {
 		} catch (InterruptedException e) {
 			e.printStackTrace();
 		}
+	}
+	
+	protected SimpleSmtpServer getSmtpServer() {
+		return dumbster;
 	}
 
 	/**

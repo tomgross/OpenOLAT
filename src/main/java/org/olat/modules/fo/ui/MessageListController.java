@@ -31,12 +31,12 @@ import javax.servlet.http.HttpServletRequest;
 
 import org.olat.basesecurity.BaseSecurityModule;
 import org.olat.core.commons.fullWebApp.popup.BaseFullWebappPopupLayoutFactory;
-import org.olat.core.commons.modules.bc.meta.MetaInfo;
-import org.olat.core.commons.modules.bc.meta.tagged.MetaTagged;
 import org.olat.core.commons.persistence.DBFactory;
 import org.olat.core.commons.services.mark.Mark;
 import org.olat.core.commons.services.mark.MarkResourceStat;
 import org.olat.core.commons.services.mark.MarkingService;
+import org.olat.core.commons.services.vfs.VFSMetadata;
+import org.olat.core.commons.services.vfs.VFSRepositoryService;
 import org.olat.core.dispatcher.mapper.Mapper;
 import org.olat.core.gui.UserRequest;
 import org.olat.core.gui.components.Component;
@@ -184,6 +184,8 @@ public class MessageListController extends BasicController implements GenericEve
 	private PortfolioV2Module portfolioModule;
 	@Autowired
 	private ForumMediaHandler forumMediaHandler;
+	@Autowired
+	private VFSRepositoryService vfsRepositoryService;
 	
 	public MessageListController(UserRequest ureq, WindowControl wControl,
 			Forum forum, ForumCallback foCallback) {
@@ -439,7 +441,7 @@ public class MessageListController extends BasicController implements GenericEve
 		}
 		
 		List<MarkResourceStat> statList = markingService.getMarkManager().getStats(forumOres, subPaths, getIdentity());
-		Map<String,MarkResourceStat> stats = new HashMap<String,MarkResourceStat>(statList.size() * 2 + 1);
+		Map<String,MarkResourceStat> stats = new HashMap<>(statList.size() * 2 + 1);
 		for(MarkResourceStat stat:statList) {
 			stats.put(stat.getSubPath(), stat);
 		}
@@ -1078,7 +1080,7 @@ public class MessageListController extends BasicController implements GenericEve
 				listenTo(editMessageCtrl);
 				cmc.activate();
 			}
-		} else if ((userIsMsgCreator) && (children == true)) {
+		} else if (userIsMsgCreator && children) {
 			// user is author of the current message but it has already at least
 			// one child
 			showWarning("may.not.save.msg.as.author");
@@ -1154,7 +1156,7 @@ public class MessageListController extends BasicController implements GenericEve
 			DBFactory.getInstance().commit();// before sending async event
 			
 			closeThreadButton.setVisible(false);
-			openThreadButton.setVisible(true && !guestOnly);
+			openThreadButton.setVisible(!guestOnly);
 			mainVC.setDirty(true);
 			
 			ForumChangedEvent event = new ForumChangedEvent(ForumChangedEvent.CLOSE, thread.getKey(), null, getIdentity());
@@ -1172,7 +1174,7 @@ public class MessageListController extends BasicController implements GenericEve
 			thread = forumManager.updateMessage(thread, true);
 			DBFactory.getInstance().commit();// before sending async event
 			
-			closeThreadButton.setVisible(true && !guestOnly);
+			closeThreadButton.setVisible(!guestOnly);
 			openThreadButton.setVisible(false);
 			mainVC.setDirty(true);
 
@@ -1198,7 +1200,7 @@ public class MessageListController extends BasicController implements GenericEve
 			DBFactory.getInstance().commit();// before sending async event
 			
 			hideThreadButton.setVisible(false);
-			showThreadButton.setVisible(true && !guestOnly);
+			showThreadButton.setVisible(!guestOnly);
 			mainVC.setDirty(true);
 
 			ForumChangedEvent event = new ForumChangedEvent(ForumChangedEvent.HIDE, thread.getKey(), null, getIdentity());
@@ -1222,7 +1224,7 @@ public class MessageListController extends BasicController implements GenericEve
 			thread = forumManager.updateMessage(thread, true);
 			DBFactory.getInstance().commit();// before sending async event
 			
-			hideThreadButton.setVisible(true && !guestOnly);
+			hideThreadButton.setVisible(!guestOnly);
 			showThreadButton.setVisible(false);
 			mainVC.setDirty(true);
 
@@ -1492,14 +1494,12 @@ public class MessageListController extends BasicController implements GenericEve
 					if (view != null) {
 						List<VFSItem> attachments = view.getAttachments();
 						for (VFSItem vfsItem : attachments) {
-							MetaInfo meta = ((MetaTagged)vfsItem).getMetaInfo();
-							if (meta.getUUID().equals(query[2])) {
-								if (meta.isThumbnailAvailable()) {
-									VFSLeaf thumb = meta.getThumbnail(200, 200, false);
-									if(thumb != null) {
-										// Positive lookup, send as response
-										return new VFSMediaResource(thumb);
-									}
+							VFSMetadata meta = vfsItem.getMetaInfo();
+							if (meta instanceof VFSLeaf && meta.getUuid().equals(query[2])) {
+								VFSLeaf thumb = vfsRepositoryService.getThumbnail((VFSLeaf)vfsItem, meta, 200, 200, false);
+								if(thumb != null) {
+									// Positive lookup, send as response
+									return new VFSMediaResource(thumb);
 								}
 								break;
 							}

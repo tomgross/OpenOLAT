@@ -57,7 +57,6 @@ import org.olat.core.gui.components.form.flexible.impl.elements.table.FlexiTable
 import org.olat.core.gui.components.form.flexible.impl.elements.table.SelectionEvent;
 import org.olat.core.gui.components.form.flexible.impl.elements.table.StaticFlexiCellRenderer;
 import org.olat.core.gui.components.link.Link;
-import org.olat.core.gui.components.table.QuestionStatusCellRenderer;
 import org.olat.core.gui.components.velocity.VelocityContainer;
 import org.olat.core.gui.control.Controller;
 import org.olat.core.gui.control.Event;
@@ -203,7 +202,7 @@ public abstract class AbstractItemListController extends FormBasicController
 		columnsModel.addFlexiColumnModel(new DefaultFlexiColumnModel(Cols.status.i18nKey(), Cols.status.ordinal(), true, OrderBy.status.name(), new QuestionStatusCellRenderer()));
 		columnsModel.addFlexiColumnModel(new DefaultFlexiColumnModel(Cols.statusLastModified.i18nKey(), Cols.statusLastModified.ordinal(), true, OrderBy.statusLastModified.name()));	
 		if (licenseModule.isEnabled(licenseHandler)) {
-			columnsModel.addFlexiColumnModel(new DefaultFlexiColumnModel(false, false, Cols.license.i18nKey(), Cols.license.ordinal(), "license", false, null, FlexiColumnModel.ALIGNMENT_LEFT,
+			columnsModel.addFlexiColumnModel(new DefaultFlexiColumnModel(false, false, Cols.license.i18nKey(), null, Cols.license.ordinal(), "license", false, null, FlexiColumnModel.ALIGNMENT_LEFT,
 					 new StaticFlexiCellRenderer("license", new LicenseRenderer(getLocale()))));
 		}
 		initActionColumns(columnsModel);

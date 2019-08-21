@@ -27,9 +27,8 @@ import java.util.Set;
 import org.olat.admin.user.UserTableDataModel;
 import org.olat.basesecurity.BaseSecurity;
 import org.olat.basesecurity.BaseSecurityModule;
-import org.olat.basesecurity.Constants;
-import org.olat.basesecurity.SecurityGroup;
-import org.olat.core.CoreSpringFactory;
+import org.olat.basesecurity.OrganisationRoles;
+import org.olat.basesecurity.OrganisationService;
 import org.olat.core.gui.UserRequest;
 import org.olat.core.gui.components.form.flexible.FormItemContainer;
 import org.olat.core.gui.components.form.flexible.elements.FlexiTableElement;
@@ -68,12 +67,11 @@ public class ImportMemberOverviewIdentitiesController extends StepFormBasicContr
 	private BaseSecurity securityManager;
 	@Autowired
 	private BaseSecurityModule securityModule;
+	@Autowired
+	private OrganisationService organisationService;
 
 	public ImportMemberOverviewIdentitiesController(UserRequest ureq, WindowControl wControl, Form rootForm, StepsRunContext runContext) {
 		super(ureq, wControl, rootForm, runContext, LAYOUT_VERTICAL, null);
-		userManager = UserManager.getInstance();
-		securityManager = CoreSpringFactory.getImpl(BaseSecurity.class);
-		securityModule = CoreSpringFactory.getImpl(BaseSecurityModule.class);
 
 		oks = null;
 		if(containsRunContextKey("logins")) {
@@ -142,8 +140,7 @@ public class ImportMemberOverviewIdentitiesController extends StepFormBasicContr
 		notfounds = new ArrayList<>();
 		
 		Set<Identity> okSet = new HashSet<>();
-		SecurityGroup anonymousSecGroup = securityManager.findSecurityGroupByName(Constants.GROUP_ANONYMOUS);
-		List<Identity> anonymousUsers = securityManager.getIdentitiesOfSecurityGroup(anonymousSecGroup);
+		List<Identity> anonymousUsers = organisationService.getIdentitiesWithRole(OrganisationRoles.guest);
 
 		for (String identityKey : keys) {
 			Identity ident = securityManager.loadIdentityByKey(Long.parseLong(identityKey));
@@ -162,9 +159,7 @@ public class ImportMemberOverviewIdentitiesController extends StepFormBasicContr
 		notfounds = new ArrayList<>();
 		
 		Set<Identity> okSet = new HashSet<>();
-		SecurityGroup anonymousSecGroup = securityManager.findSecurityGroupByName(Constants.GROUP_ANONYMOUS);
-		List<Identity> anonymousUsers = securityManager.getIdentitiesOfSecurityGroup(anonymousSecGroup);
-
+		List<Identity> anonymousUsers = organisationService.getIdentitiesWithRole(OrganisationRoles.guest);
 		for (Identity ident : keys) {
 			if (ident == null || anonymousUsers.contains(ident)) {
 				//ignore
@@ -181,8 +176,8 @@ public class ImportMemberOverviewIdentitiesController extends StepFormBasicContr
 		
 		Set<Identity> okSet = new HashSet<>();
 
-		SecurityGroup anonymousGroup = securityManager.findSecurityGroupByName(Constants.GROUP_ANONYMOUS);
-		Set<Identity> anonymousUsers = new HashSet<>(securityManager.getIdentitiesOfSecurityGroup(anonymousGroup));
+		List<Identity> anonymousUserList = organisationService.getIdentitiesWithRole(OrganisationRoles.guest);
+		Set<Identity> anonymousUsers = new HashSet<>(anonymousUserList);
 
 		List<String> identList = new ArrayList<>();
 		String[] lines = inp.split("\r?\n");
