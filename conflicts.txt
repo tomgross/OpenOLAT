@@ -1,5 +1,3 @@
-	both modified:   src/main/java/org/olat/course/CourseFactory.java
-	both modified:   src/main/java/org/olat/group/ui/main/GroupCellRenderer.java
 	both modified:   src/main/java/org/olat/ims/cp/CPManagerImpl.java
 	both modified:   src/main/java/org/olat/repository/ui/RepositoryEntryRuntimeController.java
 	both modified:   src/main/java/org/olat/repository/ui/author/ConfirmDeletePermanentlyController.java

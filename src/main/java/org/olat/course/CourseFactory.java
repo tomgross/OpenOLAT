@@ -485,12 +485,6 @@ public class CourseFactory {
 			}
 
 			// copy folder nodes directories
-<<<<<<< HEAD
-			File fSourceFoldernodesFolder = new File(
-					FolderConfig.getCanonicalRoot() + BCCourseNode.getFoldernodesPathRelToFolderBase(sourceCourse.getCourseEnvironment())
-			);
-			if (fSourceFoldernodesFolder.exists()) FileUtils.copyDirToDir(fSourceFoldernodesFolder, fTargetCourseBasePath, false, "copy folder nodes directories");
-=======
 			VFSContainer sourceFoldernodesContainer = VFSManager
 					.olatRootContainer(BCCourseNode.getFoldernodesPathRelToFolderBase(sourceCourse.getCourseEnvironment()));
 			if (sourceFoldernodesContainer.exists()) {
@@ -498,7 +492,6 @@ public class CourseFactory {
 						.olatRootContainer(BCCourseNode.getFoldernodesPathRelToFolderBase(targetCourse.getCourseEnvironment()));
 				targetFoldernodesContainer.copyContentOf(sourceFoldernodesContainer);
 			}
->>>>>>> OpenOLAT_14.0.2
 
 			// copy task folder directories
 			File fSourceTaskfoldernodesFolder = new File(
