@@ -126,7 +126,6 @@ public class SendTokenToUserForm extends FormBasicController {
 	}
 	
 	private void sendToken(UserRequest ureq, String text) {
-<<<<<<< HEAD
 		try {
 			// OLATNG-5: extracted reusable code into UserChangePasswordMailUtil.sendTokenByMail() so it can be used elsewhere
 			MailerResult result = util.sendTokenByMail(ureq, user, text);
@@ -138,33 +137,6 @@ public class SendTokenToUserForm extends FormBasicController {
 		} catch(UserChangePasswordException e) {
 			showWarning("changeuserpwd.failed");
 		} catch(UserHasNoEmailException e) {
-=======
-		// mailer configuration
-		// We allow creation of password token when user has no password so far or when he as an OpenOLAT Password. 
-		// For other cases such as Shibboleth, LDAP, oAuth etc. we don't allow creation of token as this is most 
-		// likely not a desired action.
-		List<Authentication> authentications = securityManager.getAuthentications(user);
-		boolean isOOpwdAllowed = authentications.isEmpty();
-		for (Authentication authentication : authentications) {
-			if (authentication.getProvider().equals(BaseSecurityModule.getDefaultAuthProviderIdentifier())) {
-				isOOpwdAllowed = true;
-			}			
-		}		
-		if (!isOOpwdAllowed) { 
-			showWarning("sendtoken.wrong.auth");
-			return;
-		}
-		
-		Preferences prefs = user.getUser().getPreferences();
-		Locale locale = i18nManager.getLocaleOrDefault(prefs.getLanguage());
-		String emailAdress = user.getUser().getProperty(UserConstants.EMAIL, locale);
-
-		String ip = ureq.getHttpReq().getRemoteAddr();
-		TemporaryKey tk = registrationManager.createAndDeleteOldTemporaryKey(user.getKey(), emailAdress, ip,
-				RegistrationManager.PW_CHANGE, loginModule.getValidUntilHoursGui());
-		
-		if(text.indexOf(dummyKey) < 0) {
->>>>>>> OpenOLAT_14.0.2
 			showWarning("changeuserpwd.failed");
 		}
 	}

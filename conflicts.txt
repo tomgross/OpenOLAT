@@ -1,4 +1,3 @@
-	both modified:   src/main/java/org/olat/admin/user/SendTokenToUserForm.java
 	both modified:   src/main/java/org/olat/course/CourseFactory.java
 	both modified:   src/main/java/org/olat/group/ui/main/GroupCellRenderer.java
 	both modified:   src/main/java/org/olat/ims/cp/CPManagerImpl.java

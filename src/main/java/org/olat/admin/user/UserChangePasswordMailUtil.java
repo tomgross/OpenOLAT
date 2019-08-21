@@ -1,5 +1,6 @@
 package org.olat.admin.user;
 
+import org.olat.basesecurity.BaseSecurity;
 import org.olat.basesecurity.Authentication;
 import org.olat.basesecurity.BaseSecurityManager;
 import org.olat.basesecurity.BaseSecurityModule;
@@ -35,6 +36,9 @@ public class UserChangePasswordMailUtil {
     final private MailManager mailManager;
 
     private static final OLog LOG = Tracing.createLoggerFor(UserChangePasswordMailUtil.class);
+
+    @Autowired
+    private BaseSecurity securityManager;
 
     @Autowired
     public UserChangePasswordMailUtil(RegistrationManager registrationManager, MailManager mailManager) {
@@ -87,8 +91,8 @@ public class UserChangePasswordMailUtil {
 		// We allow creation of password token when user has no password so far or when he as an OpenOLAT Password.
 		// For other cases such as Shibboleth, LDAP, oAuth etc. we don't allow creation of token as this is most
 		// likely not a desired action.
-		List<Authentication> authentications = BaseSecurityManager.getInstance().getAuthentications(user);
-		boolean isOOpwdAllowed = (authentications.size() == 0);
+	        List<Authentication> authentications = securityManager.getAuthentications(user);
+		boolean isOOpwdAllowed = authentications.isEmpty();
 		for (Authentication authentication : authentications) {
 			if (authentication.getProvider().equals(BaseSecurityModule.getDefaultAuthProviderIdentifier())) {
 				isOOpwdAllowed = true;
