@@ -77,15 +77,11 @@ import org.olat.repository.handlers.EditionSupport;
 import org.olat.repository.handlers.RepositoryHandler;
 import org.olat.repository.handlers.RepositoryHandlerFactory;
 import org.olat.repository.model.RepositoryEntrySecurity;
-<<<<<<< HEAD
-import org.olat.repository.ui.author.*;
-=======
 import org.olat.repository.ui.author.ConfirmCloseController;
 import org.olat.repository.ui.author.ConfirmDeleteSoftlyController;
 import org.olat.repository.ui.author.CopyRepositoryEntryController;
 import org.olat.repository.ui.author.RepositoryEditDescriptionController;
 import org.olat.repository.ui.author.RepositoryMembersController;
->>>>>>> OpenOLAT_14.0.2
 import org.olat.repository.ui.list.LeavingEvent;
 import org.olat.repository.ui.list.RepositoryEntryDetailsController;
 import org.olat.repository.ui.settings.ReloadSettingsEvent;
@@ -157,12 +153,8 @@ public class RepositoryEntryRuntimeController extends MainLayoutBasicController 
 	protected boolean corrupted;
 	protected boolean settingsChanged;
 	protected boolean overrideReadOnly = false;
-<<<<<<< HEAD
-	protected RepositoryEntry re;
-=======
 	private RepositoryEntry re;
 	private List<OrganisationRef> organisations;
->>>>>>> OpenOLAT_14.0.2
 	private LockResult lockResult;
 	private boolean assessmentLock;// by Assessment mode
 	private AssessmentMode assessmentMode;
@@ -786,9 +778,6 @@ public class RepositoryEntryRuntimeController extends MainLayoutBasicController 
 		initToolbar();
 		cleanUp();
 	}
-<<<<<<< HEAD
-
-=======
 	
 	protected final void doChangeStatus(UserRequest ureq, RepositoryEntryStatusEnum updatedStatus) {
 		RepositoryEntry entry = getRepositoryEntry();
@@ -829,7 +818,6 @@ public class RepositoryEntryRuntimeController extends MainLayoutBasicController 
 		ureq.getUserSession().getSingleUserEventCenter().fireEventToListenersOf(e, RepositoryService.REPOSITORY_EVENT_ORES);
 	}
 	
->>>>>>> OpenOLAT_14.0.2
 	protected final void doClose(UserRequest ureq) {
 		// Remove context to be closed from history stack
 		BusinessControl businessControl = getWindowControl().getBusinessControl();
@@ -868,13 +856,13 @@ public class RepositoryEntryRuntimeController extends MainLayoutBasicController 
 		
 		WindowControl bwControl = getSubWindowControl("Settings");
 		RepositoryEntry refreshedEntry = loadRepositoryEntry();
-<<<<<<< HEAD
-		RepositoryEditDescriptionController ctrl
-				= repositoryEditDescriptionControllerFactory.create(ureq, addToHistory(ureq, bwControl), refreshedEntry);
-=======
+//<<<<<<< HEAD
+//		RepositoryEditDescriptionController ctrl
+//				= repositoryEditDescriptionControllerFactory.create(ureq, addToHistory(ureq, bwControl), refreshedEntry);
+//=======
 		RepositoryEntrySettingsController ctrl = createSettingsController(ureq, bwControl, refreshedEntry);
 			
->>>>>>> OpenOLAT_14.0.2
+//>>>>>>> OpenOLAT_14.0.2
 		listenTo(ctrl);
 		settingsCtrl = pushController(ureq, translate("details.settings"), ctrl);
 		currentToolCtr = settingsCtrl;
@@ -1049,13 +1037,10 @@ public class RepositoryEntryRuntimeController extends MainLayoutBasicController 
 		try {
 			lockResult = handler.acquireLock(ores, ureq.getIdentity());
 			if (lockResult == null
-<<<<<<< HEAD
-					|| isSuccessfullyLocked(lockResult, isAlreadyLocked)) {
-				MediaResource mr = handler.getAsMediaResource(ores, false);
-=======
-					|| (lockResult != null && lockResult.isSuccess() && !isAlreadyLocked)) {
-				MediaResource mr = handler.getAsMediaResource(ores);
->>>>>>> OpenOLAT_14.0.2
+//<<<<<<< HEAD
+//					|| isSuccessfullyLocked(lockResult, isAlreadyLocked)) {
+//				MediaResource mr = handler.getAsMediaResource(ores, false);
+//=======
 				if (mr != null) {
 					repositoryService.incrementDownloadCounter(entry);
 					ureq.getDispatchResult().setResultingMediaResource(mr);

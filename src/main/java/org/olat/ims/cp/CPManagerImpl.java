@@ -358,7 +358,6 @@ public class CPManagerImpl implements CPManager {
 
 		path = VFSManager.sanitizePath(path);
 		try {
-<<<<<<< HEAD
 			URL url = servletContext.getResource(path);
 			assert url != null;
 			try {
@@ -370,17 +369,6 @@ public class CPManagerImpl implements CPManager {
 			}
 		} catch (MalformedURLException e) {
 			logError("Bad url syntax when copying cp template. url: " + path + " Ores:" + ores.getResourceableId(), null);
-=======
-			File f = new File(url.toURI());
-			if (f.exists() && root.exists()) {
-				FileUtils.copyFileToDir(f, root, "copy imscp template");
-			} else {
-				log.error("cp template was not copied. Source:  " + url + " Target: " + root.getAbsolutePath());
-			}
-		} catch (URISyntaxException e) {
-			log.error("Bad url syntax when copying cp template. url: " + url + " Ores:" + ores.getResourceableId());
-			return false;
->>>>>>> OpenOLAT_14.0.2
 		}
 
 		return false;

@@ -56,9 +56,6 @@ class RepositoryEntryDataModel extends DefaultFlexiTableDataSourceModel<Reposito
 		if(item == null) {
 			return null;//don't break here
 		}
-<<<<<<< HEAD
-		return item.getValueAt(col);
-=======
 		
 		switch(Cols.values()[col]) {
 			case key: return item.getKey();
@@ -108,6 +105,5 @@ class RepositoryEntryDataModel extends DefaultFlexiTableDataSourceModel<Reposito
 		public String i18nKey() {
 			return i18nKey;
 		}
->>>>>>> OpenOLAT_14.0.2
 	}
 }

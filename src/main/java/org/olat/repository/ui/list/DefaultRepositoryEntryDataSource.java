@@ -147,6 +147,7 @@ public class DefaultRepositoryEntryDataSource implements FlexiTableDataSourceDel
 		List<OLATResourceAccess> resourcesWithOffer = acService.filterResourceWithAC(resourcesWithAC);
 		repositoryService.filterMembership(searchParams.getIdentity(), repoKeys);
 
+		/*
 <<<<<<< HEAD
 		LinkedHashMap<RepositoryEntryMyView, RepositoryEntryRow> mapOfRepositoryEntryViewsAndRepositoryEntryRows =
 				repositoryEntryRowsFactory.create(repoEntries);
@@ -160,18 +161,12 @@ public class DefaultRepositoryEntryDataSource implements FlexiTableDataSourceDel
 			List<PriceMethod> types = new ArrayList<PriceMethod>();
 			if (entry.isMembersOnly()) {
 				// members only always show lock icon
-				/**
-				 * TODO sev26
-				 * Accessing {@link RepositoryEntryDataSourceUIFactory} this
-				 * way because the entire block here should be in the factory
-				 * class or better in the {@link RepositoryEntryRow} class.
-				 */
 				types.add(new PriceMethod("", "o_ac_membersonly_icon",
 						repositoryEntryRowsFactory.getUiFactory()
 								.getTranslator()
 								.translate("cif.access.membersonly.short")));
 			} else {
-=======
+======= */
 		List<RepositoryEntryRow> items = new ArrayList<>();
 		for(RepositoryEntryMyView entry:repoEntries) {
 			RepositoryEntryRow row = new RepositoryEntryRow(entry);
@@ -183,7 +178,7 @@ public class DefaultRepositoryEntryDataSource implements FlexiTableDataSourceDel
 
 			List<PriceMethod> types = new ArrayList<>(3);
 			if(entry.isBookable()) {
->>>>>>> OpenOLAT_14.0.2
+// >>>>>>> OpenOLAT_14.0.2
 				// collect access control method icons
 				OLATResource resource = entry.getOlatResource();
 				for(OLATResourceAccess resourceAccess:resourcesWithOffer) {
@@ -199,16 +194,11 @@ public class DefaultRepositoryEntryDataSource implements FlexiTableDataSourceDel
 						}
 					}
 				}
-<<<<<<< HEAD
-			}
-
-=======
 			} else if (!entry.isAllUsers() && !entry.isGuests()) {
 				// members only always show lock icon
 				types.add(new PriceMethod("", "o_ac_membersonly_icon", uifactory.getTranslator().translate("cif.access.membersonly.short")));
 			} 
 			
->>>>>>> OpenOLAT_14.0.2
 			row.setMember(repoKeys.contains(entry.getKey()));
 
 			if(!types.isEmpty()) {

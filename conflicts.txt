@@ -1,5 +1,0 @@
-	both modified:   src/main/java/org/olat/ims/cp/CPManagerImpl.java
-	both modified:   src/main/java/org/olat/repository/ui/RepositoryEntryRuntimeController.java
-	both modified:   src/main/java/org/olat/repository/ui/author/ConfirmDeletePermanentlyController.java
-	both modified:   src/main/java/org/olat/repository/ui/list/DefaultRepositoryEntryDataSource.java
-	both modified:   src/main/java/org/olat/repository/ui/list/RepositoryEntryDataModel.java

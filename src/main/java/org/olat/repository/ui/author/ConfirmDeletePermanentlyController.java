@@ -287,7 +287,6 @@ public class ConfirmDeletePermanentlyController extends FormBasicController {
 		boolean allOk = true;
 		Roles roles = ureq.getUserSession().getRoles();
 		for(RepositoryEntry entry:entries) {
-<<<<<<< HEAD
 			RepositoryEntry reloadedEntry = repositoryService.loadByKey(entry.getKey());
 			if(reloadedEntry != null) {
 				ErrorList errors = new ErrorList();
@@ -308,17 +307,6 @@ public class ConfirmDeletePermanentlyController extends FormBasicController {
 					EntryChangedEvent e = new EntryChangedEvent(reloadedEntry, getIdentity(), Change.deleted, "delete");
 					ureq.getUserSession().getSingleUserEventCenter().fireEventToListenersOf(e, RepositoryService.REPOSITORY_EVENT_ORES);
 				}
-=======
-			ErrorList errors = repositoryService.deletePermanently(entry, getIdentity(), roles, getLocale());
-			ThreadLocalUserActivityLogger.log(LearningResourceLoggingAction.LEARNING_RESOURCE_DELETE, getClass(),
-					LoggingResourceable.wrap(entry, OlatResourceableType.genRepoEntry));
-			if (errors.hasErrors()) {
-				allOk = false;
-				errorList.add(errors);
-			} else {
-				EntryChangedEvent e = new EntryChangedEvent(entry, getIdentity(), Change.deleted, "delete");
-				ureq.getUserSession().getSingleUserEventCenter().fireEventToListenersOf(e, RepositoryService.REPOSITORY_EVENT_ORES);
->>>>>>> OpenOLAT_14.0.2
 			}
 		}
 		return allOk;
