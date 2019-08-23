@@ -26,6 +26,8 @@
 
 package org.olat.core.commons.modules.bc;
 
+import org.olat.core.util.vfs.VFSContainer;
+
 import java.nio.file.Path;
 import java.nio.file.Paths;
 
@@ -344,56 +346,5 @@ public class FolderConfig {
 	public static boolean getSendDocumentLinkOnly() {
 		return sendDocumentLinkOnly;
 	}
-	
-	public static FolderVersioningConfigurator getVersioningConfigurator() {
-		return versioningConfigurator;
-	}
 
-	public static void setVersioningConfigurator(FolderVersioningConfigurator versioningConfigurator) {
-		FolderConfig.versioningConfigurator = versioningConfigurator;
-	}
-
-	/**
-	 * @return -1 if the number of revisions for the file is unlimited; 0 if versions are not allowed;
-	 * 	1 - n is the maximum allowed number of revisions
-	 */
-	public static int versionsAllowed(String relPath) {
-		if(versioningConfigurator == null) {
-			return 0;
-		}
-		return versioningConfigurator.versionAllowed(relPath);
-	}
-	
-	/**
-	 * @return true if versioning is enabled for the container
-	 */
-	public static boolean versionsEnabled(VFSContainer container) {
-		if(versioningConfigurator == null) {
-			return false;
-		}
-		return versioningConfigurator.versionEnabled(container);
-	}
-
-	
-	/**
-	 * @return true if the file-artefact and eportfolio is enabled
-	 */
-	public static boolean isEPortfolioAddEnabled() {
-		return ePortfolioAddEnabled;
-	}
-
-	/**
-	 * @param ePortfolioAddEnabled The ePortfolioAddEnabled to set.
-	 */
-	public static void setEPortfolioAddEnabled(boolean ePortfolioAddEnabled) {
-		FolderConfig.ePortfolioAddEnabled = ePortfolioAddEnabled;
-	}
-
-	public static void setMaxZipSizeMB(int maxZipSizeMB) {
-		FolderConfig.maxZipSizeMB = maxZipSizeMB;
-	}
-
-	public static void setMaxCourseExportSizeMB(int maxCourseExportSizeMB) {
-		FolderConfig.maxCourseExportSizeMB = maxCourseExportSizeMB;
-	}
 }

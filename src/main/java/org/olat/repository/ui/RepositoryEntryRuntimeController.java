@@ -81,6 +81,7 @@ import org.olat.repository.ui.author.ConfirmCloseController;
 import org.olat.repository.ui.author.ConfirmDeleteSoftlyController;
 import org.olat.repository.ui.author.CopyRepositoryEntryController;
 import org.olat.repository.ui.author.RepositoryEditDescriptionController;
+import org.olat.repository.ui.author.RepositoryEditDescriptionControllerFactory;
 import org.olat.repository.ui.author.RepositoryMembersController;
 import org.olat.repository.ui.list.LeavingEvent;
 import org.olat.repository.ui.list.RepositoryEntryDetailsController;

@@ -29,7 +29,6 @@ import org.olat.group.BusinessGroup;
 import org.olat.group.BusinessGroupManagedFlag;
 import org.olat.group.ui.main.AbstractMemberListController;
 import org.olat.group.ui.main.CourseMembership;
-import org.olat.group.ui.main.MemberView;
 import org.olat.group.ui.main.MemberListSecurityCallbackFactory;
 import org.olat.group.ui.main.MemberRow;
 import org.olat.group.ui.main.SearchMembersParams;
@@ -61,7 +60,7 @@ public class MemberListController extends AbstractMemberListController {
 	}
 
 	@Override
-	protected void confirmDelete(UserRequest ureq, List<MemberView> members) {
+	protected void confirmDelete(UserRequest ureq, List<MemberRow> members) {
 		if (globallyManaged && businessGroup != null && BusinessGroupManagedFlag.isManaged(businessGroup, BusinessGroupManagedFlag.excludeGroupCoachesFromMembersmanagement)) {
 			// Only group coaches can be removed from group
 			boolean membersWithParticipantRoleSelected = false;

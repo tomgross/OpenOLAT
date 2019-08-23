@@ -422,14 +422,6 @@ public class StringHelper {
 	public static final String unescapeHtml(String str) {
 		return org.apache.commons.text.StringEscapeUtils.unescapeHtml4(str);
 	}
-	
-	public static final String escapeXml(String str) {
-		return StringEscapeUtils.ESCAPE_XML11.translate(str);
-	}
-
-	public static final String escapeHtml(String str) {
-		return StringEscapeUtils.ESCAPE_HTML4.translate(str);
-	}
 
 	public static final void escapeHtml(Writer writer, String str) {
 		try {

@@ -50,19 +50,19 @@ public class GroupCellRenderer implements FlexiCellRenderer {
 	@Override
 	public void render(Renderer renderer, StringOutput target, Object cellValue, int row,
 			FlexiTableComponent source, URLBuilder ubu, Translator translator) {
-		if (cellValue instanceof MemberView) {
-			render(target, (MemberView) cellValue, translator.getLocale());
+		if (cellValue instanceof MemberRow) {
+			render(target, (MemberRow) cellValue, translator.getLocale());
 		}
 	}
 
 	@Override
 	public void render(StringOutput sb, Renderer renderer, Object val, Locale locale, int alignment, String action) {
-		if (val instanceof MemberView) {
-			render(sb, (MemberView) val, locale);
+		if (val instanceof MemberRow) {
+			render(sb, (MemberRow) val, locale);
 		}
 	}
 	
-	private void render(StringOutput sb, MemberView member, Locale locale) {
+	private void render(StringOutput sb, MemberRow member, Locale locale) {
 		assertNotNull(locale);
 
 		List<BusinessGroupShort> groups = member.getGroups();

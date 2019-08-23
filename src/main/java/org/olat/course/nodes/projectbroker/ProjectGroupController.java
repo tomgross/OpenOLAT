@@ -36,7 +36,6 @@ import org.olat.admin.securitygroup.gui.WaitingGroupController;
 import org.olat.basesecurity.Group;
 import org.olat.basesecurity.GroupRoles;
 import org.olat.basesecurity.ui.GroupController;
-import org.olat.core.commons.modules.bc.vfs.OlatRootFolderImpl;
 import org.olat.core.gui.UserRequest;
 import org.olat.core.gui.components.Component;
 import org.olat.core.gui.components.velocity.VelocityContainer;
@@ -227,15 +226,6 @@ public class ProjectGroupController extends BasicController {
 			getLogger().info("Remove users as account-managers");
 			fireEvent(urequest, Event.CHANGED_EVENT );
 
-			// Delete deleted user's dropbox
-			for (Identity identity : ((IdentitiesRemoveEvent) event).getRemovedIdentities()) {
-				String s = ProjectBrokerDropboxController.getDropboxBasePathForProject(project, userCourseEnv.getCourseEnvironment(), courseNode);
-				s += File.separator + identity.getName();
-				OlatRootFolderImpl dropBox = new OlatRootFolderImpl(s, null);
-				if (dropBox.getBasefile().exists()) {
-					dropBox.getBasefile().delete();
-				}
-			}
 		}
 	}
 

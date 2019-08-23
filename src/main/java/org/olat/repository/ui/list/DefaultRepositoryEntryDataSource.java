@@ -30,6 +30,7 @@ import org.olat.core.commons.persistence.SortKey;
 import org.olat.core.gui.components.form.flexible.elements.FlexiTableFilter;
 import org.olat.core.gui.components.form.flexible.impl.elements.table.FlexiTableDataSourceDelegate;
 import org.olat.core.util.StringHelper;
+import org.olat.core.util.vfs.VFSLeaf;
 import org.olat.repository.RepositoryEntryMyView;
 import org.olat.repository.RepositoryService;
 import org.olat.repository.model.SearchMyRepositoryEntryViewParams;

@@ -22,6 +22,7 @@ package org.olat.admin.user.course;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -70,6 +71,10 @@ import org.olat.group.BusinessGroupShort;
 import org.olat.group.model.BGRepositoryEntryRelation;
 import org.olat.group.manager.MemberViewQueries;
 import org.olat.group.model.MemberView;
+import org.olat.group.ui.main.CourseMembership;
+import org.olat.group.ui.main.CourseRoleCellRenderer;
+import org.olat.group.ui.main.EditSingleMembershipController;
+import org.olat.group.ui.main.MemberPermissionChangeEvent;
 import org.olat.modules.curriculum.CurriculumService;
 import org.olat.repository.RepositoryEntry;
 import org.olat.repository.RepositoryEntryManagedFlag;
@@ -212,7 +217,7 @@ public class CourseOverviewController extends FormBasicController  {
 			}
 		}
 
-		Map<Long,Date> lastLaunchDates = userInfosMgr.getRecentLaunchDates(editedIdentity);
+		Map<Long, Date> lastLaunchDates = userInfosMgr.getRecentLaunchDates(editedIdentity);
 		for(CourseMemberView memberView:repoKeyToViewMap.values()) {
 			RepositoryEntry entry = entryKeyToRepoEntryMap.get(memberView.getRepoKey());
 			if (entry != null) {

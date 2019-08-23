@@ -27,7 +27,6 @@ package org.olat.course.nodes.projectbroker;
 
 import org.olat.NewControllerFactory;
 import org.olat.core.CoreSpringFactory;
-import org.olat.core.commons.modules.bc.vfs.OlatRootFolderImpl;
 import org.olat.core.gui.UserRequest;
 import org.olat.core.gui.components.Component;
 import org.olat.core.gui.components.link.Link;
@@ -309,14 +308,6 @@ public class ProjectListController extends BasicController implements GenericEve
 				projectBrokerMailer.sendCancelEnrollmentEmailToManager(urequest.getIdentity(), selectedProject, this.getTranslator());
 			}
 			projectGroupManager.sendGroupChangeEvent(selectedProject, courseId, urequest.getIdentity());
-
-			// Delete user's dropbox
-			String s = ProjectBrokerDropboxController.getDropboxBasePathForProject(selectedProject, userCourseEnv.getCourseEnvironment(), courseNode);
-			s += File.separator + urequest.getIdentity().getName();
-			OlatRootFolderImpl dropBox = new OlatRootFolderImpl(s, null);
-			if (dropBox.getBasefile().exists()) {
-				dropBox.getBasefile().delete();
-			}
 
 		} else {
 			showInfo("info.msg.could.not.cancel.enrollment");
