@@ -1037,10 +1037,8 @@ public class RepositoryEntryRuntimeController extends MainLayoutBasicController 
 		try {
 			lockResult = handler.acquireLock(ores, ureq.getIdentity());
 			if (lockResult == null
-//<<<<<<< HEAD
-//					|| isSuccessfullyLocked(lockResult, isAlreadyLocked)) {
-//				MediaResource mr = handler.getAsMediaResource(ores, false);
-//=======
+					|| isSuccessfullyLocked(lockResult, isAlreadyLocked)) {
+				MediaResource mr = handler.getAsMediaResource(ores, false);
 				if (mr != null) {
 					repositoryService.incrementDownloadCounter(entry);
 					ureq.getDispatchResult().setResultingMediaResource(mr);

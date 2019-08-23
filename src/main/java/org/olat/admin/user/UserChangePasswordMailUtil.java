@@ -1,5 +1,6 @@
 package org.olat.admin.user;
 
+import org.apache.logging.log4j.Logger;
 import org.olat.basesecurity.BaseSecurity;
 import org.olat.basesecurity.Authentication;
 import org.olat.basesecurity.BaseSecurityManager;
@@ -10,7 +11,6 @@ import org.olat.core.helpers.Settings;
 import org.olat.core.id.Identity;
 import org.olat.core.id.Preferences;
 import org.olat.core.id.UserConstants;
-import org.olat.core.logging.OLog;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.Encoder;
 import org.olat.core.util.Util;
@@ -35,7 +35,7 @@ public class UserChangePasswordMailUtil {
     final private RegistrationManager registrationManager;
     final private MailManager mailManager;
 
-    private static final OLog LOG = Tracing.createLoggerFor(UserChangePasswordMailUtil.class);
+    private static final Logger log = Tracing.createLoggerFor(UserChangePasswordMailUtil.class);
 
     @Autowired
     private BaseSecurity securityManager;
@@ -99,21 +99,21 @@ public class UserChangePasswordMailUtil {
 			}
 		}
 		if (!isOOpwdAllowed) {
-			LOG.error("sendtoken.wrong.auth");
+			log.error("sendtoken.wrong.auth");
 			throw new UserChangePasswordException(sessionTrans.translate("sendtoken.wrong.auth", new String[] { user.getName() }));
 		}
 
         Locale locale = getUserLocale(user);
         String emailAdress = user.getUser().getProperty(UserConstants.EMAIL, locale);
         if (emailAdress == null) {
-            LOG.error("No email specified for " + user.getName());
+            log.error("No email specified for " + user.getName());
             throw new UserHasNoEmailException(sessionTrans.translate("error.sendTokenByMail.no.email", new String[] { user.getName() }));
         }
 
         // Validate if template corresponds to our expectations (should contain dummy key)
         if (!text.contains(getDummyKey(emailAdress))) {
-			LOG.warn("Can not replace temporary registration token in change pwd mail token dialog, user probably changed temporary token in mai template", null);
-            LOG.error("Dummy key not found in prepared email");
+			log.warn("Can not replace temporary registration token in change pwd mail token dialog, user probably changed temporary token in mai template", null);
+            log.error("Dummy key not found in prepared email");
             throw new UserChangePasswordException(sessionTrans.translate("error.sendTokenByMail.no.dummy.key"));
         }
 

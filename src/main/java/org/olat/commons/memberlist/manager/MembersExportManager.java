@@ -313,3 +313,4 @@ public class MembersExportManager {
 		return exporter.export(rows, membersMap, curriculumInfos, handlerTranslator, userPropertyHandlers);		
 	}
 }
+}

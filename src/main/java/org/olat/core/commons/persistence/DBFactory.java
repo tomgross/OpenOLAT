@@ -26,20 +26,12 @@
 
 package org.olat.core.commons.persistence;
 
-import org.olat.core.CoreSpringFactory;
-import org.olat.core.logging.OLog;
-import org.olat.core.logging.Tracing;
-import org.springframework.beans.factory.BeanFactory;
-
 /**
  * Factories with static method are deprecated because they cannot be
  * replaced.
  */
 @Deprecated
 public class DBFactory {
-
-	private static final OLog LOG = Tracing.createLoggerFor(DBFactory.class);
-	private static DB db;
 
 	/**
 	 * !!IMPORTANT!!

@@ -1,11 +1,11 @@
 package org.olat.commons.memberlist.manager;
 
+import org.apache.logging.log4j.Logger;
 import org.olat.admin.landingpages.ui.RulesDataModel;
 import org.olat.core.gui.media.MediaResource;
 import org.olat.core.gui.translator.Translator;
 import org.olat.core.id.Identity;
 import org.olat.core.id.UserConstants;
-import org.olat.core.logging.OLog;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.Formatter;
 import org.olat.core.util.Util;
@@ -21,7 +21,7 @@ import java.util.stream.Collectors;
 
 public class XlsGroupMembersExport {
 
-	private static final OLog log = Tracing.createLoggerFor(XlsGroupMembersExport.class);
+	private static final Logger log = Tracing.createLoggerFor(XlsGroupMembersExport.class);
 
 	public MediaResource export(Map<String, GroupData> groups, Translator translator, List<UserPropertyHandler> userPropertyHandlers) {
 

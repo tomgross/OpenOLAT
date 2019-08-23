@@ -19,9 +19,10 @@
  */
 package org.olat.resource.accesscontrol.manager;
 
+import org.apache.logging.log4j.Logger;
 import org.olat.core.CoreSpringFactory;
 import org.olat.core.commons.services.scheduler.JobWithDB;
-import org.olat.core.logging.OLog;
+
 import org.olat.core.logging.Tracing;
 import org.olat.resource.accesscontrol.ACService;
 import org.quartz.JobExecutionContext;
@@ -33,13 +34,13 @@ import org.quartz.JobExecutionException;
  */
 public class ReservationsJob extends JobWithDB {
 
-	private static final OLog LOG = Tracing.createLoggerFor(ReservationsJob.class);
+	private static final Logger log = Tracing.createLoggerFor(ReservationsJob.class);
 
 	@Override
 	public void executeWithDB(JobExecutionContext context) throws JobExecutionException {
 		ACService acService = CoreSpringFactory.getImpl(ACService.class);
 		if (acService == null) {
-			LOG.warn("Application Context not loaded. Cannot cleanup reservations.");
+			log.warn("Application Context not loaded. Cannot cleanup reservations.");
 			return;
 		}
 		acService.cleanupReservations();

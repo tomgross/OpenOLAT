@@ -2483,11 +2483,6 @@
 			<version>2.1.9</version>
 		</dependency>
 		<dependency>
-			<groupId>org.checkerframework</groupId>
-			<artifactId>checker-qual</artifactId>
-			<version>2.1.7</version>
-		</dependency>
-		<dependency>
     			<groupId>javax.inject</groupId>
     			<artifactId>javax.inject</artifactId>
     			<version>1</version>

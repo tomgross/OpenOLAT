@@ -1,6 +1,6 @@
 package org.olat.core.util.servlets;
 
-import org.olat.core.logging.OLog;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
 
 import javax.servlet.http.HttpServletRequest;
@@ -14,7 +14,7 @@ import java.nio.file.Paths;
  */
 public class OlatUrlDecoder {
 
-	private static final OLog log = Tracing.createLoggerFor(OlatUrlDecoder.class);
+	private static final Logger log = Tracing.createLoggerFor(OlatUrlDecoder.class);
 
 	/**
 	 * "request.getRequestURI()" does not work here because it ignores certain

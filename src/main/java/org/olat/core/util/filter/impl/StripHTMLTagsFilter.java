@@ -20,7 +20,7 @@
 package org.olat.core.util.filter.impl;
 
 import org.cyberneko.html.parsers.SAXParser;
-import org.olat.core.logging.OLog;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.StringHelper;
 import org.olat.core.util.filter.Filter;
@@ -39,7 +39,7 @@ import java.io.StringReader;
  *  the stripping part is extracted to its own class and SimpleHtmlTagsFilter refactored accordingly
  */
 public class StripHTMLTagsFilter implements Filter {
-	private static final OLog log = Tracing.createLoggerFor(StripHTMLTagsFilter.class);
+	private static final Logger log = Tracing.createLoggerFor(StripHTMLTagsFilter.class);
 
 	@Override
 	public String filter(String original) {

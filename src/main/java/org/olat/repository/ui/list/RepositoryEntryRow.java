@@ -92,11 +92,7 @@ public class RepositoryEntryRow implements RepositoryEntryRef {
 	
 	private OLATResourceable olatResource;
 	private FormItem ratingFormItem;
-	
-	public RepositoryEntryRow() {
-		//
-	}
-	
+		
 	public RepositoryEntryRow(RepositoryEntryMyView entry) {
 		setKey(entry.getKey());
 		setCreationDate(entry.getCreationDate());
@@ -183,6 +179,7 @@ public class RepositoryEntryRow implements RepositoryEntryRef {
 
 	public int getStatusCode() {
 		return statusCode;
+	}
 	
 	public boolean isAllUsers() {
 		return allUsers;
