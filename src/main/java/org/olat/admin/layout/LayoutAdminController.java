@@ -24,7 +24,10 @@ import java.io.FilenameFilter;
 import java.io.IOException;
 import java.net.MalformedURLException;
 import java.net.URL;
-import java.util.*;
+import java.util.Arrays;
+import java.util.HashSet;
+import java.util.Set;
+
 
 import org.olat.admin.SystemAdminMainController;
 import org.olat.core.OlatServletResource;
