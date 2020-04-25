@@ -35,7 +35,6 @@ import org.olat.core.util.StringHelper;
 import org.olat.core.util.WebappHelper;
 import org.olat.core.util.coordinate.CoordinatorManager;
 import org.olat.core.util.resource.OresHelper;
-import org.olat.search.service.document.file.PowerPointOOXMLDocument;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -140,7 +139,7 @@ public class LayoutModule extends AbstractSpringModule  {
 	private void removeAndLog(Path path) throws IOException {
 		boolean deleteSuccess = Files.deleteIfExists(path);
 		if (!deleteSuccess) {
-			log.warn("Deleting file {} failed.", path.toString());
+			log.warn("Deleting file {} failed.", path);
 		}
 	}
 
@@ -157,7 +156,7 @@ public class LayoutModule extends AbstractSpringModule  {
 			removeAndLog(logoDir.resolve("oo-logo@2x.png"));
 			setLogoFilename("");
 		} catch (IOException e) {
-			log.warn("IO Error occured deleting logo in {}", dir.toString());
+			log.warn("IO Error occured deleting logo in {}", dir);
 		}
 	}
 	

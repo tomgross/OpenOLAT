@@ -78,5 +78,5 @@ public class LayoutModuleTest extends OlatTestCase {
         layoutModule.setFooterLine(provided);
         assertThat(layoutModule.getFooterLine()).isEqualTo(provided);
     }
-    
+
 }
