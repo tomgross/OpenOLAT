@@ -106,7 +106,7 @@ public class ImportCalendarByUrlController extends FormBasicController {
 			allOk &= false;
 		}
 		
-		return allOk & super.validateFormLogic(ureq);
+		return allOk && super.validateFormLogic(ureq);
 	}
 
 	@Override
