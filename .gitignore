@@ -21,6 +21,7 @@ mvn*.log
 .DS_Store
 
 #ignore project/.classpath file at this gets created by maven
+openolat-lms.iml
 .classpath
 .project
 src/main/java/olat.local.properties
