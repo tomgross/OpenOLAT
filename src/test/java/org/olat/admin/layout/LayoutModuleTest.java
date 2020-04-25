@@ -42,7 +42,7 @@ public class LayoutModuleTest extends OlatTestCase {
         File dir = layoutModule.getLogoDirectory();
 
         layoutModule.removeLogo();
-        assertThat(! FileUtils.directoryContains(dir, logo));
+        assertThat(FileUtils.directoryContains(dir, logo)).isFalse();
         assertThat(layoutModule.getLogoFilename()).isEmpty();
     }
 
@@ -77,6 +77,20 @@ public class LayoutModuleTest extends OlatTestCase {
         String provided = "unittest footer line";
         layoutModule.setFooterLine(provided);
         assertThat(layoutModule.getFooterLine()).isEqualTo(provided);
+    }
+
+    @Test
+    public void getLogoLinkUri() {
+        String provided = "unittest link uri";
+        layoutModule.setLogoLinkUri(provided);
+        assertThat(layoutModule.getFooterLinkUri()).isEqualTo(provided);
+    }
+
+
+    @Test
+    public void getLogo_empty() {
+        layoutModule.setLogoFilename(" ");
+        assertThat(layoutModule.getLogo()).isNull();
     }
 
 }
