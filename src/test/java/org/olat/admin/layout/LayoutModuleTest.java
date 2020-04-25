@@ -58,4 +58,25 @@ public class LayoutModuleTest extends OlatTestCase {
         assertThat(layoutModule.getLogoAlt()).isEqualTo(provided);
     }
 
+    @Test
+    public void getLogoLinkType() {
+        String provided = "unittest link type";
+        layoutModule.setLogoLinkType(provided);
+        assertThat(layoutModule.getLogoLinkType()).isEqualTo(provided);
+    }
+
+    @Test
+    public void getFooterLinkUri() {
+        String provided = "unittest link uri";
+        layoutModule.setFooterLinkUri(provided);
+        assertThat(layoutModule.getFooterLinkUri()).isEqualTo(provided);
+    }
+
+    @Test
+    public void getFooterLine() {
+        String provided = "unittest footer line";
+        layoutModule.setFooterLine(provided);
+        assertThat(layoutModule.getFooterLine()).isEqualTo(provided);
+    }
+    
 }

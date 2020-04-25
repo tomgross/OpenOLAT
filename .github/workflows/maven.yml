@@ -2,7 +2,7 @@ name: Java CI
 env:
   MAVEN_OPTS: -Xms2048m -Xmx4096m
 
-on: [push]
+on: [push, pull_request]
 
 jobs:
   build:
