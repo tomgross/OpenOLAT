@@ -1,25 +1,13 @@
 package org.olat.admin.layout;
 
 import org.apache.commons.io.FileUtils;
-import org.junit.Before;
 import org.junit.Test;
-import org.olat.core.configuration.PersistedProperties;
-import org.olat.core.gui.components.updown.UpDown;
-import org.olat.core.gui.control.Event;
-import org.olat.core.util.WebappHelper;
-import org.olat.core.util.coordinate.CoordinatorManager;
-import org.olat.core.util.event.GenericEventListener;
 import org.olat.test.OlatTestCase;
 import org.springframework.beans.factory.annotation.Autowired;
 
 import java.io.File;
 import java.io.IOException;
-import java.nio.file.Paths;
-
-import static org.assertj.core.api.Assertions.as;
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.InstanceOfAssertFactories.list;
-import static org.assertj.core.condition.Not.not;
 
 
 public class LayoutModuleTest extends OlatTestCase {
@@ -43,7 +31,7 @@ public class LayoutModuleTest extends OlatTestCase {
 
         layoutModule.removeLogo();
         assertThat(FileUtils.directoryContains(dir, logo)).isFalse();
-        assertThat(layoutModule.getLogoFilename()).isNull();
+        assertThat(layoutModule.getLogoFilename()).isNullOrEmpty();
     }
 
     @Test
