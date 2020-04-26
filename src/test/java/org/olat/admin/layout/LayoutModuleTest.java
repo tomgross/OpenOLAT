@@ -43,7 +43,7 @@ public class LayoutModuleTest extends OlatTestCase {
 
         layoutModule.removeLogo();
         assertThat(FileUtils.directoryContains(dir, logo)).isFalse();
-        assertThat(layoutModule.getLogoFilename()).isEmpty();
+        assertThat(layoutModule.getLogoFilename()).isNull();
     }
 
     @Test
