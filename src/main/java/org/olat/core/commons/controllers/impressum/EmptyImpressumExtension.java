@@ -19,23 +19,13 @@
  */
 package org.olat.core.commons.controllers.impressum;
 
-import java.io.File;
-import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-
-import org.apache.commons.io.FileUtils;
 import org.olat.core.extensions.ExtensionElement;
 import org.olat.core.extensions.action.GenericActionExtension;
 import org.olat.core.gui.UserRequest;
 import org.olat.core.gui.control.Controller;
 import org.olat.core.gui.control.WindowControl;
-import org.olat.core.util.filter.FilterFactory;
 import org.olat.core.util.i18n.I18nModule;
-import org.olat.core.util.vfs.LocalFileImpl;
 import org.olat.core.util.vfs.LocalFolderImpl;
-import org.olat.core.util.vfs.VFSContainer;
-import org.olat.core.util.vfs.VFSItem;
-import org.olat.core.util.vfs.VFSLeaf;
 
 /* 
  * Initial date: 12 Apr 2020<br>
@@ -50,7 +40,6 @@ public class EmptyImpressumExtension extends GenericActionExtension {
 		this.impressumModule = impressumModule;
 		this.i18nModule = i18nModule;
 	}
-	
 
 	@Override
 	public Controller createController(UserRequest ureq, WindowControl wControl, Object arg) {
@@ -65,9 +54,9 @@ public class EmptyImpressumExtension extends GenericActionExtension {
 		
 		// Second check: Impressum module
 		if (impressumModule.isEnabled()) {
-			VFSContainer impressumDir = new LocalFolderImpl(impressumModule.getImpressumDirectory());
-			VFSContainer termsOfUseDir = new LocalFolderImpl(impressumModule.getTermsOfUseDirectory());
-			VFSContainer privacyPoliciyDir = new LocalFolderImpl(impressumModule.getPrivacyPolicyDirectory());
+			LocalFolderImpl impressumDir = new LocalFolderImpl(impressumModule.getImpressumDirectory());
+			LocalFolderImpl termsOfUseDir = new LocalFolderImpl(impressumModule.getTermsOfUseDirectory());
+			LocalFolderImpl privacyPoliciyDir = new LocalFolderImpl(impressumModule.getPrivacyPolicyDirectory());
 			
 			// First check the imprint 
 			enabled |= checkModule(impressumDir, ureq);
@@ -87,41 +76,17 @@ public class EmptyImpressumExtension extends GenericActionExtension {
 		
 		return enabled ? null : super.getExtensionFor(extensionPoint, ureq);
 	}
-	
-	private boolean checkContent(VFSItem file) {
-		boolean check = false;
-		if(file instanceof VFSLeaf && file.exists() ) {
-			if(file instanceof LocalFileImpl) {
-				File f = ((LocalFileImpl)file).getBasefile();
-				try {
-					String content = FileUtils.readFileToString(f, StandardCharsets.UTF_8);
-					content = FilterFactory.getHtmlTagAndDescapingFilter().filter(content);
-					if(content.length() > 0) {
-						content = content.trim();
-					}
-					if(content.length() > 0) {
-						check = true;
-					}
-				} catch (IOException e) {
-					// Nothing to to here
-				}
-			} else {
-				check = true;
-			}
-		}
-		return check;
-	}
-	
-	private boolean checkModule(VFSContainer baseFolder, UserRequest ureq) {
+
+	private boolean checkModule(LocalFolderImpl baseFolder, UserRequest ureq) {
 		boolean enabled = true;
 		
-		if (checkContent(baseFolder.resolve("index_" + ureq.getLocale().getLanguage() + ".html"))) {
+		if (baseFolder.isSafeHtmlFile("index_" + ureq.getLocale().getLanguage() + ".html")) {
 			// Nothing to do here
-		} else if (checkContent(baseFolder.resolve("index_" + I18nModule.getDefaultLocale().getLanguage() + ".html"))) {
+		} else if (baseFolder.isSafeHtmlFile("index_" + I18nModule.getDefaultLocale().getLanguage() + ".html")) {
 			// Nothing to do here
 		} else {
 			for (String locale : i18nModule.getEnabledLanguageKeys()) {
-				if (checkContent(baseFolder.resolve("index_" + locale + ".html"))) {
+				if (baseFolder.isSafeHtmlFile("index_" + locale + ".html")) {
 					return enabled;
 				}
 			}

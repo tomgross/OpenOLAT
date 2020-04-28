@@ -98,7 +98,7 @@ public class ChecklistDisplayController extends BasicController {
 		String title = checklist.getTitle() == null ? "" : checklist.getTitle();
 		displayChecklistVC.contextPut("checklistTitle", title);
 		// add edit and manage button
-		if((canEdit | canManage) && course != null) {
+		if((canEdit || canManage) && course != null) {
 			displayChecklistVC.contextPut("showAuthorBtns", Boolean.TRUE);
 			removeAsListenerAndDispose(authorOptions);
 			authorOptions = new ChecklistAuthorOptionsForm(ureq, getWindowControl(), canEdit && !readOnly, canManage);
@@ -298,7 +298,7 @@ public class ChecklistDisplayController extends BasicController {
 		} else if(source == cmcEdit) {
 			initTable(ureq);
 		} else if(source == editController) {
-			if(event == Event.CHANGED_EVENT | event == Event.CANCELLED_EVENT) {
+			if(event == Event.CHANGED_EVENT || event == Event.CANCELLED_EVENT) {
 				initTable(ureq);
 				cmcEdit.deactivate();
 			}
