@@ -38,6 +38,7 @@ import java.util.stream.Collectors;
 
 import javax.persistence.TemporalType;
 
+import org.apache.logging.log4j.Logger;
 import org.olat.admin.user.delete.SelectionController;
 import org.olat.basesecurity.BaseSecurity;
 import org.olat.basesecurity.IdentityImpl;
@@ -51,7 +52,6 @@ import org.olat.core.gui.translator.Translator;
 import org.olat.core.id.Identity;
 import org.olat.core.id.OrganisationRef;
 import org.olat.core.id.UserConstants;
-import org.apache.logging.log4j.Logger;
 import org.olat.core.logging.Tracing;
 import org.olat.core.util.Util;
 import org.olat.core.util.i18n.I18nManager;
