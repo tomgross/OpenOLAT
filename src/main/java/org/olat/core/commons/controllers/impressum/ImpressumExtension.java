@@ -20,7 +20,6 @@
 package org.olat.core.commons.controllers.impressum;
 
 import org.olat.core.extensions.ExtensionElement;
-import org.olat.core.extensions.action.GenericActionExtension;
 import org.olat.core.gui.UserRequest;
 import org.olat.core.gui.control.Controller;
 import org.olat.core.gui.control.WindowControl;
@@ -31,16 +30,11 @@ import org.olat.core.util.vfs.LocalFolderImpl;
  * Initial date: 12 Apr 2020<br>
  * @author aboeckle, alexander.boeckle@frentix.com
  */
-public class ImpressumExtension extends GenericActionExtension {
-	
-	private final ImpressumModule impressumModule;
-	private final I18nModule i18nModule;
-	
+public class ImpressumExtension extends GenericImpressumExtension {
+
 	public ImpressumExtension(ImpressumModule impressumModule, I18nModule i18nModule) {
-		this.impressumModule = impressumModule;
-		this.i18nModule = i18nModule;
+		super(impressumModule, i18nModule);
 	}
-	
 
 	@Override
 	public Controller createController(UserRequest ureq, WindowControl wControl, Object arg) {
@@ -53,20 +47,7 @@ public class ImpressumExtension extends GenericActionExtension {
 		
 		if (impressumModule.isEnabled()) {
 			LocalFolderImpl impressumDir = new LocalFolderImpl(impressumModule.getImpressumDirectory());
-			
-			if (impressumDir.isSafeHtmlFile("index_" + ureq.getLocale().getLanguage() + ".html")) {
-				enabled = true;
-			} else if (impressumDir.isSafeHtmlFile("index_" + I18nModule.getDefaultLocale().getLanguage() + ".html")) {
-				enabled = true;
-			} else {
-				for (String locale : i18nModule.getEnabledLanguageKeys()) {
-					if (impressumDir.isSafeHtmlFile("index_" + locale + ".html")) {
-						enabled = true;
-						break;
-					}
-				}
-			} 
-				
+			enabled = isModuleEnabled(impressumDir, ureq);
 		}
 		return enabled ? super.getExtensionFor(extensionPoint, ureq) : null;
 	}

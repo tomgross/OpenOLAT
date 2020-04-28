@@ -20,7 +20,6 @@
 package org.olat.core.commons.controllers.impressum;
 
 import org.olat.core.extensions.ExtensionElement;
-import org.olat.core.extensions.action.GenericActionExtension;
 import org.olat.core.gui.UserRequest;
 import org.olat.core.gui.control.Controller;
 import org.olat.core.gui.control.WindowControl;
@@ -31,14 +30,10 @@ import org.olat.core.util.vfs.LocalFolderImpl;
  * Initial date: 12 Apr 2020<br>
  * @author aboeckle, alexander.boeckle@frentix.com
  */
-public class EmptyImpressumExtension extends GenericActionExtension {
-	
-	private final ImpressumModule impressumModule;
-	private final I18nModule i18nModule;
-	
+public class EmptyImpressumExtension extends GenericImpressumExtension {
+
 	public EmptyImpressumExtension(ImpressumModule impressumModule, I18nModule i18nModule) {
-		this.impressumModule = impressumModule;
-		this.i18nModule = i18nModule;
+		super(impressumModule, i18nModule);
 	}
 
 	@Override
@@ -59,41 +54,20 @@ public class EmptyImpressumExtension extends GenericActionExtension {
 			LocalFolderImpl privacyPoliciyDir = new LocalFolderImpl(impressumModule.getPrivacyPolicyDirectory());
 			
 			// First check the imprint 
-			enabled |= checkModule(impressumDir, ureq);
+			enabled |= isModuleEnabled(impressumDir, ureq);
 			
 			// Go on if enabled is false
 			// and check the terms of use
 			if (!enabled) {
-				enabled |= checkModule(termsOfUseDir, ureq);
+				enabled |= isModuleEnabled(termsOfUseDir, ureq);
 			}
 			
 			// Go on if enabled is still false
 			// and check the privacy policy
 			if (!enabled) {
-				enabled |= checkModule(privacyPoliciyDir, ureq);
+				enabled |= isModuleEnabled(privacyPoliciyDir, ureq);
 			}
 		}
-		
 		return enabled ? null : super.getExtensionFor(extensionPoint, ureq);
-	}
-
-	private boolean checkModule(LocalFolderImpl baseFolder, UserRequest ureq) {
-		boolean enabled = true;
-		
-		if (baseFolder.isSafeHtmlFile("index_" + ureq.getLocale().getLanguage() + ".html")) {
-			// Nothing to do here
-		} else if (baseFolder.isSafeHtmlFile("index_" + I18nModule.getDefaultLocale().getLanguage() + ".html")) {
-			// Nothing to do here
-		} else {
-			for (String locale : i18nModule.getEnabledLanguageKeys()) {
-				if (baseFolder.isSafeHtmlFile("index_" + locale + ".html")) {
-					return enabled;
-				}
-			}
-			
-			enabled &= false;
-		} 
-		
-		return enabled;
 	}
 }
