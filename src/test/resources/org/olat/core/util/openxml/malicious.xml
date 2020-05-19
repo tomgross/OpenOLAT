@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE test [
+        <!ENTITY xxe SYSTEM "file:///etc/passwd">
+        ]>
+<test>
+    <returncode>FAILED</returncode>
+    <messageKey>checksumError</messageKey>
+    <message>&xxe;</message>
+</test>
