@@ -424,8 +424,7 @@ public class CourseElementTest extends Deployments {
 	 * Create a course with a course element of type podcast. Create
 	 * a podcast, publish the course, go the the course and configure
 	 * the podcast to read an external feed.
-	 * 
-	 * @param loginPage
+	 *
 	 * @throws IOException
 	 * @throws URISyntaxException
 	 */
@@ -486,7 +485,63 @@ public class CourseElementTest extends Deployments {
 		Assert.assertNotNull(episodeH4);
 		*/
 	}
-	
+
+	/**
+	 * Create a course with a course element of type podcast. Create
+	 * a podcast, publish the course, go the the course and configure
+	 * the podcast to read an external feed.
+	 *
+	 * @throws IOException
+	 * @throws URISyntaxException
+	 */
+	@Test
+	@RunAsClient
+	public void courseWithPodcast_uploadVideo()
+			throws IOException, URISyntaxException {
+
+		UserVO author = new UserRestClient(deploymentUrl).createAuthor();
+		LoginPage loginPage = LoginPage.load(browser, deploymentUrl);
+		loginPage.loginAs(author.getLogin(), author.getPassword());
+
+		//create a course
+		String courseTitle = "Course-With-Podcast-" + UUID.randomUUID();
+		NavigationPage navBar = NavigationPage.load(browser);
+		navBar
+				.openAuthoringEnvironment()
+				.createCourse(courseTitle)
+				.clickToolbarBack();
+
+		String podcastNodeTitle = "PodcatNode-1";
+		String podcastTitle = "ThePodcast - " + UUID.randomUUID();
+
+		//create a course element of type podcast
+		CourseEditorPageFragment courseEditor = CoursePageFragment.getCourse(browser)
+				.edit();
+		courseEditor
+				.createNode("podcast")
+				.nodeTitle(podcastNodeTitle)
+				.selectTabLearnContent()
+				.uploadVideo();
+
+		//publish the course
+		courseEditor
+				.publish()
+				.quickPublish();
+
+		//open the course and see the podcast
+		CoursePageFragment course = courseEditor
+				.clickToolbarBack();
+		course
+				.clickTree()
+				.selectWithTitle(podcastNodeTitle);
+
+		//check that the title of the podcast is correct
+		WebElement podcastH2 = browser.findElement(By.cssSelector("div.o_podcast_info>h2>i.o_FileResource-PODCAST_icon"));
+		Assert.assertNotNull(podcastH2);
+
+	}
+
+
 	@Test
 	@RunAsClient
 	public void courseWithBlog_externalFeed()

@@ -19,11 +19,16 @@
  */
 package org.olat.selenium.page.course;
 
+import java.io.File;
+import java.io.IOException;
+import java.net.URISyntaxException;
+import java.net.URL;
 import java.util.ArrayList;
 import java.util.List;
 
 import org.junit.Assert;
 import org.olat.selenium.page.graphene.OOGraphene;
+import org.olat.test.JunitTestHelper;
 import org.openqa.selenium.By;
 import org.openqa.selenium.WebDriver;
 import org.openqa.selenium.WebElement;
@@ -332,7 +337,7 @@ public class CourseEditorPageFragment {
 		}, browser);
 		return this;
 	}
-	
+
 	/**
 	 * @see chooseResource
 	 * @param resourceTitle The title of the CP
@@ -457,7 +462,16 @@ public class CourseEditorPageFragment {
 	public CourseEditorPageFragment createFeed(String resourceTitle) {
 		return createResource(chooseFeedButton, resourceTitle, null);
 	}
-	
+
+	/**
+	 * Upload a file to a podcast
+	 * @param resourceTitle
+	 * @return
+	 */
+	public CourseEditorPageFragment uploadVideo() throws URISyntaxException {
+		return importResource(chooseFeedButton);
+	}
+
 	/**
 	 * Create a portfolio template
 	 * @param resourceTitle
@@ -466,14 +480,19 @@ public class CourseEditorPageFragment {
 	public CourseEditorPageFragment createPortfolio(String resourceTitle) {
 		return createResource(choosePortfolioButton, resourceTitle, null);
 	}
-	
-	private CourseEditorPageFragment createResource(By chooseButton, String resourceTitle, String resourceType) {
+
+	private WebElement openCreatePopup(By chooseButton) {
 		browser.findElement(chooseButton).click();
 		OOGraphene.waitBusy(browser);
 		//popup
 		WebElement popup = browser.findElement(By.className("o_sel_search_referenceable_entries"));
 		popup.findElement(By.cssSelector("a.o_sel_repo_popup_my_resources")).click();
 		OOGraphene.waitBusy(browser);
+		return popup;
+	}
+	
+	private CourseEditorPageFragment createResource(By chooseButton, String resourceTitle, String resourceType) {
+		WebElement popup = openCreatePopup(chooseButton);
 		
 		//click create
 		List<WebElement> createEls = popup.findElements(By.className("o_sel_repo_popup_create_resource"));
@@ -492,7 +511,25 @@ public class CourseEditorPageFragment {
 		//fill the create form
 		return fillCreateForm(resourceTitle);
 	}
-	
+
+	private CourseEditorPageFragment importResource(By chooseButton)
+			throws URISyntaxException {
+		WebElement popup = openCreatePopup(chooseButton);
+
+		//click create
+		popup.findElement(By.className("o_sel_repo_popup_import_resource")).click();
+		OOGraphene.waitBusy(browser);
+
+		//upload a file in the configuration
+		URL imageUrl = JunitTestHelper.class.getResource("file_resources/Pasta.mp4");
+		File videoFile = new File(imageUrl.toURI());
+
+		OOGraphene.uploadFile(By.className("o_realchooser"), videoFile, browser);
+
+		browser.findElement(By.xpath("//button[@value='Importieren']")).click();
+		return this;
+	}
+
 	private CourseEditorPageFragment fillCreateForm(String displayName) {
 		OOGraphene.waitModalDialog(browser);
 		By inputBy = By.cssSelector("div.modal.o_sel_author_create_popup div.o_sel_author_displayname input");
