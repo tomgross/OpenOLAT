@@ -19,6 +19,8 @@
  */
 package org.olat.course.nodes.appointments.model;
 
+import java.util.Collection;
+
 import org.olat.course.nodes.appointments.Participation;
 import org.olat.course.nodes.appointments.ParticipationResult;
 
@@ -31,15 +33,15 @@ import org.olat.course.nodes.appointments.ParticipationResult;
 public class ParticipationResultImpl implements ParticipationResult {
 
 	private final Status status;
-	private final Participation participation;
+	private final Collection<Participation> participations;
 	
 	public ParticipationResultImpl(Status status) {
 		this(status, null);
 	}
 	
-	public ParticipationResultImpl(Status status, Participation participation) {
+	public ParticipationResultImpl(Status status, Collection<Participation> participations) {
 		this.status = status;
-		this.participation = participation;
+		this.participations = participations;
 	}
 
 	@Override
@@ -48,8 +50,8 @@ public class ParticipationResultImpl implements ParticipationResult {
 	}
 
 	@Override
-	public Participation getParticipation() {
-		return participation;
+	public Collection<Participation> getParticipations() {
+		return participations;
 	}
 
 }

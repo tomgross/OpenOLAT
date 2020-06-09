@@ -1284,6 +1284,7 @@ create table o_as_entry (
    lastcoachmodified timestamp,
    lastusermodified timestamp,
    a_attemtps int8 default null,
+   a_last_attempt timestamp,
    a_score decimal default null,
    a_passed bool default null,
    a_passed_original bool,
@@ -1313,7 +1314,7 @@ create table o_as_entry (
    a_last_visit timestamp,
    a_num_visits int8,
    fk_entry int8 not null,
-   a_subident varchar(64),
+   a_subident varchar(512),
    a_entry_root bool,
    fk_reference_entry int8,
    fk_identity int8 default null,
@@ -3861,6 +3862,7 @@ alter table o_eva_form_survey add constraint eva_surv_to_surv_idx foreign key (f
 create index idx_eva_surv_ores_idx on o_eva_form_survey (e_resid, e_resname, e_sub_ident, e_sub_ident2);
 
 alter table o_eva_form_participation add constraint eva_part_to_surv_idx foreign key (fk_survey) references o_eva_form_survey (id);
+create index idx_eva_part_survey_idx on o_eva_form_participation (fk_survey);
 create unique index idx_eva_part_ident_idx on o_eva_form_participation (e_identifier_key, e_identifier_type, fk_survey);
 create unique index idx_eva_part_executor_idx on o_eva_form_participation (fk_executor, fk_survey) where fk_executor is not null;
 

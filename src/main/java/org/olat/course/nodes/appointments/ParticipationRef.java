@@ -17,16 +17,20 @@
  * frentix GmbH, http://www.frentix.com
  * <p>
  */
-package org.olat.modules.quality.generator.ui;
-
-import org.olat.core.gui.control.Controller;
+package org.olat.course.nodes.appointments;
 
 /**
  * 
- * Initial date: 03.11.2018<br>
+ * Initial date: 19 May 2020<br>
  * @author uhensler, urs.hensler@frentix.com, http://www.frentix.com
  *
  */
-public interface GeneratorWhiteListController extends Controller {
+public interface ParticipationRef {
+	
+	public Long getKey();
+	
+	public static ParticipationRef of(Long key) {
+		return () -> key;
+	}
 
 }

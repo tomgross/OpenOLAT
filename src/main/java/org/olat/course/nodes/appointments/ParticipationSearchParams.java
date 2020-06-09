@@ -20,6 +20,7 @@
 package org.olat.course.nodes.appointments;
 
 import java.util.Collection;
+import java.util.Collections;
 import java.util.Date;
 import java.util.stream.Collectors;
 
@@ -39,6 +40,7 @@ public class ParticipationSearchParams {
 	private String subIdent;
 	private Identity identity;
 	private Date createdAfter;
+	private Collection<Long> participationKeys;
 	private Collection<Long> appointmentKeys;
 	private Date startAfter;
 	private Appointment.Status status;
@@ -89,18 +91,32 @@ public class ParticipationSearchParams {
 		this.createdAfter = createdAfter;
 	}
 
+	public Collection<Long> getParticipationKeys() {
+		return participationKeys;
+	}
+	
+	public void setParticipations(Collection<? extends ParticipationRef> participations) {
+		this.participationKeys = participations.stream()
+				.map(ParticipationRef::getKey)
+				.collect(Collectors.toSet());
+	}
+
 	public Collection<Long> getAppointmentKeys() {
 		return appointmentKeys;
 	}
 	
-	public void setAppointments(Collection<Appointment> appointments) {
-		this.appointmentKeys = appointments.stream()
-				.map(Appointment::getKey)
-				.collect(Collectors.toSet());
-	}
-
 	public void setAppointmentKeys(Collection<Long> appointmentKeys) {
 		this.appointmentKeys = appointmentKeys;
+	}
+
+	public void setAppointments(Collection<? extends AppointmentRef> appointments) {
+		this.appointmentKeys = appointments.stream()
+				.map(AppointmentRef::getKey)
+				.collect(Collectors.toSet());
+	}
+	
+	public void setAppointment(AppointmentRef appointment) {
+		this.appointmentKeys = Collections.singletonList(appointment.getKey());
 	}
 
 	public Date getStartAfter() {
