@@ -349,46 +349,28 @@ public class ReferencableEntriesSearchController extends BasicController {
 				selectedRepositoryEntries = searchCtr.getSelectedEntries();
 				fireEvent(ureq, EVENT_REPOSITORY_ENTRIES_SELECTED);
 			}
-		} else if (source == createController) { 
-			if (event.equals(Event.DONE_EVENT)) {
-				cmc.deactivate();
-				
-				selectedRepositoryEntry = createController.getAddedEntry();
-				fireEvent(ureq, EVENT_REPOSITORY_ENTRY_SELECTED);
-				// info message
-				String message = translate("message.entry.selected", new String[] { selectedRepositoryEntry.getDisplayname(), selectedRepositoryEntry.getResourcename()});
-				getWindowControl().setInfo(message);
-			} else if (event.equals(Event.CANCELLED_EVENT)) {
-				cmc.deactivate();
-			} else if (event.equals(Event.FAILED_EVENT)) {
-				showError("add.failed");
-			}
-		} else if (source == importController) { 
-			if (event.equals(Event.DONE_EVENT)) {
-				cmc.deactivate();
-				selectedRepositoryEntry = importController.getImportedEntry();
-				fireEvent(ureq, EVENT_REPOSITORY_ENTRY_SELECTED);
-				// info message
-				String message = translate("message.entry.selected", new String[] { selectedRepositoryEntry.getDisplayname(), selectedRepositoryEntry.getResourcename()});
-				getWindowControl().setInfo(message);
-			} else if (event.equals(Event.CANCELLED_EVENT)) {
-				cmc.deactivate();
-			} else if (event.equals(Event.FAILED_EVENT)) {
-				showError("add.failed");
-			}
+		} else if (source == createController) {
+			handleAction(ureq, event, createController.getAddedEntry());
+		} else if (source == importController) {
+			handleAction(ureq, event, importController.getImportedEntry());
 		} else if (source == importUrlController) { 
-			if (event.equals(Event.DONE_EVENT)) {
-				cmc.deactivate();
-				selectedRepositoryEntry = importUrlController.getImportedEntry();
-				fireEvent(ureq, EVENT_REPOSITORY_ENTRY_SELECTED);
-				// info message
-				String message = translate("message.entry.selected", new String[] { selectedRepositoryEntry.getDisplayname(), selectedRepositoryEntry.getResourcename()});
-				getWindowControl().setInfo(message);
-			} else if (event.equals(Event.CANCELLED_EVENT)) {
-				cmc.deactivate();
-			} else if (event.equals(Event.FAILED_EVENT)) {
-				showError("add.failed");
-			}
+			handleAction(ureq, event, importUrlController.getImportedEntry());
+		}
+	}
+
+	private void handleAction(UserRequest ureq, Event event, RepositoryEntry repositoryEntry) {
+		if (event.equals(Event.DONE_EVENT)) {
+			cmc.deactivate();
+			selectedRepositoryEntry = repositoryEntry;
+			fireEvent(ureq, EVENT_REPOSITORY_ENTRY_SELECTED);
+			// info message
+			String message = translate("message.entry.selected",
+					new String[] { selectedRepositoryEntry.getDisplayname(), selectedRepositoryEntry.getResourcename()});
+			getWindowControl().setInfo(message);
+		} else if (event.equals(Event.CANCELLED_EVENT)) {
+			cmc.deactivate();
+		} else if (event.equals(Event.FAILED_EVENT)) {
+			showError("add.failed");
 		}
 	}
 	
@@ -407,8 +389,7 @@ public class ReferencableEntriesSearchController extends BasicController {
 		listenTo(cmc);
 		cmc.activate();
 	}
-	
-	
+
 	private void doImportResourceUrl(UserRequest ureq) {
 		removeAsListenerAndDispose(importController);
 		importUrlController = new ImportURLRepositoryEntryController(ureq, getWindowControl(), limitTypes);
