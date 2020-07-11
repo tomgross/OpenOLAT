@@ -42,6 +42,7 @@ public enum VideoFormat {
 	m3u8("application/x-mpegURL"),
 	youtube("video/youtube"),
 	vimeo("video/vimeo"),
+	switchtube("video/mp4"),
 	panopto("video/mp4");
 
 	private static final Logger log = Tracing.createLoggerFor(VideoFormat.class);
@@ -64,7 +65,7 @@ public enum VideoFormat {
 		}
 		// catch zip, mov and other exotic format
 		if(StringHelper.containsNonWhitespace(val)) {
-			return VideoFormat.mp4;// convert at the end all unkown format
+			return VideoFormat.mp4;// convert at the end all unknown format
 		}
 		return null;
 	}
@@ -92,6 +93,8 @@ public enum VideoFormat {
 					return VideoFormat.mp4;
 				} else if(url.endsWith(".m3u8")) {
 					return VideoFormat.m3u8;
+				} else if(host.endsWith("tube.switch.ch")) {
+					return VideoFormat.switchtube;
 				}
 			} catch (MalformedURLException e) {
 				log.warn("Cannot read url: " + url, e);

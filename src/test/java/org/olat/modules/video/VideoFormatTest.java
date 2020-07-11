@@ -48,6 +48,7 @@ public class VideoFormatTest {
                 { "vimeo", VideoFormat.vimeo },
                 { "panopto", VideoFormat.panopto },
                 { "mp4", VideoFormat.mp4 },
+                { "switchtube", VideoFormat.switchtube },
                 { null, null }
         });
     }
@@ -66,4 +67,9 @@ public class VideoFormatTest {
     	Assert.assertEquals(expectedFormat, formatEnum);
     }
 
+    @Test
+    public void valueOfUrl_switchtube() {
+        VideoFormat formatUrl = VideoFormat.valueOfUrl("https://tube.switch.ch/embed/12345");
+        Assert.assertEquals(formatUrl, VideoFormat.switchtube);
+    }
 }

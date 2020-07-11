@@ -19,14 +19,24 @@
  */
 package org.olat.modules.video.ui;
 
+import java.io.IOException;
 import java.net.URISyntaxException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
+import org.apache.http.HttpEntity;
+import org.apache.http.HttpResponse;
+import org.apache.http.client.HttpClient;
+import org.apache.http.client.methods.HttpGet;
 import org.apache.http.client.utils.URIBuilder;
+import org.apache.http.impl.client.HttpClientBuilder;
+import org.apache.http.util.EntityUtils;
+import org.apache.logging.log4j.Logger;
 import org.olat.core.commons.services.commentAndRating.CommentAndRatingDefaultSecurityCallback;
 import org.olat.core.commons.services.commentAndRating.CommentAndRatingSecurityCallback;
 import org.olat.core.commons.services.commentAndRating.ReadOnlyCommentsSecurityCallback;
@@ -49,6 +59,8 @@ import org.olat.core.gui.control.controller.BasicController;
 import org.olat.core.gui.control.winmgr.Command;
 import org.olat.core.helpers.Settings;
 import org.olat.core.id.OLATResourceable;
+import org.olat.core.id.Roles;
+import org.olat.core.logging.Tracing;
 import org.olat.core.util.CodeHelper;
 import org.olat.core.util.Formatter;
 import org.olat.core.util.StringHelper;
@@ -90,6 +102,8 @@ import org.springframework.beans.factory.annotation.Autowired;
  */
 public class VideoDisplayController extends BasicController {
 
+	private static final Logger log = Tracing.createLoggerFor(VideoDisplayController.class);
+
 	private static final String GUIPREF_KEY_PREFERRED_RESOLUTION = "preferredResolution";
 
 	private VideoAssessmentItemController questionCtrl;
@@ -111,8 +125,12 @@ public class VideoDisplayController extends BasicController {
 	private VideoQuestion backToQuestion;
 	
 	private final VideoDisplayOptions displayOptions;
+	private String switchTubeSource;
 
 	private List<Marker> markers = new ArrayList<>();
+
+	private static final Pattern switchtube_video_source = Pattern.compile("<source[^>]*src=\"(.*?)\".*?/>");
+	private static final Pattern switchtube_video_poster = Pattern.compile("poster=\"(.*?)\"");
 
 	@Autowired
 	private VideoModule videoModule;
@@ -292,7 +310,6 @@ public class VideoDisplayController extends BasicController {
 	/**
 	 * Reload the video, e.g. when new captions or transcoded versions are available
 	 * @param ureq
-	 * @param currentTime The start time in seconds (optional)
 	 */
 	protected void reloadVideo(UserRequest ureq) {
 		videoMetadata = videoManager.getVideoMetadata(videoEntry.getOlatResource());
@@ -408,8 +425,15 @@ public class VideoDisplayController extends BasicController {
 			} catch (URISyntaxException e) {
 				logWarn("Error while parsing URL from external video source URL::" + url, e);
 			}			
+		} else if (VideoFormat.switchtube.equals(format)) {
+			String result = getSwitchTubeSource(true);
+			Matcher m = switchtube_video_source.matcher(result);
+			if (m.find()) {
+				url = m.group(1);
+			} else {
+				log.error("No valid video source found in HTML for URL: {}", url);
+			}
 		}
-	    
 		mainVC.contextPut("externalUrl", url);
 		mainVC.contextPut("sourceType", format.mimeType());
 
@@ -418,12 +442,41 @@ public class VideoDisplayController extends BasicController {
 		loadChapters();
 		loadMarkers();
 	}
-	
+
+	public String getSwitchTubeSource(Boolean refresh) {
+		if (switchTubeSource == null || refresh) {
+			String url = videoMetadata.getUrl();
+			// we construct the URL of the embedding url here
+			String embedUrl = url.replace("videos", "embed");
+			HttpClient httpClient = HttpClientBuilder.create().build();
+			final HttpGet request = new HttpGet(embedUrl);
+			HttpResponse httpResponse;
+			String result = "";
+			try {
+				httpResponse = httpClient.execute(request);
+				int statusCode = httpResponse.getStatusLine().getStatusCode();
+				if (statusCode == 200) {
+					HttpEntity entity = httpResponse.getEntity();
+					result = EntityUtils.toString(entity);
+				} else {
+					log.error("Status code not OK (" + statusCode + ") when fetching SWITCHtube video from URL: {}", url);
+				}
+
+			} catch (IOException e) {
+				log.error("Error while fetching SWITCHtube video from URL: {}", url, e);
+			}
+			switchTubeSource = result;
+			return result;
+		} else {
+			return switchTubeSource;
+		}
+	}
+
 	private void loadMetadataAndDisplayOptions(UserRequest ureq) {
 		String masterMapperId = "master-" + videoEntry.getOlatResource().getResourceableId();
 		String masterUrl = registerCacheableMapper(ureq, masterMapperId, new VideoMediaMapper(videoManager.getMasterContainer(videoEntry.getOlatResource())));
 		mainVC.contextPut("masterUrl", masterUrl);
-		
+
 		mainVC.contextPut("title", videoEntry.getDisplayname());
 		if(displayOptions == null || displayOptions.isShowDescription()) {
 			String desc = (StringHelper.containsNonWhitespace(descriptionText) ? descriptionText : videoEntry.getDescription());
@@ -436,13 +489,21 @@ public class VideoDisplayController extends BasicController {
 		mainVC.contextPut("clickToPlayPause", Boolean.valueOf(displayOptions.isClickToPlayPause()));
 		
 		// Check for null-value posters
+		String posterUrl = "";
 		if(displayOptions.isShowPoster()) {
 			VFSLeaf poster = videoManager.getPosterframe(videoEntry.getOlatResource());
-			mainVC.contextPut("usePoster", Boolean.valueOf(poster != null && poster.getSize() > 0));
-		} else {
-			mainVC.contextPut("usePoster", Boolean.FALSE);
+			if (Boolean.TRUE.equals(poster != null && poster.getSize() > 0)) {
+				posterUrl = masterUrl + "/poster.jpg";
+			} else if (VideoFormat.switchtube.equals(videoMetadata.getVideoFormat())) {
+				String source = getSwitchTubeSource(false);
+				Matcher m = switchtube_video_poster.matcher(source);
+				if (m.find()) {
+					posterUrl = "https://tube.switch.ch" + m.group(1);
+				}
+			}
 		}
-		
+		mainVC.contextPut("posterUrl", posterUrl);
+
 		// Add duration without preloading video
 		String duration = videoEntry.getExpenditureOfWork();
 		if (!StringHelper.containsNonWhitespace(duration)) {
