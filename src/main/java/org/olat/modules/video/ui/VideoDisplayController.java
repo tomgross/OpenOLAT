@@ -80,6 +80,7 @@ import org.olat.modules.video.ui.question.VideoQuestionRowComparator;
 import org.olat.repository.RepositoryEntry;
 import org.olat.repository.handlers.RepositoryHandler;
 import org.olat.repository.handlers.RepositoryHandlerFactory;
+import org.olat.resource.OLATResource;
 import org.springframework.beans.factory.annotation.Autowired;
 
 /**
@@ -103,6 +104,7 @@ public class VideoDisplayController extends BasicController {
 	private Integer userPreferredResolution;
 	
 	private RepositoryEntry videoEntry;
+	private OLATResource videoResource;
 	private String descriptionText;
 	private String mediaRepoBaseUrl;
 	private VideoMeta videoMetadata;
@@ -142,6 +144,8 @@ public class VideoDisplayController extends BasicController {
 		this.videoEntry = videoEntry;
 		this.displayOptions = displayOptions;
 		this.descriptionText = getDescription(courseNode, displayOptions);
+
+		videoResource = videoEntry.getOlatResource();
 		
 		mainVC = createVelocityContainer("video_run");
 		putInitialPanel(mainVC);
@@ -160,8 +164,8 @@ public class VideoDisplayController extends BasicController {
 		}
 		initMediaElementJs();
 
-		videoMetadata = videoManager.getVideoMetadata(videoEntry.getOlatResource());	
-		VFSLeaf video = videoManager.getMasterVideoFile(videoEntry.getOlatResource());
+		videoMetadata = videoManager.getVideoMetadata(videoResource);
+		VFSLeaf video = videoManager.getMasterVideoFile(videoResource);
 		if(video != null || (videoMetadata != null && StringHelper.containsNonWhitespace(videoMetadata.getUrl()))) {
 			if(displayOptions.isAutoWidth()){
 				mainVC.contextPut("height", 480);
@@ -185,9 +189,9 @@ public class VideoDisplayController extends BasicController {
 				CommentAndRatingSecurityCallback ratingSecCallback = displayOptions.isReadOnly()
 						? new ReadOnlyCommentsSecurityCallback() : new CommentAndRatingDefaultSecurityCallback(getIdentity(), false, false);
 				String subIdent = courseNode == null ? null : courseNode.getIdent();
-				PublishingInformations publishingInformations = getPublisher(entry, videoEntry, subIdent);
+				PublishingInformations publishingInformations = getPublisher(entry, subIdent);
 				// comments are always linked to the video resource (it's historic)
-				commentsAndRatingCtr = new UserCommentsAndRatingsController(ureq, getWindowControl(), videoEntry.getOlatResource(), subIdent,
+				commentsAndRatingCtr = new UserCommentsAndRatingsController(ureq, getWindowControl(), videoResource, subIdent,
 						ratingSecCallback, publishingInformations, displayOptions.isShowComments(), displayOptions.isShowRating(), true);
 				if (displayOptions.isShowComments()) {					
 					commentsAndRatingCtr.expandComments(ureq);
@@ -208,17 +212,10 @@ public class VideoDisplayController extends BasicController {
 		}
 	}
 	
-	private PublishingInformations getPublisher(RepositoryEntry entry, RepositoryEntry resourceEntry, String subIdent) {
-		OLATResourceable ores = null;
-		if(entry != null) {
-			ores = entry.getOlatResource();
-		} else {
-			ores = resourceEntry.getOlatResource();
-		}
-		if(subIdent == null) {
-			subIdent = "";
-		}
-		
+	private PublishingInformations getPublisher(RepositoryEntry entry, String subIdent) {
+		OLATResourceable ores = entry != null ? entry.getOlatResource() : videoResource;
+		subIdent = subIdent == null ? "" : subIdent;
+
 		String businessPath = getWindowControl().getBusinessControl().getAsString();
 		SubscriptionContext ctx = new SubscriptionContext(ores.getResourceableTypeName(), ores.getResourceableId(), subIdent);
 		PublisherData data = new PublisherData(VideoFileResource.TYPE_NAME, ores.getResourceableId() + "-" + subIdent, businessPath);
@@ -292,15 +289,14 @@ public class VideoDisplayController extends BasicController {
 	/**
 	 * Reload the video, e.g. when new captions or transcoded versions are available
 	 * @param ureq
-	 * @param currentTime The start time in seconds (optional)
 	 */
 	protected void reloadVideo(UserRequest ureq) {
-		videoMetadata = videoManager.getVideoMetadata(videoEntry.getOlatResource());
+		videoMetadata = videoManager.getVideoMetadata(videoResource);
 		if(StringHelper.containsNonWhitespace(videoMetadata.getUrl())) {
 			loadVideo(ureq, videoMetadata.getUrl(), videoMetadata.getVideoFormat());
 		} else {
 			//load video as VFSLeaf
-			VFSLeaf video = videoManager.getMasterVideoFile(videoEntry.getOlatResource());
+			VFSLeaf video = videoManager.getMasterVideoFile(videoResource);
 			loadVideo(ureq, video);
 			mainVC.contextPut("addForceReload", "?t=" + CodeHelper.getRAMUniqueID());
 		} 
@@ -310,11 +306,16 @@ public class VideoDisplayController extends BasicController {
 	 * Reload video poster when the video poster has been exchanged
 	 */
 	protected void reloadVideoPoster() {
+		String masterUrl = (String) mainVC.contextGet("masterUrl");
 		// Check for null-value posters
-		VFSLeaf poster = videoManager.getPosterframe(videoEntry.getOlatResource());
-		boolean showPoster = displayOptions.isShowPoster() && poster != null && poster.getSize() > 0;
-		mainVC.contextPut("usePoster", Boolean.valueOf(showPoster));
-		// avoid browser caching of poster resource
+		String posterUrl = "";
+		if(displayOptions.isShowPoster()) {
+			VFSLeaf poster = videoManager.getPosterframe(videoResource);
+			if (Boolean.TRUE.equals(poster != null && poster.getSize() > 0)) {
+				posterUrl = masterUrl + "/poster.jpg";
+			}
+		}
+		mainVC.contextPut("posterUrl", posterUrl);
 		mainVC.contextPut("nocache", "?t=" + CodeHelper.getRAMUniqueID());
 	}
 	
@@ -342,20 +343,20 @@ public class VideoDisplayController extends BasicController {
 	private void loadVideo(UserRequest ureq, VFSLeaf video) {
 		if(video != null) {
 			// get resolution of master video resource 
-			Size masterResolution = videoManager.getVideoResolutionFromOLATResource(videoEntry.getOlatResource());
+			Size masterResolution = videoManager.getVideoResolutionFromOLATResource(videoResource);
 			String masterTitle = videoManager.getDisplayTitleForResolution(masterResolution.getHeight(), getTranslator());
-			String masterSize = " (" + Formatter.formatBytes(videoManager.getVideoMetadata(videoEntry.getOlatResource()).getSize()) + ")";
+			String masterSize = " (" + Formatter.formatBytes(videoManager.getVideoMetadata(videoResource).getSize()) + ")";
 			boolean addMaster = true;
 			// Mapper for Video
 			
 			// Mapper for versions specific because not in same base as the resource itself
-			String transcodingMapperId = "transcoding-" + videoEntry.getOlatResource().getResourceableId();
-			VFSContainer transcodedContainer = videoManager.getTranscodingContainer(videoEntry.getOlatResource());
+			String transcodingMapperId = "transcoding-" + videoResource.getResourceableId();
+			VFSContainer transcodedContainer = videoManager.getTranscodingContainer(videoResource);
 			String transcodedUrl = registerCacheableMapper(ureq, transcodingMapperId, new VideoMediaMapper(transcodedContainer));
 			mainVC.contextPut("transcodedUrl", transcodedUrl);
 			
 			// Add transcoded versions
-			List<VideoTranscoding> videos = videoManager.getVideoTranscodings(videoEntry.getOlatResource());
+			List<VideoTranscoding> videos = videoManager.getVideoTranscodings(videoResource);
 			List<VideoTranscoding> readyToPlayVideos = new ArrayList<>();
 			List<String> displayTitles = new ArrayList<>();
 			int preferredAvailableResolution = 0;
@@ -408,8 +409,9 @@ public class VideoDisplayController extends BasicController {
 			} catch (URISyntaxException e) {
 				logWarn("Error while parsing URL from external video source URL::" + url, e);
 			}			
+		} else if (VideoFormat.switchtube.equals(format)) {
+			url = url.replace("videos", "external");
 		}
-	    
 		mainVC.contextPut("externalUrl", url);
 		mainVC.contextPut("sourceType", format.mimeType());
 
@@ -418,12 +420,12 @@ public class VideoDisplayController extends BasicController {
 		loadChapters();
 		loadMarkers();
 	}
-	
+
 	private void loadMetadataAndDisplayOptions(UserRequest ureq) {
-		String masterMapperId = "master-" + videoEntry.getOlatResource().getResourceableId();
-		String masterUrl = registerCacheableMapper(ureq, masterMapperId, new VideoMediaMapper(videoManager.getMasterContainer(videoEntry.getOlatResource())));
+		String masterMapperId = "master-" + videoResource.getResourceableId();
+		String masterUrl = registerCacheableMapper(ureq, masterMapperId, new VideoMediaMapper(videoManager.getMasterContainer(videoResource)));
 		mainVC.contextPut("masterUrl", masterUrl);
-		
+
 		mainVC.contextPut("title", videoEntry.getDisplayname());
 		if(displayOptions == null || displayOptions.isShowDescription()) {
 			String desc = (StringHelper.containsNonWhitespace(descriptionText) ? descriptionText : videoEntry.getDescription());
@@ -434,15 +436,7 @@ public class VideoDisplayController extends BasicController {
 		mainVC.contextPut("authors", (StringHelper.containsNonWhitespace(authors) ? authors : null));
 		
 		mainVC.contextPut("clickToPlayPause", Boolean.valueOf(displayOptions.isClickToPlayPause()));
-		
-		// Check for null-value posters
-		if(displayOptions.isShowPoster()) {
-			VFSLeaf poster = videoManager.getPosterframe(videoEntry.getOlatResource());
-			mainVC.contextPut("usePoster", Boolean.valueOf(poster != null && poster.getSize() > 0));
-		} else {
-			mainVC.contextPut("usePoster", Boolean.FALSE);
-		}
-		
+		reloadVideoPoster();
 		// Add duration without preloading video
 		String duration = videoEntry.getExpenditureOfWork();
 		if (!StringHelper.containsNonWhitespace(duration)) {
@@ -453,7 +447,7 @@ public class VideoDisplayController extends BasicController {
 	
 	private void loadTracks() {
 		Map<String, String> trackfiles = new HashMap<>();
-		Map<String, VFSLeaf> configTracks = videoManager.getAllTracks(videoEntry.getOlatResource());
+		Map<String, VFSLeaf> configTracks = videoManager.getAllTracks(videoResource);
 		for (Map.Entry<String, VFSLeaf> track : configTracks.entrySet()) {
 			trackfiles.put(track.getKey(), track.getValue().getName());
 		}
@@ -462,21 +456,21 @@ public class VideoDisplayController extends BasicController {
 	
 	private void loadChapters() {
 		// Load video chapter if available
-		mainVC.contextPut("hasChapters", videoManager.hasChapters(videoEntry.getOlatResource()));	
+		mainVC.contextPut("hasChapters", videoManager.hasChapters(videoResource));
 	}
 	
 	public List<Marker> loadMarkers() {
 		markers.clear();
 		
 		if(displayOptions.isShowAnnotations()) {
-			videoMarkers = videoManager.loadMarkers(videoEntry.getOlatResource());
+			videoMarkers = videoManager.loadMarkers(videoResource);
 			if(videoMarkers != null && !videoMarkers.getMarkers().isEmpty()) {
 				List<Marker> vcMarkers = toMarkers(videoMarkers.getMarkers());
 				markers.addAll(vcMarkers);
 			}
 		}
 		if(displayOptions.isShowQuestions()) {
-			videoQuestions = videoManager.loadQuestions(videoEntry.getOlatResource());
+			videoQuestions = videoManager.loadQuestions(videoResource);
 			if(videoQuestions != null && !videoQuestions.getQuestions().isEmpty()) {
 				List<Marker> vcMarkers = questionsToMarkers(videoQuestions.getQuestions());
 				markers.addAll(vcMarkers);
@@ -570,7 +564,7 @@ public class VideoDisplayController extends BasicController {
 			Long durationInSeconds = Math.round(Double.parseDouble(duration));
 			if(durationInSeconds.longValue() > 0l) {
 				videoEntry = videoManager.updateVideoMetadata(videoEntry, durationInSeconds);
-				videoMetadata = videoManager.getVideoMetadata(videoEntry.getOlatResource());
+				videoMetadata = videoManager.getVideoMetadata(videoResource);
 			}
 		} catch (NumberFormatException e) {
 			logError("Cannot parse duration: " + duration, e);

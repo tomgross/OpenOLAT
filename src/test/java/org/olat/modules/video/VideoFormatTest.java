@@ -41,21 +41,24 @@ public class VideoFormatTest {
 	@Parameters
     public static Collection<Object[]> data() {
         return Arrays.asList(new Object[][] {
-                { "mov", VideoFormat.mp4 },
-                { "zip", VideoFormat.mp4 },
-                { "somethingelse", VideoFormat.mp4 },
-                { "youtube", VideoFormat.youtube },
-                { "vimeo", VideoFormat.vimeo },
-                { "panopto", VideoFormat.panopto },
-                { "mp4", VideoFormat.mp4 },
-                { null, null }
+                { "video.mov", "mov", VideoFormat.mp4 },
+                { "video.zip", "zip", VideoFormat.mp4 },
+                { "video.foo", "somethingelse", VideoFormat.mp4 },
+                { "https://www.youtube.com/watch?v=Sy5cXJL7K90", "youtube", VideoFormat.youtube },
+                { "https://vimeo.com/36085398", "vimeo", VideoFormat.vimeo },
+                { "https://demo.hosted.panopto.com/Panopto/Pages/Viewer.aspx?id=9b4d2c73-acd9-46ec-a5ae-ab4a010c47d0", "panopto", VideoFormat.panopto },
+                { "video.mp4", "mp4", VideoFormat.mp4 },
+                { "https://tube.switch.ch/videos/78ece87d", "switchtube", VideoFormat.switchtube },
+                { null, null, null }
         });
     }
     
+    private String url;
     private String format;
     private VideoFormat expectedFormat;
     
-    public VideoFormatTest(String format, VideoFormat expectedFormat) {
+    public VideoFormatTest(String url, String format, VideoFormat expectedFormat) {
+        this.url = url;
     	this.format = format;
     	this.expectedFormat = expectedFormat;
     }
@@ -66,4 +69,13 @@ public class VideoFormatTest {
     	Assert.assertEquals(expectedFormat, formatEnum);
     }
 
+    @Test
+    public void valueOfUrl() {
+        // only test URL specific providers
+        if (expectedFormat == VideoFormat.mp4) {
+            return;
+        }
+        VideoFormat formatUrl = VideoFormat.valueOfUrl(url);
+        Assert.assertEquals(expectedFormat, formatUrl);
+    }
 }

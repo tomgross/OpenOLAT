@@ -526,6 +526,7 @@ import org.junit.runners.Suite;
 	org.olat.modules.quality.analysis.TemporalKeyComparatorTest.class,
 	org.olat.modules.quality.generator.provider.ProviderHelperTest.class,
 	org.olat.modules.quality.manager.QualityServiceImplTest.class,
+	org.olat.modules.video.ui.VideoDisplayControllerTest.class,
 	org.olat.modules.webFeed.manager.FeedManagerImplTest.class,
 	org.olat.modules.webFeed.manager.RomeFeedFetcherTest.class,
 	org.olat.resource.accesscontrol.provider.auto.manager.AutoAccessManagerImplTest.class,
